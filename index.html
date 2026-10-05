@@ -1,0 +1,203 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Harvest Hollow</title>
+<meta name="description" content="A cozy 3D farming game for two, in the browser. Self-hosted, open source.">
+<meta property="og:title" content="Harvest Hollow"><meta property="og:description" content="A cozy 3D farming game for two, in the browser.">
+<meta property="og:image" content="https://krasimirkralev.github.io/harvest-hollow/img/hero.png">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;700&family=Nunito:wght@400;700&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#FBF3E2;--ink:#3B2614;--muted:#7A5A3A;--wood:#B87533;--green:#4C9A2A;--card:#FFFDF6;--line:#E7D3AE}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#1E1812;--ink:#F3E6CF;--muted:#C7AE8A;--card:#2A2119;--line:#4A3926}}
+:root[data-theme="dark"]{--bg:#1E1812;--ink:#F3E6CF;--muted:#C7AE8A;--card:#2A2119;--line:#4A3926}
+*{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--ink);font:17px/1.65 Nunito,system-ui,sans-serif}
+header{text-align:center;padding:40px 16px 8px} header img.logo{width:min(520px,90%)}
+.tag{font:700 1.35rem/1.3 Fredoka,sans-serif;margin:10px 0 4px} .sub{color:var(--muted);margin:0 auto 22px;max-width:640px}
+.cta{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-bottom:26px}
+.cta a{font:700 1rem Fredoka,sans-serif;text-decoration:none;padding:12px 22px;border-radius:999px;color:#fff;background:var(--green);box-shadow:0 3px 0 #2F6A17}
+.cta a.alt{background:var(--wood);box-shadow:0 3px 0 #7A4A1C}
+.hero{display:block;width:min(1100px,100%);margin:0 auto;border-radius:18px;box-shadow:0 10px 30px rgba(60,35,10,.25)}
+main{max-width:980px;margin:0 auto;padding:24px 16px 60px}
+h2{font:700 1.6rem Fredoka,sans-serif;border-bottom:2px solid var(--line);padding-bottom:6px;margin-top:2.2em}
+img{max-width:100%;height:auto;border-radius:12px} p[align=center] img{margin:6px}
+pre{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px;overflow:auto} code{font-size:.92em}
+table{border-collapse:collapse;width:100%;display:block;overflow-x:auto} td,th{border:1px solid var(--line);padding:7px 12px;text-align:left}
+a{color:var(--green)} main p,main li{overflow-wrap:anywhere} footer{text-align:center;color:var(--muted);padding:30px 16px}
+</style></head><body>
+<header><img class="logo" src="img/logo-wide.png" alt="Harvest Hollow">
+<p class="tag">A cozy 3D farming game for two, in the browser.</p>
+<p class="sub">Plant, harvest, raise animals, craft and grow a whole valley together, on one shared farm, in real time. Host it yourself; play on a PC or a phone.</p>
+<div class="cta"><a href="https://github.com/KrasimirKralev/harvest-hollow">Get it on GitHub</a><a class="alt" href="#play-it-in-2-minutes">Play in 2 minutes</a></div>
+<img class="hero" src="img/hero.png" alt="Two farmers on the bench at Golden Hour, a busy farm around them"></header>
+<main><p>Harvest Hollow is a FarmVille-2-style co-op farm you host yourself. One small Node server runs the farm 24/7, and
+everyone plays in a browser — on a PC, a laptop, a tablet or a phone. Two people share <strong>one</strong> farm: one plants, the
+other harvests; one runs the bakery while the other feeds the cows; you both see everything the moment it happens.</p>
+<h2 id="features">Features</h2>
+<ul>
+<li><strong>A whole valley, 40 levels deep</strong> (and Legacy levels after): 21 crops from Wheat to Roses and Coffee Beans;
+  15 kinds of trees (fruit, nuts, olives, maple and cocoa, and the Pine for wood) that age a year with every harvest
+  and bear more as they grow old; 10 kinds of animals, from chickens and rabbits to bees, horses and alpacas, with
+  babies, a Nursery and breeding with coat colours, in homes that grow bigger with the flock.</li>
+<li><strong>Craft everything</strong>: 17 workshops and 121 recipes (animal feeds included), queues you drag to reorder and finish
+  item by item, and Compost and Fertilizer for bigger, faster harvests.</li>
+<li><strong>Always a next goal</strong>: Mabel's orders board, illustrated story letters from the townsfolk, 64 quests,
+  68 ribbons, 12 collection albums, a 30-tier seasonal ribbon track, a weekly County Fair with an NPC league and a
+  horse show, the River Barge, 24 Town Projects that grow a village across the river, six restoration projects
+  ending with Grandma's farmhouse and its room to furnish (40 pieces), fishing and four perk trees.</li>
+<li><strong>Surprises and treasures</strong>: the hot-air balloon drops loot crates on a parachute (coins and XP, sometimes Acorns,
+  Golden Seeds, Fertilizer, an album find or a decor piece), and eight one-of-a-kind Acorn treasures are worth saving
+  up for: the Golden Watering Can that waters everything at once, a Rainbow Tree, a Time Turner, a Farmhand and more.</li>
+<li><strong>Make it yours</strong>: 115 decor pieces (ten of them Grand showpieces), three upgrade tiers each for the farmhouse, the
+  Well, the Market Stand and the benches, turn anything where it stands, sell decor you are done with, pull the wild
+  weeds. Every farmer picks a build, hair, hair colour, skin tone, outfit colours and a hat, and wears that look in a
+  3D portrait on their name chip. A dog and a cat come in three breeds each and sleep at night in their own beds.</li>
+<li><strong>Made for two</strong>: shared coins and barn with a big-purchase confirm, "Thank all" in the activity feed,
+  pings and emotes, sitting on the bench together for Golden Hour, a Friendly Duel, duet recipes you cook together.</li>
+<li><strong>Feels good to play</strong>: drag a finger or the mouse across fields to plant and harvest, click anywhere to walk there,
+  every action is instant (the shared rules engine predicts it, the server confirms it), "where to get it" hint
+  bubbles on every item, finish crops early with Acorns, and a level-up finishes everything that is growing.</li>
+<li><strong>Looks and sounds cozy</strong>: a low-poly 3D world with day and night, seasons, drizzle and downpours with puddles and
+  the odd rainbow, glowing windows and lamps after dark, a camera you can turn and tilt, painted characters and
+  storybook letters, and an acoustic folk soundtrack that follows the time of day.</li>
+<li><strong>Phones and tablets</strong>: touch controls, a phone layout with bottom sheets, a lighter graphics mode, and
+  "Add to Home Screen".</li>
+<li><strong>Self-hosted and private</strong>: your farm lives in one JSON save on your own machine, crash-safe with an action journal
+  and rotating backups.</li>
+</ul>
+<p align="center">
+  <img src="img/farm-day.png" alt="The farm by day" width="440">
+  <img src="img/workshop.png" alt="The Windmill: one item running, four waiting, each with its own finish price" width="440">
+</p>
+<p align="center">
+  <img src="img/village.png" alt="The village across the river" width="440">
+  <img src="img/night.png" alt="The farm at night: windows and lamps lit, the dog asleep by its house" width="440">
+</p>
+<p align="center">
+  <img src="img/balloon-crate.png" alt="A balloon crate bursting open, with its loot card" width="440">
+  <img src="img/farmers.png" alt="Two farmers in their own looks on the sunset bench, their portraits on the name chips" width="440">
+</p>
+<p align="center">
+  <img src="img/phone-farm.png" alt="Playing on a phone" width="220">
+  <img src="img/phone-panel.png" alt="The Acorn shop's treasures on a phone" width="220">
+</p>
+
+<h2 id="play-it-in-2-minutes">Play it in 2 minutes</h2>
+<p>You need <a href="https://nodejs.org/">Node.js 24</a>.</p>
+<pre><code class="language-sh">git clone https://github.com/KrasimirKralev/harvest-hollow.git
+cd harvest-hollow
+npm install
+npm start
+</code></pre>
+<p>The server prints its addresses. Open <strong>http://localhost:3300</strong>, pick a farmer, a name and a colour, and play.
+Your partner opens the <strong>home-network address</strong> it prints (for example <code>http://192.168.x.y:3300</code>) on their own
+computer or phone and picks the other farmer. A farm has two farmers; <code>HH_SLOTS=1 npm start</code> makes it a solo farm.</p>
+<p>Set a farm passphrase before you share the farm beyond your home network; it protects "this is me on a new device":</p>
+<pre><code class="language-sh">HH_PASSPHRASE='something-only-you-know' npm start
+</code></pre>
+<h3>Run it 24/7 (a Raspberry Pi, a mini-PC, an old laptop)</h3>
+<pre><code class="language-sh">mkdir -p ~/.config/systemd/user
+cp deploy/harvest-hollow.service ~/.config/systemd/user/
+systemctl --user daemon-reload
+systemctl --user enable --now harvest-hollow
+loginctl enable-linger &quot;$USER&quot;          # keep it running without a login
+</code></pre>
+<p>The unit expects the checkout in <code>~/harvest-hollow</code> and Node at <code>/usr/bin/node</code>; edit its <code>WorkingDirectory</code> and
+<code>ExecStart</code> lines if yours differ. The save lives in <code>data/</code> (or <code>HH_DATA_DIR</code>). Put the passphrase in a drop-in
+(<code>systemctl --user edit harvest-hollow</code> → <code>[Service]</code> <code>Environment=HH_PASSPHRASE=...</code>), never in a tracked file.</p>
+<h3>Play from anywhere</h3>
+<p>The game is one HTTP + WebSocket port, so any tunnel works. Two free options:</p>
+<ul>
+<li><strong>Tailscale Funnel</strong>: <code>sudo tailscale funnel --bg 3300</code> gives the machine a fixed public <code>https://</code> address on
+  your tailnet's domain.</li>
+<li><strong>Cloudflare Tunnel</strong>: <code>cloudflared tunnel --url http://localhost:3300</code> (a named tunnel gives a fixed link on your
+  own domain).</li>
+</ul>
+<p>Set <code>HH_PASSPHRASE</code> before you open the farm to the internet.</p>
+<h2 id="how-to-play">How to play</h2>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>Mouse / keyboard</th>
+<th>Touch</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Act on something</td>
+<td>click it with the Hand (1)</td>
+<td>tap</td>
+</tr>
+<tr>
+<td>Plant / harvest a field</td>
+<td>pick Seeds (2) or the Sickle (3), drag across plots</td>
+<td>drag a finger</td>
+</tr>
+<tr>
+<td>Plant on an empty plot</td>
+<td>click it with the Hand → seed picker</td>
+<td>tap it</td>
+</tr>
+<tr>
+<td>Walk</td>
+<td>click open ground</td>
+<td>tap open ground</td>
+</tr>
+<tr>
+<td>Camera</td>
+<td>right-drag pan, wheel zoom, Q / E turn, PageUp / PageDown tilt</td>
+<td>two fingers pan, pinch zoom, twist to turn, two fingers up or down to tilt</td>
+</tr>
+<tr>
+<td>Move or turn a building</td>
+<td>the Hammer (9), then click it; R turns it</td>
+<td>the Hammer, then tap it; ⟳ turns it</td>
+</tr>
+<tr>
+<td>Reorder a workshop queue</td>
+<td>drag a waiting item</td>
+<td>hold, then drag (or tap it for ◀ ▶)</td>
+</tr>
+<tr>
+<td>Item info</td>
+<td>hover any item</td>
+<td>hold any item</td>
+</tr>
+</tbody>
+</table>
+<p>Everything you need to know is taught in game by Grandma Hazel's two short guides on the first evening.
+Settings › Controls lists every key and gesture.</p>
+<h2 id="how-it-works">How it works</h2>
+<ul>
+<li><code>shared/</code> — the whole game in pure, deterministic JavaScript: content tables (every crop, recipe and price,
+  generated from one economy model) and the rules engine. The <strong>same code</strong> runs in the browser to predict an action
+  instantly and on the server to decide it, so the game feels local and stays cheat-proof.</li>
+<li><code>server/</code> — Express + <code>ws</code>: one authoritative farm in memory, an append-only action journal, atomic JSON snapshots
+  and rotating backups, presence at 15 Hz, rate limits, a scheduler for daily and weekly events.</li>
+<li><code>public/</code> — the client: Three.js with no bundler (an import map), instanced and batched rendering with quality tiers
+  for laptops and phones, and an HTML/CSS interface.</li>
+<li><code>tools/</code> — the economy model and simulators, the asset pipeline, and end-to-end tests that drive two headless
+  browsers (<code>npm run test:e2e</code>) or a phone and a desktop together (<code>tools/e2e-mobile.mjs</code>).</li>
+<li><code>docs/GDD.md</code> — the full game design document: every system, number and the reasoning behind it;
+  <code>docs/research/tech-architecture.md</code> explains the technical decisions.</li>
+</ul>
+<pre><code class="language-sh">npm test                          # 1,655 unit and integration tests (node:test)
+npm run test:e2e -- --port 3310   # two players in two headless browsers, end to end (needs Chrome; CHROME=&lt;path&gt;)
+node tools/econ-sim.mjs --checks  # the economy's pacing and balance checks
+</code></pre>
+<h2 id="credits">Credits</h2>
+<ul>
+<li>3D models: <a href="https://quaternius.com">Quaternius</a>, <a href="https://kenney.nl">Kenney</a> and
+  <a href="https://vertexcat.itch.io">vertexcat</a> (CC0) — the packs are listed in
+  <a href="https://github.com/KrasimirKralev/harvest-hollow/blob/main/public/assets/models/CREDITS.md"><code>public/assets/models/CREDITS.md</code></a>.</li>
+<li>Music: CC0 tracks from <a href="https://opengameart.org">OpenGameArt</a> by Komiku, Memoraphile, Écrivain, Indieteur and
+  RandomMind — details in <a href="https://github.com/KrasimirKralev/harvest-hollow/blob/main/public/assets/audio/music/CREDITS.md"><code>public/assets/audio/music/CREDITS.md</code></a>.</li>
+<li>Fonts: Fredoka, Baloo 2 and Nunito (SIL Open Font License 1.1; the licence texts are in <code>public/assets/fonts/</code>).</li>
+<li>Illustrated portraits, letter headers, backdrops and the logo: original art made for this game with an AI image
+  model (Higgsfield), checked image by image and post-processed; released under the MIT licence with the code.</li>
+<li>Sound effects: synthesised for this game by <code>tools/make-sfx.mjs</code>.</li>
+<li>Built with <a href="https://threejs.org">three.js</a>, <a href="https://expressjs.com">Express</a> and <a href="https://github.com/websockets/ws">ws</a>.</li>
+</ul>
+<h2 id="license">License</h2>
+<p>Code and the game's own art, including the AI-generated illustrations: <a href="https://github.com/KrasimirKralev/harvest-hollow/blob/main/LICENSE">MIT</a>. Third-party assets keep their
+own licences (CC0 or the SIL OFL, listed above).</p></main>
+<footer>Harvest Hollow · MIT licensed · <a href="https://github.com/KrasimirKralev/harvest-hollow">source on GitHub</a></footer>
+</body></html>
