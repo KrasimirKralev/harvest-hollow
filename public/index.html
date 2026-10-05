@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <!-- viewport-fit=cover: the farm runs under a notch and a home bar, the HUD keeps clear of them (css/mobile.css reads
+       env(safe-area-inset-*)); resizes-content: Android's keyboard shrinks the page, so a sheet's text field stays in view -->
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+  <meta name="theme-color" content="#4C9A3E">
+  <!-- home screen (input lane: manifest.webmanifest, assets/pwa/): standalone, the status bar over the farm (the HUD keeps
+       clear of it through the safe-area insets) -->
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="apple-touch-icon" href="/assets/pwa/apple-touch-icon.png">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Harvest Hollow">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="color-scheme" content="light">
+  <title>Harvest Hollow</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <!-- Fonts are vendored (public/assets/fonts, SIL OFL): LAN play may have no internet, and no public CDN (tech §12.1). -->
+  <link rel="preload" href="/assets/fonts/fredoka-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="/assets/fonts/baloo2-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/css/style.css">
+  <link rel="stylesheet" href="/css/shell.css">
+  <link rel="stylesheet" href="/css/panels.css">
+  <link rel="stylesheet" href="/css/panels-weekly.css">
+  <link rel="stylesheet" href="/css/panels-collect.css">
+  <link rel="stylesheet" href="/css/panels-league.css">
+  <link rel="stylesheet" href="/css/panels-home.css">
+  <!-- phones and tablets last: every rule of it sits in a media query no desktop window matches -->
+  <link rel="stylesheet" href="/css/mobile.css">
+  <!-- never add modulepreload links here: the server renders this page with a versioned import map and preloads the
+       whole static module graph right after it (server/static.js, QA wave 1 SV-05) -->
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "/vendor/three/build/three.module.js",
+      "three/addons/": "/vendor/three/examples/jsm/"
+    }
+  }
+  </script>
+</head>
+<body>
+  <canvas id="world" aria-label="The farm. Click a plot to plant or harvest; Q and E rotate the view."></canvas>
+  <div id="overlay" aria-hidden="true"></div>
+  <div id="pointers" aria-hidden="true"></div>
+
+  <!-- HUD skeleton (GDD §7.3, visual-ux-juice §5.5). ui/*.js fills it; ids and data-attributes are the ui lane's
+       contract with tests and tools (e2e: #hud-players li[data-pid].online, #hud-barn-pill, .toast). -->
+  <div id="hud" hidden>
+    <header class="hud-tl" aria-label="Farm">
+      <section class="level-card" id="hud-level-card" aria-label="Farm level">
+        <button class="level-star" id="hud-level-star" type="button" aria-describedby="hud-xp-text">
+          <svg class="star-svg" viewBox="0 0 64 64" aria-hidden="true">
+            <path d="M32 3l8.6 17.4 19.2 2.8-13.9 13.5 3.3 19.1L32 46.8 14.8 55.8l3.3-19.1L4.2 23.2l19.2-2.8z" fill="#2B78B5" stroke="#1C5283" stroke-width="3" stroke-linejoin="round"/>
+            <path d="M32 9l7 14.1 15.6 2.3-11.3 11 2.7 15.5L32 44.6 18 51.9l2.7-15.5-11.3-11 15.6-2.3z" fill="#4AA8E8"/>
+            <path d="M32 11l-5.6 11.4L14 24.2" fill="none" stroke="#fff" stroke-opacity=".55" stroke-width="3" stroke-linecap="round"/>
+          </svg>
+          <span class="level-num outlined" id="hud-level">1</span>
+          <span class="sr-only">Farm level <span id="hud-level-text">1</span></span>
+        </button>
+        <div class="level-body">
+          <div class="farm-name outlined" id="hud-farm-name">Harvest Hollow</div>
+          <div class="xp" role="progressbar" aria-label="Farm XP" aria-valuemin="0" id="hud-xp-bar">
+            <div class="fill" id="hud-xp-fill"></div>
+            <span class="xp-text" id="hud-xp-text">0 / 25 XP</span>
+          </div>
+        </div>
+      </section>
+      <ul class="players" id="hud-players" aria-label="Farmers"></ul>
+    </header>
+
+    <aside class="tracker" id="tracker" aria-label="Goals"></aside>
+
+    <section class="hud-tr" aria-label="Treasury">
+      <button class="pill pill-coins" id="hud-coins-pill" type="button" data-tip="Farm treasury (shared). Open the Market">
+        <img class="icon" src="/assets/icons/coins.png" alt="" width="50" height="50" draggable="false">
+        <span class="num" id="hud-coins">0</span><span class="sr-only"> coins</span>
+        <span class="more" aria-hidden="true">+</span>
+      </button>
+      <button class="pill pill-acorns" id="hud-acorns-pill" type="button" data-tip="Acorns (shared). Rare treats for special things">
+        <img class="icon" src="/assets/icons/acorns.png" alt="" width="50" height="50" draggable="false">
+        <span class="num" id="hud-acorns">0</span><span class="sr-only"> acorns</span>
+      </button>
+      <button class="pill pill-hearts" id="hud-hearts-pill" type="button" data-tip="Your hearts (personal): earned by playing together">
+        <img class="icon" src="/assets/icons/hearts.png" alt="" width="50" height="50" draggable="false">
+        <span class="num" id="hud-hearts">0</span><span class="sr-only"> hearts</span>
+      </button>
+      <button class="pill pill-barn" id="hud-barn-pill" type="button" data-tip="The Barn (I)">
+        <img class="icon" src="/assets/icons/barn.png" alt="" width="50" height="50" draggable="false">
+        <span class="num"><span id="hud-barn">0</span><span class="cap" id="hud-barn-cap"></span></span><span class="sr-only"> items in the barn</span>
+        <span class="more" aria-hidden="true">+</span>
+      </button>
+    </section>
+
+    <nav class="hud-right" id="hud-right" aria-label="View"></nav>
+
+    <section class="hud-bl" aria-label="Together">
+      <ol class="feed" id="feed" aria-label="Activity" aria-live="polite"></ol>
+      <div class="social" id="social"></div>
+    </section>
+
+    <div class="tray-wrap" id="tray-wrap">
+      <div class="coach-slot" id="coach-slot"></div>
+      <div class="seed-tray paper" id="seed-tray" role="listbox" aria-label="Seeds" hidden></div>
+      <div class="seed-tray build-tray paper" id="build-tray" role="menu" aria-label="Build" hidden></div>
+      <div class="stroke-chip" id="stroke-chip" role="status" hidden></div>
+      <nav class="toolbar wood" id="toolbar" aria-label="Tools"></nav>
+    </div>
+
+    <nav class="dock wood" id="dock" aria-label="Farm menus"></nav>
+
+    <div class="conn" id="conn" role="status" aria-live="polite"></div>
+    <div class="toasts" id="toasts" role="status" aria-live="polite"></div>
+    <div class="banners" id="banners" aria-live="polite"></div>
+  </div>
+
+  <!-- Panels (ui.panels registry): the shell builds frames inside #panels; the scrim dims the farm behind modal ones. -->
+  <div id="panels">
+    <div class="scrim" id="scrim" hidden aria-hidden="true"></div>
+  </div>
+
+  <div id="celebrate" aria-live="assertive"></div>
+  <div class="tip" id="tip" role="tooltip" hidden></div>
+
+  <!-- Boot: the painted title scene until the farm (or the slot picker) is ready; the shell updates its line. -->
+  <section class="modal-layer boot" id="boot" aria-live="polite">
+    <!-- the farmhouse chimney (and a village chimney) of the painting smoke gently (shell.css "welcome smoke"):
+         pure CSS, locked to the cover-scaled painting at any window size; data-rest="keep": it never rests -->
+    <div class="smoke" aria-hidden="true" data-rest="keep">
+      <div class="plume plume--farm"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+      <div class="plume plume--village"><i></i><i></i><i></i><i></i></div>
+    </div>
+    <div class="boot-card">
+      <h1 class="boot-title"><picture><source srcset="/assets/art/logo.webp" type="image/webp">
+        <img class="boot-logo" src="/assets/art/logo.png" alt="Harvest Hollow" width="1200" height="538"></picture></h1>
+      <p class="boot-line" id="boot-line"><span class="spin" aria-hidden="true"></span><span id="boot-text">Waking up the farm…</span></p>
+    </div>
+  </section>
+
+  <section class="modal-layer" id="slot-picker" role="dialog" aria-modal="true" aria-labelledby="slot-title" hidden>
+    <!-- the same chimney smoke over the same painting (shell.css "welcome smoke") -->
+    <div class="smoke" aria-hidden="true" data-rest="keep">
+      <div class="plume plume--farm"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+      <div class="plume plume--village"><i></i><i></i><i></i><i></i></div>
+    </div>
+    <div class="slot-card wood">
+      <!-- the carved wide logo above the card (art lane Hookup 4: the welcome painting keeps its sky free for it) -->
+      <h1 class="slot-title" id="slot-title"><picture><source srcset="/assets/art/logo-wide.webp" type="image/webp">
+        <img class="slot-logo" src="/assets/art/logo-wide.png" alt="Harvest Hollow" width="1400" height="336"></picture></h1>
+      <div class="slot-paper paper">
+        <p class="slot-sub" id="slot-sub">Who is playing on this screen?</p>
+        <div class="slots" id="slot-list"></div>
+        <p class="modal-error" id="slot-error" role="alert"></p>
+      </div>
+    </div>
+  </section>
+
+  <noscript>Harvest Hollow needs JavaScript and WebGL2.</noscript>
+  <script type="module" src="/js/main.js"></script>
+</body>
+</html>

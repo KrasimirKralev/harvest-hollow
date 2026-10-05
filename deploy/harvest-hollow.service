@@ -1,0 +1,40 @@
+# Harvest Hollow farm server: systemd USER unit.
+#
+# Install once (the unit expects the checkout in ~/harvest-hollow and Node 24 at /usr/bin/node: edit
+# WorkingDirectory / ExecStart if yours differ, e.g. `which node` under nvm):
+#   mkdir -p ~/.config/systemd/user
+#   cp deploy/harvest-hollow.service ~/.config/systemd/user/
+#   systemctl --user daemon-reload
+#   systemctl --user enable --now harvest-hollow.service
+#   loginctl enable-linger "$USER"                  # start at boot, without a login
+#   journalctl --user -u harvest-hollow -f          # the boot banner with the LAN address is in here
+#
+# Never add HH_DEV here: it opens the time-warp and drop routes. A passphrase for claiming/reclaiming slots:
+#   systemctl --user edit harvest-hollow   ->   [Service]  Environment=HH_PASSPHRASE=...
+# (a drop-in file under ~/.config, not this tracked file, so the secret never lands in git)
+[Unit]
+Description=Harvest Hollow farm server (http://localhost:3300)
+After=network.target
+# A server that keeps failing within a minute stops retrying instead of looping in the journal.
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+[Service]
+Type=simple
+WorkingDirectory=%h/harvest-hollow
+ExecStart=/usr/bin/node %h/harvest-hollow/server/index.js
+Environment=PORT=3300
+Environment=HH_DATA_DIR=%h/harvest-hollow/data
+Environment=NODE_ENV=production
+Restart=on-failure
+RestartSec=2
+# Exit 78 = the save needs a human (a journal that does not replay, a save from a newer build, a bad HH_TZ):
+# restarting cannot fix it, the journal explains what to do.
+RestartPreventExitStatus=78
+# `systemctl --user stop` sends SIGTERM: the server stops taking actions, writes a final snapshot and exits 0.
+# The journal makes even a SIGKILL lossless; the timeout only bounds a stuck disk.
+KillSignal=SIGTERM
+TimeoutStopSec=20
+
+[Install]
+WantedBy=default.target

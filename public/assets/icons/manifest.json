@@ -1,0 +1,1505 @@
+{
+ "version": 1,
+ "hash": "23de24b468",
+ "size": [
+  128,
+  64
+ ],
+ "ids": {
+  "_fallback": {
+   "kind": "fallback"
+  },
+  "acorns": {
+   "kind": "item"
+  },
+  "aged_goat_cheese": {
+   "kind": "item"
+  },
+  "alpaca": {
+   "kind": "animal"
+  },
+  "alpaca_fiber": {
+   "kind": "item"
+  },
+  "alpaca_plush": {
+   "kind": "item"
+  },
+  "alpaca_shawl": {
+   "kind": "item"
+  },
+  "alpaca_yarn": {
+   "kind": "item"
+  },
+  "ammonite": {
+   "kind": "find"
+  },
+  "angora_mittens": {
+   "kind": "item"
+  },
+  "angora_wool": {
+   "kind": "item"
+  },
+  "angora_yarn": {
+   "kind": "item"
+  },
+  "apple": {
+   "kind": "item"
+  },
+  "apple_juice": {
+   "kind": "item"
+  },
+  "apple_pie": {
+   "kind": "item"
+  },
+  "apple_tree": {
+   "kind": "tree"
+  },
+  "arbor_of_lights": {
+   "kind": "decor"
+  },
+  "armchair": {
+   "kind": "furniture"
+  },
+  "arrowhead": {
+   "kind": "find"
+  },
+  "axe": {
+   "kind": "tool"
+  },
+  "baby_bottle": {
+   "kind": "item"
+  },
+  "bakery": {
+   "kind": "building"
+  },
+  "bandstand_souvenir": {
+   "kind": "decor"
+  },
+  "barn": {
+   "kind": "building"
+  },
+  "barred_feather": {
+   "kind": "find"
+  },
+  "basket": {
+   "kind": "tool"
+  },
+  "bath_house": {
+   "kind": "decor"
+  },
+  "bee": {
+   "kind": "animal"
+  },
+  "beehive": {
+   "kind": "home"
+  },
+  "beehive_skep": {
+   "kind": "decor"
+  },
+  "beeswax": {
+   "kind": "item"
+  },
+  "bench_swing": {
+   "kind": "decor"
+  },
+  "big_stump": {
+   "kind": "debris"
+  },
+  "big_watering_can": {
+   "kind": "tool"
+  },
+  "bird_bath": {
+   "kind": "decor"
+  },
+  "bird_feeder": {
+   "kind": "decor"
+  },
+  "bird_house": {
+   "kind": "item"
+  },
+  "black_tomato_tin": {
+   "kind": "find"
+  },
+  "black_truffle": {
+   "kind": "item"
+  },
+  "blossom_jar": {
+   "kind": "find"
+  },
+  "blue_corn_tin": {
+   "kind": "find"
+  },
+  "blue_morpho": {
+   "kind": "find"
+  },
+  "blue_rosette": {
+   "kind": "find"
+  },
+  "blueberry": {
+   "kind": "item"
+  },
+  "blueberry_jam": {
+   "kind": "item"
+  },
+  "blueberry_muffin": {
+   "kind": "item"
+  },
+  "blueberry_pie": {
+   "kind": "item"
+  },
+  "boathouse_souvenir": {
+   "kind": "decor"
+  },
+  "bookcase": {
+   "kind": "furniture"
+  },
+  "boulder": {
+   "kind": "debris"
+  },
+  "braided_rug": {
+   "kind": "furniture"
+  },
+  "brass_button": {
+   "kind": "find"
+  },
+  "brass_oil_can": {
+   "kind": "find"
+  },
+  "bread": {
+   "kind": "item"
+  },
+  "breakfast_hamper": {
+   "kind": "item"
+  },
+  "bunny_slippers": {
+   "kind": "item"
+  },
+  "bunting": {
+   "kind": "decor"
+  },
+  "butter": {
+   "kind": "item"
+  },
+  "butter_churn": {
+   "kind": "furniture"
+  },
+  "butterflies_display": {
+   "kind": "decor"
+  },
+  "buttons_display": {
+   "kind": "decor"
+  },
+  "cabbage": {
+   "kind": "item"
+  },
+  "cabbage_white": {
+   "kind": "find"
+  },
+  "candle_stand": {
+   "kind": "furniture"
+  },
+  "captains_lantern": {
+   "kind": "decor"
+  },
+  "carousel": {
+   "kind": "decor"
+  },
+  "carrot": {
+   "kind": "item"
+  },
+  "carrot_juice": {
+   "kind": "item"
+  },
+  "carrot_muffin": {
+   "kind": "item"
+  },
+  "cat": {
+   "kind": "animal"
+  },
+  "cat_basket": {
+   "kind": "decor"
+  },
+  "cat_treat": {
+   "kind": "item"
+  },
+  "champion_banner": {
+   "kind": "decor"
+  },
+  "chandlery": {
+   "kind": "building"
+  },
+  "chapel_souvenir": {
+   "kind": "decor"
+  },
+  "cheese": {
+   "kind": "item"
+  },
+  "cherry": {
+   "kind": "item"
+  },
+  "cherry_blossom": {
+   "kind": "decor"
+  },
+  "cherry_jam": {
+   "kind": "item"
+  },
+  "cherry_pie": {
+   "kind": "item"
+  },
+  "cherry_tree": {
+   "kind": "tree"
+  },
+  "chick": {
+   "kind": "animal",
+   "name": "Chick"
+  },
+  "chicken": {
+   "kind": "animal"
+  },
+  "chicken_feed": {
+   "kind": "item"
+  },
+  "chocolate": {
+   "kind": "item"
+  },
+  "chocolate_cake": {
+   "kind": "item"
+  },
+  "chocolate_truffles": {
+   "kind": "item"
+  },
+  "chocolatier": {
+   "kind": "building"
+  },
+  "clock_square_souvenir": {
+   "kind": "decor"
+  },
+  "clock_tower": {
+   "kind": "decor"
+  },
+  "cloud_angora": {
+   "kind": "item"
+  },
+  "clover_jar": {
+   "kind": "find"
+  },
+  "cocoa": {
+   "kind": "item"
+  },
+  "cocoa_tree": {
+   "kind": "tree"
+  },
+  "coffee": {
+   "kind": "item"
+  },
+  "coffee_cake": {
+   "kind": "item"
+  },
+  "coins": {
+   "kind": "item"
+  },
+  "coleslaw": {
+   "kind": "item"
+  },
+  "compost": {
+   "kind": "item"
+  },
+  "compost_bin": {
+   "kind": "building"
+  },
+  "compost_scoop": {
+   "kind": "tool"
+  },
+  "cookies": {
+   "kind": "item"
+  },
+  "coop": {
+   "kind": "home"
+  },
+  "copper_feather": {
+   "kind": "find"
+  },
+  "copper_penny": {
+   "kind": "find"
+  },
+  "corn": {
+   "kind": "item"
+  },
+  "corn_bread": {
+   "kind": "item"
+  },
+  "cornmeal": {
+   "kind": "item"
+  },
+  "cotton": {
+   "kind": "item"
+  },
+  "cotton_cloth": {
+   "kind": "item"
+  },
+  "cotton_tote": {
+   "kind": "item"
+  },
+  "couple_photo": {
+   "kind": "furniture"
+  },
+  "cow": {
+   "kind": "animal"
+  },
+  "cow_barn": {
+   "kind": "home"
+  },
+  "cozy_winter_gift": {
+   "kind": "item"
+  },
+  "craft_hall_souvenir": {
+   "kind": "decor"
+  },
+  "cream": {
+   "kind": "item"
+  },
+  "cream_top_milk": {
+   "kind": "item"
+  },
+  "cuckoo_clock": {
+   "kind": "furniture"
+  },
+  "custard": {
+   "kind": "item"
+  },
+  "dairy": {
+   "kind": "building"
+  },
+  "daybed": {
+   "kind": "furniture"
+  },
+  "dining_table": {
+   "kind": "furniture"
+  },
+  "dirt_path": {
+   "kind": "decor"
+  },
+  "dog": {
+   "kind": "animal"
+  },
+  "dog_biscuit": {
+   "kind": "item"
+  },
+  "dog_house": {
+   "kind": "decor"
+  },
+  "dresser": {
+   "kind": "furniture"
+  },
+  "duck": {
+   "kind": "animal"
+  },
+  "duck_egg": {
+   "kind": "item"
+  },
+  "duck_pond": {
+   "kind": "home"
+  },
+  "duel_pennant": {
+   "kind": "decor"
+  },
+  "duet_table": {
+   "kind": "furniture"
+  },
+  "egg": {
+   "kind": "item"
+  },
+  "fair_rosettes_display": {
+   "kind": "decor"
+  },
+  "fair_trophy": {
+   "kind": "decor"
+  },
+  "farm_coffee": {
+   "kind": "item"
+  },
+  "farmhand": {
+   "kind": "item"
+  },
+  "farmhouse": {
+   "kind": "building"
+  },
+  "farmhouse_window": {
+   "kind": "furniture"
+  },
+  "feathers_display": {
+   "kind": "decor"
+  },
+  "feed_mill": {
+   "kind": "building"
+  },
+  "feed_scoop": {
+   "kind": "tool"
+  },
+  "fern_fossil": {
+   "kind": "find"
+  },
+  "fern_pot": {
+   "kind": "furniture"
+  },
+  "ferry_landing_souvenir": {
+   "kind": "decor"
+  },
+  "fertilizer": {
+   "kind": "item"
+  },
+  "festival_arch_souvenir": {
+   "kind": "decor"
+  },
+  "fig": {
+   "kind": "item"
+  },
+  "fig_crate": {
+   "kind": "decor"
+  },
+  "fig_jam": {
+   "kind": "item"
+  },
+  "fig_tart": {
+   "kind": "item"
+  },
+  "fig_tree": {
+   "kind": "tree"
+  },
+  "fireplace": {
+   "kind": "furniture"
+  },
+  "first_note": {
+   "kind": "find"
+  },
+  "fish_bream": {
+   "kind": "fish"
+  },
+  "fish_carp": {
+   "kind": "fish"
+  },
+  "fish_golden_carp": {
+   "kind": "fish"
+  },
+  "fish_koi": {
+   "kind": "fish"
+  },
+  "fish_old_boot": {
+   "kind": "fish"
+  },
+  "fish_perch": {
+   "kind": "fish"
+  },
+  "fish_pike": {
+   "kind": "fish"
+  },
+  "fish_roach": {
+   "kind": "fish"
+  },
+  "fish_tench": {
+   "kind": "fish"
+  },
+  "fishing_rod": {
+   "kind": "tool"
+  },
+  "floor_lamp": {
+   "kind": "furniture"
+  },
+  "flour": {
+   "kind": "item"
+  },
+  "flower_bed": {
+   "kind": "decor"
+  },
+  "flower_cart": {
+   "kind": "decor"
+  },
+  "flower_market_souvenir": {
+   "kind": "decor"
+  },
+  "flower_maze": {
+   "kind": "decor"
+  },
+  "footstool": {
+   "kind": "furniture"
+  },
+  "fossils_display": {
+   "kind": "decor"
+  },
+  "fountain": {
+   "kind": "decor"
+  },
+  "french_onion_soup": {
+   "kind": "item"
+  },
+  "frog_figurine": {
+   "kind": "find"
+  },
+  "garden_gnome": {
+   "kind": "decor"
+  },
+  "gazebo": {
+   "kind": "decor"
+  },
+  "giant_trophy": {
+   "kind": "decor"
+  },
+  "glasshouse_garden_souvenir": {
+   "kind": "decor"
+  },
+  "goat": {
+   "kind": "animal"
+  },
+  "goat_cheese": {
+   "kind": "item"
+  },
+  "goat_milk": {
+   "kind": "item"
+  },
+  "goat_yard": {
+   "kind": "home"
+  },
+  "gold_scale": {
+   "kind": "decor"
+  },
+  "gold_sovereign": {
+   "kind": "find"
+  },
+  "golden_barn": {
+   "kind": "item"
+  },
+  "golden_can": {
+   "kind": "item"
+  },
+  "golden_cow_statue": {
+   "kind": "decor"
+  },
+  "golden_egg": {
+   "kind": "item"
+  },
+  "golden_feather": {
+   "kind": "item"
+  },
+  "golden_feather_piece": {
+   "kind": "find"
+  },
+  "golden_gate": {
+   "kind": "decor"
+  },
+  "golden_scarecrow": {
+   "kind": "decor"
+  },
+  "golden_seeds": {
+   "kind": "item"
+  },
+  "golden_sprinkler": {
+   "kind": "item"
+  },
+  "gourmet_hamper": {
+   "kind": "item"
+  },
+  "gramophone": {
+   "kind": "furniture"
+  },
+  "grand_sickle": {
+   "kind": "tool"
+  },
+  "grand_windmill": {
+   "kind": "decor"
+  },
+  "grandma_rocker": {
+   "kind": "decor"
+  },
+  "granola_bar": {
+   "kind": "item"
+  },
+  "greenhouse": {
+   "kind": "building"
+  },
+  "greenhouse_frame": {
+   "kind": "decor"
+  },
+  "grenadine": {
+   "kind": "item"
+  },
+  "growth_totem": {
+   "kind": "decor"
+  },
+  "hall_runner": {
+   "kind": "furniture"
+  },
+  "hammer": {
+   "kind": "tool"
+  },
+  "hamper_rosette": {
+   "kind": "decor"
+  },
+  "hand": {
+   "kind": "tool"
+  },
+  "harbour_inn_souvenir": {
+   "kind": "decor"
+  },
+  "harvest_feast": {
+   "kind": "item"
+  },
+  "harvest_hamper": {
+   "kind": "item"
+  },
+  "hay_bales": {
+   "kind": "decor"
+  },
+  "hazel_portrait": {
+   "kind": "furniture"
+  },
+  "heart_arbor": {
+   "kind": "decor"
+  },
+  "hearts": {
+   "kind": "item"
+  },
+  "heather_jar": {
+   "kind": "find"
+  },
+  "heirloom_seeds_display": {
+   "kind": "decor"
+  },
+  "hoe": {
+   "kind": "tool"
+  },
+  "honey": {
+   "kind": "item"
+  },
+  "honey_candle": {
+   "kind": "item"
+  },
+  "honey_jars_display": {
+   "kind": "decor"
+  },
+  "hope_chest": {
+   "kind": "furniture"
+  },
+  "horse": {
+   "kind": "animal"
+  },
+  "hot_air_balloon": {
+   "kind": "decor"
+  },
+  "hot_cocoa": {
+   "kind": "item"
+  },
+  "hurry": {
+   "kind": "item"
+  },
+  "hutch": {
+   "kind": "home"
+  },
+  "ice_cream": {
+   "kind": "item"
+  },
+  "jam_shelf": {
+   "kind": "decor"
+  },
+  "juice_press": {
+   "kind": "building"
+  },
+  "keepsake_shelf": {
+   "kind": "furniture"
+  },
+  "ketchup": {
+   "kind": "item"
+  },
+  "kitchen": {
+   "kind": "building"
+  },
+  "kitchen_hutch": {
+   "kind": "furniture"
+  },
+  "koi_pond": {
+   "kind": "decor"
+  },
+  "lantern": {
+   "kind": "decor"
+  },
+  "lavender": {
+   "kind": "item"
+  },
+  "lavender_candle": {
+   "kind": "item"
+  },
+  "lavender_dye": {
+   "kind": "item"
+  },
+  "lavender_jar": {
+   "kind": "find"
+  },
+  "lavender_soap": {
+   "kind": "item"
+  },
+  "legacy_statue": {
+   "kind": "decor"
+  },
+  "lemon": {
+   "kind": "item"
+  },
+  "lemon_cake": {
+   "kind": "item"
+  },
+  "lemon_meringue_pie": {
+   "kind": "item"
+  },
+  "lemon_pot": {
+   "kind": "furniture"
+  },
+  "lemon_tree": {
+   "kind": "tree"
+  },
+  "lemonade": {
+   "kind": "item"
+  },
+  "library_souvenir": {
+   "kind": "decor"
+  },
+  "lighthouse_souvenir": {
+   "kind": "decor"
+  },
+  "livestock_feed": {
+   "kind": "item"
+  },
+  "log": {
+   "kind": "debris"
+  },
+  "loot_crate": {
+   "kind": "item"
+  },
+  "lost_tools_display": {
+   "kind": "decor"
+  },
+  "love_notes_display": {
+   "kind": "decor"
+  },
+  "lucky_clover": {
+   "kind": "item"
+  },
+  "lucky_coin": {
+   "kind": "find"
+  },
+  "lucky_horseshoe": {
+   "kind": "decor"
+  },
+  "mabel_stall": {
+   "kind": "decor"
+  },
+  "mailbox": {
+   "kind": "building"
+  },
+  "manure": {
+   "kind": "item"
+  },
+  "maple_fudge": {
+   "kind": "item"
+  },
+  "maple_pancakes": {
+   "kind": "item"
+  },
+  "maple_sap": {
+   "kind": "item"
+  },
+  "maple_syrup": {
+   "kind": "item"
+  },
+  "maple_tree": {
+   "kind": "tree"
+  },
+  "market_stand": {
+   "kind": "building"
+  },
+  "mastery_sign": {
+   "kind": "decor"
+  },
+  "mastery_sign_gold": {
+   "kind": "decor"
+  },
+  "melon_awning": {
+   "kind": "decor"
+  },
+  "memory_frame": {
+   "kind": "furniture"
+  },
+  "memory_wall": {
+   "kind": "furniture"
+  },
+  "milk": {
+   "kind": "item"
+  },
+  "milk_churn": {
+   "kind": "decor"
+  },
+  "mill": {
+   "kind": "building"
+  },
+  "millpond_bridge_souvenir": {
+   "kind": "decor"
+  },
+  "monarch": {
+   "kind": "find"
+  },
+  "moon_melon_tin": {
+   "kind": "find"
+  },
+  "music_hall_souvenir": {
+   "kind": "decor"
+  },
+  "nail_tin": {
+   "kind": "find"
+  },
+  "oat_flakes": {
+   "kind": "item"
+  },
+  "oats": {
+   "kind": "item"
+  },
+  "observatory_souvenir": {
+   "kind": "decor"
+  },
+  "oil_press": {
+   "kind": "building"
+  },
+  "old_bottle": {
+   "kind": "find"
+  },
+  "old_coins_display": {
+   "kind": "decor"
+  },
+  "old_florin": {
+   "kind": "find"
+  },
+  "old_pitchfork": {
+   "kind": "find"
+  },
+  "olive": {
+   "kind": "item"
+  },
+  "olive_bread": {
+   "kind": "item"
+  },
+  "olive_jar": {
+   "kind": "decor"
+  },
+  "olive_oil": {
+   "kind": "item"
+  },
+  "olive_tree": {
+   "kind": "tree"
+  },
+  "omelette": {
+   "kind": "item"
+  },
+  "onion": {
+   "kind": "item"
+  },
+  "orange": {
+   "kind": "item"
+  },
+  "orange_juice": {
+   "kind": "item"
+  },
+  "orange_marmalade": {
+   "kind": "item"
+  },
+  "orange_tree": {
+   "kind": "tree"
+  },
+  "orangery": {
+   "kind": "decor"
+  },
+  "orchard_walk_souvenir": {
+   "kind": "decor"
+  },
+  "order_board": {
+   "kind": "building"
+  },
+  "oval_mirror": {
+   "kind": "furniture"
+  },
+  "packing": {
+   "kind": "building"
+  },
+  "paddock": {
+   "kind": "home"
+  },
+  "pancakes": {
+   "kind": "item"
+  },
+  "pasture": {
+   "kind": "home"
+  },
+  "pavilion_souvenir": {
+   "kind": "decor"
+  },
+  "peach": {
+   "kind": "item"
+  },
+  "peach_cobbler": {
+   "kind": "item"
+  },
+  "peach_jam": {
+   "kind": "item"
+  },
+  "peach_tree": {
+   "kind": "tree"
+  },
+  "peacock_butterfly": {
+   "kind": "find"
+  },
+  "peacock_feather": {
+   "kind": "find"
+  },
+  "pear": {
+   "kind": "item"
+  },
+  "pear_nectar": {
+   "kind": "item"
+  },
+  "pear_tart": {
+   "kind": "item"
+  },
+  "pear_tree": {
+   "kind": "tree"
+  },
+  "pepper": {
+   "kind": "item"
+  },
+  "pet_bed": {
+   "kind": "furniture"
+  },
+  "piano": {
+   "kind": "furniture"
+  },
+  "picket_fence": {
+   "kind": "decor"
+  },
+  "pickled_peppers": {
+   "kind": "item"
+  },
+  "picnic_basket": {
+   "kind": "item"
+  },
+  "picnic_blanket": {
+   "kind": "item"
+  },
+  "picnic_table": {
+   "kind": "decor"
+  },
+  "pie_oven": {
+   "kind": "building"
+  },
+  "pig": {
+   "kind": "animal"
+  },
+  "pig_mud_bath": {
+   "kind": "decor"
+  },
+  "pig_pen": {
+   "kind": "home"
+  },
+  "pig_slop": {
+   "kind": "item"
+  },
+  "pincushion": {
+   "kind": "find"
+  },
+  "pine": {
+   "kind": "tree"
+  },
+  "pizza": {
+   "kind": "item"
+  },
+  "planks": {
+   "kind": "item"
+  },
+  "plate_rack": {
+   "kind": "furniture"
+  },
+  "plot": {
+   "kind": "plot"
+  },
+  "plum": {
+   "kind": "item"
+  },
+  "plum_cake": {
+   "kind": "item"
+  },
+  "plum_jam": {
+   "kind": "item"
+  },
+  "plum_tree": {
+   "kind": "tree"
+  },
+  "pocket_knife": {
+   "kind": "find"
+  },
+  "polaroid": {
+   "kind": "find"
+  },
+  "pomegranate": {
+   "kind": "item"
+  },
+  "pomegranate_juice": {
+   "kind": "item"
+  },
+  "pomegranate_tree": {
+   "kind": "tree"
+  },
+  "pond_dock": {
+   "kind": "decor"
+  },
+  "pond_treasures_display": {
+   "kind": "decor"
+  },
+  "popcorn": {
+   "kind": "item"
+  },
+  "post_office_souvenir": {
+   "kind": "decor"
+  },
+  "potato": {
+   "kind": "item"
+  },
+  "potato_chips": {
+   "kind": "item"
+  },
+  "potato_gratin": {
+   "kind": "item"
+  },
+  "preserves": {
+   "kind": "building"
+  },
+  "pressed_flower": {
+   "kind": "find"
+  },
+  "pumpkin": {
+   "kind": "item"
+  },
+  "pumpkin_lanterns": {
+   "kind": "decor"
+  },
+  "pumpkin_pie": {
+   "kind": "item"
+  },
+  "pumpkin_soup": {
+   "kind": "item"
+  },
+  "purple_carrot_tin": {
+   "kind": "find"
+  },
+  "purple_rosette": {
+   "kind": "find"
+  },
+  "quilt": {
+   "kind": "item"
+  },
+  "quilt_hanging": {
+   "kind": "furniture"
+  },
+  "rabbit": {
+   "kind": "animal"
+  },
+  "rabbit_greens": {
+   "kind": "item"
+  },
+  "rag_rug": {
+   "kind": "furniture"
+  },
+  "rainbow_rosette": {
+   "kind": "find"
+  },
+  "rainbow_tree": {
+   "kind": "tree"
+  },
+  "range_stove": {
+   "kind": "furniture"
+  },
+  "raspberry": {
+   "kind": "item"
+  },
+  "raspberry_jam": {
+   "kind": "item"
+  },
+  "raspberry_tart": {
+   "kind": "item"
+  },
+  "recipe_bread": {
+   "kind": "find"
+  },
+  "recipe_cake": {
+   "kind": "find"
+  },
+  "recipe_cards_display": {
+   "kind": "decor"
+  },
+  "recipe_jam": {
+   "kind": "find"
+  },
+  "recipe_pie": {
+   "kind": "find"
+  },
+  "recipe_soup": {
+   "kind": "find"
+  },
+  "red_rosette": {
+   "kind": "find"
+  },
+  "ribbon_letter": {
+   "kind": "find"
+  },
+  "ribbon_rosette": {
+   "kind": "decor"
+  },
+  "ribbon_trophy": {
+   "kind": "decor"
+  },
+  "ribbon_wall": {
+   "kind": "furniture"
+  },
+  "rice": {
+   "kind": "item"
+  },
+  "rice_pudding": {
+   "kind": "item"
+  },
+  "risotto": {
+   "kind": "item"
+  },
+  "roasted_seeds": {
+   "kind": "item"
+  },
+  "rock": {
+   "kind": "debris"
+  },
+  "rocking_horse": {
+   "kind": "furniture"
+  },
+  "rope_coil": {
+   "kind": "decor"
+  },
+  "rose": {
+   "kind": "item"
+  },
+  "rose_arch": {
+   "kind": "decor"
+  },
+  "rose_candle": {
+   "kind": "item"
+  },
+  "rose_jelly": {
+   "kind": "item"
+  },
+  "royal_fiber": {
+   "kind": "item"
+  },
+  "royal_jelly": {
+   "kind": "item"
+  },
+  "rusty_trowel": {
+   "kind": "find"
+  },
+  "saddle_rack": {
+   "kind": "decor"
+  },
+  "sauerkraut": {
+   "kind": "item"
+  },
+  "sawmill": {
+   "kind": "building"
+  },
+  "scarecrow": {
+   "kind": "decor"
+  },
+  "scarf": {
+   "kind": "item"
+  },
+  "schoolhouse_souvenir": {
+   "kind": "decor"
+  },
+  "sea_glass": {
+   "kind": "find"
+  },
+  "season_pennant": {
+   "kind": "decor"
+  },
+  "season_trophy": {
+   "kind": "decor"
+  },
+  "seed_bag": {
+   "kind": "tool"
+  },
+  "seed_packet": {
+   "kind": "item"
+  },
+  "seed_spreader": {
+   "kind": "tool"
+  },
+  "sewing": {
+   "kind": "building"
+  },
+  "shark_tooth": {
+   "kind": "find"
+  },
+  "sheep": {
+   "kind": "animal"
+  },
+  "ship_bell": {
+   "kind": "decor"
+  },
+  "show_ribbon": {
+   "kind": "item"
+  },
+  "sickle": {
+   "kind": "tool"
+  },
+  "side_table": {
+   "kind": "furniture"
+  },
+  "silk_wool": {
+   "kind": "item"
+  },
+  "silver_needle": {
+   "kind": "find"
+  },
+  "silver_rosette": {
+   "kind": "decor"
+  },
+  "silver_sixpence": {
+   "kind": "find"
+  },
+  "silver_spoon": {
+   "kind": "find"
+  },
+  "skating_pond_souvenir": {
+   "kind": "decor"
+  },
+  "snail_shell": {
+   "kind": "find"
+  },
+  "snow_lantern": {
+   "kind": "decor"
+  },
+  "sofa": {
+   "kind": "furniture"
+  },
+  "spa_basket": {
+   "kind": "item"
+  },
+  "speckled_feather": {
+   "kind": "find"
+  },
+  "sprinkler": {
+   "kind": "decor"
+  },
+  "stable": {
+   "kind": "home"
+  },
+  "star_lanterns": {
+   "kind": "decor"
+  },
+  "statue_cow": {
+   "kind": "decor"
+  },
+  "stone_well": {
+   "kind": "decor"
+  },
+  "strawberry": {
+   "kind": "item"
+  },
+  "strawberry_jam": {
+   "kind": "item"
+  },
+  "striped_beet_tin": {
+   "kind": "find"
+  },
+  "stuffed_peppers": {
+   "kind": "item"
+  },
+  "stump": {
+   "kind": "debris"
+  },
+  "sugar": {
+   "kind": "item"
+  },
+  "sugar_shack": {
+   "kind": "building"
+  },
+  "sugarcane": {
+   "kind": "item"
+  },
+  "sunflower": {
+   "kind": "item"
+  },
+  "sunflower_jar": {
+   "kind": "find"
+  },
+  "sunflower_oil": {
+   "kind": "item"
+  },
+  "sunflower_planter": {
+   "kind": "decor"
+  },
+  "sunset_bench": {
+   "kind": "decor"
+  },
+  "swallowtail": {
+   "kind": "find"
+  },
+  "sweater": {
+   "kind": "item"
+  },
+  "sweetheart_cake": {
+   "kind": "item"
+  },
+  "tea_room_souvenir": {
+   "kind": "decor"
+  },
+  "tea_trolley": {
+   "kind": "furniture"
+  },
+  "thimble": {
+   "kind": "find"
+  },
+  "ticket_stub": {
+   "kind": "find"
+  },
+  "time_turner": {
+   "kind": "item"
+  },
+  "tomato": {
+   "kind": "item"
+  },
+  "topiary": {
+   "kind": "decor"
+  },
+  "toy_horse": {
+   "kind": "item"
+  },
+  "treehouse": {
+   "kind": "decor"
+  },
+  "trilobite": {
+   "kind": "find"
+  },
+  "truffle": {
+   "kind": "item"
+  },
+  "truffle_oil": {
+   "kind": "item"
+  },
+  "truffle_pasta": {
+   "kind": "item"
+  },
+  "tulip_planter": {
+   "kind": "decor"
+  },
+  "valley_painting": {
+   "kind": "furniture"
+  },
+  "veggie_soup": {
+   "kind": "item"
+  },
+  "village_bakery_souvenir": {
+   "kind": "decor"
+  },
+  "village_carousel_souvenir": {
+   "kind": "decor"
+  },
+  "village_green_souvenir": {
+   "kind": "decor"
+  },
+  "walnut": {
+   "kind": "item"
+  },
+  "walnut_cookies": {
+   "kind": "item"
+  },
+  "walnut_honey_cake": {
+   "kind": "item"
+  },
+  "walnut_tree": {
+   "kind": "tree"
+  },
+  "watering_can": {
+   "kind": "tool"
+  },
+  "watermelon": {
+   "kind": "item"
+  },
+  "watermelon_juice": {
+   "kind": "item"
+  },
+  "watermelon_salad": {
+   "kind": "item"
+  },
+  "watermill_souvenir": {
+   "kind": "decor"
+  },
+  "weaver": {
+   "kind": "building"
+  },
+  "wedding_cake": {
+   "kind": "item"
+  },
+  "weed": {
+   "kind": "debris"
+  },
+  "well": {
+   "kind": "building"
+  },
+  "wheat": {
+   "kind": "item"
+  },
+  "wheelbarrow": {
+   "kind": "decor"
+  },
+  "wide_sickle": {
+   "kind": "tool"
+  },
+  "wind_chime": {
+   "kind": "decor"
+  },
+  "windmill_toy": {
+   "kind": "decor"
+  },
+  "window_seat": {
+   "kind": "furniture"
+  },
+  "wood": {
+   "kind": "item"
+  },
+  "wooden_button": {
+   "kind": "find"
+  },
+  "wooden_crate": {
+   "kind": "item"
+  },
+  "wool": {
+   "kind": "item"
+  },
+  "wool_pillow": {
+   "kind": "item"
+  },
+  "writing_desk": {
+   "kind": "furniture"
+  },
+  "xp": {
+   "kind": "item"
+  },
+  "yarn": {
+   "kind": "item"
+  },
+  "yellow_rosette": {
+   "kind": "find"
+  },
+  "yogurt": {
+   "kind": "item"
+  }
+ }
+}

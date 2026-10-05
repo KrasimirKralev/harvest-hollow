@@ -1,0 +1,18 @@
+node_modules/
+data/
+data-dev/
+assets-src/
+docs/screens/
+test/.tmp-data/
+*.log
+# QA screenshots stay local (about 500 MB); the reports cite them by name
+docs/qa/*/shots/
+# wave-2 lanes keep their screens one level deeper, plus run data and sandboxes
+docs/qa/*/*/shots/
+docs/qa/**/*.png
+docs/qa/**/tmp/
+docs/qa/**/sandbox/
+docs/qa/**/data-*/
+.scratch/
+data-archive-*/
+data-backup-*/

@@ -1,0 +1,27 @@
+{
+  "name": "harvest-hollow",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Harvest Hollow: a cozy FarmVille-2-style 3D co-op farm for two players sharing one farm over the LAN.",
+  "license": "MIT",
+  "type": "module",
+  "main": "server/index.js",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "HH_DEV=1 HH_DATA_DIR=./data-dev node --watch server/index.js",
+    "test": "node --test --test-concurrency=4 \"test/**/*.test.js\"",
+    "test:e2e": "node tools/e2e-coop.mjs",
+    "shot": "node tools/shot.mjs"
+  },
+  "dependencies": {
+    "express": "^5.2.1",
+    "three": "^0.186.1",
+    "ws": "^8.22.0"
+  },
+  "devDependencies": {
+    "puppeteer-core": "^25.12.0"
+  }
+}

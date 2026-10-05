@@ -1,0 +1,583 @@
+/* Harvest Hollow on phones and tablets (mobile wave 2026-10-03, layout lane). Linked last in index.html.
+   EVERY rule of this file sits in one of the media queries of ui/layout.js LAYOUT_Q (or in `(hover: none)`), so a
+   desktop window (wider than 1180 px and taller than 500 px) never sees any of it; test/mobile-ui.test.js checks that.
+
+     touch      (max-width: 1180px), (max-height: 500px)   tablets and phones: one bottom bar (tools | dock | menu),
+                                                            the small dock buttons and the together buttons in the
+                                                            farm menu, players as dots, compact pills
+     dockless   (max-width: 959px), (max-height: 500px)    Build / Market / Barn move into the farm menu too
+     phone      (max-width: 600px), (max-height: 500px)    the compact top row, the Goal Tracker chip, bottom sheets
+     portrait   (max-width: 600px)                         phones upright: the bottom bar scrolls sideways
+     land       (max-height: 500px) and (min-width: 601px) phones on their side: tools in a left column, the menu and
+                                                            the view buttons on the right, panels slide in from the right
+   The safe-area tokens --sat/--sar/--sab/--sal (style.css) keep the HUD clear of a notch and a home bar. */
+
+/* ======== touch (tablets and phones) ============================================================================ */
+@media (max-width: 1180px), (max-height: 500px) {
+  :root { --bar-h: 82px; --menu-w: 68px; }
+  /* no grey flash on a tap, no text selection or iOS callout on a long press of the game's own controls */
+  #hud, #panels, .seed-pop, .emote-wheel, .modal-layer { -webkit-tap-highlight-color: transparent; }
+  #hud, .seed-pop, .emote-wheel { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+  #hud input { -webkit-user-select: text; user-select: text; }
+  /* a two-finger spread on the HUD or a sheet zoomed the PAGE (3.9-5x) and nothing in the game undid it (mobile QA
+     P1-1): every game layer pans only. Zero specificity, so an element's own `touch-action: none` (the sheet grip,
+     a panel title) still wins; the farm canvas is `none` (style.css), pinch and twist there are the game's own */
+  :where(#hud, #panels, #celebrate, .modal-layer, .seed-pop, .emote-wheel, .touch-build),
+  :where(#hud, #panels, #celebrate, .modal-layer, .seed-pop, .emote-wheel, .touch-build) :where(*) { touch-action: pan-x pan-y; }
+  /* buttons too (pan-x pan-y has no double-tap zoom, so a tap is as quick as with `manipulation`, minus the pinch) */
+  #hud button, #panels button, .seed-pop button, .emote-wheel button, .modal-layer button { touch-action: pan-x pan-y; }
+  /* key hints mean nothing without a keyboard */
+  .tool .key, .social-btn .key, .edge-item kbd { display: none; }
+
+  /* ---- top row: players shrink to their faces (name and title in the button's label and tooltip) ---- */
+  .hud-tl { top: calc(var(--safe) + var(--sat)); left: calc(var(--safe) + var(--sal)); }
+  .hud-tr { top: calc(var(--safe) + 6px + var(--sat)); right: calc(var(--safe) + var(--sar)); gap: 16px; }
+  .players { gap: 8px; }
+  .players .tag { display: none; }
+  .pill, .pill-coins { min-width: 0; padding-right: 8px; }
+  .hud-right { right: calc(var(--safe) + var(--sar)); }
+  /* the photo / settings / sound menu lives in the farm menu */
+  .hud-right .edge-more, .hud-right .edge-gap:nth-last-child(2) { display: none; }
+
+  /* ---- the bottom bar: the tools (they scroll sideways when they do not fit), the dock, the farm menu button ---- */
+  .tray-wrap { left: 0; right: 0; bottom: 0; transform: none; align-items: flex-start; gap: 8px;
+    padding: 0 calc(8px + var(--sar)) calc(8px + var(--sab)) calc(8px + var(--sal)); }
+  .tray-wrap > * { max-width: 100%; }
+  #toolbar { max-width: calc(100% - var(--menu-w) - 8px - var(--dock-w, 0px)); overflow-x: auto; overflow-y: hidden;
+    scrollbar-width: none; overscroll-behavior-x: contain; padding-top: 12px; }
+  #toolbar::-webkit-scrollbar { display: none; }
+  .tool { flex: none; }
+  /* the chevron of a bar with tools past the edge (toolbar.js paintMore): forward at the bar's visible end, back at
+     its start once the far end is reached */
+  .tool-more:not([hidden]) { position: absolute; z-index: 3; display: grid; place-items: center; width: 32px; height: 50px; padding: 0;
+    right: calc(var(--menu-w) + 4px + var(--sar) + var(--dock-w, 0px)); bottom: calc(17px + var(--sab));
+    border: 0; border-radius: var(--r-pill); pointer-events: auto; color: var(--wood-900); font: 800 1.875rem/1 var(--font-display);
+    background: radial-gradient(110% 90% at 50% 30%, var(--paper-50), var(--paper-100) 55%, var(--paper-300));
+    box-shadow: inset 0 0 0 2px var(--paper-edge), 0 0 0 2.5px var(--wood-900), 0 3px 0 2.5px rgba(62, 38, 18, .3); }
+  .tool-more::before { content: ''; position: absolute; inset: -4px -6px; }
+  .tool-more span { display: block; margin-top: -4px; }
+  .tool-more[data-dir="back"] span { transform: scaleX(-1); }
+  .tool-more[data-dir="back"] { right: auto; left: calc(4px + var(--sal)); }
+  .tool-more:active { translate: 0 2px; }
+  .tool[aria-pressed="true"] { transform: translateY(-5px); }
+  .m-menu-btn { position: absolute; right: calc(8px + var(--sar)); bottom: calc(8px + var(--sab)); z-index: 2; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 3px; width: var(--menu-w); height: 74px; padding: 0; border: 0; border-radius: var(--r-l);
+    pointer-events: auto; color: var(--ink-900);
+    background: radial-gradient(110% 90% at 50% 30%, var(--paper-50), var(--paper-100) 55%, var(--paper-300));
+    box-shadow: inset 0 0 0 2px var(--paper-edge), 0 0 0 3px var(--wood-900), 0 5px 0 3px rgba(62, 38, 18, .35); }
+  .m-menu-btn:active { transform: translateY(2px); }
+  .m-menu-btn[aria-expanded="true"] { background: radial-gradient(110% 90% at 50% 30%, var(--sun-300), var(--sun-500) 70%, var(--sun-700)); }
+  .m-menu-ico { display: grid; gap: 4px; width: 28px; }
+  .m-menu-ico i { display: block; height: 4px; border-radius: 2px; background: var(--wood-900); }
+  .m-menu-btn .lbl { font: 800 .875rem/1 var(--font-display); color: var(--wood-900); }
+  .m-menu-btn .badge { position: absolute; top: -8px; right: -4px; }
+  .m-menu-btn .badge:not(.badge--calm):not(.badge--new) { animation: bob 500ms var(--ease-inout) infinite alternate; }
+  /* the dock sits in the bar between the tools and the menu */
+  #hud > .dock { right: calc(8px + var(--sar) + var(--menu-w) + 10px); bottom: calc(8px + var(--sab)); }
+  /* the small dock buttons and the together buttons live in the farm menu */
+  #hud .dock-minis, #hud .hud-bl > .social { display: none; }
+
+  /* ---- above the bar: the coach, the feed (it steps aside for the coach), the trays ---- */
+  .coach { width: min(540px, calc(100vw - 16px - var(--sal) - var(--sar))); }
+  body.tray-open .coach-slot { position: static; width: auto; }
+  body.tray-open .coach { width: min(440px, calc(100vw - 16px - var(--sal) - var(--sar))); }
+  .hud-bl { left: calc(8px + var(--sal)); bottom: calc(var(--bar-h) + var(--sab) + 12px); min-width: 0; max-width: min(360px, calc(100vw - 80px)); }
+  body.coach-on .hud-bl .feed { display: none; }
+  .seed-tray, .seed-strip { max-width: calc(100vw - 16px - var(--sal) - var(--sar)); }
+  .chat-box { width: min(420px, calc(100vw - 16px)); }
+
+  /* ---- toasts never squeeze between a banner and the tracker; with a banner up they sit over the bar. The column
+     spans the screen (left: 50% alone let an absolute box shrink-wrap to half of it and wrap every toast) ---- */
+  .toasts, #hud:has(#banners > :not(.banner-more)) .toasts { left: calc(8px + var(--sal)); right: calc(8px + var(--sar)); transform: none; }
+  .notice, #hud:has(#banners > :not(.banner-more)) .notice { left: 50%; width: max-content; }
+  #hud:has(#banners > :not(.banner-more)) .toast, #hud:has(#banners > :not(.banner-more)) .notice { max-width: min(560px, calc(100vw - 24px)); }
+  #hud:has(#banners > .unlock-banner, #banners > .rosette, #banners > .bloom-banner) .toasts { top: auto; bottom: calc(var(--bar-h) + var(--sab) + 16px); }
+  .toast { max-width: min(560px, calc(100vw - 24px)); }
+
+  /* the tutorial's arrow over a tool gets its own room above the bar (tutorial.js body.tut-bar) */
+  body.tut-bar #toolbar { margin-top: 66px; }
+  /* small buttons on cards a finger presses: 44 px tall at least */
+  .unlock-banner .x { width: 44px; height: 44px; }
+  .unlock-banner .btn--small, .toast .btn--small, .coach .btn--small { min-height: 42px; }
+  .hud-tr .pill::before { content: ''; position: absolute; inset: -6px -3px; }
+  .hammer-hint .hint-btn { min-height: 40px; padding: 0 14px; }
+  .keys.gestures kbd { white-space: nowrap; }
+  .ss-seed, .ss-more { width: 44px; height: 44px; }
+  /* every button a finger presses in a sheet: 44 px at least (mobile QA P1-4, astra P1-1: Feed / Sell / Collect were
+     26 px, stacked 4 px apart). A range slider takes `height` (Chrome ignores its min-height) */
+  .hh-panel-body .btn, .hh-panel-body .btn.pn-xs, .hh-panel-body .btn.pn-sm, .hh-panel-body .btn.pn-skip, .hh-panel-body .btn--small,
+  .pn-chipbtn, .pn-keep-open, .pn-feedtoggle, .pn-tag-btn, .pn-thanks, .pn-wishbtn, .pn-step, .hh-panel-body .chip {
+    min-height: 44px; min-width: 44px; }
+  .hh-panel-body input[type="range"], .settings input[type="range"] { height: 44px; }
+  .hh-panel-body input.pn-num { min-height: 44px; }
+  .hh-tab, .coach-more, .tracker-chip, .hint-btn { min-height: 44px; }
+  .coach-more { min-width: 44px; }
+  .swatch { width: 44px; height: 44px; }
+  /* the farmer dots stay small to look at; the finger gets 44 px across them (two stacked dots share the height) */
+  .players .farmer { position: relative; }
+  .players .farmer::before { content: ''; position: absolute; inset: -1px -10px; }
+  .ss-seed .ic { width: 34px; height: 34px; }
+  /* a card is flicked away with a finger (toasts.js swipeAway): the browser must not take that drag */
+  .unlock-banner { touch-action: none; }
+  /* a chat line typed while Grandma's card is up sits over the card, not under it */
+  .hud-bl { z-index: 3; }
+
+  /* ---- the farm menu (ui/layout.js): the HUD's own dock, small dock and together buttons move in while it is open ---- */
+  .m-menu { display: flex; flex-direction: column; gap: 16px; }
+  .m-sec h3 { margin: 0 0 12px; font: 800 1.125rem/1 var(--font-display); color: var(--wood-700); }
+  .m-menu .dock, .m-menu .dock-minis, .m-menu .social, .m-menu .m-tiles {
+    position: static; display: grid; grid-template-columns: repeat(auto-fill, minmax(72px, 1fr)); justify-items: center; gap: 22px 6px;
+    padding: 2px 0 12px; margin: 0; background: none; box-shadow: none; border-radius: 0; transform: none; }
+  .m-menu .dock[hidden] { display: none; }
+  .m-menu .dock::after { content: none; }
+  .m-menu .dock-btn { width: 76px; height: 80px; }
+  .m-menu .dock-mini, .m-menu .social-btn, .m-tile .m-ico { width: 60px; height: 60px; }
+  .m-menu .dock-mini .lbl, .m-menu .social-btn::after, .m-tile .lbl { position: absolute; bottom: -12px; left: 50%; transform: translateX(-50%); padding: 2px 9px;
+    border-radius: var(--r-pill); font: 700 .875rem/1.1 var(--font-ui); color: #fff; background: var(--wood-900); white-space: nowrap; }
+  .m-menu .social-btn::after { content: attr(data-label); }
+  .m-menu .social-btn .glyph { width: 34px; height: 34px; }
+  .m-tile { position: relative; display: grid; place-items: center; width: 72px; height: 60px; padding: 0; border: 0; background: none; }
+  .m-tile .m-ico { display: grid; place-items: center; border-radius: 50%;
+    background: radial-gradient(110% 90% at 50% 30%, var(--paper-50), var(--paper-100) 55%, var(--paper-300));
+    box-shadow: inset 0 0 0 2px var(--paper-edge), 0 0 0 3px var(--wood-900), 0 5px 0 3px rgba(62, 38, 18, .35); }
+  .m-tile:active .m-ico, .m-menu .social-btn:active, .m-menu .dock-mini:active { transform: translateY(2px); }
+  .m-tile[aria-checked="false"] .m-ico { filter: grayscale(.6); }
+  .m-stats { display: flex; flex-wrap: wrap; gap: 8px; }
+  .m-stat { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 4px 16px 4px 8px; border: 0; border-radius: var(--r-pill);
+    font: 600 .9375rem/1.2 var(--font-ui); color: var(--ink-700); background: linear-gradient(180deg, var(--paper-50), var(--paper-200));
+    box-shadow: inset 0 0 0 2px var(--paper-edge), 0 3px 0 rgba(62, 38, 18, .25); }
+  .m-stat b { font: 800 1.125rem/1 var(--font-ui); color: var(--ink-900); font-variant-numeric: tabular-nums; }
+  .m-stat .ic { width: 30px; height: 30px; }
+  .m-stat[data-mode="overflow"], .m-stat[data-mode="full"] { background: linear-gradient(180deg, #FFE1B8, #FFC27A); box-shadow: inset 0 0 0 2px var(--sun-700); }
+}
+
+/* ======== tablets wide enough for the dock in the bar (960-1180 px) ============================================== */
+@media (min-width: 960px) and (max-width: 1180px) and (min-height: 501px) {
+  :root { --dock-w: 270px; }
+}
+
+/* ======== dockless: Build / Market / Barn in the farm menu (tablets under 960 px and every phone) ================ */
+@media (max-width: 959px), (max-height: 500px) {
+  #hud > .dock { display: none; }
+  /* a narrow top row: the farm's name and the pills' "+" step aside (the pills still open their panels) */
+  .farm-name, .pill > .more, .pill-hearts { display: none; }
+  #hud-xp-bar { width: 130px; }
+  .pill { padding-right: 12px; }
+}
+
+/* ======== phone (portrait and landscape) ========================================================================== */
+@media (max-width: 600px), (max-height: 500px) {
+  :root { --bar-h: 84px; }
+
+  /* ---- the compact top row: the level star and its XP bar, the two farmers as stacked dots, coins and acorns ---- */
+  .hud-tl { top: calc(6px + var(--sat)); left: calc(6px + var(--sal)); gap: 6px; }
+  .level-star { width: 48px; height: 48px; margin-right: -16px; }
+  .level-num { font-size: 1.25rem; padding-top: 5px; }
+  .level-body { padding: 4px 8px 5px 20px; gap: 0; }
+  .farm-name { display: none; }
+  #hud-xp-bar { width: 88px; height: 20px; }
+  .xp-text { font-size: .8125rem; }
+  .xp-text .xp-unit { display: none; }
+  .players { flex-direction: column; gap: 1px; }
+  .players .face, .players li.partner .face { width: 24px; height: 24px; font-size: .875rem;
+    box-shadow: 0 0 0 2px var(--paper-50), 0 0 0 4px var(--pcd), 0 2px 0 4px rgba(62, 38, 18, .25); }
+  .players li.partner[data-slot="p2"] .face, .players li[data-slot="p2"] .face { border-radius: 7px; }
+  .players .face::after { width: 9px; height: 9px; right: -4px; bottom: -3px; box-shadow: 0 0 0 2px var(--paper-50); }
+  body.cb-safe .players li.offline .face { outline-offset: 3px; outline-width: 2px; }
+  .hud-tr { top: calc(10px + var(--sat)); right: calc(6px + var(--sar)); gap: 10px; }
+  .pill { height: 34px; gap: 4px; padding: 0 10px 0 30px; font-size: 1.0625rem; }
+  .pill > .icon { width: 38px; height: 38px; left: -9px; }
+  .pill > .more { display: none; }
+  .pill .badge { top: -9px; right: -9px; }
+  .buffs { left: 0; top: 102px; }
+  .buff { height: 30px; font-size: .875rem; }
+  /* Farm Beauty: a small flower under the pills */
+  #hud-beauty { top: calc(54px + var(--sat)); right: calc(6px + var(--sar)); transform: scale(.82); transform-origin: 100% 0; }
+
+  /* ---- the Goal Tracker: one chip under the top row; a tap opens every card under it ---- */
+  .tracker-chip-wrap { display: flex; position: absolute; top: calc(58px + var(--sat)); left: calc(6px + var(--sal)); right: calc(66px + var(--sar)); }
+  .tracker-chip { position: relative; display: flex; align-items: center; gap: 7px; min-width: 0; max-width: 100%; height: 42px; padding: 0 12px 0 5px;
+    border: 0; border-radius: var(--r-pill); text-align: left; pointer-events: auto; color: var(--ink-900);
+    background: radial-gradient(120% 90% at 30% 30%, var(--paper-50), var(--paper-100) 60%, var(--paper-200));
+    box-shadow: inset 0 0 0 2px var(--paper-edge), 0 0 0 2.5px var(--wood-700), 0 4px 0 2.5px rgba(62, 38, 18, .3); }
+  .tracker-chip .slot-tag { flex: none; padding: 4px 7px; border-radius: var(--r-pill); font: 800 .8125rem/1 var(--font-display); letter-spacing: .05em;
+    color: #fff; background: var(--go-900); }
+  .tracker-chip .tc-art { flex: none; display: grid; place-items: center; width: 26px; height: 26px; }
+  .tracker-chip .tc-art .ic, .tracker-chip .tc-art .glyph { width: 26px; height: 26px; }
+  .tracker-chip .tc-t { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 700 .9375rem/1.1 var(--font-ui); }
+  .tracker-chip .tc-n { flex: none; padding: 2px 7px; border-radius: var(--r-pill); font: 800 .8125rem/1.2 var(--font-ui); color: #fff; background: var(--wood-700); }
+  .tracker-chip .chev { flex: none; font: 800 .875rem/1 var(--font-ui); color: var(--ink-700); transition: transform var(--t-micro) var(--ease-out); }
+  .tracker-chip[aria-expanded="true"] .chev { transform: rotate(180deg); }
+  .tracker-chip.bang::after { content: '!'; position: absolute; right: -6px; top: -7px; width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center;
+    font: 800 .875rem/1 var(--font-display); color: var(--ink-900); background: var(--sun-500); box-shadow: 0 0 0 2px var(--sun-900); }
+  .tracker { display: none; top: calc(108px + var(--sat)); left: calc(6px + var(--sal)); width: min(360px, calc(100vw - 12px - var(--sal) - var(--sar)));
+    max-height: calc(100% - 116px - var(--sat) - var(--bar-h) - var(--sab)); overflow-y: auto; overscroll-behavior: contain;
+    gap: 12px; padding: 12px 10px 10px; border-radius: var(--r-l);
+    background: rgba(255, 244, 214, .94); box-shadow: inset 0 0 0 2px var(--paper-edge), 0 0 0 3px var(--wood-700), var(--drop); }
+  .tracker.m-open { display: flex; z-index: 20; pointer-events: auto; }
+  .tracker .tracker-mode { display: none; }
+  .goal { min-height: 56px; }
+
+  /* ---- the farm menu button and the bar ---- */
+  .hud-right { gap: 6px; }
+  .edge-btn { width: 44px; height: 44px; }
+  .edge-btn .glyph { width: 26px; height: 26px; }
+  .edge-gap { height: 2px; }
+
+  /* ---- above the bar ---- */
+  .coach { padding: 5px; }
+  .coach-paper { gap: 8px; padding: 7px 9px; }
+  .coach .grandma-art, .coach .gran { width: 40px !important; height: 40px !important; }
+  .coach .line { font-size: .9375rem; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+  .coach .who { font-size: .875rem; }
+  .coach .prog { margin-top: 3px; }
+  .coach .acts .btn { font-size: .875rem; padding: 7px 12px 9px; }
+  .coach-more { width: 40px; height: 40px; }
+  .feed li { font-size: .875rem; padding: 3px 6px 3px 9px; }
+  .feed li .ic { width: 20px; height: 20px; }
+  .feed li:not(:nth-last-child(-n+2)) { display: none; }
+  .hud-bl .feed li.stale { display: none; }
+  /* a seed card grows with its "Plant 108 · 1h" line (a fixed 96 px let it run into the next card) */
+  .seed { width: auto; min-width: 96px; padding-left: 6px; padding-right: 6px; }
+
+  /* ---- toasts and banners under the tracker chip ---- */
+  .conn, .toasts, .notice { top: calc(108px + var(--sat)); }
+  .conn { max-width: calc(100vw - 16px); }
+  .conn:not(:empty) ~ .toasts, .conn:not(:empty) ~ .notice { top: calc(160px + var(--sat)); }
+  /* a running Friendly Duel's score chip sits under the tracker (ui-league): toasts and notices go below it */
+  #hud:has(> .lg-duel-chip:not([hidden])) .toasts, #hud:has(> .lg-duel-chip:not([hidden])) .notice { top: calc(156px + var(--sat)); }
+  .notice { max-width: calc(100vw - 16px); }
+  .banners { top: calc(108px + var(--sat)); right: calc(12px + var(--sar)); left: calc(12px + var(--sal)); align-items: center; }
+  .unlock-banner .x { right: -6px; }
+  body.tut-bar #hud:has(#banners > .unlock-banner, #banners > .rosette, #banners > .bloom-banner) .toasts {
+    bottom: calc(var(--bar-h) + var(--sab) + 82px); }
+  .unlock-banner, .bloom-banner, .rosette { width: min(360px, 100%); }
+  .banner-more { align-self: center; }
+  /* a drip-fed system card ("Changed your mind?") folds into a slim chip on a phone (wave 4b): one 48 px line under the
+     tracker instead of a quarter of the screen; a tap opens the whole card, Got it / × / a swipe put it away */
+  .unlock-banner.compact:not(.open) { padding: 4px; border-radius: var(--r-pill); width: min(340px, 100%); }
+  .unlock-banner.compact:not(.open) > .ribbon, .unlock-banner.compact:not(.open) > .sheet { display: none; }
+  .unlock-banner.compact:not(.open) > .card-chip { display: flex; }
+  .unlock-banner.compact:not(.open) > .x { top: 50%; right: 2px; translate: 0 -50%; }
+  .card-chip { align-items: center; gap: 8px; width: 100%; min-height: 44px; padding: 4px 50px 4px 10px; border: 0;
+    border-radius: var(--r-pill); background: linear-gradient(180deg, var(--paper-50), var(--paper-100));
+    box-shadow: inset 0 0 0 2px var(--paper-edge); color: var(--ink-900); text-align: left; cursor: pointer; }
+  .card-chip-bulb { flex: none; font-size: 1.15rem; line-height: 1; }
+  .card-chip-title { flex: 1 1 auto; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+    font: 800 1rem/1.15 var(--font-display); }
+  .card-chip-more { flex: none; padding: 3px 10px 4px; border-radius: var(--r-pill); font: 700 .8125rem/1.2 var(--font-ui);
+    color: #fff; background: var(--sky-700, #2F7FC1); }
+  .card-chip:focus-visible { outline: 3px solid var(--sky-900); outline-offset: 2px; }
+  .unlock-banner.compact.open { animation: none; }
+
+  /* the level-up: the same show, phone-sized */
+  .lvl { scale: .62; }
+
+  /* the seed picker at a plot: four columns, inside the screen */
+  .seed-pop { max-width: calc(100vw - 12px); }
+  .sp-grid { grid-template-columns: repeat(4, minmax(72px, 1fr)); }
+
+  /* ---- panels: sheets with a grip; the banner title sits inside the sheet, the close button in its corner ---- */
+  .hh-sheet-grip { display: block; position: absolute; z-index: 3; left: 50%; top: 6px; width: 46px; height: 5px; margin-left: -23px; border-radius: 3px;
+    background: rgba(90, 50, 21, .5); box-shadow: 0 1px 0 rgba(255, 255, 255, .35); }
+  .hh-sheet-grip::before { content: ''; position: absolute; inset: -6px -50px -10px; }
+  .hh-sheet-grip, .hh-panel-title { touch-action: none; }
+  .hh-panel-title { top: 15px; max-width: calc(100% - 124px); padding: 6px 20px 8px; font-size: 1.375rem;
+    text-shadow: -1.5px -1.5px 0 var(--o), 1.5px -1.5px 0 var(--o), -1.5px 1.5px 0 var(--o), 1.5px 1.5px 0 var(--o), 0 2.5px 0 var(--o); }
+  .hh-panel.size-side .hh-panel-title { font-size: 1.375rem; }
+  .hh-panel-title .ic { width: 30px; height: 30px; margin: -6px 0 -6px -8px; }
+  .hh-panel-close { right: calc(10px + var(--sar)); top: 11px; width: 44px; height: 44px; }
+  .hh-panel-close .glyph { width: 22px; height: 22px; }
+  .hh-tabs { padding: 0 2px; }
+  .hh-tab { min-height: 44px; padding: 8px 12px 9px; }
+  .hh-panel-body { padding: 12px 10px 16px; }
+  .hh-panel .scroll-fade { left: 10px; right: 10px; }
+  @keyframes sheet-up { from { transform: translateY(100%); } }
+  @keyframes sheet-down { to { transform: translateY(100%); } }
+  @keyframes sheet-left { from { transform: translateX(100%); } }
+  @keyframes sheet-right { to { transform: translateX(100%); } }
+
+  /* ---- panel bodies reflow: one column for every two-pane page, card grids never wider than the sheet ---- */
+  .pn-sell, .pn-land, .pn-land-one, .pn-ordhead, .pn-barnhead, .wk-fair-top, .wk-barge-top, .wk-fair-cols, .wk-town-cols, .wk-payout,
+  .pc-wall-head, .pc-ledger, .pc-bgrid, .pc-pages, .pc-set-body, .pc-album-head, .pc-bundles { grid-template-columns: minmax(0, 1fr); }
+  .pn-recipes, .pn-animals, .pn-letters, .pn-letters:has(> .pn-letter:only-child), .pn-week, .pn-ribbons, .pn-statrows, .pn-board,
+  .pn-cards2, .pn-anifoot, .pn-cards.pn-cards-animals, .wk-board, .wk-friend-grid, .pc-pieces, .pc-mws, .pc-facts, .pc-pets {
+    grid-template-columns: minmax(0, 1fr); }
+  .pn-cards, .wk-entries { grid-template-columns: repeat(auto-fill, minmax(min(150px, 100%), 1fr)); gap: 10px; }
+  .pn-stacks { grid-template-columns: repeat(auto-fill, minmax(88px, 1fr)); gap: 8px; }
+  .pn-board { padding: 14px 10px; gap: 16px; }
+  .pn-barnrow { grid-template-columns: 40px minmax(0, 1fr) 56px; }
+  .pn-barnrow .pn-keep, .pn-barnrow .pn-keep-open, .pn-barnrow-acts { grid-column: 2 / -1; }
+  .pn-upgrade { max-width: none; }
+  .pn-tree { grid-template-columns: 96px minmax(0, 1fr); }
+  .pn-tree-art { width: 96px; height: 96px; }
+  .pn-reqs { grid-template-columns: minmax(0, 1fr); }
+  .wk-row { grid-template-columns: 54px minmax(0, 1fr); }
+  .wk-row > :last-child { grid-column: 1 / -1; }
+  .pc-tiers, .pc-btop-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .pc-stickers { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .pc-next-list { grid-template-columns: minmax(0, 1fr); }
+  .pc-project { min-width: 0; }
+  .wk-banner { flex-direction: column; align-items: flex-start; height: auto; min-height: 124px; }
+  /* the village across the river keeps readable names: it scrolls sideways instead of shrinking to 5 px text (M-11) */
+  .wk-village-wrap { overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none; }
+  .wk-village-wrap::-webkit-scrollbar { display: none; }
+  .wk-village { width: 760px; max-width: none; max-height: none; }
+  .wk-ladder-head { flex-wrap: wrap; }
+  .wk-entries { grid-template-columns: repeat(auto-fill, minmax(min(220px, 100%), 1fr)); }
+  .wk-row { grid-template-columns: minmax(0, 1fr); }
+  .wk-row > :last-child { grid-column: auto; }
+  .pn-plotstrip { flex-wrap: wrap; gap: 8px 12px; }
+  .pn-plotstrip-text { flex: 1 1 160px; }
+  .pn-plotstrip .ic { width: 44px; height: 44px; }
+  .pn-bhead { flex-wrap: wrap; gap: 10px 12px; }
+  .pn-bhead-art { width: 64px; height: 64px; }
+  .pn-bhead-art .ic { width: 52px; height: 52px; }
+  .pn-bhead-text { flex: 1 1 200px; }
+  .pn-bhead-acts { flex: 1 1 100%; flex-direction: row; flex-wrap: wrap; }
+  .pn-bhead-acts > * { flex: 1 1 140px; }
+  .pc-bhero { grid-template-columns: minmax(0, 1fr); gap: 10px; }
+  .pn-store-intro { flex-wrap: wrap; }
+  /* the Market's sell slip rides at the bottom of the sheet while the goods scroll under it */
+  .pn-slip { top: auto; bottom: 0; z-index: 2; gap: 8px; padding: 12px 12px 12px; margin-top: 4px;
+    box-shadow: inset 0 0 0 2px rgba(217, 182, 119, .8), 0 -8px 16px rgba(62, 38, 18, .18); }
+  .pn-slip-head .ic { width: 52px; height: 52px; }
+  .pn-slip-title { font-size: 1.25rem; }
+  .pn-sell-btn { min-height: 48px; }
+
+  /* ---- the first screen: the card scrolls when a keyboard or a short screen leaves no room for it ---- */
+  #slot-picker.modal-layer { overflow-y: auto; overscroll-behavior: contain; place-items: start center;
+    padding: calc(8px + var(--sat)) calc(8px + var(--sar)) calc(16px + var(--sab)) calc(8px + var(--sal)); }
+  .slot-card { width: min(500px, 100%); margin: 78px auto 0; }
+  .slot-title { width: min(340px, 86vw); }
+  .slot-paper { padding: 12px 12px 10px; }
+  .slot .swatches { padding-left: 0; flex-wrap: wrap; gap: 6px; }
+  .swatch { width: 44px; height: 44px; }
+  .slot .pass { margin-left: 0; max-width: 100%; }
+  .slot .btn { margin-left: auto; min-height: 44px; }
+
+  /* ---- dialogs inside the sheets ---- */
+  .dlg .art { width: 72px; height: 72px; }
+  .dlg .lead { font-size: 1.125rem; }
+  .settings { grid-template-columns: 1fr; gap: 14px; }
+  .sign { width: 100%; }
+}
+
+/* ======== phone upright ============================================================================================ */
+@media (max-width: 600px) {
+  /* portrait: a running duel's chip (top 112 px) sits where the Golden Hour / Spark pill is; the pill goes under it
+     (the chip covered it: "Golden" was all that showed) and toasts under both */
+  #hud:has(> .lg-duel-chip:not([hidden])) .buffs { top: 152px; }
+  #hud:has(> .lg-duel-chip:not([hidden])):has(.buffs > *) .toasts,
+  #hud:has(> .lg-duel-chip:not([hidden])):has(.buffs > *) .notice { top: calc(196px + var(--sat)); }
+  /* hearts and the barn count live in the farm menu's header */
+  .pill-hearts, .pill-barn { display: none; }
+
+  /* the right edge: zoom and turn in a slim column (pinch and twist do the same) */
+  .hud-right { top: 46%; }
+
+  /* the bottom bar spans the screen: the tools scroll under a soft edge, the menu button holds the right end */
+  .tray-wrap { padding: 0; gap: 8px; align-items: center; }
+  #toolbar { align-self: stretch; max-width: none; gap: 6px; border-radius: 22px 22px 0 0;
+    padding: 12px 8px calc(8px + var(--sab)) calc(8px + var(--sal)); box-shadow: inset 0 2px 0 rgba(255, 255, 255, .45), 0 0 0 2.5px var(--wood-900), 0 -4px 12px rgba(62, 38, 18, .25); }
+  /* the "›" chevron has its own solid slot left of the menu: the fade ends before it, so a tool is never cut in half
+     under it (final release V-03), and the last tool scrolls clear of the fade */
+  #toolbar::after { content: ''; flex: 0 0 calc(var(--menu-w) + 74px + var(--sar)); }
+  .tool { width: 58px; height: 62px; padding-top: 2px; }
+  .tool .ico { height: 40px; }
+  .tool .ic, .tool .glyph { width: 40px; height: 40px; }
+  .tool .name { font-size: .8125rem; }
+  .tool .name.long { display: inline-block; transform: scaleX(.86); letter-spacing: -.02em; }
+  .tray-wrap::after { content: ''; position: absolute; right: 0; bottom: 0; width: calc(var(--menu-w) + 66px + var(--sar)); height: calc(82px + var(--sab));
+    border-radius: 0 22px 0 0; pointer-events: none;
+    background: linear-gradient(to right, rgba(217, 154, 74, 0), var(--wood-300) 26px, var(--wood-300)); }
+  .m-menu-btn { right: calc(6px + var(--sar)); bottom: calc(5px + var(--sab)); height: 70px; }
+  .coach-slot, .seed-tray, .build-tray, .stroke-chip, .seed-strip, .tray-tip, .hammer-hint { margin: 0 6px; }
+  .coach { width: calc(100vw - 12px - var(--sal) - var(--sar)); }
+  body.tray-open .coach { width: calc(100vw - 12px - var(--sal) - var(--sar)); }
+  body.tray-open .coach .line { -webkit-line-clamp: 2; }
+
+  /* every panel is a bottom sheet; the big ones take the whole screen under the status bar */
+  .hh-panel, .hh-panel.size-side, .hh-panel.size-wide, .hh-panel.size-full, .hh-panel.size-card {
+    left: 0; right: 0; top: auto; bottom: 0; width: auto; height: auto; transform: none; max-height: calc(100% - 10px - var(--sat));
+    padding: 62px calc(8px + var(--sar)) calc(8px + var(--sab)) calc(8px + var(--sal)); border-radius: 22px 22px 0 0; }
+  .hh-panel.size-wide, .hh-panel.size-full { height: calc(100% - 10px - var(--sat)); }
+  /* without tabs a wide panel's height never jumps, so a short one (Pets, a building) is only as tall as it needs */
+  .hh-panel.size-wide:not(:has(> .hh-tabs:not([hidden]))) { height: auto; }
+  .hh-panel.is-opening, .hh-panel.size-card.is-opening, .hh-panel.size-side.is-opening { animation: sheet-up 300ms var(--ease-out) both; }
+  .hh-panel.is-closing, .hh-panel.size-card.is-closing, .hh-panel.size-side.is-closing { animation: sheet-down 160ms var(--ease-in) both; }
+  .hh-panel .scroll-fade { bottom: calc(8px + var(--sab)); }
+  /* the Market on an upright phone (final release V-07): the slip was a third of the sheet (about 320 px) and the
+     chalkboard another 125, so only two rows of goods showed. The chalkboard keeps only its wanted goods; the slip
+     packs the quick chips and the total on one row, and an empty note takes no room */
+  .pn-chalk { margin: 0 0 8px; padding: 6px 10px 8px; }
+  .pn-chalk-title, .pn-chalk-lead { display: none; }
+  .pn-chalk-body { margin-top: 0; }
+  .pn-slip { flex-flow: row wrap; align-items: center; gap: 6px 8px; padding: 8px 12px 10px; }
+  .pn-slip > * { flex: 1 1 100%; min-width: 0; }
+  .pn-slip-head { gap: 8px; }
+  .pn-slip-head .ic { width: 40px; height: 40px; }
+  .pn-slip-title { font-size: 1.0625rem; }
+  .pn-slip-qty { grid-template-columns: minmax(0, 1fr) 64px; }
+  .pn-slip > .pn-quick { flex: 0 1 auto; }
+  .pn-slip > .pn-slip-sum { flex: 1 1 120px; flex-direction: column; align-items: flex-end; gap: 2px; padding: 0; border: 0; }
+  .pn-slip-total { font-size: 1.5rem; }
+  .pn-slip-note:empty { display: none; }
+  /* Grandma's card already says what the tray tip says: on an upright phone the tip goes while she talks, so the
+     card, the tip and the tray no longer cover half the farm (final release PT-07) */
+  body.tray-open.coach-on .tray-tip { display: none; }
+}
+
+/* ======== small phones upright (iPhone SE, Galaxy S8, 360 x 640): the farm keeps its middle (mobile QA P1-3, M-09) === */
+@media (max-width: 600px) and (max-height: 760px) {
+  /* with the seed tray open the tip, the coach's progress line and a third coach line go; the zoom and turn buttons
+     move up out from under Grandma's card */
+  body.tray-open .tray-tip, body.tray-open .coach .prog { display: none; }
+  body.tray-open .coach .line { -webkit-line-clamp: 2; }
+  body.tray-open .hud-right { top: calc(var(--sat) + 132px); transform: none; }
+  /* a 640 px screen still has Grandma's card over the turn buttons: they step out while the tray is open (a two-finger
+     twist turns the view all the same) */
+  body.tray-open .hud-right .edge-btn[aria-label^="Turn"] { display: none; }
+  /* the seed picker: two rows that scroll sideways, so it fits above or below its plot instead of on it */
+  .sp-grid { grid-auto-flow: column; grid-template-rows: repeat(2, auto); grid-template-columns: none; grid-auto-columns: 80px;
+    max-width: calc(100vw - 42px); overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none; padding-bottom: 3px; }
+  .sp-grid::-webkit-scrollbar { display: none; }
+  /* the Market: Mabel's chalkboard and the sell slip shrink so the goods keep three to six stacks in view */
+  .pn-chalk { margin: 0 0 8px; padding: 6px 10px 8px; }
+  .pn-chalk-title, .pn-chalk-lead { display: none; }
+  .pn-chalk-body { margin-top: 0; }
+  .pn-slip { gap: 6px; padding: 8px 12px 10px; }
+  .pn-slip-head { gap: 8px; }
+  .pn-slip-head .ic { display: none; }
+  .pn-slip-title { font-size: 1.0625rem; }
+}
+
+/* ======== phone on its side: tools on the left, the view buttons and the menu on the right ===================== */
+@media (max-height: 500px) and (min-width: 601px) {
+  :root { --side-l: 84px; --side-r: 64px; }
+  .hud-tr { right: calc(6px + var(--sar)); }
+  .pill-barn .cap { font-size: .875rem; }
+  #hud-beauty { top: calc(52px + var(--sat)); right: calc(60px + var(--sar)); transform: scale(.72); }
+
+  /* the tracker chip and its drop-down start right of the tool column */
+  .tracker-chip-wrap { top: calc(56px + var(--sat)); left: calc(var(--side-l) + var(--sal)); right: auto; max-width: min(440px, calc(100vw - var(--side-l) - var(--side-r) - 90px)); }
+  .tracker { top: calc(104px + var(--sat)); left: calc(var(--side-l) + var(--sal)); width: min(380px, calc(100vw - var(--side-l) - var(--side-r) - 16px));
+    max-height: calc(100% - 112px - var(--sat) - var(--sab)); }
+
+  /* the right column: zoom and turn under the pills, the farm menu in the corner */
+  .hud-right { top: calc(54px + var(--sat)); transform: none; gap: 5px; }
+  .edge-btn { width: 44px; height: 42px; }
+  .edge-gap { height: 0; }
+  .m-menu-btn { right: calc(6px + var(--sar)); bottom: calc(6px + var(--sab)); width: 56px; height: 62px; }
+
+  /* the tool column on the left; the coach, the trays and the chips stay at the bottom between the columns */
+  .tray-wrap { top: 0; justify-content: flex-end; align-items: center; gap: 6px;
+    padding: 0 calc(var(--side-r) + 8px + var(--sar)) calc(6px + var(--sab)) calc(var(--side-l) + 4px + var(--sal)); }
+  #toolbar { position: absolute; left: calc(6px + var(--sal)); top: calc(56px + var(--sat)); bottom: calc(6px + var(--sab)); flex-direction: column;
+    max-width: none; width: 72px; padding: 8px 6px; gap: 6px; overflow-x: hidden; overflow-y: auto; overscroll-behavior-y: contain; border-radius: 18px; }
+  #toolbar .tool-sep { width: auto; height: 3px; margin: 2px 6px; }
+  .tool-more:not([hidden]) { left: calc(20px + var(--sal)); right: auto; bottom: calc(8px + var(--sab)); width: 44px; height: 32px; }
+  .tool-more span { transform: rotate(90deg); margin: 0; }
+  .tool-more[data-dir="back"] { bottom: auto; top: calc(60px + var(--sat)); left: calc(20px + var(--sal)); }
+  .tool-more[data-dir="back"] span { transform: rotate(-90deg); }
+  .tool { width: 60px; height: 56px; padding-top: 1px; }
+  .tool .ico { height: 34px; }
+  .tool .ic, .tool .glyph { width: 34px; height: 34px; }
+  .tool .name { font-size: .8125rem; }
+  .tool .name.long { display: inline-block; transform: scaleX(.86); letter-spacing: -.02em; }
+  .tool[aria-pressed="true"] { transform: translateX(3px); }
+  .tool .badge { top: -6px; right: -6px; }
+  .coach, body.tray-open .coach { width: min(560px, 100%); }
+  .coach .line, body.tray-open .coach .line { -webkit-line-clamp: 2; }
+  /* Grandma's buttons side by side: the card stays two lines tall and the farm keeps its middle */
+  .coach .acts { flex-direction: row; align-items: center; align-self: center; }
+  .hud-bl { left: calc(var(--side-l) + var(--sal)); bottom: calc(6px + var(--sab)); max-width: min(380px, 44vw); }
+  .conn, .toasts, .notice { top: calc(56px + var(--sat)); }
+  .conn:not(:empty) ~ .toasts, .conn:not(:empty) ~ .notice { top: calc(104px + var(--sat)); }
+  #hud:has(#banners > .unlock-banner, #banners > .rosette, #banners > .bloom-banner) .toasts { bottom: calc(80px + var(--sab)); }
+  .banners { top: calc(56px + var(--sat)); left: auto; right: calc(var(--side-r) + 8px + var(--sar)); width: min(360px, 46vw); }
+  .buffs { top: 50px; left: calc(var(--side-l) + 280px); }
+  .lvl { scale: .5; }
+  /* the seed picker: two rows that scroll sideways (a half card peeks at the end), so the card fits beside its plot
+     instead of on it (seeds.js popPlacement 'side'; astra P1-2) */
+  .sp-grid { grid-auto-flow: column; grid-template-rows: repeat(2, auto); grid-template-columns: none; grid-auto-columns: 80px;
+    max-width: calc(3.5 * 80px + 3 * 5px); overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none; padding-bottom: 3px; }
+  .sp-grid::-webkit-scrollbar { display: none; }
+  /* the quick-seed strip stays between the tool column and the menu (it ran 39 px under each, astra P1-4) */
+  .seed-tray, .seed-strip { max-width: 100%; }
+  /* the Market on a 390 px tall screen: the tab's intro and the plots card fold so a crop and its button show (astra P1-5) */
+  .pn-store-intro .pn-intro { display: none; }
+  .pn-store-intro { justify-content: flex-end; }
+  .pn-plotstrip { flex-wrap: nowrap; gap: 10px; margin-bottom: 10px; padding: 4px 8px 4px 4px; }
+  .pn-plotstrip .ic { width: 36px; height: 36px; }
+  .pn-plotstrip-text span { display: none; }
+  .pn-plotstrip .btn { min-height: 44px; padding-top: 6px; padding-bottom: 8px; white-space: nowrap; }
+
+  /* the Market's sell slip: too tall to ride along the bottom of a 340 px sheet, so it stands beside the goods */
+  .pn-sell { grid-template-columns: minmax(0, 1fr) 216px; gap: 10px; }
+  .pn-stacks { grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); }
+  .pn-slip { top: 0; bottom: auto; margin-top: 0; padding: 10px; box-shadow: inset 0 0 0 2px rgba(217, 182, 119, .8), var(--pn-shadow); }
+  .pn-slip-head { gap: 8px; }
+  .pn-slip-head .ic { width: 40px; height: 40px; }
+  .pn-slip-title { font-size: 1.125rem; }
+  .pn-slip-qty { grid-template-columns: minmax(0, 1fr) 56px; }
+  .pn-slip-sum { flex-wrap: wrap; }
+  /* dialogs: the buttons stay in view on a 340 px screen */
+  .dlg { gap: 8px; }
+  .dlg .art { width: 52px; height: 52px; }
+  .dlg .acts { margin-top: 0; }
+
+  /* panels slide in from the right and leave the farm in view; small cards stay in the middle */
+  .hh-panel.size-side, .hh-panel.size-wide, .hh-panel.size-full, #panel-menu.hh-panel {
+    left: auto; right: 0; top: 0; bottom: 0; width: min(500px, 64vw); height: auto; max-height: none; transform: none;
+    padding: 58px calc(8px + var(--sar)) calc(6px + var(--sab)) 12px; border-radius: 22px 0 0 22px; }
+  .hh-panel.size-card:not(#panel-menu) { width: min(460px, calc(100vw - 24px)); max-height: calc(100% - 12px); padding-top: 56px; }
+  .hh-panel.size-side .hh-sheet-grip, .hh-panel.size-wide .hh-sheet-grip, .hh-panel.size-full .hh-sheet-grip, #panel-menu .hh-sheet-grip {
+    left: 5px; top: 50%; width: 5px; height: 46px; margin: -23px 0 0; }
+  .hh-panel.size-card:not(#panel-menu) .hh-sheet-grip { display: none; }
+  .hh-panel.size-side .hh-panel-title, .hh-panel.size-wide .hh-panel-title, .hh-panel.size-full .hh-panel-title, #panel-menu .hh-panel-title { top: 10px; }
+  .hh-panel-title { top: 10px; }
+  .hh-panel-close { top: 8px; }
+  .hh-panel.size-side.is-opening, .hh-panel.size-wide.is-opening, .hh-panel.size-full.is-opening, #panel-menu.is-opening { animation: sheet-left 280ms var(--ease-out) both; }
+  .hh-panel.size-side.is-closing, .hh-panel.size-wide.is-closing, .hh-panel.size-full.is-closing, #panel-menu.is-closing { animation: sheet-right 160ms var(--ease-in) both; }
+  .hh-panel .scroll-fade { bottom: calc(6px + var(--sab)); }
+}
+
+/* ======== tablets (601-1180 px wide, taller than 500 px) ========================================================== */
+@media (min-width: 601px) and (max-width: 1180px) and (min-height: 501px) {
+  .tool { width: 60px; height: 64px; }
+  #toolbar { padding-bottom: 8px; }
+  .coach-slot, .seed-tray, .build-tray, .seed-strip, .tray-tip { align-self: flex-start; }
+  .tracker { top: calc(104px + var(--sat)); left: calc(var(--safe) + var(--sal)); }
+  .farm-name { max-width: 150px; }
+  #hud-xp-bar { width: 170px; }
+}
+
+/* ======== touch screens: a hover that sticks after a tap never lifts or tilts a button ============================= */
+@media (hover: none) {
+  .tool:hover:not([aria-pressed="true"]), .dock-btn:hover, .dock-mini:hover, .edge-btn:hover, .social-btn:hover, .seed:hover,
+  .hud-tr .pill:hover, .goal:hover, .sp-seed:hover, .ss-seed:hover, .level-star:hover, .hh-tab:hover, .btn:hover { transform: none; filter: none; }
+  .tool:hover .ic, .tool:hover .glyph, .dock-btn:hover .ic, .dock-btn:hover .glyph, .sp-seed:hover .sp-art .ic { transform: none; }
+  .players .farmer:hover .face { transform: none; }
+}
+
+/* ======== touch layouts: the "where to get it" bubble and a crop's Finish buttons take a thumb (live requests) ======= */
+@media (max-width: 1180px), (max-height: 500px) {
+  .ih { width: min(344px, calc(100vw - 16px)); }
+  .ih-scroll { max-height: calc(100dvh - 32px - var(--sat) - var(--sab)); padding: 12px 12px 12px; }
+  .ih .ih-show { min-height: 40px; padding: 8px 12px 10px; font-size: .875rem; }
+  .ih-src { grid-template-columns: 36px minmax(0, 1fr) auto; }
+  .tip .tip-finish .btn { min-height: 44px; }
+  /* a hover that sticks after a tap never rings a chip that is not open */
+  .pn-chip[data-item]:hover:not([aria-describedby="item-hint"]) { box-shadow: inset 0 0 0 2px rgba(217, 182, 119, .7); background: rgba(255, 255, 255, .55); }
+}
+
+/* wave 4 (wish 9): a phone's farmer chips are small: "Your look" lives in the Menu and Settings there */
+@media (max-width: 600px), (max-height: 500px) {
+  .players .look-btn { display: none; }
+}
+
+/* a finger needs room on the Settings switches (Quality, Day and night, Motion, Right-drag) */
+@media (hover: none) {
+  .seg button { min-height: 44px; padding: 6px 14px; }
+}

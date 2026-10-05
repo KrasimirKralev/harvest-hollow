@@ -1,0 +1,130 @@
+{
+ "schema": 1,
+ "meta": {
+  "farmSeed": 42,
+  "createdAt": 1790000000000,
+  "version": 2,
+  "contentHash": "0badc0de"
+ },
+ "farm": {
+  "name": "Harvest Hollow",
+  "xp": 0,
+  "wallet": {
+   "coins": 300,
+   "acorns": 5
+  },
+  "inventory": {},
+  "overflow": {},
+  "stats": {},
+  "mastery": {},
+  "ledger": {
+   "n": 0,
+   "rows": {}
+  },
+  "expansions": [
+   "home"
+  ],
+  "objects": {
+   "home.0.0": {
+    "def": "plot",
+    "x": 24,
+    "z": 30,
+    "rot": 0,
+    "placedAt": 1790000000000,
+    "by": "sys",
+    "cycle": 0,
+    "crop": null
+   },
+   "home.0.1": {
+    "def": "plot",
+    "x": 25,
+    "z": 30,
+    "rot": 0,
+    "placedAt": 1790000000000,
+    "by": "sys",
+    "cycle": 0,
+    "crop": null
+   },
+   "home.0.2": {
+    "def": "plot",
+    "x": 26,
+    "z": 30,
+    "rot": 0,
+    "placedAt": 1790000000000,
+    "by": "sys",
+    "cycle": 0,
+    "crop": null
+   },
+   "home.0.3": {
+    "def": "plot",
+    "x": 27,
+    "z": 30,
+    "rot": 0,
+    "placedAt": 1790000000000,
+    "by": "sys",
+    "cycle": 0,
+    "crop": null
+   },
+   "home.0.4": {
+    "def": "plot",
+    "x": 24,
+    "z": 31,
+    "rot": 0,
+    "placedAt": 1790000000000,
+    "by": "sys",
+    "cycle": 0,
+    "crop": null
+   },
+   "home.0.5": {
+    "def": "plot",
+    "x": 25,
+    "z": 31,
+    "rot": 0,
+    "placedAt": 1790000000000,
+    "by": "sys",
+    "cycle": 0,
+    "crop": null
+   },
+   "home.0.6": {
+    "def": "plot",
+    "x": 26,
+    "z": 31,
+    "rot": 0,
+    "placedAt": 1790000000000,
+    "by": "sys",
+    "cycle": 0,
+    "crop": null
+   },
+   "home.0.7": {
+    "def": "plot",
+    "x": 27,
+    "z": 31,
+    "rot": 0,
+    "placedAt": 1790000000000,
+    "by": "sys",
+    "cycle": 0,
+    "crop": null
+   }
+  }
+ },
+ "players": {
+  "p1": {
+   "name": "Rowan",
+   "color": "#2BB3A3",
+   "xp": 0,
+   "hearts": 0,
+   "stats": {},
+   "joinedAt": 1790000000000,
+   "lastSeenAt": 1790000000000
+  },
+  "p2": {
+   "name": "Mia",
+   "color": "#FF7A6B",
+   "xp": 0,
+   "hearts": 0,
+   "stats": {},
+   "joinedAt": 1790000000000,
+   "lastSeenAt": 1790000000000
+  }
+ }
+}

@@ -1,0 +1,483 @@
+{
+  "version": 1,
+  "note": "Harvest Hollow 2D art (art lane). Sizes in px; bytes on disk.",
+  "npc": {
+    "hazel": {
+      "512": {
+        "file": "npc/hazel.webp",
+        "w": 512,
+        "h": 512,
+        "bytes": 19216
+      },
+      "128": {
+        "file": "npc/hazel_128.webp",
+        "w": 128,
+        "h": 128,
+        "bytes": 3830
+      },
+      "face": {
+        "file": "npc/hazel_face.webp",
+        "w": 128,
+        "h": 128,
+        "bytes": 4706
+      }
+    },
+    "journal": {
+      "512": {
+        "file": "npc/journal.webp",
+        "w": 512,
+        "h": 512,
+        "bytes": 19288
+      },
+      "128": {
+        "file": "npc/journal_128.webp",
+        "w": 128,
+        "h": 128,
+        "bytes": 3462
+      },
+      "face": {
+        "file": "npc/journal_face.webp",
+        "w": 128,
+        "h": 128,
+        "bytes": 4120
+      }
+    },
+    "mabel": {
+      "512": {
+        "file": "npc/mabel.webp",
+        "w": 512,
+        "h": 512,
+        "bytes": 21488
+      },
+      "128": {
+        "file": "npc/mabel_128.webp",
+        "w": 128,
+        "h": 128,
+        "bytes": 4718
+      },
+      "face": {
+        "file": "npc/mabel_face.webp",
+        "w": 128,
+        "h": 128,
+        "bytes": 5278
+      }
+    },
+    "ollie": {
+      "512": {
+        "file": "npc/ollie.webp",
+        "w": 512,
+        "h": 512,
+        "bytes": 20842
+      },
+      "128": {
+        "file": "npc/ollie_128.webp",
+        "w": 128,
+        "h": 128,
+        "bytes": 4198
+      },
+      "face": {
+        "file": "npc/ollie_face.webp",
+        "w": 128,
+        "h": 128,
+        "bytes": 4976
+      }
+    },
+    "fern": {
+      "512": {
+        "file": "npc/fern.webp",
+        "w": 512,
+        "h": 512,
+        "bytes": 14554
+      },
+      "128": {
+        "file": "npc/fern_128.webp",
+        "w": 128,
+        "h": 128,
+        "bytes": 3258
+      },
+      "face": {
+        "file": "npc/fern_face.webp",
+        "w": 128,
+        "h": 128,
+        "bytes": 3060
+      }
+    },
+    "juniper": {
+      "512": {
+        "file": "npc/juniper.webp",
+        "w": 512,
+        "h": 512,
+        "bytes": 19764
+      },
+      "128": {
+        "file": "npc/juniper_128.webp",
+        "w": 128,
+        "h": 128,
+        "bytes": 3942
+      },
+      "face": {
+        "file": "npc/juniper_face.webp",
+        "w": 128,
+        "h": 128,
+        "bytes": 4788
+      }
+    },
+    "reed": {
+      "512": {
+        "file": "npc/reed.webp",
+        "w": 512,
+        "h": 512,
+        "bytes": 21068
+      },
+      "128": {
+        "file": "npc/reed_128.webp",
+        "w": 128,
+        "h": 128,
+        "bytes": 4220
+      },
+      "face": {
+        "file": "npc/reed_face.webp",
+        "w": 128,
+        "h": 128,
+        "bytes": 4642
+      }
+    },
+    "pemberton": {
+      "512": {
+        "file": "npc/pemberton.webp",
+        "w": 512,
+        "h": 512,
+        "bytes": 18426
+      },
+      "128": {
+        "file": "npc/pemberton_128.webp",
+        "w": 128,
+        "h": 128,
+        "bytes": 3866
+      },
+      "face": {
+        "file": "npc/pemberton_face.webp",
+        "w": 128,
+        "h": 128,
+        "bytes": 4298
+      }
+    },
+    "pip": {
+      "512": {
+        "file": "npc/pip.webp",
+        "w": 512,
+        "h": 512,
+        "bytes": 18218
+      },
+      "128": {
+        "file": "npc/pip_128.webp",
+        "w": 128,
+        "h": 128,
+        "bytes": 3866
+      },
+      "face": {
+        "file": "npc/pip_face.webp",
+        "w": 128,
+        "h": 128,
+        "bytes": 4698
+      }
+    },
+    "rosie": {
+      "512": {
+        "file": "npc/rosie.webp",
+        "w": 512,
+        "h": 512,
+        "bytes": 18974
+      },
+      "128": {
+        "file": "npc/rosie_128.webp",
+        "w": 128,
+        "h": 128,
+        "bytes": 4150
+      },
+      "face": {
+        "file": "npc/rosie_face.webp",
+        "w": 128,
+        "h": 128,
+        "bytes": 5514
+      }
+    },
+    "tom": {
+      "512": {
+        "file": "npc/tom.webp",
+        "w": 512,
+        "h": 512,
+        "bytes": 20988
+      },
+      "128": {
+        "file": "npc/tom_128.webp",
+        "w": 128,
+        "h": 128,
+        "bytes": 3922
+      },
+      "face": {
+        "file": "npc/tom_face.webp",
+        "w": 128,
+        "h": 128,
+        "bytes": 4688
+      }
+    },
+    "lucia": {
+      "512": {
+        "file": "npc/lucia.webp",
+        "w": 512,
+        "h": 512,
+        "bytes": 21294
+      },
+      "128": {
+        "file": "npc/lucia_128.webp",
+        "w": 128,
+        "h": 128,
+        "bytes": 4500
+      },
+      "face": {
+        "file": "npc/lucia_face.webp",
+        "w": 128,
+        "h": 128,
+        "bytes": 4568
+      }
+    }
+  },
+  "quests": {
+    "a": {
+      "theme": "Grandma Hazel: the farmhouse porch, letters, bread, windmill, apple tree, hens",
+      "focus": [
+        0.4,
+        0.62
+      ],
+      "1200": {
+        "file": "quests/a.webp",
+        "w": 1200,
+        "h": 400,
+        "bytes": 54692
+      },
+      "600": {
+        "file": "quests/a_600.webp",
+        "w": 600,
+        "h": 200,
+        "bytes": 25202
+      }
+    },
+    "b": {
+      "theme": "Mabel: the market stall, produce crates, jams, juice, hamper",
+      "focus": [
+        0.5,
+        0.55
+      ],
+      "1200": {
+        "file": "quests/b.webp",
+        "w": 1200,
+        "h": 400,
+        "bytes": 49294
+      },
+      "600": {
+        "file": "quests/b_600.webp",
+        "w": 600,
+        "h": 200,
+        "bytes": 23628
+      }
+    },
+    "c": {
+      "theme": "Dr. Fern: barnyard pasture, cow and calf, sheep, pig, ducks, goat, horse, vet bag",
+      "focus": [
+        0.38,
+        0.55
+      ],
+      "1200": {
+        "file": "quests/c.webp",
+        "w": 1200,
+        "h": 400,
+        "bytes": 52404
+      },
+      "600": {
+        "file": "quests/c_600.webp",
+        "w": 600,
+        "h": 200,
+        "bytes": 24180
+      }
+    },
+    "d": {
+      "theme": "Juniper: orchard, cherries, peaches, beehives, ladder, pie",
+      "focus": [
+        0.55,
+        0.62
+      ],
+      "1200": {
+        "file": "quests/d.webp",
+        "w": 1200,
+        "h": 400,
+        "bytes": 61478
+      },
+      "600": {
+        "file": "quests/d_600.webp",
+        "w": 600,
+        "h": 200,
+        "bytes": 28332
+      }
+    },
+    "e": {
+      "theme": "Ollie: building a bridge, planks and sawhorses, greenhouse, village across the river",
+      "focus": [
+        0.48,
+        0.72
+      ],
+      "1200": {
+        "file": "quests/e.webp",
+        "w": 1200,
+        "h": 400,
+        "bytes": 59336
+      },
+      "600": {
+        "file": "quests/e_600.webp",
+        "w": 600,
+        "h": 200,
+        "bytes": 27262
+      }
+    },
+    "f": {
+      "theme": "Captain Reed: the river barge at the jetty, crates in rows, pennants",
+      "focus": [
+        0.55,
+        0.55
+      ],
+      "1200": {
+        "file": "quests/f.webp",
+        "w": 1200,
+        "h": 400,
+        "bytes": 65676
+      },
+      "600": {
+        "file": "quests/f_600.webp",
+        "w": 600,
+        "h": 200,
+        "bytes": 30102
+      }
+    },
+    "g": {
+      "theme": "Judge Pemberton: County Fair tent, prize pumpkin, rosettes, judging table",
+      "focus": [
+        0.25,
+        0.68
+      ],
+      "1200": {
+        "file": "quests/g.webp",
+        "w": 1200,
+        "h": 400,
+        "bytes": 45700
+      },
+      "600": {
+        "file": "quests/g_600.webp",
+        "w": 600,
+        "h": 200,
+        "bytes": 21998
+      }
+    },
+    "h": {
+      "theme": "Together (Grandma's Journal): the couple on the sunset bench, pond and dock, fireflies",
+      "focus": [
+        0.7,
+        0.45
+      ],
+      "1200": {
+        "file": "quests/h.webp",
+        "w": 1200,
+        "h": 400,
+        "bytes": 41354
+      },
+      "600": {
+        "file": "quests/h_600.webp",
+        "w": 600,
+        "h": 200,
+        "bytes": 19696
+      }
+    }
+  },
+  "logo": {
+    "stacked": {
+      "webp": {
+        "file": "logo.webp",
+        "w": 1200,
+        "h": 538,
+        "bytes": 133398
+      },
+      "png": {
+        "file": "logo.png",
+        "w": 1200,
+        "h": 538,
+        "bytes": 734843
+      }
+    },
+    "wide": {
+      "webp": {
+        "file": "logo-wide.webp",
+        "w": 1400,
+        "h": 336,
+        "bytes": 95888
+      },
+      "png": {
+        "file": "logo-wide.png",
+        "w": 1400,
+        "h": 336,
+        "bytes": 474175
+      }
+    }
+  },
+  "welcome": {
+    "1920": {
+      "file": "welcome.webp",
+      "w": 1920,
+      "h": 1080,
+      "bytes": 142298
+    },
+    "960": {
+      "file": "welcome_960.webp",
+      "w": 960,
+      "h": 540,
+      "bytes": 63412
+    }
+  },
+  "parchment": {
+    "tile": {
+      "file": "parchment.webp",
+      "w": 1024,
+      "h": 1024,
+      "bytes": 5626
+    },
+    "avg": "#FDF1DB"
+  },
+  "horizon": {
+    "sky": {
+      "file": "horizon.webp",
+      "w": 4096,
+      "h": 1422,
+      "bytes": 59892,
+      "horizonY": 0.55
+    },
+    "hills": {
+      "file": "horizon-hills.webp",
+      "w": 4096,
+      "h": 962,
+      "bytes": 81904
+    }
+  },
+  "welcome-couple": {
+    "1920": {
+      "file": "welcome-couple.webp",
+      "w": 1920,
+      "h": 1080,
+      "bytes": 117008
+    },
+    "960": {
+      "file": "welcome-couple_960.webp",
+      "w": 960,
+      "h": 540,
+      "bytes": 56276
+    }
+  },
+  "totalBytes": 2939643
+}
