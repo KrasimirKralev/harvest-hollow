@@ -11,6 +11,7 @@
 //                           Predictions stay instant; only the wire is paced. Frames are DROPPED while
 //                           disconnected (the SyncStore re-sends pending actions after the next welcome)
 //   socket.ping()           one clock sample now
+//   socket.stop()           close for good, no reconnect (multi-farm mode: a private farm, a used-up invite)
 //   status: 'connecting' | 'open' | 'reconnecting'
 import { MSG, LIMITS } from '../../../shared/net/protocol.js';
 
@@ -73,6 +74,7 @@ export class Socket {
       this.ws = null;
       clearTimeout(this.pingTimer);
       this.batch = [];             // the store re-sends every pending action after the next welcome
+      if (this.stopped) return;    // stop(): the farm said no (multi mode's private page), knocking again changes nothing
       this.setStatus('reconnecting');
       const steps = LIMITS.RECONNECT_MS;
       const delay = steps[Math.min(this.attempt++, steps.length - 1)];
@@ -137,4 +139,11 @@ export class Socket {
 
   /** Dev/test: close the socket as if the network dropped. */
   drop() { if (this.ws) this.ws.close(); }
+
+  /** Close for good, no reconnect (additive, multi-farm mode: a private farm or a used-up invite). */
+  stop() {
+    this.stopped = true;
+    clearTimeout(this.pingTimer);
+    if (this.ws) this.ws.close();
+  }
 }

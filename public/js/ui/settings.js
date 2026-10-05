@@ -387,9 +387,10 @@ export function createSettings(S) {
           ...(S.ui.panels.has('avatar') ? [h('div.set-row', h('span.lbl', 'Your farmer'), h('div',
             h('button.btn.btn--sky.btn--small', { type: 'button', dataset: { look: 'open' }, on: { click: () => { ctx.close(); S.ui.panels.open('avatar'); } } }, 'Change your look')),
           h('span.help', 'Hair, clothes, skin tone and a hat. Saved with the farm: your partner sees it too.'))] : []),
-          h('div.set-row', h('span.lbl', 'This screen'), h('div',
+          // multi-farm mode: invite, the personal link and the retention line instead of "Switch farmer" (ui/invite.js)
+          ...(S.invite ? S.invite.settingsRows(ctx) : [h('div.set-row', h('span.lbl', 'This screen'), h('div',
             h('button.btn.btn--paper.btn--small', { type: 'button', on: { click: () => S.ui.switchFarmer?.() } }, 'Switch farmer')),
-          h('span.help', 'Pick the other farmer on this computer (two tabs can be both of you).')),
+          h('span.help', 'Pick the other farmer on this computer (two tabs can be both of you).'))]),
         );
       }
       body.append(grid);

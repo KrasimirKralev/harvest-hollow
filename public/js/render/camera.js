@@ -29,6 +29,7 @@
 //   tiltClamp(p) pure (tested)
 import * as THREE from 'three';
 import { TILE_M, WORLD_TILES } from '../../../shared/content/config.js';
+import { farm } from '../net/farm.js';
 
 const DEG = Math.PI / 180;
 export const CAM = Object.freeze({ fov: 30, minDist: 18, maxDist: 90, defDist: 55, rotateMs: 400, focusMs: 500, margin: 6, zoomRate: 12 });
@@ -91,7 +92,7 @@ export function centredInset(dist, aspect) {
 }
 
 function loadSaved() {
-  try { return JSON.parse(localStorage.getItem('hh.camera') || 'null'); } catch { return null; }
+  try { return JSON.parse(localStorage.getItem(farm.key('hh.camera')) || 'null'); } catch { return null; }
 }
 
 export function createCamera(target = { x: 28 * TILE_M, z: 32 * TILE_M }, { touch = false, kind = 'phone' } = {}) {
@@ -152,7 +153,7 @@ export function createCamera(target = { x: 28 * TILE_M, z: 32 * TILE_M }, { touc
   function flushSave() {
     const v = view ? { vw: view.w, vh: view.h } : {};
     const o = { ...(s.tilt !== null ? { tilt: s.tilt } : {}), ...(Math.abs(s.yaw - (Math.PI / 4 + s.k * (Math.PI / 2))) > 1e-4 ? { yaw: s.yaw } : {}) };
-    try { localStorage.setItem('hh.camera', JSON.stringify({ tx: s.tx, tz: s.tz, dist: s.dist, k: s.k, ...v, ...o })); } catch { /* private mode */ }
+    try { localStorage.setItem(farm.key('hh.camera'), JSON.stringify({ tx: s.tx, tz: s.tz, dist: s.dist, k: s.k, ...v, ...o })); } catch { /* private mode */ }
   }
   place();
 

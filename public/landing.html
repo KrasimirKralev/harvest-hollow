@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <!-- The multi-farm front door (docs/agent-briefs/multi-farm.md): served at / when HH_MODE=multi. The game page itself is
+       /f/<farmId> (index.html). Static: it needs no build stamp. -->
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#4C9A3E">
+  <meta name="description" content="Harvest Hollow: a cozy 3D farm for two, in your browser. Start a farm in one tap and invite a friend to farm with you, live.">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="apple-touch-icon" href="/assets/pwa/apple-touch-icon.png">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Harvest Hollow">
+  <meta name="color-scheme" content="light">
+  <title>Harvest Hollow · a cozy farm for two</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="preload" href="/assets/fonts/fredoka-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="/assets/fonts/baloo2-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/css/style.css">
+  <link rel="stylesheet" href="/css/landing.css">
+</head>
+<body class="landing">
+  <main class="ld" id="landing">
+    <h1 class="ld-logo"><picture><source srcset="/assets/art/logo.webp" type="image/webp">
+      <img src="/assets/art/logo.png" alt="Harvest Hollow" width="1200" height="538"></picture></h1>
+    <p class="ld-tag outlined-thin">A cozy farm for two. Plant, harvest and build it together, live, right in your browser.</p>
+
+    <section class="ld-card wood" aria-labelledby="ld-start-title">
+      <div class="ld-paper paper">
+        <h2 class="ld-h" id="ld-start-title">Your own farm, in one tap</h2>
+        <p class="ld-sub" id="ld-start-sub">No account, no e-mail. Grandma Hazel shows you around, and you can invite a friend whenever you like.</p>
+        <button class="btn ld-start" id="ld-start" type="button" aria-describedby="ld-start-sub">Start a new farm</button>
+        <p class="ld-status" id="ld-status" role="status" aria-live="polite"></p>
+        <p class="ld-warn" id="ld-storage" hidden>This browser window does not keep anything once it closes, so this device will
+          forget your farm. In the game, Settings &rsaquo; Farm has your personal farm link: keep it somewhere safe.</p>
+      </div>
+    </section>
+
+    <section class="ld-card wood" id="ld-farms" aria-labelledby="ld-farms-title" hidden>
+      <div class="ld-paper paper">
+        <h2 class="ld-h" id="ld-farms-title">Your farms on this device</h2>
+        <ul class="ld-list" id="ld-list"></ul>
+      </div>
+    </section>
+
+    <section class="ld-card wood" id="ld-full" aria-labelledby="ld-full-title" hidden>
+      <div class="ld-paper paper">
+        <h2 class="ld-h" id="ld-full-title">The valley is full right now</h2>
+        <p class="ld-sub">Every farm Harvest Hollow can keep is taken. Farms nobody visits for 7 days are deleted, so room opens up
+          again: please try once more tomorrow.</p>
+      </div>
+    </section>
+
+    <footer class="ld-foot">
+      <p class="ld-ttl outlined-thin">Farms nobody visits for 7 days are deleted.</p>
+      <p class="ld-links"><a id="ld-repo" href="https://github.com/KrasimirKralev/harvest-hollow" rel="noopener">Harvest Hollow on GitHub</a></p>
+    </footer>
+  </main>
+  <noscript><p class="ld-noscript">Harvest Hollow needs JavaScript and WebGL2.</p></noscript>
+  <script type="module" src="/js/landing.js"></script>
+</body>
+</html>

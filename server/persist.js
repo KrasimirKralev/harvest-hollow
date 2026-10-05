@@ -93,11 +93,17 @@ async function writeAtomic(file, data) {
 }
 
 export class Persist {
-  /** @param {string} dir  @param {{ log?: Console, now?: () => number }} [opts] */
-  constructor(dir, { log = console, now = Date.now } = {}) {
+  /**
+   * @param {string} dir
+   * @param {{ log?: Console, now?: () => number, backupHours?: number, backupDays?: number }} [opts]
+   *   backupHours/backupDays: the retention (multi-farm hosting keeps fewer per farm; default BACKUP_HOURS/DAYS)
+   */
+  constructor(dir, { log = console, now = Date.now, backupHours = BACKUP_HOURS, backupDays = BACKUP_DAYS } = {}) {
     this.dir = dir;
     this.log = log;
     this.wall = now;
+    this.backupHours = backupHours;
+    this.backupDays = backupDays;
     this.fd = null;
     this.unsynced = false;
     this.saving = null;
@@ -365,7 +371,7 @@ export class Persist {
       if (fs.existsSync(this.p(ARCHIVE))) await fsp.truncate(this.p(ARCHIVE), 0);
       this.stats.lastBackupAt = at;
       const all = this.backupNames();
-      const keep = backupsToKeep(all);
+      const keep = backupsToKeep(all, this.backupHours, this.backupDays);
       for (const f of all) if (!keep.has(f)) await fsp.unlink(this.p(`backups/${f}`)).catch(() => {});
     } catch (err) {
       this.lastBackupAt = at - BACKUP_EVERY_MS + 5 * 60_000;     // try again in 5 minutes, not in an hour

@@ -16,6 +16,7 @@
 //   touchText(text, touch) -> string         "click" reads "tap" and "(G)" key hints drop out for a touch player
 import { iconUrl } from '../render/icons.js';
 import { portraitSpec, peekPortrait } from '../render/portrait.js';
+import { farm } from '../net/farm.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
@@ -240,16 +241,19 @@ export function ensureStylesheet(href) {
   } catch { /* no DOM: nothing to link */ }
 }
 
-/** localStorage JSON with try/catch (private windows, blocked storage): UI conveniences only, never game state. */
+/**
+ * localStorage JSON with try/catch (private windows, blocked storage): UI conveniences only, never game state. A farm's
+ * own keys (tips seen, drafts) are namespaced per farm in multi mode (net/farm.js `farm.key`); unchanged otherwise.
+ */
 export const kv = {
   get(key, fallback = null) {
     try {
-      const raw = globalThis.localStorage?.getItem(key);
+      const raw = globalThis.localStorage?.getItem(farm.key(key));
       return raw === null || raw === undefined ? fallback : JSON.parse(raw);
     } catch { return fallback; }
   },
   set(key, value) {
-    try { globalThis.localStorage?.setItem(key, JSON.stringify(value)); } catch { /* storage unavailable: keep it for this page */ }
+    try { globalThis.localStorage?.setItem(farm.key(key), JSON.stringify(value)); } catch { /* storage unavailable: keep it for this page */ }
   },
 };
 

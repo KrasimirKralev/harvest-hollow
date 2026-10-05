@@ -41,7 +41,16 @@ export function loadConfig(env = process.env) {
   const slots = Number(env.HH_SLOTS);
   const tz = env.HH_TZ || machineTz();
   if (!isTimeZone(tz)) throw new ConfigError(`HH_TZ=${tz} is not an IANA time zone (e.g. Europe/Sofia)`);
+  const mode = env.HH_MODE || 'single';
+  if (mode !== 'single' && mode !== 'multi') throw new ConfigError(`HH_MODE=${mode} must be single or multi`);
+  // A public host must never carry the time-warp and drop routes: behind a reverse proxy on the same machine every
+  // visitor would look like loopback to them.
+  if (mode === 'multi' && env.HH_DEV === '1' && env.NODE_ENV === 'production') {
+    throw new ConfigError('HH_DEV=1 is refused in multi-farm mode with NODE_ENV=production (dev routes on a public host)');
+  }
   return {
+    mode,                                 // 'single' (default: one farm, the LAN game) or 'multi' (hosted, server/multi.js)
+    multi: mode === 'multi' ? multiConfig(env) : null,   // the hosting knobs (multiConfig), multi mode only
     port: env.PORT !== undefined && env.PORT !== '' && Number.isInteger(port) && port >= 0 && port < 65536 ? port : 3300,
     host: env.HH_HOST || '0.0.0.0',
     dataDir: path.resolve(env.HH_DATA_DIR || path.join(ROOT, 'data')),
@@ -62,5 +71,35 @@ export function loadConfig(env = process.env) {
       && Number(env.HH_AWAY_GRACE_MS) >= 0 ? Number(env.HH_AWAY_GRACE_MS) : undefined,
     root: ROOT,
     version: packageVersion(),
+  };
+}
+
+/** A positive integer from the environment, else `dflt` (a set but invalid value is a configuration error). */
+function posInt(env, key, dflt, { min = 1 } = {}) {
+  const raw = env[key];
+  if (raw === undefined || raw === '') return dflt;
+  const n = Number(raw);
+  if (!Number.isSafeInteger(n) || n < min) throw new ConfigError(`${key}=${raw} must be an integer >= ${min}`);
+  return n;
+}
+
+/**
+ * Multi-farm hosting knobs (HH_MODE=multi only; a set but invalid value refuses the boot).
+ * Every duration is in milliseconds except HH_FARM_TTL_DAYS.
+ */
+export function multiConfig(env = process.env) {
+  return {
+    maxFarms: posInt(env, 'HH_MAX_FARMS', 500),              // stored farms; POST /api/farms answers 503 above it
+    ttlDays: posInt(env, 'HH_FARM_TTL_DAYS', 7),             // a farm nobody connected to for this long is deleted
+    sweepMs: posInt(env, 'HH_SWEEP_MS', 60 * 60_000),        // how often the retention sweep runs
+    idleMs: posInt(env, 'HH_FARM_IDLE_MS', 10 * 60_000),     // a loaded farm with no socket this long is unloaded
+    maxLoaded: posInt(env, 'HH_MAX_LOADED', 64),             // LRU cap on farms in memory (idle ones go first)
+    createPerHour: posInt(env, 'HH_CREATE_PER_HOUR', 5),     // new farms per client address
+    createPerDay: posInt(env, 'HH_CREATE_PER_DAY', 20),
+    wsPerIp: posInt(env, 'HH_WS_PER_IP', 16),                // open sockets per client address, all farms together
+    // reverse proxies in front of the server whose X-Forwarded-For entry is trusted (0 = use the socket address)
+    trustProxy: posInt(env, 'HH_TRUST_PROXY', 1, { min: 0 }),
+    backupHours: posInt(env, 'HH_BACKUP_HOURS', 3),          // per farm: newest backup of each of the last N hours
+    backupDays: posInt(env, 'HH_BACKUP_DAYS', 3),            // ... and of each of the last N days
   };
 }

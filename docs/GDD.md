@@ -50,6 +50,14 @@ from 30 +2 (the Heirloom's +1 stacks), and the tree grows. **Workshop queues**: 
 new order (the running item stays first, total time and inputs unchanged), and any item can be finished now for what
 Hurry would cost when it runs (a waiting item: its whole time, 1 Acorn per started hour, at most 8). Each has a
 drip-fed card (§7.4). None of it changes E(L) or the model (`tools/econ-sim.mjs --checks` 23/23).
+**2026-10-05, a hosted mode for everyone** (owner: "a link so everyone can start with their own progress and it is
+saved", "and a link so you can invite a second player to your farm"; `docs/agent-briefs/multi-farm.md`): with
+`HH_MODE=multi` one public URL serves many private farms. Anyone starts a farm in one tap (no account) and is its
+farmer 1, then gets the first-run flow of §7 unchanged; **Invite a friend** makes a one-time link that seats the second
+farmer (§6 co-op, still two players per farm); a **personal farm link** opens the farm as that farmer on any device
+(it replaces the passphrase there); a farm nobody visits for 7 days is deleted, which Settings and the landing page
+say. The rules, the economy and E(L) are untouched: every farm is exactly the farm this document designs, and the LAN
+game (`HH_MODE=single`, the default) is unchanged.
 
 Harvest Hollow is a FarmVille-2-style co-op farm for two people (up to four) who share one farm and play it together in
 real time on their home LAN. This document is the single source of truth for mechanics, numbers, UX, art and

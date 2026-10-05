@@ -6,6 +6,12 @@
 // be the two partners on one machine. URL params ?slot=p1&name=Rowan claim/resume without the picker
 // (used by tools/shot.mjs and tools/e2e-coop.mjs).
 //
+// Multi-farm hosted mode (a page at /f/<farmId>, net/farm.js; wire details docs/agent-notes/mf-client.md): the same
+// identity, its keys namespaced per farm; the way in for a device without a farmer's token is the creator's secret
+// (the landing page stored it), a personal link's '#k=<secret>' (read, stored, wiped from the address bar) or an
+// invite's '?join=<token>'. A farm that says no (deny PRIVATE / INVITE / FULL) shows the farm gate (ui/farm-gate.js)
+// and the socket stops knocking. Single mode (any other path) sends exactly the frames it always did.
+//
 // Server messages go through a per-animation-frame INBOX (GDD App. F "coalesce deltas per animation frame"):
 // everything that arrived since the last frame is handled in arrival order, and each run of d/rej/ack becomes
 // ONE store.onServerBatch() (one rewind, all changes, one replay). A 20 ms timer flushes when frames do not run
@@ -36,19 +42,41 @@ import { makeCid } from '../../shared/net/ids.js';
 import { MSG, ERR, PROTOCOL_VERSION, CAPS } from '../../shared/net/protocol.js';
 import { CONTENT_HASH, furnitureOf } from '../../shared/content/index.js';
 import { RULES_VERSION } from '../../shared/rules/version.js';
+import { farm, session, readLaunch, cleanUrl, rememberFarm, forgetFarm, farmLabel, validSecret, ttlDays } from './net/farm.js';
+import { showFarmGate, installFarmManifest } from './ui/farm-gate.js';
 
+// a farm's own keys are namespaced per farm in multi mode (farm.key); unchanged in single mode
 const storage = {
-  get(area, key) { try { return JSON.parse(area.getItem(key)); } catch { return null; } },
-  set(area, key, v) { try { area.setItem(key, JSON.stringify(v)); } catch { /* private mode: identity lasts this page only */ } },
+  get(area, key) { try { return JSON.parse(area.getItem(farm.key(key))); } catch { return null; } },
+  set(area, key, v) { try { area.setItem(farm.key(key), JSON.stringify(v)); } catch { /* private mode: identity lasts this page only */ } },
+  del(area, key) { try { area.removeItem(farm.key(key)); } catch { /* storage blocked */ } },
 };
 const params = new URLSearchParams(location.search);
+// multi mode: the personal link's key leaves the address bar at once (it is the farmer's key; a screenshot or a
+// shared tab must not carry it), and is kept for this farm until a welcome confirms it
+const launch = farm.multi ? readLaunch(location) : { key: null, join: null };
+if (farm.multi && /[#&]k=/.test(location.hash)) {
+  try { history.replaceState(history.state, '', cleanUrl(location)); } catch { /* an odd browser: the key stays visible */ }
+}
+if (launch.key) storage.set(localStorage, 'hh.key', launch.key);
+/** ident.used when the hello carried the device's way in (creator secret / personal link) or an invite, not a slot's token. */
+const KEY = '*key';
+const JOIN = '*join';
 const ident = {
   tokens: storage.get(localStorage, 'hh.tokens') || {},
   slot: params.get('slot') || storage.get(sessionStorage, 'hh.slot'),
   name: params.get('name'),
   used: null,
+  // multi mode only (null in single mode): the creator's or a personal link's secret, and an invite
+  key: farm.multi ? launch.key ?? validSecret(storage.get(localStorage, 'hh.key')) : null,
+  linkKey: Boolean(launch.key),     // a link opened just now: it says who I am, before any token this device keeps
+  join: launch.join,
+  sentKey: false,
+  sentJoin: false,
+  inviteFailed: false,              // the server refused the invite (used, expired, replaced): the gate says so
 };
 const saveTokens = () => storage.set(localStorage, 'hh.tokens', ident.tokens);
+let gated = false;
 
 const cid = makeCid((n) => crypto.getRandomValues(new Uint8Array(n)));   // not randomUUID: LAN pages are not secure contexts
 const clock = new ClockSync();
@@ -68,21 +96,50 @@ const peerTools = createPeerTools();
 const unsavedMemo = {
   get: () => storage.get(sessionStorage, 'hh.unsaved'),
   set: (v) => storage.set(sessionStorage, 'hh.unsaved', v),
-  clear: () => { try { sessionStorage.removeItem('hh.unsaved'); } catch { /* storage blocked */ } },
+  clear: () => storage.del(sessionStorage, 'hh.unsaved'),
 };
 /** How long a stale tab waits for its re-sent actions to be answered before it reloads anyway (CL-02). */
 const RELOAD_SETTLE_MS = 8000;
 let reloading = false;
 
 function hello(claim) {
+  if (gated) return;
   // caps ['b']: this client unpacks batch frames (socket.js), so the server may send one frame per tick
   const msg = { t: MSG.HELLO, proto: PROTOCOL_VERSION, cid, caps: [CAPS.BATCH] };
   const mine = Object.keys(ident.tokens);
-  if (claim) msg.claim = claim;
+  // multi mode: what lets this device in when no farmer's token of its own answers ({} in single mode). Every key
+  // rides in hello.token, an invite too (server/farm-sessions.js); the server remembers it for the claim that follows
+  const way = ident.key ? { token: ident.key } : ident.join ? { token: ident.join } : {};
+  if (claim) { msg.claim = claim; Object.assign(msg, way); if (way.token) ident.used = ident.key ? KEY : JOIN; }
+  else if (ident.key && ident.linkKey) { msg.token = ident.key; ident.used = KEY; }
   else if (ident.slot && ident.tokens[ident.slot]) { msg.token = ident.tokens[ident.slot]; ident.used = ident.slot; }
   else if (!ident.slot && mine.length === 1) { msg.token = ident.tokens[mine[0]]; ident.used = mine[0]; }
-  else if (ident.slot && ident.name) msg.claim = { slot: ident.slot, name: ident.name };
+  else if (ident.slot && ident.name) {
+    msg.claim = { slot: ident.slot, name: ident.name };
+    Object.assign(msg, way);
+    if (way.token) ident.used = ident.key ? KEY : JOIN;
+  }
+  else if (way.token) { msg.token = way.token; ident.used = ident.key ? KEY : JOIN; }
+  ident.sentKey = Boolean(ident.key) && msg.token === ident.key;
+  ident.sentJoin = Boolean(ident.join) && msg.token === ident.join;
   socket.raw(msg);
+}
+
+/**
+ * The farm said no (multi mode): stop knocking and show the gate. The server's private answer is deny PASSPHRASE (no
+ * passphrase exists in multi mode) or PRIVATE; an invite it refused shows as "this invite no longer works".
+ */
+const GATE_CODES = new Set(['PRIVATE', 'INVITE', ERR.PASSPHRASE, ERR.FULL]);
+function gate(code) {
+  if (gated) return;
+  gated = true;
+  socket?.stop();
+  ui.hideSlots();
+  const invite = code === 'INVITE' || ident.inviteFailed || (ident.sentJoin && code === ERR.PASSPHRASE);
+  const kind = code === 'GONE' ? 'gone' : code === ERR.FULL ? 'full' : invite ? 'invite' : 'private';
+  // a farm this device played that the server no longer has was deleted (7 days without a visit): its keys are useless
+  if (kind === 'gone') forgetFarm(localStorage, farm.id);
+  showFarmGate(kind, { farmId: farm.id });
 }
 
 /**
@@ -91,6 +148,11 @@ function hello(claim) {
  * colour picked on the card).
  */
 function pickSlot(slots, pass) {
+  // multi mode: the picker says whose screen this is (a new farm's creator, an invited friend) and hides the
+  // passphrase and "this is me on a new device" (the personal link replaces them)
+  const opts = farm.multi ? { multi: true, invited: Boolean(ident.join && !ident.key), creator: Boolean(ident.key) } : {};
+  // a new farm's creator is farmer 1 (the brief): one row, not a choice between two empty ones
+  if (opts.creator && slots.every((s) => !s.claimed) && slots.some((s) => s.pid === 'p1')) slots = slots.filter((s) => s.pid === 'p1');
   ui.showSlots(slots.map((s) => ({ ...s, mine: Boolean(ident.tokens[s.pid]), pass })), (slot, name, extra = {}) => {
     ident.slot = slot;
     const claim = name ? { slot, name } : null;
@@ -98,14 +160,16 @@ function pickSlot(slots, pass) {
     if (claim && extra.reclaim === true) claim.reclaim = true;
     if (claim && typeof extra.color === 'string' && /^#[0-9a-f]{6}$/i.test(extra.color)) claim.color = extra.color;
     hello(claim);
-  });
+  }, opts);
 }
 
 function onWelcome(w) {
   // Identity first, whatever happens next: a reload below must never throw a fresh claim's token away.
   if (w.token) { ident.tokens[w.pid] = w.token; saveTokens(); }
+  else if (farm.multi && ident.sentKey && ident.key) { ident.tokens[w.pid] = ident.key; saveTokens(); }
   ident.slot = w.pid;
   storage.set(sessionStorage, 'hh.slot', w.pid);
+  if (farm.multi) welcomeFarm(w);
   const gate = contentGate(w, { content: CONTENT_HASH, build: myBuild }, {
     get: () => storage.get(sessionStorage, 'hh.reloadedFor'),
     set: (v) => storage.set(sessionStorage, 'hh.reloadedFor', v),
@@ -192,6 +256,32 @@ function onWelcome(w) {
   if (Array.isArray(w.chat) && typeof ui.chatHistory === 'function') ui.chatHistory(w.chat);
   document.title = `Harvest Hollow · ${store.state.players[w.pid]?.name ?? ''}`;
   if (settle) settle();
+}
+
+/**
+ * Multi mode, at each welcome: the secret that brought me in is now this farmer's token (the creator's or the
+ * personal link's key is forgotten as such), a used invite leaves the address bar, the device's farm list learns the
+ * farm's name, and the invite card and Settings get my secret (net/farm.js session).
+ */
+function welcomeFarm(w) {
+  if (ident.key && (ident.sentKey || ident.linkKey)) { ident.key = null; storage.del(localStorage, 'hh.key'); }
+  ident.linkKey = false;
+  if (ident.join) {
+    // my own farm opened from the invite I made: the invite stays for the friend it was meant for
+    if (!ident.sentJoin) setTimeout(() => ui.notice("You are already a farmer here, so that invite link is still waiting for your friend."), 1500);
+    ident.join = null;
+    try { history.replaceState(history.state, '', cleanUrl(location, { join: true })); } catch { /* the link stays visible */ }
+  }
+  session.pid = w.pid;
+  session.secret = ident.tokens[w.pid] ?? null;
+  rememberFarm(localStorage, { id: farm.id, name: farmLabel(w.state) });
+  // the server's retention (Settings > Farm says it), once
+  if (!welcomeFarm.asked) {
+    welcomeFarm.asked = true;
+    fetch(farm.api('/api/status'), { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null))
+      .then((st) => { if (st) session.ttlDays = ttlDays(st); }).catch(() => { /* the default stands */ });
+  }
+  installFarmManifest(farm.id, session.secret);
 }
 
 /**
@@ -291,11 +381,19 @@ function handle(m) {
     case MSG.SLOTS: return pickSlot(m.slots, Boolean(m.pass));
     case MSG.DENY:
       if (m.code === ERR.BAD_TOKEN) {
-        if (ident.used) { delete ident.tokens[ident.used]; saveTokens(); ident.used = null; }
+        if (ident.used === KEY) { ident.key = null; ident.linkKey = false; storage.del(localStorage, 'hh.key'); ident.used = null; }
+        else if (ident.used === JOIN) { ident.join = null; ident.inviteFailed = true; ident.used = null; }
+        else if (ident.used) { delete ident.tokens[ident.used]; saveTokens(); ident.used = null; }
         return hello();
       }
       if (m.code === ERR.PROTO) { ui.toast(m.code); setTimeout(() => location.reload(), 1500); return undefined; }
-      if (document.getElementById('slot-picker').hidden) { ident.name = null; return hello(); }
+      // multi mode: a private farm, a used-up invite, a full farm (never the slot list: no names leak)
+      if (farm.multi && GATE_CODES.has(m.code)) return gate(m.code);
+      if (document.getElementById('slot-picker').hidden) {
+        if (farm.multi && !ident.name) return gate('PRIVATE');
+        ident.name = null;
+        return hello();
+      }
       return ui.slotError(m.code);
     case MSG.PRESENCE:
       peerTools.presence(m.list);
@@ -381,6 +479,9 @@ function startAudioSoon() {
 }
 
 async function boot() {
+  // multi mode, nothing that could let this device in (no token, no key, no invite): the server can only say "private",
+  // so say it now, without loading the world (a phone would fetch the whole farm's art for nothing)
+  if (farm.multi && !ident.key && !ident.join && !Object.keys(ident.tokens).length) { gate('PRIVATE'); return; }
   const canvas = document.getElementById('world');
   // nobody touching the page for a while: the endless CSS pulses pause (CL-03, a resting laptop)
   window.__hh.rest = createRest();
@@ -388,7 +489,7 @@ async function boot() {
   window.__hh.viewport = createViewport();
   // this page's build hash, when the server did not stamp index.html (SV-03; a failed fetch skips the check)
   if (!myBuild) {
-    fetch('/api/status', { cache: 'no-store' }).then((r) => r.json()).then((st) => { myBuild = pageBuild({ status: st }); })
+    fetch(farm.api('/api/status'), { cache: 'no-store' }).then((r) => r.json()).then((st) => { myBuild = pageBuild({ status: st }); })
       .catch(() => { /* unknown build: content hash only */ });
   }
   // ?quality=low|medium|high|eco|auto (tests, a slow partner PC); otherwise the view's default / remembered tier
@@ -418,11 +519,29 @@ async function boot() {
     if (show || pendingShown) ui.setPending(show ? { n: hh.pending, oldestMs: hh.oldestMs, online: hh.online } : null);
     pendingShown = show;
   }, 400);
-  const url = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`;
+  const url = farm.wsUrl(location);
   socket = new Socket({ url, clock, onMessage, onOpen: () => hello(),
-    onStatus: (s) => { store.setOnline(s === 'open'); ui.setConnection(s); } });
+    onStatus: (s) => { store.setOnline(s === 'open'); ui.setConnection(s); if (farm.multi) farmProbe(s); } });
   window.__hh.net = socket;
   socket.connect();
+  // multi mode: leaving for the landing page (Settings > All farms) can keep this page in the back/forward cache with
+  // its socket open, so the partner saw me "playing right now" and the farm never went to sleep. Close it there; the
+  // reconnect (its timer frozen with the page) says hello again if the page is brought back.
+  if (farm.multi) addEventListener('pagehide', (e) => { if (e.persisted && !gated) socket.drop(); });
+}
+
+/**
+ * Multi mode: a socket that never opens for this farm (an unknown or deleted farm is refused at the handshake) asks
+ * the farm's status once; a 404 shows a gate instead of "trying again" forever: "this farm is gone" when this device
+ * was a farmer there (the retention sweep deleted it), else the private-farm gate (no existence leak).
+ */
+let failedOpens = 0;
+function farmProbe(s) {
+  if (s === 'open') { failedOpens = 0; return; }
+  if (s !== 'reconnecting' || started || gated || ++failedOpens !== 2) return;
+  fetch(farm.api('/api/status'), { cache: 'no-store' })
+    .then((r) => { if (r.status === 404 && !started) gate(Object.keys(ident.tokens).length ? 'GONE' : 'PRIVATE'); })
+    .catch(() => { /* the network itself: keep trying */ });
 }
 
 /** How much to trust the clock estimate: best RTT, the spread of the kept samples, a word for the overlay. */
@@ -450,7 +569,7 @@ window.__hh = {
   dev: {
     /** HH_DEV servers only (loopback): jump game time, then re-sync the clock estimate. */
     async warp(ms) {
-      const r = await fetch('/api/dev/warp', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ ms }) });
+      const r = await fetch(farm.api('/api/dev/warp'), { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ ms }) });
       const { serverNow: target } = await r.json();
       for (let i = 0; i < 40 && serverNow() < target - 250; i++) {
         socket.ping();

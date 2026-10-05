@@ -5,11 +5,15 @@
 <p align="center"><b>A cozy 3D farming game for two, in the browser.</b><br>
 Plant, harvest, raise animals, craft and grow a whole valley together, on one shared farm, in real time.</p>
 
+<p align="center"><a href="https://harvest-hollow.up.railway.app"><b>▶ Play now in your browser</b></a> — start your own farm in one tap
+and send your partner an invite link. No account needed.</p>
+
 <p align="center">
   <img src="docs/screenshots/hero.png" alt="Two farmers on the sunset bench during Golden Hour, a busy farm around them" width="900">
 </p>
 
-Harvest Hollow is a FarmVille-2-style co-op farm you host yourself. One small Node server runs the farm 24/7, and
+Harvest Hollow is a FarmVille-2-style co-op farm. Play it at **[harvest-hollow.up.railway.app](https://harvest-hollow.up.railway.app)**
+(farms nobody visits for 7 days are deleted there), or host your own. One small Node server runs the farm 24/7, and
 everyone plays in a browser — on a PC, a laptop, a tablet or a phone. Two people share **one** farm: one plants, the
 other harvests; one runs the bakery while the other feeds the cows; you both see everything the moment it happens.
 
@@ -153,11 +157,10 @@ node tools/econ-sim.mjs --checks  # the economy's pacing and balance checks
   RandomMind — details in [`public/assets/audio/music/CREDITS.md`](public/assets/audio/music/CREDITS.md).
 - Fonts: Fredoka, Baloo 2 and Nunito (SIL Open Font License 1.1; the licence texts are in `public/assets/fonts/`).
 - Illustrated portraits, letter headers, backdrops and the logo: original art made for this game with an AI image
-  model (Higgsfield), checked image by image and post-processed; released under the MIT licence with the code.
+  model, checked image by image and post-processed.
 - Sound effects: synthesised for this game by `tools/make-sfx.mjs`.
 - Built with [three.js](https://threejs.org), [Express](https://expressjs.com) and [ws](https://github.com/websockets/ws).
 
 ## License
 
-Code and the game's own art, including the AI-generated illustrations: [MIT](LICENSE). Third-party assets keep their
-own licences (CC0 or the SIL OFL, listed above).
+Code: [MIT](LICENSE). Third-party assets keep their own licences (CC0 or the SIL OFL, listed above).

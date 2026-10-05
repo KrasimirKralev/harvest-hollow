@@ -359,6 +359,8 @@ export function createHud(S) {
     menuBtn('photo', 'Take a photo', 'P', () => (typeof controller.photo === 'function' ? controller.photo() : ui.photoMode(true))),
     menuBtn('gear', 'Settings', ',', () => ui.panels.toggle('settings'), { id: 'hud-settings' }),
     menuBtn('smile', 'Your look', null, () => { if (ui.panels.has('avatar')) ui.panels.open('avatar'); }, { id: 'hud-look' }),
+    // multi-farm mode only (ui/invite.js): a one-time link for the second farmer
+    S.invite ? menuBtn('letter', 'Invite a friend', null, () => S.invite.open(), { id: 'hud-invite' }) : null,
     soundBtn);
   const moreBtn = edgeBtn('gear', 'More: photo, settings, sound', null, () => (menu.hidden ? openMenu() : closeMenu()),
     { id: 'hud-more', 'aria-haspopup': 'menu', 'aria-expanded': 'false' });

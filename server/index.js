@@ -145,20 +145,25 @@ export function loadFarm(persist, { dev = false, log = console, tz = DEFAULT_TZ,
 }
 
 /**
- * Start a full server. Resolves once listening.
- * @param {ReturnType<typeof loadConfig>} [cfg]
- * @returns {Promise<{ port: number, hh: object, close: () => Promise<void>, banner: string }>}
+ * Open one farm in `dir`: load + replay, wire the engine, sessions, presence, together time and the scheduler, run
+ * the catch-up of everything that came due while it was not running, and write a snapshot. A single-farm server
+ * opens one at boot; the multi-farm host (server/farms.js) opens each farm on demand, so a farm that slept catches
+ * up exactly like a restarted single-farm server.
+ * @param {object} cfg  loadConfig() shape
+ * @param {{ log: Console, dir?: string, perf?: Perf, staticFiles?: StaticFiles|null, persistOpts?: object,
+ *   makeSessions?: (o: object) => Sessions }} o
+ * @returns {Promise<object>} the farm context `hh` the router and the http routes use
  */
-export async function startServer(cfg = loadConfig()) {
-  const log = cfg.log || createLogger({ quiet: cfg.quiet, json: cfg.logJson });
-  const persist = new Persist(cfg.dataDir, { log });
+export async function openFarm(cfg, { log, dir = cfg.dataDir, perf = null, staticFiles = null, persistOpts = {},
+  makeSessions = (o) => new Sessions(o) }) {
+  const persist = new Persist(dir, { log, ...persistOpts });
   const { engine, clock, replayed, server: sidecar, togetherPaidMin } = loadFarm(persist, { dev: cfg.dev, log, tz: cfg.tz,
     tzExplicit: cfg.tzExplicit !== false, replayAnyway: cfg.replayAnyway });
   engine.journal = persist;
   engine.incident = (name, data) => persist.incident(name, data);
   persist.openJournal();
-  const hh = { cfg, log, persist, engine, clock, parse: parseClientMessage, startedAt: Date.now(), perf: new Perf() };
-  hh.static = new StaticFiles({ root: cfg.root, log });          // BUILD_HASH: the game files this server serves
+  const hh = { cfg, log, persist, engine, clock, parse: parseClientMessage, startedAt: Date.now(), perf: perf ?? new Perf() };
+  hh.static = staticFiles ?? new StaticFiles({ root: cfg.root, log });   // BUILD_HASH: the game files this server serves
   // a farmer appears on the farmhouse porch wherever the couple moved the farmhouse (owner rule 2026-10-04)
   hh.presence = new Presence(clock, (msg) => hh.sessions.presenceOut(msg), { spawnOf: (pid) => spawnAt(engine.state, pid) });
   // Together time not paid before the last snapshot, minus what the replayed lines paid since (SV-07).
@@ -166,7 +171,7 @@ export async function startServer(cfg = loadConfig()) {
   const savedAcc = saved && Number.isSafeInteger(saved.acc) ? saved.acc : 0;
   hh.together = new Together({ online: () => hh.sessions.onlinePids(), poses: () => hh.presence.p,
     acc: Math.max(0, savedAcc - togetherPaidMin * 60_000) });
-  hh.sessions = new Sessions({ engine, clock, presence: hh.presence, together: hh.together, cfg, log, save: () => hh.scheduler.save(),
+  hh.sessions = makeSessions({ engine, clock, presence: hh.presence, together: hh.together, cfg, log, save: () => hh.scheduler.save(),
     build: hh.static.build, perf: hh.perf });
   hh.scheduler = new Scheduler({ engine, persist, clock, cfg, log, perf: hh.perf,
     live: () => ({ online: hh.sessions.onlinePids().sort(), together: hh.together.snapshot(clock.now()) }) });
@@ -179,6 +184,41 @@ export async function startServer(cfg = loadConfig()) {
   if (away) log.info(`${away} player(s) marked as away after the restart`);
   hh.scheduler.start();                          // catch-up: everything that came due while the server was off
   await hh.scheduler.save();                     // the journal starts empty after a replay
+  return hh;
+}
+
+/** Stop a farm's timers and close its sockets synchronously, so their `_seen` lines land before the final snapshot. */
+export function stopFarm(hh) {
+  hh.scheduler.stop();
+  hh.presence.stop();
+  hh.sessions.stop();
+  for (const c of [...hh.sessions.conns]) {
+    hh.sessions.close(c);
+    try { c.ws.close(CLOSE.SHUTDOWN, 'server stopping'); } catch { /* gone */ }
+    c.ws.terminate();
+  }
+}
+
+/** The final snapshot of a stopped farm, then its journal is flushed and closed. */
+export async function finishFarm(hh) {
+  await hh.scheduler.save();
+  hh.persist.close();
+}
+
+/**
+ * Start a full server. Resolves once listening. `cfg.mode === 'multi'` starts the multi-farm host instead
+ * (server/multi.js); the default single-farm server is unchanged.
+ * @param {ReturnType<typeof loadConfig>} [cfg]
+ * @returns {Promise<{ port: number, hh: object, close: () => Promise<void>, banner: string }>}
+ */
+export async function startServer(cfg = loadConfig()) {
+  if (cfg.mode === 'multi') {
+    const { startMultiServer } = await import('./multi.js');
+    return startMultiServer(cfg);
+  }
+  const log = cfg.log || createLogger({ quiet: cfg.quiet, json: cfg.logJson });
+  const hh = await openFarm(cfg, { log });
+  const { persist } = hh;
 
   const app = createApp(hh);
   const server = http.createServer(app);
@@ -220,20 +260,11 @@ export async function startServer(cfg = loadConfig()) {
   let closing = null;
   const close = () => {
     closing ??= (async () => {
-      hh.scheduler.stop();
-      hh.presence.stop();
-      hh.sessions.stop();
-      // Close sessions synchronously so their `_seen` lines land before the final snapshot.
-      for (const c of [...hh.sessions.conns]) {
-        hh.sessions.close(c);
-        try { c.ws.close(CLOSE.SHUTDOWN, 'server stopping'); } catch { /* gone */ }
-        c.ws.terminate();
-      }
+      stopFarm(hh);
       wss.close();
       server.closeAllConnections?.();
       await new Promise((r) => server.close(() => r()));
-      await hh.scheduler.save();
-      persist.close();
+      await finishFarm(hh);
       hh.perf.stop();
     })();
     return closing;

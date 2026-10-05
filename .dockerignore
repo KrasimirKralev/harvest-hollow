@@ -1,0 +1,8 @@
+# An allow-list: only what the server runs goes into the image. Never the saves (data*/), the 371 MB art staging
+# folder (assets-src/), tests, tools, docs or local scratch.
+*
+!package.json
+!package-lock.json
+!server/
+!shared/
+!public/

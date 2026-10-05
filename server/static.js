@@ -378,12 +378,15 @@ export class StaticFiles {
     return { all, statics, bare };
   }
 
-  /** index.html as served (see the header), or null when public/index.html is missing. Memoized per input. */
-  indexHtml() {
-    const abs = path.join(this.root, 'public', 'index.html');
+  /**
+   * index.html as served (see the header), or null when public/index.html is missing. Memoized per input.
+   * `name`: another page under public/ rendered the same way (the multi-farm landing page, server/multi.js).
+   */
+  indexHtml(name = 'index.html') {
+    const abs = path.join(this.root, 'public', name);
     const me = this.info(abs);
     if (!me) return null;
-    const p = this.page;
+    const p = name === 'index.html' ? this.page : this.pages?.get(name);
     if (p && p.hash === me.hash && p.deps.every(([a, h]) => { const e = this.info(a); return e && e.hash === h; })) return p;
     let html = fs.readFileSync(abs, 'utf8');
     const deps = [];
@@ -451,8 +454,27 @@ export class StaticFiles {
       ? html.replace(/<meta\s+charset=[^>]*>/i, (m) => `${m}\n  ${meta}`)
       : html.replace(/<head(\s[^>]*)?>/i, (h) => `${h}\n  ${meta}`);
     const body = Buffer.from(html);
-    this.page = { hash: me.hash, deps, body, etag: `"${sha(body).slice(0, 16)}"`, gz: zlib.gzipSync(body, { level: 6 }) };
-    return this.page;
+    const page = { hash: me.hash, deps, body, etag: `"${sha(body).slice(0, 16)}"`, gz: zlib.gzipSync(body, { level: 6 }) };
+    if (name === 'index.html') this.page = page;
+    else (this.pages ??= new Map()).set(name, page);
+    return page;
+  }
+
+  /**
+   * Answer a rendered page ({ body, gz, etag } from indexHtml or derived from it): no-cache + ETag, gzip when
+   * accepted, HEAD without a body.
+   */
+  sendPage(req, res, page) {
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.setHeader('Cache-Control', REVALIDATE);
+    res.setHeader('Vary', 'Accept-Encoding');
+    res.setHeader('ETag', page.etag);
+    if (req.fresh) return res.status(304).end();
+    const gz = acceptsGzip(req);
+    const body = gz ? page.gz : page.body;
+    if (gz) res.setHeader('Content-Encoding', 'gzip');
+    res.setHeader('Content-Length', body.length);
+    return req.method === 'HEAD' ? res.end() : res.end(body);
   }
 
   /** Express middleware for GET/HEAD of `/` and `/index.html`. */
@@ -467,16 +489,7 @@ export class StaticFiles {
         return next();
       }
       if (!page) return next();
-      res.setHeader('Content-Type', 'text/html; charset=utf-8');
-      res.setHeader('Cache-Control', REVALIDATE);
-      res.setHeader('Vary', 'Accept-Encoding');
-      res.setHeader('ETag', page.etag);
-      if (req.fresh) return res.status(304).end();
-      const gz = acceptsGzip(req);
-      const body = gz ? page.gz : page.body;
-      if (gz) res.setHeader('Content-Encoding', 'gzip');
-      res.setHeader('Content-Length', body.length);
-      return req.method === 'HEAD' ? res.end() : res.end(body);
+      return this.sendPage(req, res, page);
     };
   }
 

@@ -99,6 +99,8 @@ import { createTracker } from './tracker.js';
 import { createSeeds } from './seeds.js';
 import { createLayout, LAYOUT_Q } from './layout.js';
 import { createItemHints } from './item-hint.js';
+import { createInviteUi } from './invite.js';
+import { farm } from '../net/farm.js';
 
 export { h, icon, svgIcon, focusables, fmt, fmtShort, fmtDuration, plural, kv, playerVars, playerMark } from './dom.js';
 
@@ -651,6 +653,9 @@ export const ui = {
     const toasts = createToasts(ctx, errText);
     ctx.toasts = toasts;
     const dialogs = createDialogs(ctx);
+    // multi-farm mode only (null otherwise): the invite card, the personal link, the nudge (before the HUD: its menu
+    // and Settings link to it)
+    ctx.invite = createInviteUi(ctx);
     const hud = createHud(ctx);
     ctx.hud = hud;
     const tips = createTips(ctx);
@@ -785,7 +790,7 @@ export const ui = {
   nameFarm() { if (mods) mods.naming.open(); },
   /** Forget this tab's farmer and show the slot picker again (two tabs can be both partners). */
   switchFarmer() {
-    try { sessionStorage.removeItem('hh.slot'); } catch { /* private mode */ }
+    try { sessionStorage.removeItem(farm.key('hh.slot')); } catch { /* private mode */ }
     const u = new URL(location.href);
     u.searchParams.delete('slot');
     u.searchParams.delete('name');
@@ -948,16 +953,26 @@ function slotPortrait(face, s, color) {
   import('../render/index.js').then(({ view }) => showPortrait(face, spec, view), () => {});
 }
 
+/** The picker's line in multi-farm mode: a new farm's creator, an invited friend, or a farmer coming back. Pure. */
+export function multiSub(slots, { invited = false, creator = false } = {}) {
+  const host = slots.find((s) => s.claimed && s.name)?.name;
+  if (invited) return host ? `${host} invited you! Pick your name and colour to farm together.` : 'You are invited! Pick your name and colour to farm together.';
+  if (creator && slots.every((s) => !s.claimed)) return 'Your new farm is ready! Who is the first farmer?';
+  return 'Who is playing on this screen?';
+}
+
 function showSlots(slots, onPick, opts = {}) {
   const list = $('slot-list');
   list.replaceChildren();
   $('slot-error').textContent = '';
-  const needPass = Boolean(opts.pass || slots.some((s) => s.pass));
+  // multi-farm mode (opts.multi): no passphrase and no "new computer" reclaim (the personal link replaces them)
+  const needPass = !opts.multi && Boolean(opts.pass || slots.some((s) => s.pass));
   const anyFree = slots.some((s) => !s.claimed);
   // final release V-15: two identical rows read as "both names needed"; each farmer takes ONE row on their own screen
   const bothFree = slots.length > 1 && slots.every((s) => !s.claimed);
-  $('slot-sub').textContent = bothFree ? 'Pick one farmer for this screen. Your partner takes the other one on their own screen.'
-    : anyFree ? 'Who is playing on this screen?' : 'Welcome back! Who is playing on this screen?';
+  $('slot-sub').textContent = opts.multi ? multiSub(slots, opts)
+    : bothFree ? 'Pick one farmer for this screen. Your partner takes the other one on their own screen.'
+      : anyFree ? 'Who is playing on this screen?' : 'Welcome back! Who is playing on this screen?';
   for (const s of slots) {
     const swatches = freeSwatches(slots, s.pid);
     let base = s.color || SLOT_COLORS[s.pid] || SWATCHES[0];
@@ -973,6 +988,9 @@ function showSlots(slots, onPick, opts = {}) {
       row.append(h('span.taken', s.name || s.pid, h('small', s.online ? 'Playing right now' : 'Away')));
       if (s.mine) {
         row.append(h('button.btn.btn--small', { type: 'button', on: { click: () => onPick(s.pid, null) } }, 'Continue'));
+      } else if (opts.multi) {
+        // a farmer of this farm on a new device opens their personal link (Settings > Farm on their old one)
+        row.append(h('small.slot-hint', 'Is this you on a new device? Open your personal farm link.'));
       } else if (!s.online || needPass) {
         // a lost token: "this is me on a new device" (needs the passphrase when the server has one)
         const pass = needPass ? h('input.field.pass', { type: 'password', placeholder: 'Farm passphrase', 'aria-label': 'Farm passphrase', autocomplete: 'current-password' }) : null;

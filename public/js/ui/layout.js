@@ -114,6 +114,9 @@ export function createLayout(S) {
       h('button.m-tile', { type: 'button', on: { click: () => ui.panels.open('settings') } }, h('span.m-ico', svgIcon('gear', 30)), h('span.lbl', 'Settings')),
       // wave 4 (wish 9): the farmer's look
       ui.panels.has('avatar') ? h('button.m-tile', { type: 'button', on: { click: () => ui.panels.open('avatar') } }, h('span.m-ico', svgIcon('smile', 30)), h('span.lbl', 'Your look')) : null,
+      // multi-farm mode only (ui/invite.js)
+      // "Invite" on the tile (the label pill is as wide as its neighbours'), the full words for a screen reader
+      S.invite ? h('button.m-tile', { type: 'button', 'aria-label': 'Invite a friend', dataset: { invite: 'open' }, on: { click: () => S.invite.open() } }, h('span.m-ico', svgIcon('letter', 30)), h('span.lbl', 'Invite')) : null,
       sound,
       h('button.m-tile', { type: 'button', on: { click: () => { ctx.close(); typeof controller.photo === 'function' ? controller.photo() : ui.photoMode(true); } } },
         h('span.m-ico', svgIcon('photo', 30)), h('span.lbl', 'Photo')),

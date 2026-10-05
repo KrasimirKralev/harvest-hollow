@@ -1,0 +1,62 @@
+/* The multi-farm front door (public/landing.html). On top of css/style.css (tokens, fonts, .wood, .paper, .btn): the
+   painted valley of the welcome screen, the carved logo, two wood-and-parchment cards. Phone first; a page that
+   scrolls (the game's html/body do not). */
+html, body.landing { height: auto; min-height: 100%; overflow-x: hidden; overflow-y: auto; }
+html:has(body.landing) { background: #F6C98F; }
+body.landing { min-height: 100vh; min-height: 100dvh; background: #F6C98F; -webkit-text-size-adjust: 100%; }
+/* the painting on a fixed layer the size of the screen: it never ends above a tall phone's bottom, and a fixed
+   pseudo-element works where background-attachment: fixed does not (iOS) */
+body.landing::before { content: ''; position: fixed; inset: 0; z-index: 0; pointer-events: none;
+  background: radial-gradient(ellipse at 50% 40%, transparent 50%, rgba(62, 38, 18, .22)),
+    url('/assets/art/welcome-couple_960.webp') center / cover no-repeat, #F6C98F; }
+@media (min-width: 961px) {
+  body.landing::before { background: radial-gradient(ellipse at 50% 40%, transparent 50%, rgba(62, 38, 18, .22)),
+    url('/assets/art/welcome-couple.webp') center / cover no-repeat, #F6C98F; }
+}
+
+.ld {
+  position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; gap: 16px;
+  width: min(520px, 100%); margin: 0 auto;
+  padding: calc(14px + env(safe-area-inset-top, 0px)) calc(16px + env(safe-area-inset-right, 0px))
+    calc(20px + env(safe-area-inset-bottom, 0px)) calc(16px + env(safe-area-inset-left, 0px));
+}
+.ld-logo { margin: 0; width: min(330px, 78vw); line-height: 0; }
+.ld-logo img { display: block; width: 100%; height: auto; filter: drop-shadow(0 6px 10px rgba(62, 38, 18, .35)); }
+.ld-tag { margin: -6px 0 0; text-align: center; font: 700 1.125rem/1.3 var(--font-ui); }
+
+.ld-card { width: 100%; padding: 12px; }
+.ld-paper { padding: 16px 16px 14px; text-align: center; }
+.ld-h { margin: 0 0 6px; font: 800 1.375rem/1.15 var(--font-display); color: var(--ink-900); }
+.ld-sub { margin: 0 0 14px; font: 600 1rem/1.4 var(--font-ui); color: var(--ink-700); }
+.ld-start { font-size: 1.375rem; padding: 14px 30px 16px; --lip: 5px; min-height: 56px; width: min(320px, 100%); }
+.ld-status { margin: 12px 0 0; min-height: 1.3em; font: 700 1rem/1.35 var(--font-ui); color: var(--ink-700); }
+.ld-status:empty { margin: 0; min-height: 0; }
+.ld-warn { margin: 10px 0 0; padding: 10px 12px; border-radius: var(--r-s); text-align: left; font: 600 .9375rem/1.35 var(--font-ui);
+  color: var(--ink-900); background: #FFF0C2; box-shadow: inset 0 0 0 2px var(--sun-700); }
+
+.ld-list { margin: 0; padding: 0; list-style: none; display: grid; gap: 8px; text-align: left; }
+.ld-farm { display: flex; align-items: stretch; gap: 6px; }
+.ld-open { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; padding: 11px 14px; border-radius: var(--r-m);
+  text-decoration: none; color: var(--ink-900); background: var(--paper-50); box-shadow: inset 0 0 0 2px var(--paper-edge), 0 3px 0 var(--paper-edge);
+  transition: transform var(--t-micro) var(--ease-out); }
+.ld-open:hover { transform: translateY(-1px); background: #FFF6CC; }
+.ld-open:focus-visible { outline: 3px solid var(--sky-900); outline-offset: 2px; }
+.ld-name { font: 800 1.125rem/1.2 var(--font-display); overflow-wrap: anywhere; }
+.ld-when { font: 600 .875rem/1.2 var(--font-ui); color: var(--ink-500); }
+.ld-forget { flex: none; width: 44px; border: 0; border-radius: var(--r-m); font: 800 1rem/1 var(--font-ui); color: var(--ink-700);
+  background: transparent; box-shadow: inset 0 0 0 2px var(--paper-edge); }
+.ld-forget:hover, .ld-forget:focus-visible { background: #FFE3DE; color: var(--stop-900); }
+
+.ld-foot { display: flex; flex-direction: column; align-items: center; gap: 6px; padding-bottom: 8px; text-align: center; }
+.ld-ttl { margin: 0; font: 700 1rem/1.3 var(--font-ui); }
+.ld-links { margin: 0; }
+.ld-links a { display: inline-block; padding: 8px 14px; border-radius: var(--r-pill); font: 700 .9375rem/1.2 var(--font-ui);
+  color: var(--ink-900); background: rgba(255, 251, 238, .9); box-shadow: inset 0 0 0 2px var(--paper-edge); text-decoration: none; }
+.ld-links a:hover, .ld-links a:focus-visible { background: #fff; text-decoration: underline; }
+.ld-noscript { margin: 40vh 16px 0; text-align: center; font: 700 1.125rem/1.3 var(--font-ui); }
+
+@media (min-width: 700px) {
+  .ld { gap: 20px; padding-top: 32px; }
+  .ld-logo { width: 400px; }
+}
+@media (prefers-reduced-motion: reduce) { .ld-open { transition: none; } }
