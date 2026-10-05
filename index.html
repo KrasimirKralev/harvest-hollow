@@ -1,203 +1,462 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Harvest Hollow</title>
-<meta name="description" content="A cozy 3D farming game for two, in the browser. Self-hosted, open source.">
-<meta property="og:title" content="Harvest Hollow"><meta property="og:description" content="A cozy 3D farming game for two, in the browser.">
-<meta property="og:image" content="https://krasimirkralev.github.io/harvest-hollow/img/hero.png">
-<link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;700&family=Nunito:wght@400;700&display=swap" rel="stylesheet">
-<style>
-:root{--bg:#FBF3E2;--ink:#3B2614;--muted:#7A5A3A;--wood:#B87533;--green:#4C9A2A;--card:#FFFDF6;--line:#E7D3AE}
-@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#1E1812;--ink:#F3E6CF;--muted:#C7AE8A;--card:#2A2119;--line:#4A3926}}
-:root[data-theme="dark"]{--bg:#1E1812;--ink:#F3E6CF;--muted:#C7AE8A;--card:#2A2119;--line:#4A3926}
-*{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--ink);font:17px/1.65 Nunito,system-ui,sans-serif}
-header{text-align:center;padding:40px 16px 8px} header img.logo{width:min(520px,90%)}
-.tag{font:700 1.35rem/1.3 Fredoka,sans-serif;margin:10px 0 4px} .sub{color:var(--muted);margin:0 auto 22px;max-width:640px}
-.cta{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-bottom:26px}
-.cta a{font:700 1rem Fredoka,sans-serif;text-decoration:none;padding:12px 22px;border-radius:999px;color:#fff;background:var(--green);box-shadow:0 3px 0 #2F6A17}
-.cta a.alt{background:var(--wood);box-shadow:0 3px 0 #7A4A1C}
-.hero{display:block;width:min(1100px,100%);margin:0 auto;border-radius:18px;box-shadow:0 10px 30px rgba(60,35,10,.25)}
-main{max-width:980px;margin:0 auto;padding:24px 16px 60px}
-h2{font:700 1.6rem Fredoka,sans-serif;border-bottom:2px solid var(--line);padding-bottom:6px;margin-top:2.2em}
-img{max-width:100%;height:auto;border-radius:12px} p[align=center] img{margin:6px}
-pre{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px;overflow:auto} code{font-size:.92em}
-table{border-collapse:collapse;width:100%;display:block;overflow-x:auto} td,th{border:1px solid var(--line);padding:7px 12px;text-align:left}
-a{color:var(--green)} main p,main li{overflow-wrap:anywhere} footer{text-align:center;color:var(--muted);padding:30px 16px}
-</style></head><body>
-<header><img class="logo" src="img/logo-wide.png" alt="Harvest Hollow">
-<p class="tag">A cozy 3D farming game for two, in the browser.</p>
-<p class="sub">Plant, harvest, raise animals, craft and grow a whole valley together, on one shared farm, in real time. Start your own farm in one tap, invite your partner with a link, play on a PC or a phone. Or host it yourself.</p>
-<div class="cta"><a href="https://harvest-hollow.up.railway.app">▶ Play now</a><a class="alt" href="https://github.com/KrasimirKralev/harvest-hollow">Get it on GitHub</a></div>
-<img class="hero" src="img/hero.png" alt="Two farmers on the bench at Golden Hour, a busy farm around them"></header>
-<main><p>Harvest Hollow is a FarmVille-2-style co-op farm you host yourself. One small Node server runs the farm 24/7, and
-everyone plays in a browser — on a PC, a laptop, a tablet or a phone. Two people share <strong>one</strong> farm: one plants, the
-other harvests; one runs the bakery while the other feeds the cows; you both see everything the moment it happens.</p>
-<h2 id="features">Features</h2>
-<ul>
-<li><strong>A whole valley, 40 levels deep</strong> (and Legacy levels after): 21 crops from Wheat to Roses and Coffee Beans;
-  15 kinds of trees (fruit, nuts, olives, maple and cocoa, and the Pine for wood) that age a year with every harvest
-  and bear more as they grow old; 10 kinds of animals, from chickens and rabbits to bees, horses and alpacas, with
-  babies, a Nursery and breeding with coat colours, in homes that grow bigger with the flock.</li>
-<li><strong>Craft everything</strong>: 17 workshops and 121 recipes (animal feeds included), queues you drag to reorder and finish
-  item by item, and Compost and Fertilizer for bigger, faster harvests.</li>
-<li><strong>Always a next goal</strong>: Mabel's orders board, illustrated story letters from the townsfolk, 64 quests,
-  68 ribbons, 12 collection albums, a 30-tier seasonal ribbon track, a weekly County Fair with an NPC league and a
-  horse show, the River Barge, 24 Town Projects that grow a village across the river, six restoration projects
-  ending with Grandma's farmhouse and its room to furnish (40 pieces), fishing and four perk trees.</li>
-<li><strong>Surprises and treasures</strong>: the hot-air balloon drops loot crates on a parachute (coins and XP, sometimes Acorns,
-  Golden Seeds, Fertilizer, an album find or a decor piece), and eight one-of-a-kind Acorn treasures are worth saving
-  up for: the Golden Watering Can that waters everything at once, a Rainbow Tree, a Time Turner, a Farmhand and more.</li>
-<li><strong>Make it yours</strong>: 115 decor pieces (ten of them Grand showpieces), three upgrade tiers each for the farmhouse, the
-  Well, the Market Stand and the benches, turn anything where it stands, sell decor you are done with, pull the wild
-  weeds. Every farmer picks a build, hair, hair colour, skin tone, outfit colours and a hat, and wears that look in a
-  3D portrait on their name chip. A dog and a cat come in three breeds each and sleep at night in their own beds.</li>
-<li><strong>Made for two</strong>: shared coins and barn with a big-purchase confirm, "Thank all" in the activity feed,
-  pings and emotes, sitting on the bench together for Golden Hour, a Friendly Duel, duet recipes you cook together.</li>
-<li><strong>Feels good to play</strong>: drag a finger or the mouse across fields to plant and harvest, click anywhere to walk there,
-  every action is instant (the shared rules engine predicts it, the server confirms it), "where to get it" hint
-  bubbles on every item, finish crops early with Acorns, and a level-up finishes everything that is growing.</li>
-<li><strong>Looks and sounds cozy</strong>: a low-poly 3D world with day and night, seasons, drizzle and downpours with puddles and
-  the odd rainbow, glowing windows and lamps after dark, a camera you can turn and tilt, painted characters and
-  storybook letters, and an acoustic folk soundtrack that follows the time of day.</li>
-<li><strong>Phones and tablets</strong>: touch controls, a phone layout with bottom sheets, a lighter graphics mode, and
-  "Add to Home Screen".</li>
-<li><strong>Self-hosted and private</strong>: your farm lives in one JSON save on your own machine, crash-safe with an action journal
-  and rotating backups.</li>
-</ul>
-<p align="center">
-  <img src="img/farm-day.png" alt="The farm by day" width="440">
-  <img src="img/workshop.png" alt="The Windmill: one item running, four waiting, each with its own finish price" width="440">
-</p>
-<p align="center">
-  <img src="img/village.png" alt="The village across the river" width="440">
-  <img src="img/night.png" alt="The farm at night: windows and lamps lit, the dog asleep by its house" width="440">
-</p>
-<p align="center">
-  <img src="img/balloon-crate.png" alt="A balloon crate bursting open, with its loot card" width="440">
-  <img src="img/farmers.png" alt="Two farmers in their own looks on the sunset bench, their portraits on the name chips" width="440">
-</p>
-<p align="center">
-  <img src="img/phone-farm.png" alt="Playing on a phone" width="220">
-  <img src="img/phone-panel.png" alt="The Acorn shop's treasures on a phone" width="220">
-</p>
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <!-- Harvest Hollow on GitHub Pages: the same one screen as the hosted front door (public/landing.html in the repo),
+       static. Play opens the hosted game; Star and GitHub open the repository. Built from the repo's css/landing.css. -->
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#2A1458">
+  <meta name="color-scheme" content="dark">
+  <title>Harvest Hollow · a cozy farm for two</title>
+  <meta name="description" content="Harvest Hollow: a cozy 3D farm for two, in your browser. Free and open source: play it on the hosted farm, or host your own.">
+  <link rel="canonical" href="https://krasimirkralev.github.io/harvest-hollow/">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Harvest Hollow · a cozy farm for two">
+  <meta property="og:description" content="A cozy 3D farm for two, live in your browser. Free and open source.">
+  <meta property="og:url" content="https://krasimirkralev.github.io/harvest-hollow/">
+  <meta property="og:image" content="https://krasimirkralev.github.io/harvest-hollow/assets/og.jpg">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
+  <link rel="preload" href="assets/fredoka-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <style>
+@font-face {
+  font-family: 'Fredoka'; font-style: normal; font-weight: 300 700; font-display: swap;
+  src: url('assets/fredoka-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
+    U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Fredoka'; font-style: normal; font-weight: 300 700; font-display: swap;
+  src: url('assets/fredoka-latin-ext.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+1D00-1DBF, U+1E00-1E9F,
+    U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+:root {
+  --night: #160736;      
+  --dusk: #2A1458;       
+  --plum: #5A1C86;
+  --magenta: #FF3E8E;
+  --ember: #FF8A3D;
+  --honey: #FFC93E;
+  --teal: #19C3B4;
+  --lime: #A8EC5E;
+  --lilac: #EBDDFF;      
+  --glass: rgba(28, 10, 66, .5);
+  --glass-solid: rgba(36, 14, 80, .92);
+  --glass-edge: rgba(255, 255, 255, .24);
+  --ease-out: cubic-bezier(.22, 1, .36, 1);
+  --ease-back: cubic-bezier(.34, 1.56, .64, 1);
+  --font: 'Fredoka', ui-rounded, system-ui, sans-serif;
+  --orb: clamp(150px, min(36svh, 58vw), 460px);
+}
+@supports not (height: 1svh) { :root { --orb: clamp(150px, min(36vh, 58vw), 460px); } }
+*, *::before, *::after { box-sizing: border-box; }
+html:has(body.landing) { min-height: 100%; height: auto; overflow-x: hidden; overflow-y: auto; background: var(--dusk); color-scheme: dark; }
+body.landing {
+  margin: 0; min-height: 100vh; min-height: 100svh; height: auto; overflow: visible; position: relative;
+  font: 500 1rem/1.4 var(--font); color: #fff; background: transparent;
+  -webkit-font-smoothing: antialiased; -webkit-text-size-adjust: 100%; text-rendering: optimizeLegibility;
+}
+[hidden] { display: none !important; }
+.sr-only { position: absolute !important; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+button { font: inherit; color: inherit; cursor: pointer; }
+.ld-sky { position: fixed; inset: 0; z-index: -1; overflow: hidden; pointer-events: none;
+  background: linear-gradient(180deg, var(--night) 0%, #2C0F63 18%, var(--plum) 38%, #A92A88 56%, #F2477A 70%, #FF7B4E 82%, #FFB25A 93%, #FFD27A 100%); }
+.ld-glow { position: absolute; border-radius: 50%; will-change: transform; }
+.ld-glow--teal { left: -34vmax; top: -40vmax; width: 96vmax; height: 80vmax;
+  background: radial-gradient(closest-side, rgba(25, 195, 180, .5), rgba(25, 195, 180, .16) 55%, transparent);
+  animation: ld-drift-a 26s ease-in-out infinite alternate; }
+.ld-glow--rose { right: -36vmax; top: 6vh; width: 84vmax; height: 70vmax;
+  background: radial-gradient(closest-side, rgba(255, 62, 142, .46), rgba(255, 62, 142, .14) 55%, transparent);
+  animation: ld-drift-b 32s ease-in-out infinite alternate; }
+@keyframes ld-drift-a { to { transform: translate3d(12vmax, 8vmax, 0) scale(1.08); } }
+@keyframes ld-drift-b { to { transform: translate3d(-14vmax, -6vmax, 0) scale(1.12); } }
+.ld-hills { position: absolute; left: 0; bottom: 0; width: 100%; height: clamp(110px, 24svh, 250px); display: block; }
+.ld-hill--far { fill: #8C2A86; opacity: .78; }
+.ld-hill--mid { fill: #521A78; }
+.ld-hill--near { fill: var(--dusk); }
+.ld-motes { position: absolute; inset: 0; }
+.ld-motes i { position: absolute; left: var(--x); top: var(--y); border-radius: 50%; opacity: 0; will-change: transform, opacity; }
+.ld-fly { width: 5px; height: 5px; background: #FFF6B0;
+  box-shadow: 0 0 6px 2px rgba(255, 236, 130, .9), 0 0 16px 6px rgba(196, 255, 120, .35);
+  animation: ld-rise var(--d) linear var(--t) infinite; }
+.ld-dust { width: 3px; height: 3px; background: #fff; box-shadow: 0 0 6px 1px rgba(255, 255, 255, .7);
+  animation: ld-float var(--d) linear var(--t) infinite; }
+@keyframes ld-rise {
+  0% { opacity: 0; transform: translate3d(0, 0, 0); }
+  12% { opacity: 1; }
+  26% { opacity: .3; transform: translate3d(2.5vw, -9vh, 0); }
+  40% { opacity: 1; }
+  58% { opacity: .45; transform: translate3d(-1.5vw, -22vh, 0); }
+  74% { opacity: 1; }
+  100% { opacity: 0; transform: translate3d(2vw, -40vh, 0); }
+}
+@keyframes ld-float {
+  0% { opacity: 0; transform: translate3d(0, 0, 0); }
+  15% { opacity: .85; }
+  85% { opacity: .6; }
+  100% { opacity: 0; transform: translate3d(16vw, 12vh, 0); }
+}
+.ld { position: relative; display: flex; flex-direction: column; align-items: center; min-height: 100vh; min-height: 100svh; overflow-x: clip;
+  padding: calc(18px + env(safe-area-inset-top, 0px)) calc(16px + env(safe-area-inset-right, 0px))
+    calc(16px + env(safe-area-inset-bottom, 0px)) calc(16px + env(safe-area-inset-left, 0px)); }
+.ld-stage { display: flex; flex-direction: column; align-items: center; margin-top: auto; text-align: center; }
+.ld-orb { position: relative; flex: none; width: var(--orb); height: var(--orb); isolation: isolate; }
+.ld-sun { position: absolute; left: 50%; top: 50%; z-index: -2; width: calc(var(--orb) * 2.6); height: calc(var(--orb) * 2.6);
+  margin: calc(var(--orb) * -1.3) 0 0 calc(var(--orb) * -1.3); border-radius: 50%; pointer-events: none;
+  background: radial-gradient(closest-side, rgba(255, 196, 96, .6), rgba(255, 120, 80, .24) 50%, transparent);
+  animation: ld-breathe 9s ease-in-out infinite alternate; }
+@keyframes ld-breathe { from { transform: scale(.92); opacity: .85; } to { transform: scale(1.06); opacity: 1; } }
+.ld-orb::before { content: ''; position: absolute; inset: -16%; z-index: -1; border-radius: 50%; opacity: .5;
+  background: conic-gradient(from 20deg, var(--magenta), var(--ember), var(--honey), var(--teal), #8B5CF6, var(--magenta));
+  filter: blur(calc(var(--orb) / 12)); animation: ld-spin 18s linear infinite; }
+.ld-orb-ring { position: absolute; inset: -8px; z-index: 1; border-radius: 50%;
+  background: conic-gradient(from 0deg, var(--magenta), var(--ember), var(--honey), var(--teal), #8B5CF6, var(--magenta));
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 2.5px));
+  mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 2.5px));
+  animation: ld-spin 14s linear infinite reverse; }
+.ld-orb-view { position: absolute; inset: 0; z-index: 2; overflow: hidden; border-radius: 50%; transform: translateZ(0);
+  background: radial-gradient(circle at 50% 42%, #86C64C, #4A8A34 62%, #2C5A2A);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, .45), 0 0 40px 2px rgba(255, 160, 90, .55), 0 0 110px 20px rgba(255, 62, 142, .3); }
+.ld-orb-view img, .ld-orb-view video { position: absolute; inset: -1px; display: block; width: calc(100% + 2px); height: calc(100% + 2px); object-fit: cover; }
+.ld-orb-view video { opacity: 0; transition: opacity .9s ease; }
+.ld-orb-view video.is-on { opacity: 1; }
+.ld-orb-shine { position: absolute; inset: 0; z-index: 3; border-radius: 50%; pointer-events: none;
+  background: radial-gradient(circle at 31% 22%, rgba(255, 255, 255, .5), rgba(255, 255, 255, 0) 26%),
+    radial-gradient(circle at 50% 50%, rgba(28, 10, 66, 0) 62%, rgba(28, 10, 66, .55) 100%);
+  box-shadow: inset 0 -14px 34px rgba(255, 120, 60, .35), inset 0 10px 26px rgba(255, 255, 255, .2); }
+.ld-orbit { position: absolute; left: -24%; right: -24%; top: 41%; height: 28%; pointer-events: none; transform: rotate(-13deg); }
+.ld-orbit::before { content: ''; position: absolute; inset: 0; border-radius: 50%; border: 1.5px solid rgba(255, 236, 200, .5);
+  box-shadow: 0 0 14px rgba(255, 201, 62, .28); }
+.ld-orbit--back { z-index: 0; }
+.ld-orbit--front { z-index: 4; clip-path: inset(50% -12% -40% -12%); }
+.ld-orbit i { position: absolute; left: 0; top: 50%; width: 0; height: 0; animation: ld-sx 4.2s ease-in-out infinite alternate; }
+.ld-orbit i::before { content: ''; position: absolute; left: -4px; top: -4px; width: 8px; height: 8px; border-radius: 50%; background: #FFF8E0;
+  box-shadow: 0 0 8px 3px rgba(255, 214, 110, .95), 0 0 22px 8px rgba(255, 120, 80, .4);
+  animation: ld-sy 4.2s ease-in-out -2.1s infinite alternate; }
+@keyframes ld-sx { from { transform: translateX(0); } to { transform: translateX(calc(var(--orb) * 1.48)); } }
+@keyframes ld-sy { from { transform: translateY(calc(var(--orb) * -.14)); } to { transform: translateY(calc(var(--orb) * .14)); } }
+@keyframes ld-spin { to { transform: rotate(360deg); } }
+.ld-logo { position: relative; z-index: 2; margin: calc(var(--orb) * -.17) 0 0; width: clamp(250px, min(80vw, 58svh), 520px); line-height: 0; }
+.ld-logo img { display: block; width: 100%; height: auto; filter: drop-shadow(0 8px 20px rgba(28, 10, 66, .55)); }
+.ld-tag { margin: 6px 0 0; max-width: 30ch; text-wrap: balance; font: 600 clamp(1.0625rem, 2.2vw, 1.3125rem)/1.3 var(--font);
+  letter-spacing: .005em; text-shadow: 0 2px 14px rgba(28, 10, 66, .75), 0 1px 2px rgba(28, 10, 66, .6); }
+.ld-dock { position: relative; width: min(900px, 100%); margin-top: clamp(14px, 2.6svh, 26px); padding: 12px; border-radius: 30px;
+  background: var(--glass-solid); border: 1px solid var(--glass-edge);
+  box-shadow: 0 24px 60px -18px rgba(14, 4, 36, .7), inset 0 1px 0 rgba(255, 255, 255, .22); text-align: center; }
+@supports ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
+  .ld-dock { background: var(--glass); -webkit-backdrop-filter: blur(18px) saturate(1.5); backdrop-filter: blur(18px) saturate(1.5); }
+}
+.ld-acts { display: grid; gap: 10px; }
+@media (min-width: 700px) { .ld-acts { grid-template-columns: repeat(3, 1fr); gap: 12px; } }
+.ld-act { --c1: #fff; --c2: #ddd; --c3: #bbb; --ink: #111; --sub: #333; --glow: rgba(0, 0, 0, .4); --icbg: rgba(0, 0, 0, .8); --icfg: #fff;
+  position: relative; display: flex; align-items: center; gap: 14px; min-height: 64px; padding: 10px 16px 10px 10px;
+  border: 0; border-radius: 22px; overflow: hidden; isolation: isolate; text-align: left; text-decoration: none; color: var(--ink);
+  background: linear-gradient(135deg, var(--c1), var(--c2) 52%, var(--c3));
+  box-shadow: 0 12px 26px -12px var(--glow), 0 2px 0 rgba(255, 255, 255, .5) inset, 0 -3px 0 rgba(0, 0, 0, .14) inset;
+  transition: transform .28s var(--ease-out), box-shadow .28s var(--ease-out); -webkit-tap-highlight-color: transparent; }
+.ld-act--play { --c1: #E4FF7A; --c2: #8DE45C; --c3: #2CC98C; --ink: #0B2A18; --sub: #174A2C; --glow: rgba(122, 230, 90, .85); --icbg: #0B2A18; --icfg: #B8F46A; }
+.ld-act--star { --c1: #FFF27E; --c2: #FFC93E; --c3: #FF8A3D; --ink: #3A1A00; --sub: #5E2E00; --glow: rgba(255, 176, 60, .85); --icbg: #3A1A00; --icfg: #FFD84D; }
+.ld-act--gh { --c1: #6C3CF0; --c2: #8A3DD8; --c3: #C22F7A; --ink: #fff; --sub: #F6EBFF; --glow: rgba(196, 70, 220, .85); --icbg: rgba(255, 255, 255, .18); --icfg: #fff; }
+.ld-act::after { content: ''; position: absolute; top: -30%; bottom: -30%; left: -45%; width: 34%; z-index: -1; pointer-events: none;
+  background: linear-gradient(100deg, transparent, rgba(255, 255, 255, .55) 50%, transparent); transform: translateX(-60%) skewX(-16deg);
+  animation: ld-sheen 8s var(--ease-out) infinite; }
+.ld-act--star::after { animation-delay: 1.1s; }
+.ld-act--gh::after { animation-delay: 2.2s; }
+@keyframes ld-sheen { 0%, 78% { transform: translateX(-60%) skewX(-16deg); } 100% { transform: translateX(520%) skewX(-16deg); } }
+.ld-act:hover, .ld-act:focus-visible { transform: translateY(-3px) scale(1.015); box-shadow: 0 20px 34px -12px var(--glow), 0 0 0 1px rgba(255, 255, 255, .35),
+  0 2px 0 rgba(255, 255, 255, .5) inset, 0 -3px 0 rgba(0, 0, 0, .14) inset; }
+.ld-act:hover::after, .ld-act:focus-visible::after { animation: ld-sheen-now .7s var(--ease-out) 1; }
+@keyframes ld-sheen-now { from { transform: translateX(-60%) skewX(-16deg); } to { transform: translateX(520%) skewX(-16deg); } }
+.ld-act:active { transform: translateY(0) scale(.985); transition-duration: .08s; }
+.ld-act:focus-visible { outline: 3px solid #fff; outline-offset: 3px; }
+.ld-act:disabled, .ld-act[aria-disabled="true"] { cursor: not-allowed; filter: grayscale(.7) brightness(.92); transform: none; }
+.ld-act-ic { flex: none; display: grid; place-items: center; width: 44px; height: 44px; border-radius: 50%; background: var(--icbg); color: var(--icfg);
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, .22); transition: transform .4s var(--ease-back); }
+.ld-act-ic svg { width: 24px; height: 24px; fill: currentColor; }
+.ld-act--play .ld-act-ic svg { margin-left: 3px; }
+.ld-act:hover .ld-act-ic, .ld-act:focus-visible .ld-act-ic { transform: scale(1.1); }
+.ld-act--play:hover .ld-act-ic svg, .ld-act--play:focus-visible .ld-act-ic svg { animation: ld-nudge .7s var(--ease-out); }
+.ld-act--star:hover .ld-act-ic, .ld-act--star:focus-visible .ld-act-ic { transform: scale(1.12) rotate(72deg); }
+.ld-act--gh:hover .ld-act-ic, .ld-act--gh:focus-visible .ld-act-ic { transform: scale(1.1) rotate(-10deg); }
+@keyframes ld-nudge { 0% { transform: translateX(0); } 40% { transform: translateX(4px); } 100% { transform: translateX(0); } }
+.ld-act-txt { display: flex; flex-direction: column; min-width: 0; }
+.ld-act-t { font: 700 1.375rem/1.1 var(--font); letter-spacing: .005em; }
+.ld-act-s { margin-top: 2px; font: 500 .9375rem/1.2 var(--font); color: var(--sub); }
+.ld-act--play .ld-act-t { font-size: 1.5rem; }
+.ld-star-n { margin-left: auto; flex: none; padding: 5px 11px 6px; border-radius: 999px; font: 700 1rem/1 var(--font);
+  font-variant-numeric: tabular-nums; color: #FFE7A0; background: rgba(58, 26, 0, .88); box-shadow: 0 0 0 2px rgba(255, 255, 255, .25); }
+.ld-why { margin: 12px 0 0; padding: 0 8px; font: 500 .9375rem/1.4 var(--font); color: #fff; text-wrap: balance; }
+.ld-ttl { display: inline-flex; align-items: center; gap: 8px; margin: 6px 0 2px; font: 600 .875rem/1.35 var(--font); color: var(--lilac); }
+.ld-ttl-moon { flex: none; width: 13px; height: 13px; border-radius: 50%; box-shadow: inset -4px -2px 0 0 var(--honey); transform: rotate(-20deg); }
+.ld-status { margin: 8px 0 0; font: 600 1rem/1.35 var(--font); color: #fff; }
+.ld-status:empty { display: none; }
+.ld-note { margin: 10px 0 0; padding: 10px 14px; border-radius: 16px; text-align: left; font: 500 .9375rem/1.4 var(--font); color: #fff;
+  background: rgba(255, 138, 61, .2); box-shadow: inset 0 0 0 1.5px rgba(255, 201, 62, .7); }
+.ld-note p { margin: 0; }
+.ld-note-t { margin: 0 0 4px; font: 700 1.0625rem/1.2 var(--font); }
+.ld-farms { width: min(900px, 100%); margin-top: 14px; text-align: center; }
+.ld-farms-t { display: inline-block; margin: 0 0 8px; padding: 4px 12px 5px; border-radius: 999px; font: 600 .875rem/1.2 var(--font); color: #fff;
+  background: rgba(28, 10, 66, .62); }
+.ld-list { margin: 0; padding: 2px; list-style: none; display: flex; flex-wrap: wrap; justify-content: center; gap: 8px;
+  max-height: 128px; overflow-y: auto; overscroll-behavior: contain; }
+.ld-farm { display: flex; align-items: stretch; min-width: 0; border-radius: 18px; background: var(--glass-solid);
+  box-shadow: inset 0 0 0 1px var(--glass-edge), 0 10px 24px -14px rgba(14, 4, 36, .8); }
+@supports ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
+  .ld-farm { background: rgba(28, 10, 66, .62); -webkit-backdrop-filter: blur(14px) saturate(1.4); backdrop-filter: blur(14px) saturate(1.4); }
+}
+.ld-open { flex: 1; min-width: 0; display: flex; align-items: center; gap: 14px; padding: 8px 8px 8px 16px; border-radius: 18px 0 0 18px; text-align: left;
+  text-decoration: none; color: #fff; transition: background .2s; }
+.ld-open::after { content: ''; flex: none; margin-left: auto; width: 8px; height: 8px; border: solid #fff; border-width: 2.5px 2.5px 0 0; transform: rotate(45deg);
+  transition: transform .2s var(--ease-out); }
+.ld-open:hover { background: rgba(255, 255, 255, .1); }
+.ld-open:hover::after { transform: translateX(2px) rotate(45deg); }
+.ld-open:focus-visible { outline: 3px solid #fff; outline-offset: 2px; }
+.ld-open-txt { display: flex; flex-direction: column; min-width: 0; }
+.ld-name { font: 700 1.0625rem/1.2 var(--font); overflow-wrap: anywhere; }
+.ld-when { font: 500 .8125rem/1.25 var(--font); color: var(--lilac); }
+.ld-forget { flex: none; width: 44px; min-height: 44px; border: 0; border-left: 1px solid rgba(255, 255, 255, .16); border-radius: 0 18px 18px 0;
+  font: 700 .9375rem/1 var(--font); color: var(--lilac); background: transparent; }
+.ld-forget:hover, .ld-forget:focus-visible { color: #fff; background: rgba(255, 62, 142, .4); }
+.ld-forget:focus-visible { outline: 3px solid #fff; outline-offset: 2px; }
+.ld:has(> .ld-farms:not([hidden])) { --orb: clamp(140px, min(30svh, 54vw), 420px); }
+.ld-more { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; width: min(760px, 100%); margin-top: auto; padding-top: 22px; }
+.ld-link { display: inline-flex; align-items: center; min-height: 44px; padding: 8px 16px; border: 0; border-radius: 999px;
+  font: 600 .9375rem/1.2 var(--font); color: #fff; text-decoration: none; background: rgba(28, 10, 66, .55);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .26); transition: background .2s, box-shadow .2s; }
+.ld-link:hover { background: rgba(255, 255, 255, .16); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .5); }
+.ld-link:focus-visible { outline: 3px solid #fff; outline-offset: 2px; }
+.ld-noscript { position: relative; margin: 16px; text-align: center; font: 600 1.0625rem/1.4 var(--font); }
+.ld-noscript a { color: #fff; }
+.ld-sheet { width: min(600px, calc(100vw - 32px)); max-width: none; max-height: min(90svh, 860px); margin: auto; padding: 0; border: 0;
+  border-radius: 28px; overflow: auto; overscroll-behavior: contain; color: var(--dusk); color-scheme: light;
+  background: linear-gradient(180deg, #FFFDF9, #FFF3E6); box-shadow: 0 30px 80px rgba(14, 4, 36, .6), 0 0 0 1px rgba(255, 255, 255, .7); }
+.ld-sheet::backdrop { background: rgba(18, 6, 46, .62); }
+@supports ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) { .ld-sheet::backdrop { backdrop-filter: blur(5px); } }
+.ld-sheet[open] { animation: ld-pop .34s var(--ease-out); }
+@keyframes ld-pop { from { opacity: 0; transform: translateY(14px) scale(.98); } }
+.ld-sheet-in { position: relative; padding: 24px 22px 22px; text-align: left; }
+.ld-sheet-in::before { content: ''; position: absolute; left: 0; right: 0; top: 0; height: 6px;
+  background: linear-gradient(90deg, var(--magenta), var(--ember), var(--honey), var(--teal), #8B5CF6); }
+.ld-sheet-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 6px; }
+.ld-sheet-t { margin: 4px 0 0; font: 700 1.5rem/1.15 var(--font); color: var(--dusk); text-wrap: balance; }
+.ld-sheet-x { flex: none; display: grid; place-items: center; width: 44px; height: 44px; padding: 0; border: 0; border-radius: 50%;
+  font: 700 1.0625rem/1 var(--font); color: var(--dusk); background: #F0E4FF; transition: background .2s, transform .2s var(--ease-out); }
+.ld-sheet-x:hover { background: #E2CCFF; transform: rotate(90deg); }
+.ld-sheet-x:focus-visible { outline: 3px solid var(--plum); outline-offset: 2px; }
+.ld-sheet-sub { margin: 0 0 16px; font: 500 1rem/1.45 var(--font); color: #4A3466; text-wrap: pretty; }
+.ld-idea-slot { min-height: 420px; }
+.ld-idea-slot:has(.idea-box) { min-height: 0; }
+.ld-sheet .gate-back { margin: 0; }
+.ld-sheet .gate-back .gate-link, .ld .gate-back .gate-link { min-height: 44px; padding: 8px 12px; border: 2px solid #E6C99A; border-radius: 14px;
+  background: #fff; font: 600 1rem/1.2 var(--font); color: #3E2612; }
+@media (max-width: 599px) {
+  .ld-sheet { width: 100%; max-height: 92svh; margin: auto 0 0; border-radius: 26px 26px 0 0; }
+  .ld-sheet-in { padding: 22px 16px calc(20px + env(safe-area-inset-bottom, 0px)); }
+  .ld-sheet[open] { animation: ld-rise-in .38s var(--ease-out); }
+}
+@keyframes ld-rise-in { from { transform: translateY(40px); opacity: .4; } }
+.ld-back--inline { width: min(600px, 100%); margin-top: 16px; border-radius: 26px; overflow: hidden; color: var(--dusk); color-scheme: light;
+  background: linear-gradient(180deg, #FFFDF9, #FFF3E6); box-shadow: 0 24px 60px -18px rgba(14, 4, 36, .7); }
+.ld-back--inline .ld-sheet-x { display: none; }
+.ld-box { width: min(96vw, 1440px); max-width: none; max-height: none; margin: auto; padding: 0; border: 0; background: transparent; overflow: visible; }
+.ld-box::backdrop { background: rgba(14, 4, 36, .92); }
+.ld-box-fig { margin: 0; display: flex; flex-direction: column; align-items: center; gap: 12px; }
+.ld-box-img { display: block; width: auto; height: auto; max-width: 100%; max-height: calc(100svh - 150px); border-radius: 18px; background: var(--dusk);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, .3), 0 0 60px rgba(255, 62, 142, .3), 0 24px 48px rgba(0, 0, 0, .5); }
+.ld-box-meta { max-width: 40em; padding: 0 56px; text-align: center; color: #fff; }
+.ld-box-cap { margin: 0; font: 600 1.0625rem/1.35 var(--font); }
+.ld-box-n { margin: 4px 0 0; font: 500 .875rem/1.3 var(--font); color: var(--lilac); }
+.ld-box-btn { position: fixed; display: grid; place-items: center; width: 48px; height: 48px; padding: 0 0 3px; border: 0; border-radius: 50%;
+  font: 700 1.75rem/1 var(--font); color: #fff; background: rgba(255, 255, 255, .14); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .4); }
+.ld-box-btn:hover { background: rgba(255, 255, 255, .26); }
+.ld-box-btn:focus-visible { outline: 3px solid #fff; outline-offset: 3px; }
+.ld-box-x { top: calc(12px + env(safe-area-inset-top, 0px)); right: calc(12px + env(safe-area-inset-right, 0px)); font-size: 1.25rem; padding: 0; }
+.ld-box-prev, .ld-box-next { top: 50%; translate: 0 -50%; }
+.ld-box-prev { left: calc(10px + env(safe-area-inset-left, 0px)); }
+.ld-box-next { right: calc(10px + env(safe-area-inset-right, 0px)); }
+@media (max-width: 699px) {
+  .ld-box-prev, .ld-box-next { top: auto; bottom: calc(14px + env(safe-area-inset-bottom, 0px)); translate: none; }
+  .ld-box-meta { padding: 0 8px 64px; }
+}
+@media (max-width: 699px) {
+  .ld-act-t { font-size: 1.25rem; }
+  .ld-act--play .ld-act-t { font-size: 1.375rem; }
+}
+@media (min-width: 700px) {
+  .ld { padding-top: calc(clamp(18px, 3.5svh, 44px) + env(safe-area-inset-top, 0px)); }
+  .ld-tag { max-width: none; }
+  .ld-dock { padding: 14px; border-radius: 32px; }
+  .ld-act { min-height: 78px; padding: 12px 18px 12px 12px; border-radius: 24px; }
+  .ld-act-ic { width: 50px; height: 50px; }
+  .ld-act-ic svg { width: 26px; height: 26px; }
+}
+@media (min-width: 1500px) and (min-height: 900px) {
+  .ld-dock { width: min(1000px, 100%); }
+  .ld-act { min-height: 90px; }
+  .ld-act-t { font-size: 1.5rem; }
+  .ld-act--play .ld-act-t { font-size: 1.625rem; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ld-glow, .ld-sun, .ld-orb::before, .ld-orb-ring, .ld-orbit i, .ld-orbit i::before, .ld-act::after, .ld-act-ic, .ld-act-ic svg { animation: none !important; }
+  .ld-motes i { animation: none; }
+  .ld-fly { opacity: .85; }
+  .ld-dust { opacity: .5; }
+  .ld-orbit i { transform: translateX(calc(var(--orb) * 1.15)); }
+  .ld-orbit i::before { transform: translateY(calc(var(--orb) * .1)); }
+  .ld-act, .ld-act-ic, .ld-open, .ld-sheet-x, .ld-orb-view video { transition: none; }
+  .ld-act:hover, .ld-act:focus-visible { transform: none; }
+  .ld-act:hover .ld-act-ic, .ld-act:focus-visible .ld-act-ic { transform: none; }
+  .ld-sheet[open] { animation: none; }
+}
+.ld-acts a.ld-act { cursor: pointer; }
+.ld-pages-foot { margin: 10px 0 0; font: 500 .8125rem/1.4 var(--font); color: var(--lilac); text-align: center; }
+.ld-pages-foot a { color: #fff; }
+  </style>
+</head>
+<body class="landing">
+  <div class="ld-sky" aria-hidden="true">
+    <span class="ld-glow ld-glow--teal"></span><span class="ld-glow ld-glow--rose"></span>
+    <svg class="ld-hills" viewBox="0 0 1440 240" preserveAspectRatio="none" focusable="false">
+      <path class="ld-hill ld-hill--far" d="M0 120 C160 70 300 70 440 104 C600 142 720 66 900 78 C1060 88 1180 132 1300 110 C1370 98 1410 92 1440 96 V240 H0Z"/>
+      <path class="ld-hill ld-hill--mid" d="M0 162 C140 120 280 128 420 150 C560 172 700 120 860 128 C1020 136 1120 176 1260 160 C1340 151 1400 140 1440 142 V240 H0Z"/>
+      <path class="ld-hill ld-hill--near" d="M0 196 C180 168 360 172 540 190 C700 206 860 178 1020 182 C1180 186 1320 210 1440 198 V240 H0Z"/>
+    </svg>
+    <span class="ld-motes"><i class="ld-fly" style="--x:8%;--y:84%;--d:11s;--t:-2s"></i><i class="ld-fly" style="--x:19%;--y:90%;--d:14s;--t:-9s"></i><i class="ld-fly" style="--x:31%;--y:80%;--d:12s;--t:-5s"></i><i class="ld-fly" style="--x:46%;--y:92%;--d:16s;--t:-12s"></i><i class="ld-fly" style="--x:58%;--y:86%;--d:13s;--t:-1s"></i><i class="ld-fly" style="--x:71%;--y:82%;--d:15s;--t:-7s"></i><i class="ld-fly" style="--x:83%;--y:90%;--d:12s;--t:-10s"></i><i class="ld-fly" style="--x:93%;--y:78%;--d:17s;--t:-4s"></i><i class="ld-fly" style="--x:38%;--y:70%;--d:18s;--t:-14s"></i><i class="ld-fly" style="--x:66%;--y:68%;--d:19s;--t:-6s"></i><i class="ld-dust" style="--x:12%;--y:40%;--d:21s;--t:-3s"></i><i class="ld-dust" style="--x:26%;--y:22%;--d:25s;--t:-15s"></i><i class="ld-dust" style="--x:52%;--y:12%;--d:23s;--t:-8s"></i><i class="ld-dust" style="--x:77%;--y:30%;--d:27s;--t:-19s"></i><i class="ld-dust" style="--x:88%;--y:52%;--d:22s;--t:-11s"></i><i class="ld-dust" style="--x:5%;--y:62%;--d:26s;--t:-21s"></i></span>
+  </div>
 
-<h2 id="play-it-in-2-minutes">Play it in 2 minutes</h2>
-<p>You need <a href="https://nodejs.org/">Node.js 24</a>.</p>
-<pre><code class="language-sh">git clone https://github.com/KrasimirKralev/harvest-hollow.git
-cd harvest-hollow
-npm install
-npm start
-</code></pre>
-<p>The server prints its addresses. Open <strong>http://localhost:3300</strong>, pick a farmer, a name and a colour, and play.
-Your partner opens the <strong>home-network address</strong> it prints (for example <code>http://192.168.x.y:3300</code>) on their own
-computer or phone and picks the other farmer. A farm has two farmers; <code>HH_SLOTS=1 npm start</code> makes it a solo farm.</p>
-<p>Set a farm passphrase before you share the farm beyond your home network; it protects "this is me on a new device":</p>
-<pre><code class="language-sh">HH_PASSPHRASE='something-only-you-know' npm start
-</code></pre>
-<h3>Run it 24/7 (a Raspberry Pi, a mini-PC, an old laptop)</h3>
-<pre><code class="language-sh">mkdir -p ~/.config/systemd/user
-cp deploy/harvest-hollow.service ~/.config/systemd/user/
-systemctl --user daemon-reload
-systemctl --user enable --now harvest-hollow
-loginctl enable-linger &quot;$USER&quot;          # keep it running without a login
-</code></pre>
-<p>The unit expects the checkout in <code>~/harvest-hollow</code> and Node at <code>/usr/bin/node</code>; edit its <code>WorkingDirectory</code> and
-<code>ExecStart</code> lines if yours differ. The save lives in <code>data/</code> (or <code>HH_DATA_DIR</code>). Put the passphrase in a drop-in
-(<code>systemctl --user edit harvest-hollow</code> → <code>[Service]</code> <code>Environment=HH_PASSPHRASE=...</code>), never in a tracked file.</p>
-<h3>Play from anywhere</h3>
-<p>The game is one HTTP + WebSocket port, so any tunnel works. Two free options:</p>
-<ul>
-<li><strong>Tailscale Funnel</strong>: <code>sudo tailscale funnel --bg 3300</code> gives the machine a fixed public <code>https://</code> address on
-  your tailnet's domain.</li>
-<li><strong>Cloudflare Tunnel</strong>: <code>cloudflared tunnel --url http://localhost:3300</code> (a named tunnel gives a fixed link on your
-  own domain).</li>
-</ul>
-<p>Set <code>HH_PASSPHRASE</code> before you open the farm to the internet.</p>
-<h2 id="how-to-play">How to play</h2>
-<table>
-<thead>
-<tr>
-<th></th>
-<th>Mouse / keyboard</th>
-<th>Touch</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>Act on something</td>
-<td>click it with the Hand (1)</td>
-<td>tap</td>
-</tr>
-<tr>
-<td>Plant / harvest a field</td>
-<td>pick Seeds (2) or the Sickle (3), drag across plots</td>
-<td>drag a finger</td>
-</tr>
-<tr>
-<td>Plant on an empty plot</td>
-<td>click it with the Hand → seed picker</td>
-<td>tap it</td>
-</tr>
-<tr>
-<td>Walk</td>
-<td>click open ground</td>
-<td>tap open ground</td>
-</tr>
-<tr>
-<td>Camera</td>
-<td>right-drag pan, wheel zoom, Q / E turn, PageUp / PageDown tilt</td>
-<td>two fingers pan, pinch zoom, twist to turn, two fingers up or down to tilt</td>
-</tr>
-<tr>
-<td>Move or turn a building</td>
-<td>the Hammer (9), then click it; R turns it</td>
-<td>the Hammer, then tap it; ⟳ turns it</td>
-</tr>
-<tr>
-<td>Reorder a workshop queue</td>
-<td>drag a waiting item</td>
-<td>hold, then drag (or tap it for ◀ ▶)</td>
-</tr>
-<tr>
-<td>Item info</td>
-<td>hover any item</td>
-<td>hold any item</td>
-</tr>
-</tbody>
-</table>
-<p>Everything you need to know is taught in game by Grandma Hazel's two short guides on the first evening.
-Settings › Controls lists every key and gesture.</p>
-<h2 id="how-it-works">How it works</h2>
-<ul>
-<li><code>shared/</code> — the whole game in pure, deterministic JavaScript: content tables (every crop, recipe and price,
-  generated from one economy model) and the rules engine. The <strong>same code</strong> runs in the browser to predict an action
-  instantly and on the server to decide it, so the game feels local and stays cheat-proof.</li>
-<li><code>server/</code> — Express + <code>ws</code>: one authoritative farm in memory, an append-only action journal, atomic JSON snapshots
-  and rotating backups, presence at 15 Hz, rate limits, a scheduler for daily and weekly events.</li>
-<li><code>public/</code> — the client: Three.js with no bundler (an import map), instanced and batched rendering with quality tiers
-  for laptops and phones, and an HTML/CSS interface.</li>
-<li><code>tools/</code> — the economy model and simulators, the asset pipeline, and end-to-end tests that drive two headless
-  browsers (<code>npm run test:e2e</code>) or a phone and a desktop together (<code>tools/e2e-mobile.mjs</code>).</li>
-<li><code>docs/GDD.md</code> — the full game design document: every system, number and the reasoning behind it;
-  <code>docs/research/tech-architecture.md</code> explains the technical decisions.</li>
-</ul>
-<pre><code class="language-sh">npm test                          # 1,655 unit and integration tests (node:test)
-npm run test:e2e -- --port 3310   # two players in two headless browsers, end to end (needs Chrome; CHROME=&lt;path&gt;)
-node tools/econ-sim.mjs --checks  # the economy's pacing and balance checks
-</code></pre>
-<h2 id="credits">Credits</h2>
-<ul>
-<li>3D models: <a href="https://quaternius.com">Quaternius</a>, <a href="https://kenney.nl">Kenney</a> and
-  <a href="https://vertexcat.itch.io">vertexcat</a> (CC0) — the packs are listed in
-  <a href="https://github.com/KrasimirKralev/harvest-hollow/blob/main/public/assets/models/CREDITS.md"><code>public/assets/models/CREDITS.md</code></a>.</li>
-<li>Music: CC0 tracks from <a href="https://opengameart.org">OpenGameArt</a> by Komiku, Memoraphile, Écrivain, Indieteur and
-  RandomMind — details in <a href="https://github.com/KrasimirKralev/harvest-hollow/blob/main/public/assets/audio/music/CREDITS.md"><code>public/assets/audio/music/CREDITS.md</code></a>.</li>
-<li>Fonts: Fredoka, Baloo 2 and Nunito (SIL Open Font License 1.1; the licence texts are in <code>public/assets/fonts/</code>).</li>
-<li>Illustrated portraits, letter headers, backdrops and the logo: original art made for this game with an AI image
-  model (Higgsfield), checked image by image and post-processed; released under the MIT licence with the code.</li>
-<li>Sound effects: synthesised for this game by <code>tools/make-sfx.mjs</code>.</li>
-<li>Built with <a href="https://threejs.org">three.js</a>, <a href="https://expressjs.com">Express</a> and <a href="https://github.com/websockets/ws">ws</a>.</li>
-</ul>
-<h2 id="license">License</h2>
-<p>Code and the game's own art, including the AI-generated illustrations: <a href="https://github.com/KrasimirKralev/harvest-hollow/blob/main/LICENSE">MIT</a>. Third-party assets keep their
-own licences (CC0 or the SIL OFL, listed above).</p></main>
-<footer>Harvest Hollow · MIT licensed · <a href="https://github.com/KrasimirKralev/harvest-hollow">source on GitHub</a></footer>
-</body></html>
+  <main class="ld" id="landing">
+    <div class="ld-stage">
+      <div class="ld-orb" id="ld-orb" aria-hidden="true">
+        <span class="ld-sun"></span>
+        <span class="ld-orbit ld-orbit--back"><i></i></span>
+        <span class="ld-orb-ring"></span>
+        <span class="ld-orb-view" id="ld-orb-view"><img class="ld-orb-still" src="assets/farm-orbit.webp" width="480" height="480" alt="" fetchpriority="low" decoding="async"></span>
+        <span class="ld-orb-shine"></span>
+        <span class="ld-orbit ld-orbit--front"><i></i></span>
+      </div>
+      <h1 class="ld-logo"><img src="assets/logo-wide_560.webp" srcset="assets/logo-wide_560.webp 560w, assets/logo-wide_880.webp 880w, assets/logo-wide_1120.webp 1120w"
+        sizes="(max-width: 699px) 290px, (max-height: 760px) 440px, 520px" width="1400" height="336" alt="Harvest Hollow" fetchpriority="high"></h1>
+      <p class="ld-tag">A cozy 3D farm for two, live in your browser.</p>
+    </div>
+
+    <section class="ld-dock" id="ld-dock" aria-labelledby="ld-dock-title">
+      <h2 class="sr-only" id="ld-dock-title">Play, or help Harvest Hollow grow</h2>
+      <div class="ld-acts">
+        <a class="ld-act ld-act--play" id="ld-play" href="https://harvest-hollow.up.railway.app/" aria-describedby="ld-ttl">
+          <span class="ld-act-ic" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M8 5.6v12.8a1.2 1.2 0 0 0 1.8 1l10-6.4a1.2 1.2 0 0 0 0-2l-10-6.4A1.2 1.2 0 0 0 8 5.6Z"/></svg></span>
+          <span class="ld-act-txt"><span class="ld-act-t">Play</span><span class="ld-act-s">Free, in your browser</span></span>
+        </a>
+        <a class="ld-act ld-act--star" href="https://github.com/KrasimirKralev/harvest-hollow" target="_blank" rel="noopener">
+          <span class="ld-act-ic" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M12 2.8l2.7 5.6 6.1.8-4.5 4.2 1.1 6.1L12 16.6l-5.4 2.9 1.1-6.1-4.5-4.2 6.1-.8L12 2.8Z"/></svg></span>
+          <span class="ld-act-txt"><span class="ld-act-t">Star us</span><span class="ld-act-s">on GitHub</span></span>
+        </a>
+        <a class="ld-act ld-act--gh" href="https://github.com/KrasimirKralev/harvest-hollow" target="_blank" rel="noopener">
+          <span class="ld-act-ic" aria-hidden="true"><svg viewBox="0 0 16 16" focusable="false"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg></span>
+          <span class="ld-act-txt"><span class="ld-act-t">Open GitHub</span><span class="ld-act-s">See how it is made</span></span>
+        </a>
+      </div>
+      <p class="ld-why">Free and open source: a ⭐ helps other couples find it.</p>
+      <p class="ld-ttl" id="ld-ttl"><span class="ld-ttl-moon" aria-hidden="true"></span><span>Farms idle for 7 days are deleted.</span></p>
+    </section>
+
+    <nav class="ld-more" aria-label="If you need more">
+      <a class="ld-link" href="https://harvest-hollow.up.railway.app/">Already have a farm?</a>
+      <a class="ld-link" href="https://github.com/KrasimirKralev/harvest-hollow/discussions/categories/ideas" target="_blank" rel="noopener">Suggest an idea</a>
+      <button class="ld-link" id="ld-shots-open" type="button" aria-haspopup="dialog">Screenshots</button>
+      <a class="ld-link" href="https://harvest-hollow.up.railway.app/privacy">Privacy</a>
+      <a class="ld-link" href="https://github.com/KrasimirKralev/harvest-hollow#play-it-in-2-minutes" target="_blank" rel="noopener">Self-host it</a>
+    </nav>
+  </main>
+
+  <script>
+  // The orbit video once the page has painted (never under reduced motion or Save-Data), and the screenshots viewer.
+  (() => {
+    const $ = (id) => document.getElementById(id);
+    const still = matchMedia('(prefers-reduced-motion: reduce)');
+    const later = (fn) => {
+      const go = () => ('requestIdleCallback' in window ? requestIdleCallback(fn, { timeout: 1500 }) : setTimeout(fn, 200));
+      if (document.readyState === 'complete') go(); else addEventListener('load', go, { once: true });
+    };
+    later(() => {
+      if (still.matches || navigator.connection?.saveData) return;
+      const v = document.createElement('video');
+      Object.assign(v, { muted: true, defaultMuted: true, loop: true, playsInline: true, preload: 'auto', tabIndex: -1 });
+      for (const a of ['muted', 'playsinline', 'loop', 'disablepictureinpicture']) v.setAttribute(a, '');
+      v.setAttribute('aria-hidden', 'true');
+      for (const [src, type] of [['assets/farm-orbit.webm', 'video/webm; codecs="vp9"'], ['assets/farm-orbit.mp4', 'video/mp4; codecs="avc1.4D401F"']]) {
+        if (v.canPlayType(type)) v.append(Object.assign(document.createElement('source'), { src, type }));
+      }
+      if (!v.children.length) return;
+      v.addEventListener('playing', () => v.classList.add('is-on'), { once: true });
+      v.addEventListener('error', () => v.remove(), { once: true });
+      $('ld-orb-view').append(v);
+      const play = () => { if (!still.matches) v.play()?.catch(() => {}); };
+      let seen = true;
+      if ('IntersectionObserver' in window) new IntersectionObserver((e) => { seen = e.some((x) => x.isIntersecting); if (seen) play(); else v.pause(); }).observe($('ld-orb'));
+      still.addEventListener?.('change', (e) => { if (e.matches) { v.pause(); v.classList.remove('is-on'); } else if (seen) { play(); v.classList.add('is-on'); } });
+      play();
+    });
+
+    const shots = [['1-farm', 'A farm in full swing: fields, sheep, the orchard and the farmhouse'],
+      ['2-together', 'Two farmers in one field, live: a wave from one, a heart from the other'],
+      ['3-animals', 'Chickens and cows, each with something ready to collect'],
+      ['4-bakery', 'The bakery turns your harvest into bread, muffins and pancakes'],
+      ['5-phone', 'The same farm on a phone, made for thumbs']];
+    let box = null;
+    let at = 0;
+    const mk = (tag, cls, props = {}) => Object.assign(document.createElement(tag), { className: cls }, props);
+    function build() {
+      box = mk('dialog', 'ld-box');
+      box.setAttribute('aria-label', 'Screenshots from the game');
+      const img = mk('img', 'ld-box-img', { alt: '', decoding: 'async', width: 1600, height: 1000 });
+      const cap = mk('p', 'ld-box-cap');
+      const n = mk('p', 'ld-box-n');
+      n.setAttribute('aria-live', 'polite');
+      const btn = (cls, label, glyph) => { const b = mk('button', `ld-box-btn ${cls}`, { type: 'button', textContent: glyph }); b.setAttribute('aria-label', label); return b; };
+      const x = btn('ld-box-x', 'Close', '✕');
+      const prev = btn('ld-box-prev', 'Previous picture', '‹');
+      const next = btn('ld-box-next', 'Next picture', '›');
+      const fig = mk('figure', 'ld-box-fig');
+      const meta = mk('figcaption', 'ld-box-meta');
+      meta.append(cap, n);
+      fig.append(img, meta);
+      box.append(fig, prev, next, x);
+      document.body.append(box);
+      box.show = (i) => {
+        at = (i + shots.length) % shots.length;
+        const [f, c] = shots[at];
+        img.removeAttribute('src');
+        img.srcset = `assets/shot-${f}_960.webp 960w, assets/shot-${f}.webp 1600w`;
+        img.sizes = 'min(94vw, 1400px)';
+        img.src = `assets/shot-${f}_960.webp`;
+        img.alt = c;
+        cap.textContent = c;
+        n.textContent = `Picture ${at + 1} of ${shots.length}`;
+      };
+      x.addEventListener('click', () => box.close());
+      prev.addEventListener('click', () => box.show(at - 1));
+      next.addEventListener('click', () => box.show(at + 1));
+      box.addEventListener('click', (e) => { if (e.target === box) box.close(); });
+      box.addEventListener('close', () => $('ld-shots-open').focus({ preventScroll: true }));
+      box.addEventListener('keydown', (e) => {
+        if (e.key === 'ArrowLeft') { e.preventDefault(); box.show(at - 1); } else if (e.key === 'ArrowRight') { e.preventDefault(); box.show(at + 1); }
+      });
+      let x0 = null;
+      fig.addEventListener('pointerdown', (e) => { x0 = e.pointerType === 'mouse' ? null : e.clientX; });
+      fig.addEventListener('pointerup', (e) => { if (x0 === null) return; const d = e.clientX - x0; x0 = null; if (Math.abs(d) > 40) box.show(at + (d < 0 ? 1 : -1)); });
+    }
+    $('ld-shots-open').addEventListener('click', () => {
+      if (typeof HTMLDialogElement !== 'function') { location.href = 'assets/shot-1-farm.webp'; return; }
+      if (!box) build();
+      box.show(0);
+      box.showModal();
+      box.querySelector('.ld-box-x').focus({ preventScroll: true });
+    });
+  })();
+  </script>
+</body>
+</html>
