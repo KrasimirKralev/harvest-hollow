@@ -170,7 +170,7 @@ node tools/econ-sim.mjs --checks  # the economy's pacing and balance checks
   RandomMind — details in [`public/assets/audio/music/CREDITS.md`](public/assets/audio/music/CREDITS.md).
 - Fonts: Fredoka, Baloo 2 and Nunito (SIL Open Font License 1.1; the licence texts are in `public/assets/fonts/`).
 - Illustrated portraits, letter headers, backdrops and the logo: original art made for this game with an AI image
-  model, checked image by image and post-processed.
+  model (Higgsfield), checked image by image and post-processed; released under the MIT licence with the code.
 - Sound effects: synthesised for this game by `tools/make-sfx.mjs`.
 - Built with [three.js](https://threejs.org), [Express](https://expressjs.com) and [ws](https://github.com/websockets/ws).
 
@@ -180,4 +180,5 @@ The hosted game's privacy note is at [/privacy](https://harvest-hollow.up.railwa
 everything on your own machine ([PRIVACY.md](PRIVACY.md)).
 
 
-Code: [MIT](LICENSE). Third-party assets keep their own licences (CC0 or the SIL OFL, listed above).
+Code and the game's own art, including the AI-generated illustrations: [MIT](LICENSE). Third-party assets keep their
+own licences (CC0 or the SIL OFL, listed above).
