@@ -145,6 +145,7 @@ import { TOUCH, tapSlop, pair, angleDelta, twist, isDoubleTap, groundAt, flingSt
 import { createHaptics } from './haptics.js';
 import { TILE_M } from '../../../shared/content/config.js';
 import { createFishing, pondSpots } from './fishing.js';
+import * as i18n from '../i18n/index.js';
 import { createPairing } from './pairing.js';
 import { createInterior, interiorOpenNow } from './interior.js';
 import { orbitStep, tiltIntent, canOrbit, quarterSteps, ORBIT } from './camera-input.js';
@@ -691,9 +692,9 @@ export function createController({
     if (riding) { dismount(); return true; }
     const code = rideCode(id);
     if (code) {
-      const text = code === ERR.NOT_READY ? 'Too young to ride yet: a foal grows up first.'
-        : code === ERR.OCCUPIED ? 'Every horse has a rider right now.'
-          : code === ERR.LOCKED ? 'You need an adult horse to ride: the Stable opens at level 25.' : null;
+      const text = code === ERR.NOT_READY ? i18n.t('game.ride.young')
+        : code === ERR.OCCUPIED ? i18n.t('game.ride.taken')
+          : code === ERR.LOCKED ? i18n.t('game.ride.locked', { n: 25 }) : null;
       if (text) toast(text, {});
       return false;
     }
@@ -745,7 +746,7 @@ export function createController({
     // night (wave 4, wish 4): render-world's pick says the pet sleeps in its doghouse or basket; a pat or a treat still
     // counts (the day's cuddle is never lost to the clock), with a sleepy snore and a 💤 line instead of a woof
     const asleep = p.asleep === true;
-    const petName = store.state.players[owner]?.pet?.name ?? 'The pet';
+    const petName = store.state.players[owner]?.pet?.name ?? i18n.t('game.pet.the');
     let refusal = null;
     for (const [type, args] of [['petPet', { owner }], ['feedPet', { owner }]]) {
       if (!ACTIONS[type]) continue;
@@ -755,7 +756,7 @@ export function createController({
         if (res.ok && Number.isFinite(p.px)) avatar.walkTo(Math.floor(p.px), Math.floor(p.pz), 1, 1);
         if (res.ok && asleep) {
           audio?.play('snore', { gain: 0.6 });
-          toast(`${petName} stirs, enjoys a sleepy ${type === 'feedPet' ? 'treat' : 'pat'} and dozes off again 💤`, {});
+          toast(i18n.t(type === 'feedPet' ? 'game.pet.sleepyTreat' : 'game.pet.sleepyPat', { name: petName }), {});
         }
         return res;
       }
@@ -769,13 +770,13 @@ export function createController({
     const name = petName;
     if (asleep && !(refusal && (SOFT.has(refusal.code) || [ERR.LOCKED, ERR.NOT_FOUND, ERR.UNKNOWN_ACTION].includes(refusal.code)))) {
       audio?.play('snore', { gain: 0.7 });
-      toast(`${name} is fast asleep 💤 Let them dream till morning.`, {});
+      toast(i18n.t('game.pet.asleep', { name }), {});
       return null;
     }
     const treat = refusal && refusal.code === ERR.NO_ITEMS;
-    toast(treat ? `${name} would love a treat: Dog Biscuits and Cat Treats come from the Kitchen.`
-      : refusal && refusal.code === ERR.NOT_READY ? `${name} is busy with this morning's find. Treats again tomorrow.`
-        : `${name} had a cuddle and a treat today. Tomorrow again!`, {});
+    toast(treat ? i18n.t('game.pet.wantsTreat', { name })
+      : refusal && refusal.code === ERR.NOT_READY ? i18n.t('game.pet.busy', { name })
+        : i18n.t('game.pet.doneToday', { name }), {});
     invalid(null, null);
     return null;
   }
@@ -814,7 +815,7 @@ export function createController({
     }
     if (info?.refusal && info.refusal.code === 'NO_SEED') {
       emit('command', { cmd: 'seedTray' });
-      toast(input === 'touch' ? 'Pick a seed first, then tap the plot.' : 'Pick a seed first (2), then click the plot.', {});
+      toast(input === 'touch' ? i18n.t('game.seedFirstTouch') : i18n.t('game.seedFirst'), {});
       return null;
     }
     // The Smart Hand's watering is a bonus: a crop that cannot take it (too quick, already watered) just shows its
@@ -858,13 +859,12 @@ export function createController({
       }
     }
     if (t.kind === 'plot' && t.giant && t.ready && !['axe', 'hand', 'sickle'].includes(tool.id)) {
-      const name = cropOf(t.crop)?.name ?? 'crop';
-      toast(`A Giant ${name}! Fell it with the Axe (8), the Sickle or the Hand: quicker together.`, {});
+      toast(i18n.t('game.giant.fell', { crop: cropOf(t.crop) ? i18n.N(t.crop) : i18n.t('game.giant.crop') }), {});
       invalid(t.id, null);
       return null;
     }
     if (t.kind === 'debris' && t.tool !== 'hand' && tool.id === 'hand') {
-      toast(`${t.def.name}: use the Axe (8).`, {});
+      toast(i18n.t('game.debris.axe', { thing: i18n.N(t.def.id) }), {});
       invalid(t.id, null);
       return null;
     }
@@ -1026,7 +1026,7 @@ export function createController({
     if (fishing.casting) { fishing.press(); return true; }
     if (pairing.active) {
       if (p && p.kind === 'object') pairing.pick(p.id);
-      else if (p && (p.kind === 'pet')) toast('Pets keep their own company: pick a farm animal.', {});
+      else if (p && (p.kind === 'pet')) toast(i18n.t('game.pair.pet'), {});
       return true;
     }
     return false;
@@ -1214,11 +1214,11 @@ export function createController({
       const next = nextSetPiece(setPlan.id);
       if (next && next !== b.def) { startBuild(next, { rot: b.rot }); return; }
       if (!next) {
-        const name = CONTENT.decorSets?.get(setPlan.id)?.name ?? 'set';
+        const set = CONTENT.decorSets?.get(setPlan.id) ? i18n.N(setPlan.id, 'decorSets') : i18n.t('game.set.set');
         setPlan = null;
         endBuild();
         setTool('hand');
-        toast(`The ${name} set is out on the farm. Keep the pieces close together and it shines.`, { kind: 'ok' });
+        toast(i18n.t('game.set.out', { set }), { kind: 'ok' });
         return;
       }
     }
@@ -1252,7 +1252,7 @@ export function createController({
       return false;
     }
     const next = nextSetPiece(setId);
-    if (!next) { toast(`Every piece of the ${set.name} set is already on the farm.`, {}); return false; }
+    if (!next) { toast(i18n.t('game.set.allOut', { set: i18n.N(setId, 'decorSets') }), {}); return false; }
     setPlan = { id: setId };
     tool.id = 'hammer';
     canvas.style.cursor = cursorFor('hammer');
@@ -1273,7 +1273,7 @@ export function createController({
     const t = liftable(id);
     if (!t) {
       invalid(id, null);
-      toast(d.kind === 'debris' ? `${d.def.name} is cleared, not moved.` : `${d.def.name} stays where it is.`, {});
+      toast(i18n.t(d.kind === 'debris' ? 'game.move.debris' : 'game.move.fixed', { thing: i18n.N(d.def.id) }), {});
       return false;
     }
     if (tool.id !== 'hammer') { tool.id = 'hammer'; canvas.style.cursor = cursorFor('hammer'); emit('tool', publicTool()); }
@@ -1334,7 +1334,7 @@ export function createController({
       if (refusal && SOFT.has(code)) { toast(code, { type: refusal.type, args: refusal.args }); return null; }
       if (t && (code === ERR.BLOCKED || code === ERR.OUT_OF_BOUNDS)) {
         invalid(t.id, null);
-        toast(`No room to turn the ${t.def.name} here: move it with the Hammer first.`, {});
+        toast(i18n.t('game.rotate.noRoom', { thing: i18n.N(t.def.id) }), {});
         return null;
       }
       invalid(t ? t.id : null, code, refusal && refusal.type ? { type: refusal.type, args: refusal.args } : {});
@@ -1436,7 +1436,7 @@ export function createController({
         return perform(r, tg, performance.now());
       }
     }
-    toast('Nothing to undo right now: purchases and moves can be undone for 10 minutes, while untouched.', {});
+    toast(i18n.t('game.undo.none'), {});
     return null;
   }
 
@@ -1485,7 +1485,7 @@ export function createController({
     const pose = pid ? view.partner.pose(pid) : null;
     if (!pose) {
       const name = pid ? store.state.players[pid]?.name : null;
-      toast(name ? `${name} is not on the farm right now.` : 'Your partner has not joined yet.', {});
+      toast(name ? i18n.t('game.partner.away', { name }) : i18n.t('game.partner.none'), {});
       return false;
     }
     view.focus(pose.x, pose.z);
@@ -1495,7 +1495,7 @@ export function createController({
   // the Memory Book (M1b, GDD §5.9 "manual pages from photo mode"): offer to keep this picture as a page
   function offerMemoryPage() {
     if (ACTIONS.memoryPage && canRun(store, 'memoryPage', { k: 'photo' }) === null && typeof ui?.notice === 'function') {
-      ui.notice('Keep this photo in the Memory Book?', { action: { label: 'Keep it', fn: () => doAct('memoryPage', { k: 'photo' }) }, ms: 12000 });
+      ui.notice(i18n.t('game.photo.keepAsk'), { action: { label: i18n.t('game.photo.keep'), fn: () => doAct('memoryPage', { k: 'photo' }) }, ms: 12000 });
     }
   }
   async function photo() {
@@ -1520,13 +1520,13 @@ export function createController({
       setTimeout(() => URL.revokeObjectURL(a.href), 5000);
       audio?.play('click', { bus: 'ui' });
       // P takes the picture at once (no separate photo mode): say where it went (ui-ux-28)
-      toast('Photo saved to your downloads', { kind: 'ok', ms: 3500 });
+      toast(i18n.t('game.photo.saved'), { kind: 'ok', ms: 3500 });
       emit('photo', { blob });
       offerMemoryPage();
       return true;
     } catch (err) {
       console.error('photo failed', err);
-      toast('The photo did not work this time.', {});
+      toast(i18n.t('game.photo.failed'), {});
       return false;
     } finally {
       ui?.hideHud?.(false);
@@ -1833,10 +1833,12 @@ export function createController({
   const haptic = (kind) => input === 'touch' && haptics.pulse(kind);
 
   // the canvas names its controls for a screen reader: a finger's, or the mouse and keys' (mobile QA M-07)
-  const CANVAS_LABEL = {
-    touch: 'The farm. Tap a plot to plant or harvest; pinch to zoom, twist two fingers to turn the view, drag two fingers up or down to tilt it.',
-    mouse: 'The farm. Click a plot to plant or harvest; Q and E rotate the view.',
-  };
+  const CANVAS_LABEL = i18n.getters({
+    touch: () => i18n.t('game.canvas.touch'),
+    mouse: () => i18n.t('shell.html.canvas'),
+  });
+  // a language switch re-names the canvas for the input in use
+  i18n.onLang(() => canvas.setAttribute?.('aria-label', input === 'touch' ? CANVAS_LABEL.touch : CANVAS_LABEL.mouse));
   if (input === 'touch') canvas.setAttribute?.('aria-label', CANVAS_LABEL.touch);
   function setInput(kind) {
     if (kind === input) return;

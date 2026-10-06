@@ -19,8 +19,9 @@ import { isBigSpend, acornsToday } from '../../../shared/rules/economy.js';
 import { sortedKeys } from '../../../shared/rules/order.js';
 import { ERR } from '../../../shared/net/protocol.js';
 import { probe } from './panels/core.js';
+import { t, tn, N, fmtNum } from '../i18n/index.js';
 
-const fmt = (n) => Number(n).toLocaleString('en-US');
+const fmt = (n) => fmtNum(n);
 const own = (o, k) => (o && Object.hasOwn(o, k) ? o[k] : undefined);
 
 /** What one hurry on plot `id` finishes now (a Giant's plot stands for its anchor), or null. */
@@ -80,28 +81,27 @@ export function fieldHurry(state, crop, now, pid) {
 export function hurryReason(code, { acorns = 0, short, unlock = BOOSTS.hurry.unlock, wallet } = {}) {
   switch (code) {
     case null: case undefined: case ERR.BIG_SPEND: return '';
-    case ERR.LOCKED: return `Finish now opens at level ${unlock}`;
+    case ERR.LOCKED: return t('toolbar.hurry.locked', { level: unlock });
     case ERR.NO_ACORNS: case ERR.NO_COINS: {
       const n = Number.isFinite(short) ? short : Math.max(1, acorns - (wallet ?? 0));
-      return `Need ${fmt(n)} more Acorn${n === 1 ? '' : 's'}`;
+      return tn('toolbar.hurry.need', n);
     }
-    case ERR.EMPTY: case ERR.ALREADY_DONE: return 'Nothing left growing';
-    default: return "Can't right now";
+    case ERR.EMPTY: case ERR.ALREADY_DONE: return t('toolbar.hurry.nothing');
+    default: return t('toolbar.hurry.cant');
   }
 }
 
-/** "6 Strawberry plots" */
-export const plotsOf = (n, name) => `${fmt(n)} ${name} plot${n === 1 ? '' : 's'}`;
+/** "6 Strawberry plots" / "6 лехи с ягоди" (`name`: a crop's name ref N(id), or a name) */
+export const plotsOf = (n, name) => tn('toolbar.hurry.plotsOf', n, { name });
 
 /** Why a batch asks first, as the Acorn heads-up of every other purchase words it (ui/dialogs.js softCopy). */
 function bigBody(store, plan) {
   const B = SAFETY.bigSpend;
-  const each = 'one per started hour on each plot';
-  if (plan.acorns >= B.acorns) return `That is ${fmt(plan.acorns)} Acorns from the farm's shared stash: ${each}.`;
+  if (plan.acorns >= B.acorns) return tn('toolbar.hurry.stash', plan.acorns);
   let today = 0;
   try { today = acornsToday(store.state, store.pid, store.now()); } catch { today = 0; }
   const partner = Object.keys(store.state.players).filter((p) => p !== store.pid).map((p) => store.state.players[p].name)[0];
-  return `That makes ${fmt(today + plan.acorns)} Acorns you spent today (${partner ?? 'your partner'} gets a heads-up from ${fmt(B.acornsPerPlayerDay)}): ${each}.`;
+  return tn('toolbar.hurry.today', today + plan.acorns, { partner: partner ?? t('hud.tip.yourPartner'), from: B.acornsPerPlayerDay });
 }
 
 /**
@@ -114,18 +114,18 @@ export async function finishField(S, crop) {
   const { store, controller, ui } = S;
   const plan = fieldHurry(store.state, crop, store.now(), store.pid);
   if (plan.code && plan.code !== ERR.BIG_SPEND) {
-    ui.toast(hurryReason(plan.code, plan) || "Can't right now", { kind: 'info' });
+    ui.toast(hurryReason(plan.code, plan) || t('toolbar.hurry.cant'), { kind: 'info' });
     return { ok: false, done: 0, acorns: 0, code: plan.code };
   }
   let confirm = null;
   if (plan.big) {
     const ok = await ui.confirm({
-      title: 'A big purchase', icon: crop,
-      lead: `Finish ${plotsOf(plan.plots, plan.name)} now?`,
+      title: t('toasts.dlg.bigTitle'), icon: crop,
+      lead: t('toolbar.hurry.ask', { plots: plotsOf(plan.plots, N(crop)) }),
       body: bigBody(store, plan),
       cost: { acorns: plan.acorns },
-      fine: 'Your partner gets a friendly heads-up.',
-      ok: 'Finish them', okKind: 'sun',
+      fine: t('toolbar.hurry.fine'),
+      ok: t('toolbar.hurry.ok'), okKind: 'sun',
     });
     if (!ok) return { ok: false, done: 0, acorns: 0, code: 'CANCELLED' };
     confirm = [ERR.BIG_SPEND];
@@ -143,11 +143,11 @@ export async function finishField(S, crop) {
     done += 1;
     acorns += Math.max(0, before - store.state.farm.wallet.acorns);
   }
-  if (done > 1) ui.toast(`${plotsOf(done, plan.name)} ready to harvest!`, { kind: 'ok', icon: crop });
+  if (done > 1) ui.toast(t('toolbar.hurry.done', { plots: plotsOf(done, N(crop)) }), { kind: 'ok', icon: crop });
   return { ok: done > 0, done, acorns };
 }
 
 /** "Finish all growing Strawberries (6 plots · 6 Acorns)": the button's spoken name (its face shows the acorn) */
 export function fieldLabel(f) {
-  return `Finish all growing ${pluralOf(f.name, 2)} (${fmt(f.plots)} plot${f.plots === 1 ? '' : 's'} · ${fmt(f.acorns)} Acorn${f.acorns === 1 ? '' : 's'})`;
+  return t('toolbar.hurry.fieldLabel', { crop: N(f.crop), plots: tn('toolbar.hurry.plots', f.plots), acorns: tn('toolbar.hurry.acorns', f.acorns) });
 }

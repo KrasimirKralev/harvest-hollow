@@ -39,6 +39,7 @@ import { defOf, FISHING, expansionOf } from '../../../shared/content/index.js';
 import { footprint } from '../../../shared/rules/grid.js';
 import { ERR } from '../../../shared/net/protocol.js';
 import { canRun as dryRun } from './targets.js';
+import { t } from '../i18n/index.js';
 
 /**
  * The client's timings round the rules' bite (ms). castMs: the cast animation before the bobber lands; the hook window
@@ -216,8 +217,8 @@ export function createFishing({ store, view, avatar, audio = null, toast = () =>
   /** Why a cast cannot start, said once (perform() already toasted a refusal it saw itself). */
   function refused(why, toasted = false) {
     if (!toasted) {
-      if (why === ERR.COOLDOWN) hint('Resting the line: one cast an hour each');
-      else if (why === ERR.UNKNOWN_ACTION || why === ERR.LOCKED) toast('The fish are not biting here yet.', {});
+      if (why === ERR.COOLDOWN) hint(t('game.fish.restHint'));
+      else if (why === ERR.UNKNOWN_ACTION || why === ERR.LOCKED) toast(t('game.fish.notBitingYet'), {});
       else toast(why, {});
     }
     if (at) setPhase('seated', { force: true, why });
@@ -283,7 +284,7 @@ export function createFishing({ store, view, avatar, audio = null, toast = () =>
   /** The hook (or "reel in" when late): true when the press belonged to the cast. */
   function press() {
     if (!at) return false;
-    if (phase === 'cast' || phase === 'wait') { hint('Wait for the bobber to dip…'); return true; }
+    if (phase === 'cast' || phase === 'wait') { hint(t('game.fish.waitDip')); return true; }
     if (phase === 'bite' || phase === 'late') { reelNow(); return true; }
     return phase === 'reel';
   }

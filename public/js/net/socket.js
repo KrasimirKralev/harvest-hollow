@@ -46,6 +46,7 @@ export class Socket {
   get open() { return this.ws !== null && this.ws.readyState === WebSocket.OPEN; }
 
   connect() {
+    if (this.stopped) return;      // a reconnect timer that outlived stop() (the close raced the farm's refusal)
     const ws = new WebSocket(this.url);
     this.ws = ws;
     ws.onopen = () => {

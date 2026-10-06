@@ -475,3 +475,13 @@ body.hud-hidden .pc-meter { display: none; }
 .pc-breed.on { border-color: #E8A33D; background: #FFEFC8; box-shadow: 0 0 0 3px rgba(232, 163, 61, .25); }
 .pc-breed:focus-visible { outline: 3px solid #4AA8E8; outline-offset: 2px; }
 @media (prefers-reduced-motion: reduce) { .pc-breed, .pc-breed:hover { transition: none; transform: none; } }
+
+/* Bulgarian (i18n lane D) on a phone: a Masterwork row's words run longer, so the row wraps (the buttons go under the
+   level words) instead of pushing "Подобри" off the card */
+@media (max-width: 600px) {
+  :lang(bg) .pc-mw-copy { display: flex; flex-wrap: wrap; row-gap: 6px; }
+  :lang(bg) .pc-mw-now { flex: 1 1 7em; }
+  :lang(bg) .pc-mw-next { flex: 1 1 9em; justify-items: start; }
+  :lang(bg) .pc-mw-next small { text-align: left; }
+  :lang(bg) .pc-mw-copy > .pn-act { margin-left: auto; }
+}

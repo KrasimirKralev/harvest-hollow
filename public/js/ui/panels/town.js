@@ -12,9 +12,29 @@ import { systemLive } from '../../../../shared/rules/coop.js';
 import { h, icon, svgIcon, fmt, fmtShort, playerMark, createKit, fill, hintable } from './kit.js';
 import { levelOf, available } from './core.js';
 import { s as sv } from './art.js';
-import { actionOf, banner, speech, lockedBody, leftText, need, toTop, fairView, fmtPts } from './fair.js';
+import { actionOf, banner, speech, lockedBody, leftText, need, toTop, fairView, fmtPts, tParts } from './fair.js';
 import { bargeView } from './barge.js';
 import { townsfolkView } from './townsfolk.js';
+import { t, ctext, name as cname } from '../../i18n/index.js';
+import { FESTIVAL_PAVILION } from '../../../../shared/content/index.js';
+
+/** A Town Project's name and words in the language in effect (authored: the names table; the Festival Pavilion's tiers:
+ *  text-b FESTIVAL_PAVILION['tier.<k>']). */
+function projName(def) {
+  if (!def) return t('weekly.town.newProject');
+  if (!Number.isSafeInteger(def.tier)) return CONTENT.townProjects.has(def.id) ? cname(def.id) : def.name;
+  const rows = FESTIVAL_PAVILION?.tiers ?? [];
+  const k = Math.min(def.tier, rows.length);
+  const base = ctext('FESTIVAL_PAVILION', `tier.${k}`, 'name', rows[k - 1]?.name ?? def.name);
+  return def.tier <= rows.length ? base : t('weekly.town.pavRepeat', { name: base, n: def.tier });
+}
+function projText(def) {
+  if (!def) return '';
+  if (!Number.isSafeInteger(def.tier)) return ctext('townProjects', def.id, 'desc', def.text ?? '');
+  const rows = FESTIVAL_PAVILION?.tiers ?? [];
+  const k = Math.min(def.tier, rows.length);
+  return ctext('FESTIVAL_PAVILION', `tier.${k}`, 'text', def.text ?? '');
+}
 
 const R = TOWN_PROJECT_RULES;
 const byPid = ([a], [b]) => (a < b ? -1 : a > b ? 1 : 0);
@@ -26,11 +46,11 @@ export const liveProjects = () => [...CONTENT.townProjects.values()].filter((p) 
 function currentOf(state, c, now) {
   // Town Projects 25+ are the Festival Pavilion's tiers (M2; rules town.pavilionTier), not authored projects
   const def = CONTENT.townProjects.get(c.id) ?? (typeof TW.pavilionTier === 'function' ? TW.pavilionTier(c.n) : null);
-  const goods = c.goods.map((g) => ({ item: g.item, name: itemOf(g.item)?.name ?? g.item, qty: g.qty, given: Math.min(g.qty, g.got),
+  const goods = c.goods.map((g) => ({ item: g.item, name: itemOf(g.item) ? cname(g.item) : g.item, qty: g.qty, given: Math.min(g.qty, g.got),
     left: Math.max(0, g.qty - g.got), by: { ...g.by }, have: available(state, g.item) }));
   const stage = c.buildAt !== undefined ? (now >= c.buildAt ? 'built' : 'building') : 'gathering';
   return {
-    id: c.id, def, name: def ? def.name : 'A new project', text: def ? def.text : '', n: c.n, souvenir: def ? def.souvenir : null,
+    id: c.id, def, name: projName(def), text: projText(def), n: c.n, souvenir: def ? def.souvenir : null,
     goods, need: c.coins, funded: Math.min(c.coins, c.paid), fundedBy: { ...c.by }, coinsLeft: Math.max(0, c.coins - c.paid),
     readyAt: c.buildAt ?? 0, goodsDone: goods.every((g) => g.left <= 0), coinsDone: c.paid >= c.coins, stage, acorns: R.acorns, at: c.at,
   };
@@ -44,15 +64,15 @@ export function townView(state, pid, now) {
   const level = levelOf(state);
   const live = systemLive(R);
   const open = live && level >= R.unlock;
-  const t = state.farm.town ?? null;
-  const builtN = t ? t.n : 0;
-  const cur = t?.cur ? currentOf(state, t.cur, now) : null;
+  const tw = state.farm.town ?? null;
+  const builtN = tw ? tw.n : 0;
+  const cur = tw?.cur ? currentOf(state, tw.cur, now) : null;
   const statusOf = (p) => {
     if (p.n <= builtN) return 'built';
     if (cur && cur.id === p.id) return cur.stage === 'gathering' ? 'current' : 'building';
     return 'later';
   };
-  const projects = liveProjects().map((p) => ({ id: p.id, name: p.name, n: p.n, souvenir: p.souvenir, text: p.text, status: statusOf(p) }));
+  const projects = liveProjects().map((p) => ({ id: p.id, name: projName(p), n: p.n, souvenir: p.souvenir, text: projText(p), status: statusOf(p) }));
   const donors = {};
   const add = (p, k, n) => {
     if (!(n > 0)) return;
@@ -65,7 +85,7 @@ export function townView(state, pid, now) {
   }
   // why Ollie has nothing pinned up: the next project waits for three kinds of goods made lately, or there is none
   let waiting = null;
-  const made = t && !cur ? TW.townCandidates(state, now).length : 0;
+  const made = tw && !cur ? TW.townCandidates(state, now).length : 0;
   if (open && !cur) {
     const next = liveProjects().find((p) => p.n === builtN + 1)
       ?? (typeof TW.pavilionTier === 'function' ? TW.pavilionTier(builtN + 1) : null);
@@ -74,10 +94,10 @@ export function townView(state, pid, now) {
   const more = [...CONTENT.townProjects.values()].filter((p) => !systemLive(p)).length;
   // the Festival Pavilion's tiers built after the last authored project (M2), one line in "Built together"
   const tiers = typeof TW.pavilionTier === 'function' && TW.pavilionTier(projects.length + 1) ? Math.max(0, builtN - projects.length) : 0;
-  const pavilion = tiers ? { id: R.repeatable, name: `Festival Pavilion · ${tiers} ${tiers === 1 ? 'tier' : 'tiers'}`,
-    text: TW.pavilionTier(projects.length + tiers).text, souvenir: TW.pavilionTier(projects.length + 1).souvenir } : null;
+  const pavilion = tiers ? { id: R.repeatable, name: t('weekly.town.pavilion', { n: tiers }),
+    text: projText(TW.pavilionTier(projects.length + tiers)), souvenir: TW.pavilionTier(projects.length + 1).souvenir } : null;
   const built = projects.filter((p) => p.status === 'built');
-  return { live, open, unlock: R.unlock, level, has: Boolean(t), projects, cur, built: pavilion ? [...built, pavilion] : built,
+  return { live, open, unlock: R.unlock, level, has: Boolean(tw), projects, cur, built: pavilion ? [...built, pavilion] : built,
     donors, more, waiting, made, need: R.goods, pavilionTiers: tiers };
 }
 
@@ -96,10 +116,10 @@ export function fundSegments(state, c) {
     if (!(n > 0)) continue;
     known += n;
     const pl = state.players?.[p];
-    out.push({ pid: p, color: pl?.color ?? '#C9A36A', w: c.need ? n / c.need : 0, title: `${pl?.name ?? 'A farmer'}: ${fmt(n)} coins` });
+    out.push({ pid: p, color: pl?.color ?? '#C9A36A', w: c.need ? n / c.need : 0, title: t('weekly.split.tip', { name: pl?.name ?? t('weekly.someone'), v: t('weekly.coins', { n }) }) });
   }
   const rest = c.funded - known;
-  if (rest > 0) out.push({ pid: null, color: '#F5C542', w: c.need ? rest / c.need : 0, title: `${fmt(rest)} coins` });
+  if (rest > 0) out.push({ pid: null, color: '#F5C542', w: c.need ? rest / c.need : 0, title: t('weekly.coins', { n: rest }) });
   return out;
 }
 
@@ -111,25 +131,25 @@ export function weeklyLines(state, pid, now) {
   const out = [];
   const f = fairView(state, pid, now);
   if (f.open && f.has && f.isOpen) {
-    const so = f.medal ? `, ${f.medal.name} so far` : '';
+    const pts = { p: fmtPts(f.p10), w: fmtPts(f.W10), left: leftText(f.closesAt, now) };
     out.push({ panel: 'fair', icon: 'ribbon_rosette',
-      text: `County Fair: ${fmtPts(f.p10)} of ${fmtPts(f.W10)} points${so}. Judging in ${leftText(f.closesAt, now)}` });
+      text: f.medal ? t('weekly.line.fairMedal', { ...pts, medal: f.medal.name }) : t('weekly.line.fair', pts) });
   } else if (f.open && f.last && now - f.last.at < 2 * 86_400_000) {
-    out.push({ panel: 'fair', icon: 'ribbon_rosette', text: f.last.name ? `County Fair: ${f.last.name}! ${fmtPts(f.last.p10)} points`
-      : `County Fair: ${fmtPts(f.last.p10)} points, no medal this time` });
+    out.push({ panel: 'fair', icon: 'ribbon_rosette', text: f.last.name ? t('weekly.line.fairWon', { medal: f.last.name, p: fmtPts(f.last.p10), n: f.last.p10 / 10 })
+      : t('weekly.line.fairNone', { p: fmtPts(f.last.p10), n: f.last.p10 / 10 }) });
   }
   const b = bargeView(state, pid, now);
   if (b.open && b.docked && b.total) {
-    const ready = b.ready ? `, ${b.ready} ready to load` : '';
+    const args = { n: b.loaded, of: b.total, ready: b.ready, left: leftText(b.leavesAt, now) };
     out.push({ panel: 'barge', icon: 'wooden_crate',
-      text: `River Barge: ${b.loaded} of ${b.total} crates loaded${ready}. Casts off in ${leftText(b.leavesAt, now)}` });
+      text: b.ready ? t('weekly.line.bargeReady', args) : t('weekly.line.barge', args) });
   } else if (b.open && !b.docked) {
-    out.push({ panel: 'barge', icon: 'wooden_crate', text: `River Barge: downriver, docks in ${leftText(b.arrivesAt, now)}` });
+    out.push({ panel: 'barge', icon: 'wooden_crate', text: t('weekly.line.bargeAway', { left: leftText(b.arrivesAt, now) }) });
   }
-  const t = townsfolkView(state, pid, now);
-  if (t.open && t.posts.length) {
-    const ready = t.ready ? `, ${t.ready} ready to hand in` : '';
-    out.push({ panel: 'townsfolk', icon: 'order_board', text: `Townsfolk board: ${t.done} of ${t.posts.length} requests filled${ready}` });
+  const tf = townsfolkView(state, pid, now);
+  if (tf.open && tf.posts.length) {
+    const args = { n: tf.done, of: tf.posts.length, ready: tf.ready };
+    out.push({ panel: 'townsfolk', icon: 'order_board', text: tf.ready ? t('weekly.line.folkReady', args) : t('weekly.line.folk', args) });
   }
   const v = townView(state, pid, now);
   if (v.open && v.cur) {
@@ -137,8 +157,8 @@ export function weeklyLines(state, pid, now) {
     const goods = c.goods.reduce((n, g) => n + g.given, 0);
     const all = c.goods.reduce((n, g) => n + g.qty, 0);
     const text = c.stage === 'gathering'
-      ? `${c.name}: ${goods} of ${all} goods, ${Math.floor((100 * c.funded) / Math.max(1, c.need))} % funded`
-      : c.stage === 'building' ? `${c.name}: Ollie is building it, ready in ${leftText(c.readyAt, now)}` : `${c.name} is finished!`;
+      ? t('weekly.line.town', { name: c.name, n: goods, of: all, pct: Math.floor((100 * c.funded) / Math.max(1, c.need)) })
+      : c.stage === 'building' ? t('weekly.line.townBuilding', { name: c.name, left: leftText(c.readyAt, now) }) : t('weekly.line.townDone', { name: c.name });
     out.push({ panel: 'town', icon: c.souvenir ?? 'ferry_landing_souvenir', text });
   }
   return out;
@@ -240,8 +260,8 @@ export function villageStrip(projects, { more = 0 } = {}) {
   const tail = more ? 110 : 0;
   const step = (w - 60 - tail) / n;
   const built = projects.filter((p) => p.status === 'built').length;
-  const svg = sv('svg', { viewBox: `0 0 ${w} 132`, class: 'wk-village', role: 'img', preserveAspectRatio: 'xMidYMid meet',
-    'aria-label': `The Hollow Village: ${built} of ${projects.length} projects built` });
+  const svg = sv('svg', { viewBox: `0 0 ${w} 132`, class: 'wk-village', role: 'img', preserveAspectRatio: 'xMidYMid meet', // i18n-ok: an SVG keyword
+    'aria-label': t('weekly.town.stripLabel', { n: built, of: projects.length }) });
   svg.append(
     sv('defs', {}, sv('linearGradient', { id: 'wk-river', x1: 0, y1: 0, x2: 0, y2: 1 },
       sv('stop', { offset: '0', 'stop-color': '#8FD3FF' }), sv('stop', { offset: '1', 'stop-color': '#4AA8E8' }))),
@@ -264,29 +284,23 @@ export function villageStrip(projects, { more = 0 } = {}) {
     const g = landmarkArt(p.id, p.status);
     g.setAttribute('transform', `translate(${x} 7)`);
     svg.append(g, sv('text', { x, y: 126, 'text-anchor': 'middle', class: `wk-lm-name s-${p.status}` },
-      p.status === 'later' ? `Project ${p.n}` : p.name));
+      p.status === 'later' ? t('weekly.town.lot', { n: p.n }) : p.name));
   });
   if (more) {
     const x = w - tail / 2 - 10;
     svg.append(sv('g', { class: 'wk-lm s-later' }, sv('path', L({ d: `M${x - 18} 85 v-22 h36 v22`, fill: 'none', 'stroke-dasharray': '4 4' })),
-      sv('text', { x, y: 126, 'text-anchor': 'middle', class: 'wk-lm-name s-later' }, `+${more} more`)));
+      sv('text', { x, y: 126, 'text-anchor': 'middle', class: 'wk-lm-name s-later' }, t('weekly.town.more', { n: more }))));
   }
   return svg;
 }
 
 // ---- the panel --------------------------------------------------------------------------------------------------
 
-const OLLIE = {
-  start: 'The village wants a hand, and I want an excuse to use my good saw. Bring what you can, a bit at a time.',
-  coins: 'The goods are in. Now the timber merchant wants paying, then I can start on it.',
-  building: 'Scaffolding\'s up. Give me a day and she\'ll be standing proud.',
-  built: 'Done and dusted. Look at that across the river: you two did that.',
-  waiting: 'Nothing on the drawing board just yet. I\'ll pin up the next one soon.',
-  goods: 'I\'ve a plan for the next one, but I build with what you make. Show me a few kinds of goods first.',
-  done: 'That\'s every project the village has asked for, for now. Fine work, the two of you.',
-};
+const OLLIE_KEYS = ['start', 'coins', 'building', 'built', 'waiting', 'goods', 'done'];
+const OLLIE = Object.fromEntries(OLLIE_KEYS.map((k) => [k, null]));
+for (const k of OLLIE_KEYS) Object.defineProperty(OLLIE, k, { get: () => t(`weekly.town.ollie.${k}`), enumerable: true });
 
-const STAGES = [['posted', 'Posted'], ['gather', 'Goods and coins'], ['building', 'Building'], ['built', 'Built']];
+const STAGES = [['posted', 'weekly.town.stage.posted'], ['gather', 'weekly.town.stage.gather'], ['building', 'weekly.town.stage.building'], ['built', 'weekly.town.stage.built']];
 
 function ollieLine(v) {
   const c = v.cur;
@@ -297,7 +311,7 @@ function ollieLine(v) {
 }
 
 export const townPanel = {
-  title: 'The Hollow Village',
+  get title() { return t('weekly.town.title'); },
   icon: 'ferry_landing_souvenir',
   size: 'full',
   topics: ['town', 'inventory', 'overflow', 'wallet', 'xp', 'players', 'made'],
@@ -320,21 +334,21 @@ export const townPanel = {
       const now = ctx.now();
       const v = townView(st, ctx.store.pid, now);
       if (!v.open) {
-        fill(body, lockedBody('e', 'The Hollow Village', [
-          'Across the river lies a sleepy village. Ollie posts one project at a time.',
-          'Donate goods the farm made and fund the work in coins; it is built the next day.',
-          'Each project adds a landmark, 5 Acorns, a souvenir decor and a page in the Memory Book.',
+        fill(body, lockedBody('e', t('weekly.town.title'), [
+          t('weekly.town.locked.1'),
+          t('weekly.town.locked.2'),
+          t('weekly.town.locked.3'),
         ], v.unlock, v.level, v.live));
         return;
       }
       const c = v.cur;
       const board = ctx.ui.panels.has('townsfolk')
         ? h('button.btn.btn--paper.btn--small.wk-board-link', { type: 'button', on: { click: () => ctx.ui.panels.open('townsfolk') } },
-          svgIcon('letter', 20), 'The townsfolk board')
+          svgIcon('letter', 20), t('weekly.town.board'))
         : null;
       fill(body,
-        banner('e', 'Across the river', v.pavilionTiers ? `Every Town Project built · the Festival Pavilion: ${v.pavilionTiers} `
-          + `${v.pavilionTiers === 1 ? 'tier' : 'tiers'}` : `${v.built.length} of ${v.projects.length} Town Projects built · one at a time, built the day after`,
+        banner('e', t('weekly.town.banner'), v.pavilionTiers ? t('weekly.town.bannerPavilion', { n: v.pavilionTiers })
+          : t('weekly.town.bannerSub', { n: v.built.length, of: v.projects.length }),
           { chip: board }),
         (() => { const sw = stripWindow(v.projects); return h('div.wk-village-wrap', villageStrip(sw.list, { more: sw.after + v.more })); })(),
         h('div.wk-town-cols',
@@ -346,9 +360,9 @@ export const townPanel = {
 
     function stagesEl(c) {
       const at = c.stage === 'built' ? 3 : c.stage === 'building' ? 2 : 1;
-      return h('ol.wk-stages', { 'aria-label': `Stage: ${STAGES[at][1]}` }, ...STAGES.map(([id, label], i) =>
+      return h('ol.wk-stages', { 'aria-label': t('weekly.town.stageLabel', { stage: t(STAGES[at][1]) }) }, ...STAGES.map(([id, label], i) =>
         h(`li${i < at ? '.done' : i === at ? '.now' : ''}`, { dataset: { stage: id } },
-          h('span.wk-stage-dot', i < at ? svgIcon('check', 14) : String(i + 1)), h('span', label))));
+          h('span.wk-stage-dot', i < at ? svgIcon('check', 14) : String(i + 1)), h('span', t(label)))));
     }
 
     function goodRow(st, g) {
@@ -360,12 +374,12 @@ export const townPanel = {
         hintable(icon(g.item, { size: 48 }), g.item, { need: g.left }),
         h('div.wk-good-text', h('b', g.name), h('span.wk-good-n', `${fmt(g.given)} / ${fmt(g.qty)}`),
           h('span.wk-good-bar', { style: { '--p': String(g.qty ? g.given / g.qty : 0) } }),
-          h('span.wk-donors', ...donors, g.left > 0 ? h('small.wk-good-have', `${fmt(g.have)} in the barn`) : null)),
+          h('span.wk-donors', ...donors, g.left > 0 ? h('small.wk-good-have', t('weekly.inBarn', { n: g.have })) : null)),
         g.left <= 0 ? h('span.wk-good-ok', svgIcon('check', 22))
           : h('div.wk-good-acts',
-            kit.button({ label: 'Give 1', cls: 'btn--small btn--paper', key: `tg:${g.item}:1`, type: gT, args: { item: g.item, qty: 1 },
+            kit.button({ label: t('weekly.town.giveN', { n: 1 }), cls: 'btn--small btn--paper', key: `tg:${g.item}:1`, type: gT, args: { item: g.item, qty: 1 },
               hint: need(g.item, 1), data: { give: g.item } }),
-            can > 1 ? kit.button({ label: `Give ${fmt(can)}`, cls: 'btn--small btn--sun', key: `tg:${g.item}:n`, type: gT,
+            can > 1 ? kit.button({ label: t('weekly.town.giveN', { n: can }), cls: 'btn--small btn--sun', key: `tg:${g.item}:n`, type: gT,
               args: { item: g.item, qty: can } }) : null));
     }
 
@@ -374,70 +388,69 @@ export const townPanel = {
       const coins = st.farm.wallet.coins;
       const tenth = Math.max(1, Math.ceil(c.need / 10));
       const steps = [...new Set([Math.min(tenth, c.coinsLeft), Math.min(c.coinsLeft, coins)].filter((n) => n > 0))].sort((a, b) => a - b);
-      const label = (n) => (n >= c.coinsLeft ? `Fund the rest (${fmtShort(n)})` : `Give ${fmtShort(n)}`);
+      const label = (n) => (n >= c.coinsLeft ? t('weekly.town.fundRest', { n: fmtShort(n) }) : t('weekly.town.giveCoins', { n: fmtShort(n) }));
       return h('div.wk-fund',
-        h('div.wk-fund-head', svgIcon('coin', 26), h('b', 'Funding'), h('span', `${fmt(c.funded)} of ${fmt(c.need)} coins`)),
+        h('div.wk-fund-head', svgIcon('coin', 26), h('b', t('weekly.town.funding')), h('span', t('weekly.town.coinsOf', { n: c.funded, of: c.need }))),
         h('span.wk-fund-bar', { role: 'progressbar', 'aria-valuemin': '0', 'aria-valuemax': String(c.need), 'aria-valuenow': String(c.funded),
-          'aria-label': `${fmt(c.funded)} of ${fmt(c.need)} coins` },
+          'aria-label': t('weekly.town.coinsOf', { n: c.funded, of: c.need }) },
         ...fundSegments(st, c).map((sg) => h('i', { style: { '--who': sg.color, '--w': String(sg.w) }, title: sg.title }))),
         c.coinsLeft > 0
           ? h('div.wk-fund-acts', ...steps.map((n, i) => kit.button({ label: label(n), cls: `btn--small ${i === steps.length - 1 ? 'btn--sun' : 'btn--paper'}`,
             key: `tf:${i}`, type: fT, args: { coins: n }, data: { fund: String(n) }, hint: { coins: Math.max(0, n - coins) } })),
-          coins <= 0 ? h('small', 'The treasury is empty right now.') : null)
-          : h('p.wk-fund-ok', svgIcon('check', 18), 'Fully funded'));
+          coins <= 0 ? h('small', t('weekly.town.emptyPurse')) : null)
+          : h('p.wk-fund-ok', svgIcon('check', 18), t('weekly.town.funded')));
     }
 
     function projectCard(st, v, c, now) {
       const gathering = c.stage === 'gathering';
-      const when = c.readyAt > now ? `Ready in ${leftText(c.readyAt, now)}`
-        : c.stage === 'built' ? 'Look across the river tonight: it lights up.' : 'Starting first thing tomorrow.';
+      const when = c.readyAt > now ? t('weekly.town.readyIn', { left: leftText(c.readyAt, now) })
+        : c.stage === 'built' ? t('weekly.town.lightsUp') : t('weekly.town.tomorrow');
       return h('section.wk-project', { dataset: { project: c.id ?? '' } },
         h('header.wk-project-head', c.souvenir ? icon(c.souvenir, { size: 56 }) : null,
-          h('div', h('small', `Town Project ${c.n} of ${v.projects.length + v.more}`), h('h3', c.name), c.text ? h('p', c.text) : null)),
+          h('div', h('small', t('weekly.town.projectN', { n: c.n, of: v.projects.length + v.more })), h('h3', c.name), c.text ? h('p', c.text) : null)),
         stagesEl(c),
         gathering ? null : h('div.wk-building', svgIcon('hammer', 30),
-          h('div', h('b', c.stage === 'built' ? `${c.name} is finished!` : `Ollie is building the ${c.name}`), h('span', when))),
-        gathering ? h('h4.wk-sub', 'Goods for the work', h('small', 'piece by piece, from either of you')) : null,
-        gathering ? h('div.wk-goods', ...(c.goods.length ? c.goods.map((g) => goodRow(st, g)) : [h('p.wk-muted', 'Ollie is still writing the list.')]))
+          h('div', h('b', c.stage === 'built' ? t('weekly.line.townDone', { name: c.name }) : t('weekly.town.building', { name: c.name })), h('span', when))),
+        gathering ? h('h4.wk-sub', t('weekly.town.goodsHead'), h('small', t('weekly.town.goodsNote'))) : null,
+        gathering ? h('div.wk-goods', ...(c.goods.length ? c.goods.map((g) => goodRow(st, g)) : [h('p.wk-muted', t('weekly.town.writing'))]))
           : null,
         gathering ? fundEl(st, c) : null,
         Object.keys(v.donors).length ? donorsEl(st, v) : null);
     }
 
     function donorsEl(st, v) {
-      return h('div.wk-donor-list', h('b', 'Given so far'), ...Object.entries(v.donors).sort(byPid).map(([p, d]) => {
+      return h('div.wk-donor-list', h('b', t('weekly.town.given')), ...Object.entries(v.donors).sort(byPid).map(([p, d]) => {
         const pl = st.players?.[p];
-        const what = [d.goods ? `${fmt(d.goods)} goods` : null, d.coins ? `${fmt(d.coins)} coins` : null].filter(Boolean).join(' · ');
-        return h('span.wk-donor-row', pl ? playerMark(p, pl) : null, h('span', pl ? pl.name : 'A farmer'), h('small', what));
+        const what = [d.goods ? t('weekly.town.goods', { n: d.goods }) : null, d.coins ? t('weekly.coins', { n: d.coins }) : null].filter(Boolean).join(' · ');
+        return h('span.wk-donor-row', pl ? playerMark(p, pl) : null, h('span', pl ? pl.name : t('weekly.someone')), h('small', what));
       }));
     }
 
     function rewardCard(c) {
-      return h('section.wk-card.wk-reward', h('h3.pn-h', h('span', 'When it is built')),
+      return h('section.wk-card.wk-reward', h('h3.pn-h', h('span', t('weekly.town.whenBuilt'))),
         h('ul.wk-reward-list',
-          h('li', svgIcon('acorn', 26), h('span', h('b', `${c.acorns} Acorns`), ' for the farm')),
-          c.souvenir ? h('li', icon(c.souvenir, { size: 32 }), h('span', h('b', defOf(c.souvenir)?.name ?? 'A souvenir'), ' to place on the farm')) : null,
-          h('li', svgIcon('book', 26), h('span', h('b', 'A Memory Book page'), ' of the two of you')),
-          h('li', svgIcon('sun', 26), h('span', h('b', `The ${c.name}`), ' joins the village and lights up at night'))));
+          h('li', svgIcon('acorn', 26), h('span', tParts('weekly.town.rwAcorns', { b: h('b', t('weekly.acorns', { n: c.acorns })) }))),
+          c.souvenir ? h('li', icon(c.souvenir, { size: 32 }), h('span', tParts('weekly.town.rwSouvenir', { b: h('b', defOf(c.souvenir) ? cname(c.souvenir) : t('weekly.town.aSouvenir')) }))) : null,
+          h('li', svgIcon('book', 26), h('span', tParts('weekly.town.rwPage', { b: h('b', t('weekly.town.rwPageB')) }))),
+          h('li', svgIcon('sun', 26), h('span', tParts('weekly.town.rwJoins', { b: h('b', t('weekly.town.rwJoinsB', { name: c.name })) })))));
     }
 
     function waitingCard(v) {
       if (v.waiting === 'done') {
-        return h('div.wk-empty', svgIcon('star', 44), h('p', 'Every project of this season is built.'),
-          h('small', 'More of the village wakes up in a later update.'));
+        return h('div.wk-empty', svgIcon('star', 44), h('p', t('weekly.town.allBuilt')),
+          h('small', t('weekly.town.allBuiltNote')));
       }
       if (v.waiting === 'goods') {
-        return h('div.wk-empty', svgIcon('hammer', 44), h('p', 'Ollie is waiting for the farm\'s goods.'),
-          h('small', `He posts the next project once the farm has made ${v.need} kinds of crafted goods, animal goods or fruit `
-            + `in the last 14 days (${v.made} so far).`));
+        return h('div.wk-empty', svgIcon('hammer', 44), h('p', t('weekly.town.waitGoods')),
+          h('small', t('weekly.town.waitGoodsNote', { n: v.need, made: v.made })));
       }
-      return h('div.wk-empty', svgIcon('hammer', 44), h('p', 'Ollie will pin up the next project in a moment.'));
+      return h('div.wk-empty', svgIcon('hammer', 44), h('p', t('weekly.town.waitSoon')));
     }
 
     function builtCard(v) {
-      return h('section.wk-card', h('h3.pn-h', h('span', 'Built together')),
+      return h('section.wk-card', h('h3.pn-h', h('span', t('weekly.town.builtHead'))),
         v.built.length ? h('ul.wk-built', ...v.built.map((b) => h('li', icon(b.souvenir, { size: 32 }), h('span', h('b', b.name), h('small', b.text)))))
-          : h('p.wk-muted', `Nothing yet: the first landmark is the ${v.projects[0]?.name ?? 'Ferry Landing'}.`));
+          : h('p.wk-muted', t('weekly.town.nothingYet', { name: v.projects[0]?.name ?? t('weekly.town.ferry') })));
     }
 
     update(true);

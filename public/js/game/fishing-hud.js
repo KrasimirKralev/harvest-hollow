@@ -12,16 +12,20 @@
 //   phaseText(phase, { c, input, wait, why, line }) -> { title, sub }   the card's words (pure, tested)
 //   catchTitle(fishCaught) -> "A 42 cm Perch!"   starsOf(grade) -> 1..3   fmtWait(ms) -> 'in 42 min'
 import { FISHING } from '../../../shared/content/index.js';
+import { t, ctext, onLang } from '../i18n/index.js';
 
 /** A wait as a friendly phrase ("in 42 min", "in 1 h 5 min"), rounded up to the minute. */
 export function fmtWait(ms) {
-  if (!Number.isFinite(ms) || ms <= 30_000) return 'in a moment';
+  if (!Number.isFinite(ms) || ms <= 30_000) return t('game.fish.wait.moment');
   const m = Math.ceil(ms / 60_000);
-  if (m < 60) return `in ${m} min`;
+  if (m < 60) return t('game.fish.wait.m', { m });
   const h = Math.floor(m / 60);
   const r = m % 60;
-  return r ? `in ${h} h ${r} min` : `in ${h} h`;
+  return r ? t('game.fish.wait.hm', { h, m: r }) : t('game.fish.wait.h', { h });
 }
+/** A fish's name in the language in effect (FISHING.fish; lane B translates it in i18n/bg/text-b.js). */
+const fishName = (f) => ctext('FISHING', `fish.${f.id}`, 'name', f.name);
+const fishLine = (k, en) => ctext('FISHING', 'lines', k, FISHING?.lines?.[k] ?? en);
 
 const CSS = `
 .fh-bobber { position: absolute; left: 0; top: 0; width: 0; height: 0; pointer-events: none; z-index: 3; }
@@ -111,11 +115,11 @@ export const starsOf = (grade) => (grade >= 2 ? 3 : grade === 1 ? 2 : 1);
 
 /** "A 42 cm Perch!" for the rules' `fishCaught` event (content FISHING.fish names the species). */
 export function catchTitle(c) {
-  if (!c || !c.fish) return 'A catch!';
+  if (!c || !c.fish) return t('game.fish.catch');
   const f = FISHING?.fish?.find((x) => x.id === c.fish);
-  const name = f ? f.name : String(c.fish).replace(/_/g, ' ');
-  if (c.joke || f?.joke) return `${name}!`;
-  return Number.isFinite(c.cm) ? `A ${c.cm} cm ${name}!` : `A ${name}!`;
+  const name = f ? fishName(f) : String(c.fish).replace(/_/g, ' ');
+  if (c.joke || f?.joke) return t('game.fish.joke', { name });
+  return Number.isFinite(c.cm) ? t('game.fish.caughtCm', { cm: c.cm, name }) : t('game.fish.caught', { name });
 }
 
 /**
@@ -124,23 +128,22 @@ export function catchTitle(c) {
  * @returns {{ title: string, sub: string }}
  */
 export function phaseText(phase, { c = null, input = 'mouse', wait = null, why = null, line = null } = {}) {
-  const press = input === 'touch' ? 'Tap Hook it!' : 'Click or press Space';
+  const press = input === 'touch' ? t('game.fish.pressTouch') : t('game.fish.press');
   switch (phase) {
-    case 'cast': return { title: 'Casting…', sub: 'The line flies out over the water' };
-    case 'wait': return { title: 'Waiting for a bite…', sub: line ?? `${press} when the bobber dips` };
-    case 'bite': return { title: 'A bite! Hook it!', sub: press };
-    case 'late': return { title: 'Still on the line!', sub: 'Reel it in whenever you like' };
-    case 'reel': return { title: 'Reeling in…', sub: 'Steady now' };
+    case 'cast': return { title: t('game.fish.casting'), sub: t('game.fish.castingSub') };
+    case 'wait': return { title: t('game.fish.waiting'), sub: line ?? t('game.fish.waitingSub', { press }) };
+    case 'bite': return { title: t('game.fish.bite'), sub: press };
+    case 'late': return { title: t('game.fish.late'), sub: t('game.fish.lateSub') };
+    case 'reel': return { title: t('game.fish.reeling'), sub: t('game.fish.reelingSub') };
     case 'done': {
-      const lines = FISHING?.lines ?? {};
-      const sub = c?.joke ? (lines.boot ?? 'So that is where it went.') : c?.record ? (lines.record ?? 'A new record for the dock!')
-        : c?.weekBest ? 'The biggest fish of the week so far' : c?.grade === 2 ? 'A perfect strike!' : 'Into the dock\'s logbook it goes';
+      const sub = c?.joke ? fishLine('boot', t('game.fish.boot')) : c?.record ? fishLine('record', t('game.fish.record'))
+        : c?.weekBest ? t('game.fish.weekBest') : c?.grade === 2 ? t('game.fish.perfect') : t('game.fish.logbook');
       return { title: catchTitle(c), sub };
     }
     case 'seated':
-      if (Number.isFinite(wait) && wait > 0) return { title: 'Resting the line', sub: `Your next cast: ${fmtWait(wait)}` };
-      if (why) return { title: 'On the dock', sub: 'The fish are not biting here yet' };
-      return { title: 'On the dock', sub: 'One calm cast an hour each. Fish together!' };
+      if (Number.isFinite(wait) && wait > 0) return { title: t('game.fish.resting'), sub: t('game.fish.nextCast', { when: fmtWait(wait) }) };
+      if (why) return { title: t('game.fish.onDock'), sub: t('game.fish.notBiting') };
+      return { title: t('game.fish.onDock'), sub: t('game.fish.oneCast') };
     default: return { title: '', sub: '' };
   }
 }
@@ -161,7 +164,7 @@ export function createFishingHud({ fishing, view, hud, overlay, now = () => Date
   card.className = 'fh-card paper';
   card.hidden = true;
   card.setAttribute('role', 'group');
-  card.setAttribute('aria-label', 'Fishing');
+  card.setAttribute('aria-label', t('game.fish.label'));
   card.innerHTML = `<div class="fh-title" aria-live="polite">${ICON_SVG}<span></span><span class="fh-stars" hidden></span></div>`
     + '<div class="fh-sub"></div><div class="fh-meter" hidden><i></i></div><div class="fh-acts"></div>';
   layer.append(card);
@@ -199,10 +202,10 @@ export function createFishingHud({ fishing, view, hud, overlay, now = () => Date
 
   function paintActions() {
     acts.replaceChildren();
-    if (phase === 'bite') acts.append(button('Hook it!', 'btn--sun fh-hook', () => fishing.press()));
-    else if (phase === 'late') acts.append(button('Reel in', 'btn--sky', () => fishing.press()));
-    else if (phase === 'seated' && !waitUntil && !why) acts.append(button('Cast', 'btn--sky', () => fishing.again(), 'Cast the line'));
-    if (!['bite', 'cast', 'reel', 'late'].includes(phase)) acts.append(button('Stop fishing', 'btn--paper', () => fishing.stop('hud')));
+    if (phase === 'bite') acts.append(button(t('game.fish.hook'), 'btn--sun fh-hook', () => fishing.press()));
+    else if (phase === 'late') acts.append(button(t('game.fish.reel'), 'btn--sky', () => fishing.press()));
+    else if (phase === 'seated' && !waitUntil && !why) acts.append(button(t('game.fish.cast'), 'btn--sky', () => fishing.again(), t('game.fish.castLabel')));
+    if (!['bite', 'cast', 'reel', 'late'].includes(phase)) acts.append(button(t('game.fish.stop'), 'btn--paper', () => fishing.stop('hud')));
   }
 
   function paint() {
@@ -274,7 +277,7 @@ export function createFishingHud({ fishing, view, hud, overlay, now = () => Date
       caught = e.catch ?? null;
       if (phase === 'idle') { at = null; card.hidden = true; bob.hidden = true; lastKey = ''; return; }
       if (phase === 'cast') {
-        const lines = FISHING?.lines?.cast ?? [];
+        const lines = ctext('FISHING', 'lines', 'cast', FISHING?.lines?.cast ?? []);
         line = lines.length ? lines[Math.floor(Math.random() * lines.length)] : null;
       }
       if (phase === 'seated') {
@@ -289,6 +292,7 @@ export function createFishingHud({ fishing, view, hud, overlay, now = () => Date
       place();
     }),
     fishing.on('hint', ({ text }) => { hintText = text; hintUntil = performance.now() + 2400; lastKey = ''; paint(); }),
+    onLang(() => { card.setAttribute('aria-label', t('game.fish.label')); lastKey = ''; if (phase !== 'idle') { paint(); paintActions(); } }),
   ];
   const offFrame = view.onFrame?.(() => {
     if (phase === 'idle') return;

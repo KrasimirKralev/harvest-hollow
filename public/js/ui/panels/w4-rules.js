@@ -22,6 +22,7 @@ import * as UP from '../../../../shared/rules/upgrades.js';
 import * as PK from '../../../../shared/rules/actions/perks.js';
 import * as PE from '../../../../shared/rules/actions/pets.js';
 import { levelFromXp } from '../../../../shared/content/index.js';
+import { t, has, lang, ctext } from '../../i18n/index.js';
 
 const isObj = (v) => Boolean(v) && typeof v === 'object' && !Array.isArray(v);
 const int = (v, d = 0) => (Number.isSafeInteger(v) ? v : d);
@@ -99,8 +100,8 @@ export function perkPrices() {
 
 /** The rules' default breeds (docs/agent-notes/w4-rules.md), used when content publishes none. */
 export const DEFAULT_BREEDS = Object.freeze({
-  dog: Object.freeze([{ id: 'shiba', name: 'Shiba Inu' }, { id: 'husky', name: 'Husky' }, { id: 'shepherd', name: 'German Shepherd' }]),
-  cat: Object.freeze([{ id: 'orange', name: 'Orange Tabby' }, { id: 'black', name: 'Black Cat' }, { id: 'white', name: 'White Cat' }]),
+  dog: Object.freeze([{ id: 'shiba', name: 'Shiba Inu' }, { id: 'husky', name: 'Husky' }, { id: 'shepherd', name: 'German Shepherd' }]), // i18n-ok: English defaults; breedLabel() translates
+  cat: Object.freeze([{ id: 'orange', name: 'Orange Tabby' }, { id: 'black', name: 'Black Cat' }, { id: 'white', name: 'White Cat' }]), // i18n-ok: English defaults; breedLabel() translates
 });
 
 export const prettyId = (id) => String(id ?? '').replace(/[_-]+/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
@@ -111,7 +112,17 @@ export function breedsOf(kind) {
   let list = f ? f(kind) : null;
   if (!Array.isArray(list) || !list.length) list = C.PETS?.kinds?.find((k) => k.id === kind)?.breeds ?? C.PETS?.breeds?.[kind];
   if (!Array.isArray(list) || !list.length) list = DEFAULT_BREEDS[kind] ?? [];
-  return list.map((b) => (typeof b === 'string' ? { id: b, name: prettyId(b) } : { id: b.id, name: b.name ?? prettyId(b.id), ...b }));
+  return list.map((b) => {
+    const o = typeof b === 'string' ? { id: b, name: prettyId(b) } : { ...b, id: b.id, name: b.name ?? prettyId(b.id) };
+    return { ...o, name: breedLabel(o.id, o.name) };
+  });
+}
+
+/** A breed's name in the language in effect: lane B's PETS text ('breed.<id>'), else this lane's catalog, else English. */
+function breedLabel(id, english) {
+  if (lang() === 'en') return english;
+  const k = `home.breed.${id}`;
+  return ctext('PETS', `breed.${id}`, 'name', has(k) ? t(k) : english);
 }
 
 /** A pet's breed id (absent = its kind's first breed). */

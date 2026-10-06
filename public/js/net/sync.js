@@ -392,7 +392,7 @@ export class SyncStore {
     } catch (err) {
       // Ops that do not apply mean the copies diverged (a bug): start over from a full state.
       console.error('sync: could not apply server change; resyncing', err);
-      this.requestResync(`apply failed: ${err && err.message}`);
+      this.requestResync(`apply failed: ${err && err.message}`); // i18n-ok: a log cause
       return;
     }
     this.emitChange(touched, applied ? 'server' : 'reject');

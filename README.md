@@ -5,15 +5,16 @@
 <p align="center"><b>A cozy 3D farming game for two, in the browser.</b><br>
 Plant, harvest, raise animals, craft and grow a whole valley together, on one shared farm, in real time.</p>
 
-<p align="center"><a href="https://harvest-hollow.up.railway.app"><b>▶ Play now in your browser</b></a> — start your own farm in one tap
-and send your partner an invite link. No account needed.</p>
+<p align="center"><a href="https://harvest-hollow.up.railway.app"><b>▶ Play now in your browser</b></a> ·
+<a href="https://github.com/KrasimirKralev/harvest-hollow/stargazers">⭐ Star it</a> · English &amp; Български</p>
 
 <p align="center">
   <img src="docs/screenshots/hero.png" alt="Two farmers on the sunset bench during Golden Hour, a busy farm around them" width="900">
 </p>
 
 Harvest Hollow is a FarmVille-2-style co-op farm. Play it at **[harvest-hollow.up.railway.app](https://harvest-hollow.up.railway.app)**
-(farms nobody visits for 7 days are deleted there), or host your own. One small Node server runs the farm 24/7, and
+(no account; start a farm in one tap and invite your partner with a link; farms nobody visits for 7 days are deleted
+there), or host your own. One small Node server runs the farm 24/7, and
 everyone plays in a browser — on a PC, a laptop, a tablet or a phone. Two people share **one** farm: one plants, the
 other harvests; one runs the bakery while the other feeds the cows; you both see everything the moment it happens.
 
@@ -112,6 +113,18 @@ The game is one HTTP + WebSocket port, so any tunnel works. Two free options:
 
 Set `HH_PASSPHRASE` before you open the farm to the internet.
 
+### Host it for everyone
+
+Set `HH_MODE=multi` and the server becomes a public host with many private farms behind one URL: a one-screen landing
+page with **Play**, one-time **invite links** for the second farmer, a **personal farm link** that opens your farm on
+any device (its key never reaches the server), a privacy page, an ideas box and a 7-day clean-up of idle farms. A
+`Dockerfile` is included; [`deploy/cloud.md`](deploy/cloud.md) walks through Railway, Fly.io and Render.
+
+### Languages
+
+English and Bulgarian (Български): pick one on the loading screen, the landing page or in Settings. Each device remembers
+its choice, and two farmers can play the same farm in different languages.
+
 ## How to play
 
 | | Mouse / keyboard | Touch |
@@ -161,6 +174,10 @@ node tools/econ-sim.mjs --checks  # the economy's pacing and balance checks
 - Sound effects: synthesised for this game by `tools/make-sfx.mjs`.
 - Built with [three.js](https://threejs.org), [Express](https://expressjs.com) and [ws](https://github.com/websockets/ws).
 
-## License
+## Privacy and license
+
+The hosted game's privacy note is at [/privacy](https://harvest-hollow.up.railway.app/privacy); a self-hosted server keeps
+everything on your own machine ([PRIVACY.md](PRIVACY.md)).
+
 
 Code: [MIT](LICENSE). Third-party assets keep their own licences (CC0 or the SIL OFL, listed above).

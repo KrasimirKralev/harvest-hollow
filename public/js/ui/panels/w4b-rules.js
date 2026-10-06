@@ -26,6 +26,7 @@ import * as TR from '../../../../shared/rules/actions/trees.js';
 import * as AN from '../../../../shared/rules/actions/animals.js';
 import * as GR from '../../../../shared/rules/grid.js';
 import { dayIndex } from '../../../../shared/rules/calendar.js';
+import { t, ctext } from '../../i18n/index.js';
 
 const isObj = (v) => Boolean(v) && typeof v === 'object' && !Array.isArray(v);
 const int = (v, d = 0) => (Number.isSafeInteger(v) ? v : d);
@@ -64,7 +65,9 @@ const takes = (type, arg) => Boolean(type && ACTIONS[type]?.schema && Object.has
  * the moment it starts (its own whole time: 1 Acorn per started hour, at most 8); it is made at once and every later item
  * moves up by its time. The running item keeps its usual Hurry price (the time it has left).
  */
-export const FINISH_RULE = 'Finish one now: what Hurry costs when it starts (1 Acorn per started hour of its own time, at most 8). Later items move up.';
+export const FINISH_RULE = 'Finish one now: what Hurry costs when it starts (1 Acorn per started hour of its own time, at most 8). Later items move up.'; // i18n-ok: the English constant; screens read finishRule()
+/** FINISH_RULE in the language in effect. */
+export const finishRule = () => t('farm.finish.rule');
 
 const HOUR = 3_600_000;
 const hurryCost = (rest) => (typeof BO.hurryCost === 'function' ? BO.hurryCost(rest)
@@ -164,9 +167,9 @@ export function finishQuote(store, id, q, now) {
 
 /** The default age stages (render's too: young < 5, mature < 12, grand) when content publishes none. */
 export const DEFAULT_STAGES = Object.freeze([
-  Object.freeze({ id: 'young', name: 'Young', from: 0, bonus: 0 }),
-  Object.freeze({ id: 'mature', name: 'Mature', from: 5, bonus: 0 }),
-  Object.freeze({ id: 'grand', name: 'Grand', from: 12, bonus: 0 }),
+  Object.freeze({ id: 'young', get name() { return t('farm.age.young'); }, from: 0, bonus: 0 }),
+  Object.freeze({ id: 'mature', get name() { return t('farm.age.mature'); }, from: 5, bonus: 0 }),
+  Object.freeze({ id: 'grand', get name() { return t('farm.age.grand'); }, from: 12, bonus: 0 }),
 ]);
 
 /** A tree's age in years (one harvest = one year): the rules' helper, else `age`, else its harvest counter. */
@@ -190,7 +193,8 @@ export function ageStages() {
   const t = table('TREE_AGE', 'TREE_AGES', 'TREES_AGE');
   const raw = Array.isArray(t) ? t : Array.isArray(t?.stages) ? t.stages : null;
   if (!raw || !raw.length) return DEFAULT_STAGES;
-  return raw.map((s, i) => ({ id: s.id ?? `stage${i}`, name: s.name ?? cap(String(s.id ?? `Stage ${i + 1}`)),
+  return raw.map((s, i) => ({ id: s.id ?? `stage${i}`,
+    name: s.name ? ctext('TREE_AGE', s.id, 'name', s.name) : s.id ? cap(String(s.id)) : t('farm.age.stage', { n: i + 1 }),
     from: int(s.from ?? s.at ?? s.years ?? s.min, 0), bonus: int(s.bonusUnits ?? s.bonus ?? s.fruit ?? s.extra ?? s.units, 0) }))
     .sort((a, b) => a.from - b.from);
 }
@@ -205,8 +209,8 @@ export function treeStageOf(years) {
 
 /** "Apple Tree · 7 years" (a sapling: "· sapling"). Pure. */
 export function ageLine(name, years, sapling = false) {
-  if (sapling) return `${name} · sapling`;
-  return `${name} · ${years} year${years === 1 ? '' : 's'}`;
+  if (sapling) return t('farm.age.sapling', { name });
+  return t('farm.age.years', { name, n: years });
 }
 
 /** Extra fruit a harvest gives for the tree's age (rules' helper, else its stage's bonus). */
@@ -284,8 +288,8 @@ export function treasures(state) {
     let owned = placed || stored || Boolean(state?.farm?.relics?.[id] ?? state?.farm?.treasures?.[id]);
     if (owns) { try { owned = Boolean(owns(state, id)); } catch { /* keep */ } }
     return {
-      id, def, name: x.name ?? def?.name ?? id.replace(/_/g, ' '), acorns: int(x.acorns ?? x.price ?? def?.acorns, 0),
-      text: x.text ?? x.blurb ?? def?.text ?? '', unlock: int(x.unlock ?? def?.unlock, 1), owned,
+      id, def, name: ctext(null, id, 'name', x.name ?? def?.name ?? id.replace(/_/g, ' ')), acorns: int(x.acorns ?? x.price ?? def?.acorns, 0),
+      text: ctext(null, id, 'desc', x.text ?? x.blurb ?? def?.text ?? ''), unlock: int(x.unlock ?? def?.unlock, 1), owned,
       placeable: x.kind === 'placed' || Boolean(x.def && def && def.layer !== 'none' && def.kind !== 'item'), kind: x.kind ?? null,
       fx: isObj(x.fx) ? x.fx : {}, use: x.use ?? x.fx?.daily ?? null,
     };

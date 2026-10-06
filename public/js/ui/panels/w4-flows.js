@@ -12,12 +12,18 @@ import { probe, passes, simulate } from './core.js';
 import { fmt } from '../dom.js';
 import { actFor } from './w4-rules.js';
 import { sellPlacedQuote, sellStoredQuote, newestTrash } from './w4-model.js';
+import { t, tn, N, lang, list } from '../../i18n/index.js';
 
 const UNDO_MIN = Math.round((SAFETY?.trashMs ?? 600_000) / 60_000);
 
 /** "60 coins", "3 Acorns", "60 coins and 3 Acorns", "nothing". */
 export function moneyText(q) {
   const parts = [];
+  if (lang() !== 'en') {
+    if (q?.coins > 0) parts.push(tn('common.coins', q.coins));
+    if (q?.acorns > 0) parts.push(tn('common.acorns', q.acorns));
+    return parts.length ? list(parts) : t('farm.sell.nothing');
+  }
   if (q?.coins > 0) parts.push(`${fmt(q.coins)} coin${q.coins === 1 ? '' : 's'}`);
   if (q?.acorns > 0) parts.push(`${fmt(q.acorns)} Acorn${q.acorns === 1 ? '' : 's'}`);
   return parts.length ? parts.join(' and ') : 'nothing';
@@ -40,12 +46,12 @@ export function simulatedGain(store, type, args) {
 function soldToast(S, text, icon, trashId) {
   const can = trashId && S.store.state?.farm?.trash?.[trashId];
   S.ui.toast(text, { kind: 'ok', icon, ms: 7000,
-    action: can ? { label: 'Undo', fn: () => undoSale(S, trashId) } : undefined });
+    action: can ? { label: t('market.barn.undo'), fn: () => undoSale(S, trashId) } : undefined });
 }
 
 export function undoSale(S, trashId) {
   const r = S.controller.do(actFor('restore'), { id: trashId });
-  if (r?.ok) S.ui.toast('Back where it was.', { kind: 'ok' });
+  if (r?.ok) S.ui.toast(t('farm.sell.back'), { kind: 'ok' });
   return r;
 }
 
@@ -59,19 +65,20 @@ export async function sellPlaced(S, id) {
   const code = probe(S.store, type, { id });
   if (!passes(code)) { S.controller.do(type, { id }); return null; }       // the controller explains the refusal
   const q = sellPlacedQuote(st, id, S.store.now()) ?? { ...(simulatedGain(S.store, type, { id }) ?? { coins: 0, acorns: 0 }), undo: false };
+  const item = N(o.def);
+  const money = moneyText(q);
   const ok = await S.ui.confirm({
-    title: fitTitle(`Sell the ${def.name}?`, 'Sell it?'),
-    lead: q.undo ? `The ${def.name}, bought a moment ago: you get all ${moneyText(q)} back.` : q.coins || q.acorns
-      ? `The ${def.name} sells for ${moneyText(q)}.` : `The ${def.name} was a gift: the shop pays nothing for it.`,
+    title: fitTitle(t('farm.sell.title', { item }), t('farm.sell.titleShort')),
+    lead: q.undo ? t('farm.sell.leadUndo', { item, money }) : q.coins || q.acorns
+      ? t('farm.sell.lead', { item, money }) : t('farm.sell.gift', { item }),
     icon: o.def, cost: q.coins || q.acorns ? { coins: q.coins, acorns: q.acorns } : null,
-    body: q.undo ? 'Nothing was lost: it goes back to the shop.' : q.coins || q.acorns
-      ? 'Decor sells back for a share of what it cost, never more.' : 'It was a gift, so the shop pays nothing for it, but the spot is free again.',
-    fine: q.undo ? null : `Changed your mind? Undo brings it back for ${UNDO_MIN} minutes (also in the Barn).`,
-    ok: 'Sell it', okKind: 'sun', cancel: 'Keep it',
+    body: q.undo ? t('farm.sell.bodyUndo') : q.coins || q.acorns ? t('farm.sell.body') : t('farm.sell.bodyGift'),
+    fine: q.undo ? null : t('farm.sell.fine', { n: UNDO_MIN }),
+    ok: t('farm.sell.ok'), okKind: 'sun', cancel: t('farm.sell.keep'),
   });
   if (!ok) return null;
   const r = S.controller.do(type, { id });
-  if (r?.ok) soldToast(S, q.coins || q.acorns ? `Sold the ${def.name} for ${moneyText(q)}.` : `The ${def.name} is gone.`, o.def, q.undo ? null : id);
+  if (r?.ok) soldToast(S, q.coins || q.acorns ? t('farm.sell.sold', { item, money }) : t('farm.sell.gone', { item }), o.def, q.undo ? null : id);
   return r;
 }
 
@@ -95,16 +102,16 @@ export async function sellStored(S, defId, { quiet = false } = {}) {
   const q = sellStoredQuote(st, defId) ?? simulatedGain(S.store, type, { def: defId }) ?? { coins: 0, acorns: 0 };
   if (!quiet) {
     const ok = await S.ui.confirm({
-      title: fitTitle(`Sell a ${def.name}?`, 'Sell one?'),
-      lead: q.coins || q.acorns ? `One ${def.name} from the tray sells for ${moneyText(q)}.` : `The ${def.name} was a gift: the shop pays nothing for it.`,
+      title: fitTitle(t('farm.sell.titleOne', { item: N(defId) }), t('farm.sell.titleOneShort')),
+      lead: q.coins || q.acorns ? t('farm.sell.leadOne', { item: N(defId), money: moneyText(q) }) : t('farm.sell.gift', { item: N(defId) }),
       icon: defId, cost: q.coins || q.acorns ? q : null,
-      body: q.coins || q.acorns ? 'Decor sells back for a share of what it cost, never more.' : 'Selling it just clears it from the tray.',
-      fine: `Changed your mind? Undo puts it back in the tray for ${UNDO_MIN} minutes.`, ok: 'Sell it', okKind: 'sun', cancel: 'Keep it',
+      body: q.coins || q.acorns ? t('farm.sell.body') : t('farm.sell.bodyTray'),
+      fine: t('farm.sell.fineTray', { n: UNDO_MIN }), ok: t('farm.sell.ok'), okKind: 'sun', cancel: t('farm.sell.keep'),
     });
     if (!ok) return null;
   }
   const r = S.controller.do(type, { def: defId });
-  if (r?.ok) soldToast(S, q.coins || q.acorns ? `Sold a ${def.name} for ${moneyText(q)}.` : `The ${def.name} is gone from the tray.`, defId,
+  if (r?.ok) soldToast(S, q.coins || q.acorns ? t('farm.sell.soldOne', { item: N(defId), money: moneyText(q) }) : t('farm.sell.goneTray', { item: N(defId) }), defId,
     newestTrash(S.store.state, S.store.pid, defId));
   return r;
 }
@@ -140,6 +147,6 @@ export function rotatePlaced(S, id) {
     if (r && !r.code) spot = { x: r.x, z: r.z, rot: r.rot };
   }
   if (!spot) spot = turnSpots(o, def).find((c) => passes(probe(S.store, 'move', { id, ...c }))) ?? null;
-  if (!spot) { S.ui.toast(`No room to turn the ${def.name} here. Move it somewhere roomier first.`, { kind: 'info', icon: o.def }); return null; }
+  if (!spot) { S.ui.toast(t('farm.sell.noTurn', { item: N(o.def) }), { kind: 'info', icon: o.def }); return null; }
   return S.controller.do('move', { id, ...spot });
 }

@@ -15,6 +15,7 @@
 //   popPlacement(pt, size, view, { margin, gap }) -> { left, top, below }   where the card goes (pure)
 import { h, icon, svgIcon, fmt, fmtDuration, touchPlayer } from './dom.js';
 import { seedRows, shortTime, TOOL_CONTENT } from './toolbar.js';
+import { t as tr, onLang, N, name as cname, lang } from '../i18n/index.js';
 
 const isSeedTool = (id) => TOOL_CONTENT[id] === 'seed_bag';
 
@@ -57,7 +58,7 @@ export function createSeeds(S) {
 
   // ---- the picker -------------------------------------------------------------------------------------------------
   // its own layer (above the tutorial's pointer, which sits over the HUD), zoomed with the UI scale like the HUD
-  const pop = h('div.seed-pop', { role: 'dialog', 'aria-label': 'Plant a seed here', hidden: true });
+  const pop = h('div.seed-pop', { role: 'dialog', 'aria-label': tr('toolbar.pop.label'), hidden: true });
   document.body.append(pop);
   let at = null;            // { id, x, z } the plot the picker belongs to
   let lastPos = '';
@@ -73,7 +74,7 @@ export function createSeeds(S) {
 
   function choose(r) {
     if (!at) return;
-    if (!r.open) { ui.toast(`${r.name} unlocks at farm level ${r.unlock}.`, { kind: 'info', icon: r.id }); return; }
+    if (!r.open) { ui.toast(tr('toolbar.seed.lockedToast', { name: N(r.id, 'crops'), level: r.unlock }), { kind: 'info', icon: r.id }); return; }
     const id = at.id;
     close();
     controller.plantWith(r.id, id);
@@ -88,17 +89,19 @@ export function createSeeds(S) {
     const cards = rows.map((r) => h(`button.sp-seed${r.open ? '' : '.locked'}${r.open && r.id === last ? '.last' : ''}${r.open && coins < r.seed ? '.poor' : ''}`, {
       type: 'button', role: 'option', dataset: { crop: r.id },
       'aria-selected': String(r.open && r.id === last), 'aria-disabled': r.open ? null : 'true',
-      'aria-label': r.open ? `${r.name}: ${fmt(r.seed)} coins a plot, ready in ${fmtDuration(r.growMs)}` : `${r.name}: unlocks at farm level ${r.unlock}`,
+      'aria-label': r.open ? tr('toolbar.pop.seed', { name: N(r.id, 'crops'), seed: r.seed, d: fmtDuration(r.growMs) })
+        : tr('toolbar.seed.lockedLabel', { name: N(r.id, 'crops'), level: r.unlock }),
       on: { click: () => choose(r) },
     },
     h('span.sp-art', icon(r.id, { size: 38 }), r.open ? null : h('span.sp-lock', svgIcon('lock', 18))),
-    h('span.sp-nm', r.name),
+    h('span.sp-nm', cname(r.id, { family: 'crops' })),
     r.open
       ? h('span.sp-meta', icon('coins', { size: 15 }), h('b', fmt(r.seed)), h('span.sp-dot', '·'), shortTime(r.growMs))
-      : h('span.sp-meta.sp-lv', `Level ${r.unlock}`)));
+      : h('span.sp-meta.sp-lv', tr('common.level', { n: r.unlock }))));
+    pop.setAttribute('aria-label', tr('toolbar.pop.label'));
     pop.replaceChildren(
-      h('div.sp-head', h('b', 'Plant here'), h('span', `then ${touchPlayer(S.controller) ? 'tap' : 'click'} or drag over more plots`)),
-      h('div.sp-grid', { role: 'listbox', 'aria-label': 'Seeds' }, cards),
+      h('div.sp-head', h('b', tr('toolbar.pop.here')), h('span', touchPlayer(S.controller) ? tr('toolbar.pop.moreTouch') : tr('toolbar.pop.more'))),
+      h('div.sp-grid', { role: 'listbox', 'aria-label': tr('shell.html.seeds') }, cards),
       h('i.sp-tail', { 'aria-hidden': 'true' }));
     size = null;
   }
@@ -171,7 +174,7 @@ export function createSeeds(S) {
   // ---- the quick-seed strip ---------------------------------------------------------------------------------------
   const tray = document.getElementById('seed-tray');
   const bar = document.getElementById('toolbar');
-  const strip = h('div.seed-strip', { role: 'toolbar', 'aria-label': 'Quick seeds', hidden: true });
+  const strip = h('div.seed-strip', { role: 'toolbar', 'aria-label': tr('toolbar.strip.label'), hidden: true });
   bar.before(strip);
   let stripKey = '';
 
@@ -181,21 +184,23 @@ export function createSeeds(S) {
     const show = Boolean(st) && isSeedTool(t.id) && tray.hidden;
     if (!show) { strip.hidden = true; stripKey = ''; return; }
     const rows = seedRows(st).filter((r) => r.open);
-    const key = `${rows.map((r) => r.id).join(',')}|${t.crop}`;
+    const key = `${rows.map((r) => r.id).join(',')}|${t.crop}|${lang()}`;
     strip.hidden = false;
     if (key === stripKey) return;
     stripKey = key;
+    strip.setAttribute('aria-label', tr('toolbar.strip.label'));
     strip.replaceChildren(
-      h('span.ss-label', { 'aria-hidden': 'true' }, 'Seeds'),
+      h('span.ss-label', { 'aria-hidden': 'true' }, tr('toolbar.short.seeds')),
       ...rows.map((r) => h('button.ss-seed', {
-        type: 'button', dataset: { crop: r.id, tip: `${r.name}: ${fmt(r.seed)} coins a plot · ready in ${fmtDuration(r.growMs)}` },
-        'aria-pressed': String(t.crop === r.id), 'aria-label': `${r.name}, ${fmt(r.seed)} coins a plot`,
+        type: 'button', dataset: { crop: r.id, tip: tr('toolbar.strip.tip', { name: N(r.id, 'crops'), seed: r.seed, d: fmtDuration(r.growMs) }) },
+        'aria-pressed': String(t.crop === r.id), 'aria-label': tr('toolbar.strip.seed', { name: N(r.id, 'crops'), seed: r.seed }),
         on: { click: () => controller.setTool(t.id, { crop: r.id }) },
       }, icon(r.id, { size: 34 }))),
-      h('button.ss-more', { type: 'button', 'aria-label': 'All seeds', dataset: { tip: 'All seeds: prices, harvests and mastery' },
+      h('button.ss-more', { type: 'button', 'aria-label': tr('toolbar.strip.all'), dataset: { tip: tr('toolbar.strip.allTip') },
         on: { click: () => S.toolbar?.openSeeds(true) } }, h('span', { 'aria-hidden': 'true' }, '⋯')));
   }
   controller.on('tool', renderStrip);
+  onLang(() => { renderStrip(); if (at) { render(); lastPos = ''; } });
   store.subscribe('xp', renderStrip);
   store.on('welcome', renderStrip);
   if (typeof MutationObserver === 'function') new MutationObserver(renderStrip).observe(tray, { attributes: true, attributeFilter: ['hidden'] });

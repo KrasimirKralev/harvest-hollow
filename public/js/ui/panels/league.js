@@ -15,13 +15,14 @@
 // The rules decide: every number comes from league-rules.js (the rules-goals helpers: league.js leagueTable,
 // npcFinals, topTier; fair.js medals), so a preview never disagrees with Sunday's settlement.
 import { h, icon, svgIcon, fmtDuration, createKit, fill, price } from './kit.js';
-import { banner, speech, clockChip, lockedBody, medalArt, fmtPts, isObj, toTop } from './fair.js';
+import { banner, speech, clockChip, lockedBody, medalArt, fmtPts, isObj, toTop, tParts } from './fair.js';
 import { ensureStylesheet } from '../dom.js';
 import * as FR from '../../../../shared/rules/actions/fair.js';
 import {
-  leagueOpen, leagueTable, leagueHistory, leagueName, leagueAcorns, platinumOf, trackOf, LEAGUE, LEAGUE_NAMES, levelOf,
+  leagueOpen, leagueTable, leagueHistory, leagueName, leagueAcorns, platinumOf, trackOf, LEAGUE, npcFarm, levelOf,
 } from './league-rules.js';
 import { hubNav, hubBadge, hubView, hubSig, crest, farmBarn, rewardChips, rewardParts } from './league-kit.js';
+import { t, ordinal as ord, list } from '../../i18n/index.js';
 
 const CSS_HREF = '/css/panels-league.css';
 
@@ -44,29 +45,26 @@ export function leagueView(state, pid, now) {
 }
 
 /** Judge Pemberton's line for the table as it stands (pure). */
-export function pembertonLine(t, zone) {
-  if (!t.open) return 'The judging is done. New tables go up on Monday, and the other farms are already baking.';
-  if (!t.us || t.us.p10 === 0) return `Welcome to the ${leagueName(t.tier)}! Every Fair point you score counts here: the two of you are one farm.`;
-  if (t.secured) return 'Splendid! Whatever the others bake, you finish in a promotion place this week.';
-  if (zone === 'up') return t.us.rank === 1 ? 'Top of the table! The others will catch up by Sunday: keep the goods coming.' : 'A promotion place! Hold it until the bell on Sunday.';
-  if (zone === 'down' || t.safe10 > 0) return `Careful now: ${fmtPts(t.safe10)} more points by Sunday lift you off the bottom.`;
-  if (t.tier >= t.top) return t.top < LEAGUE.leagues ? 'Only the Town Fair Grounds open the league above this one.' : 'The finest farms in the county. Stay sharp!';
-  return t.upTo10 > 0 ? `${fmtPts(t.upTo10)} more points by Sunday put you in the promotion places.` : 'Nicely placed. Keep the goods coming!';
+export function pembertonLine(tb, zone) {
+  if (!tb.open) return t('league.pem.closed');
+  if (!tb.us || tb.us.p10 === 0) return t('league.pem.welcome', { league: leagueName(tb.tier) });
+  if (tb.secured) return t('league.pem.secured');
+  if (zone === 'up') return tb.us.rank === 1 ? t('league.pem.top') : t('league.pem.promo');
+  if (zone === 'down' || tb.safe10 > 0) return t('league.pem.careful', { pts: fmtPts(tb.safe10), n: tb.safe10 / 10 });
+  if (tb.tier >= tb.top) return tb.top < LEAGUE.leagues ? t('league.pem.grounds') : t('league.pem.finest');
+  return tb.upTo10 > 0 ? t('league.pem.upTo', { pts: fmtPts(tb.upTo10), n: tb.upTo10 / 10 }) : t('league.pem.nice');
 }
 
 /** The words of a week's move. */
-export const moveText = (m) => (m > 0 ? 'Promoted' : m < 0 ? 'Moved down' : 'Stayed');
+export const moveText = (m) => (m > 0 ? t('league.move.up') : m < 0 ? t('league.move.down') : t('league.move.stay'));
 
-const ordinal = (n) => {
-  if (!Number.isSafeInteger(n)) return '';
-  const s = n % 100 >= 11 && n % 100 <= 13 ? 'th' : ['th', 'st', 'nd', 'rd'][n % 10] ?? 'th';
-  return `${n}${s}`;
-};
+/** "1st" / "1-во" (място, a neuter noun). */
+const ordinal = (n) => (Number.isSafeInteger(n) ? ord(n, 'n') : '');
 
 // ---- the panel ---------------------------------------------------------------------------------------------------
 
 export const leaguePanel = {
-  title: 'County League',
+  get title() { return t('league.title'); },
   icon: 'purple_rosette',
   size: 'full',
   topics: ['fair', 'league', 'xp', 'players', 'meta', 'restore', 'coop', 'track', 'duel', 'inventory'],
@@ -87,81 +85,81 @@ export const leaguePanel = {
       const st = ctx.store.state;
       const v = leagueView(st, ctx.store.pid, ctx.now());
       if (!v.open) {
-        fill(body, hubNav(ctx, 'league'), lockedBody('g', 'The County League', [
-          'Five neighbouring farms enter the County Fair every week, and so does yours: the two of you as one farm.',
-          'After Sunday\'s judging the top two farms of a league move up and the last one moves down.',
-          'Each week the league pays its number in Acorns. The top league opens with the Town Fair Grounds.',
+        fill(body, hubNav(ctx, 'league'), lockedBody('g', t('league.lockedTitle'), [
+          t('league.locked.1'),
+          t('league.locked.2'),
+          t('league.locked.3'),
         ], v.unlock, v.level));
         return;
       }
-      const t = v.table;
-      const chip = t.open
-        ? clockChip(kit, { label: 'Final table Sunday 20:00 ·', at: t.closesAt, doneText: 'judging now' })
-        : clockChip(kit, { label: 'New week Monday ·', at: FR.fairOpenAt(st, t.w + 1), doneText: 'any moment', cls: 'closed' });
+      const tb = v.table;
+      const chip = tb.open
+        ? clockChip(kit, { label: t('league.clock.final'), at: tb.closesAt, doneText: t('weekly.fair.clock.judgingNow') })
+        : clockChip(kit, { label: t('league.clock.newWeek'), at: FR.fairOpenAt(st, tb.w + 1), doneText: t('league.clock.anyMoment'), cls: 'closed' });
+      const farms = LEAGUE.farms.map((n) => npcFarm(n).name);
       fill(body,
         hubNav(ctx, 'league'),
-        banner('g', `The ${v.name}`, `League ${v.tier} of ${LEAGUE.leagues} · ${LEAGUE.farms.join(', ')} and your farm`,
+        banner('g', t('league.banner', { league: v.name }), t('league.bannerSub', { n: v.tier, of: LEAGUE.leagues, farms: farms.join(', '), list: list([...farms, t('league.andYours')]) }),
           { chip, focus: [0.8, 0.45], cls: 'lg-banner' }),
         h('div.lg-top', speech('pemberton', v.line), leagueCard(v)),
         h('div.lg-cols',
-          h('section.lg-col', h('h3.pn-h', h('span', t.open ? 'This week\'s table' : 'The final table')), tableCard(st, v)),
+          h('section.lg-col', h('h3.pn-h', h('span', tb.open ? t('league.table.week') : t('league.table.final'))), tableCard(st, v)),
           h('aside.lg-col.lg-side', ladderCard(v), platinumCard(st, v), historyCard(v), rulesCard(v))));
       kit.refresh();
       kit.tick();
     }
 
     function leagueCard(v) {
-      const t = v.table;
-      const zoneText = !t.us ? 'Your first league week starts Monday' : !t.open ? 'Judged: see the result below'
-        : t.secured ? 'Promotion secured'
-          : v.zone === 'up' ? 'In a promotion place' : v.zone === 'down' ? 'In the drop place' : `Place ${t.rank} of ${t.rows.length}`;
-      return h(`section.lg-league-card${v.zone ? `.z-${v.zone}` : ''}`, { 'aria-label': `${v.name}, league ${v.tier} of ${LEAGUE.leagues}` },
+      const tb = v.table;
+      const zoneText = !tb.us ? t('league.zone.first') : !tb.open ? t('league.zone.judged')
+        : tb.secured ? t('league.zone.secured')
+          : v.zone === 'up' ? t('league.zone.up') : v.zone === 'down' ? t('league.zone.down') : t('league.zone.place', { n: tb.rank, of: tb.rows.length });
+      return h(`section.lg-league-card${v.zone ? `.z-${v.zone}` : ''}`, { 'aria-label': t('league.cardLabel', { league: v.name, n: v.tier, of: LEAGUE.leagues }) },
         crest(v.tier, 76, { label: v.name }),
         h('div.lg-league-text',
-          h('small', `League ${v.tier} of ${LEAGUE.leagues}`),
+          h('small', t('league.nOf', { n: v.tier, of: LEAGUE.leagues })),
           h('b', v.name),
-          h('span.lg-zone', v.zone === 'up' || t.secured ? '▲ ' : v.zone === 'down' ? '▼ ' : '', zoneText),
-          h('span.lg-pays', 'Every week it pays', price({ acorns: v.acorns }))));
+          h('span.lg-zone', v.zone === 'up' || tb.secured ? '▲ ' : v.zone === 'down' ? '▼ ' : '', zoneText),
+          h('span.lg-pays', t('league.paysWeekly'), price({ acorns: v.acorns }))));
     }
 
     function tableCard(st, v) {
-      const t = v.table;
-      const max10 = Math.max(1, ...t.rows.map((r) => r.p10));
+      const tb = v.table;
+      const max10 = Math.max(1, ...tb.rows.map((r) => r.p10));
       const colors = Object.keys(st.players ?? {}).sort().map((p) => st.players[p].color);
-      const rows = t.rows.map((r) => {
+      const rows = tb.rows.map((r) => {
         // the zone is a shape and a word, never colour alone (GDD §7.5)
-        const zone = r.zone === 'up' ? h('span.lg-mark.up', { title: 'Promotion place' }, h('span', { 'aria-hidden': 'true' }, '▲'), h('span.sr-only', 'promotion place'))
-          : r.zone === 'down' ? h('span.lg-mark.down', { title: 'Drop place' }, h('span', { 'aria-hidden': 'true' }, '▼'), h('span.sr-only', 'drop place')) : h('span.lg-mark');
-        return h(`li.lg-row${r.us ? '.us' : ''}${r.zone ? `.z-${r.zone}` : ''}`, { dataset: { key: r.key, rank: String(r.rank) } },
+        const zone = r.zone === 'up' ? h('span.lg-mark.up', { title: t('league.mark.up') }, h('span', { 'aria-hidden': 'true' }, '▲'), h('span.sr-only', t('league.mark.upSr')))
+          : r.zone === 'down' ? h('span.lg-mark.down', { title: t('league.mark.down') }, h('span', { 'aria-hidden': 'true' }, '▼'), h('span.sr-only', t('league.mark.downSr'))) : h('span.lg-mark');
+        return h(`li.lg-row${r.us ? '.us' : ''}${r.zone ? `.z-${r.zone}` : ''}`, { dataset: { key: r.key, rank: String(r.rank), upLine: t('league.line.up'), downLine: t('league.line.down') } },
           h('span.lg-rank', String(r.rank)),
           zone,
           farmBarn(r.npc?.hue ?? Math.max(0, r.npc?.i ?? 0), 38, { colors: r.us ? colors : null }),
           h('span.lg-name', h('b', r.name),
-            h('small', r.us ? 'the two of you, together' : r.npc?.motto ? `${r.npc.farmer}: “${r.npc.motto}”` : r.npc?.farmer ?? '')),
+            h('small', r.us ? t('league.together') : r.npc?.motto ? t('league.motto', { farmer: r.npc.farmer, motto: r.npc.motto }) : r.npc?.farmer ?? '')),
           h('span.lg-pts-bar', { 'aria-hidden': 'true' }, h('i', { style: { '--p': String(r.p10 / max10) } })),
-          h('span.lg-pts', h('b', fmtPts(r.p10)), h('small', 'pts')));
+          h('span.lg-pts', h('b', fmtPts(r.p10)), h('small', t('league.ptsShort'))));
       });
       let hint = null;
-      if (t.open && t.us) {
-        if (t.us.p10 === 0) hint = h('p.lg-hint', svgIcon('ribbon', 20), h('span', 'No points yet this week. Score at the Fair to play: a week without a single point holds your league and pays nothing.'));
-        else if (t.secured) hint = h('p.lg-hint.up', svgIcon('check', 20), h('span', h('b', 'Promotion secured: '), 'your points already beat the third farm\'s final score.'));
-        else if (t.upTo10 > 0 && t.tier < t.top) hint = h('p.lg-hint.up', svgIcon('star', 20), h('span', h('b', `${fmtPts(t.upTo10)} more points`), ' by Sunday 20:00 secure a promotion place.'));
-        if (t.safe10 > 0 && t.us.p10 > 0) {
-          hint = h('div.lg-hints', hint, h('p.lg-hint.down', svgIcon('ribbon', 20), h('span', h('b', `${fmtPts(t.safe10)} more points`), ' by Sunday keep you off the bottom.')));
+      if (tb.open && tb.us) {
+        if (tb.us.p10 === 0) hint = h('p.lg-hint', svgIcon('ribbon', 20), h('span', t('league.hint.none')));
+        else if (tb.secured) hint = h('p.lg-hint.up', svgIcon('check', 20), h('span', tParts('league.hint.secured', { b: h('b', t('league.hint.securedB')) })));
+        else if (tb.upTo10 > 0 && tb.tier < tb.top) hint = h('p.lg-hint.up', svgIcon('star', 20), h('span', tParts('league.hint.up', { b: h('b', t('weekly.morePts', { pts: fmtPts(tb.upTo10), n: tb.upTo10 / 10 })) })));
+        if (tb.safe10 > 0 && tb.us.p10 > 0) {
+          hint = h('div.lg-hints', hint, h('p.lg-hint.down', svgIcon('ribbon', 20), h('span', tParts('league.hint.safe', { b: h('b', t('weekly.morePts', { pts: fmtPts(tb.safe10), n: tb.safe10 / 10 })) }))));
         }
       }
       if (!rows.length) {
         // a farm that reached the league after this week's Fair opened plays from next Monday
-        return h('div.lg-table-card', h('div.wk-empty', crest(v.tier, 48), h('p', 'Your first league week starts on Monday.'),
-          h('small', `Five farms and yours, one table: the Fair points you score from Monday count here. The top ${LEAGUE.promote} move up.`)));
+        return h('div.lg-table-card', h('div.wk-empty', crest(v.tier, 48), h('p', t('league.firstWeek')),
+          h('small', t('league.firstWeekNote', { n: LEAGUE.promote }))));
       }
       return h('div.lg-table-card',
-        h('ol.lg-table', { 'aria-label': `${leagueName(v.tier)} table` }, ...rows),
+        h('ol.lg-table', { 'aria-label': t('league.tableLabel', { league: leagueName(v.tier) }) }, ...rows),
         hint,
         h('div.lg-table-foot',
-          h('small', t.open ? 'The other farms\' scores grow through the week to their finals on Sunday. Yours are the Fair\'s points, scored together.'
-            : 'The table is final. A new week opens on Monday morning.'),
-          t.open ? kit.button({ label: 'Enter goods at the Fair', cls: 'btn--small btn--sun', key: 'lg:fair',
+          h('small', tb.open ? t('league.tableFootOpen') : t('league.tableFootFinal')),
+          tb.open ? kit.button({ label: t('league.toFair'), cls: 'btn--small btn--sun', key: 'lg:fair',
             onClick: () => ctx.ui.panels.open('fair'), gate: () => null }) : null));
     }
 
@@ -171,12 +169,12 @@ export const leaguePanel = {
         const locked = k > v.top;
         steps.push(h(`li.lg-step${k === v.tier ? '.on' : ''}${locked ? '.locked' : ''}`, { dataset: { tier: String(k) } },
           crest(k, 30, { dim: locked }),
-          h('span', LEAGUE_NAMES[k - 1]),
-          locked ? h('small', svgIcon('lock', 16), 'Fair Grounds') : h('small', `${leagueAcorns(k)} Acorn${leagueAcorns(k) === 1 ? '' : 's'} a week`)));
+          h('span', { dataset: { you: t('league.line.you') } }, leagueName(k)),
+          locked ? h('small', svgIcon('lock', 16), t('league.grounds')) : h('small', t('league.acornsWeek', { n: leagueAcorns(k) }))));
       }
-      return h('section.wk-card.lg-ladder', h('h3.pn-h', h('span', 'Five leagues')), h('ol.lg-steps', ...steps),
-        v.best > v.tier ? h('p.wk-muted', `Your best so far: the ${leagueName(v.best)}.`) : null,
-        v.topLocked ? h('p.wk-muted', `The ${LEAGUE_NAMES[LEAGUE.leagues - 1]} opens with the Town Fair Grounds (Restoration project 5).`) : null);
+      return h('section.wk-card.lg-ladder', h('h3.pn-h', h('span', t('league.five'))), h('ol.lg-steps', ...steps),
+        v.best > v.tier ? h('p.wk-muted', t('league.best', { league: leagueName(v.best) })) : null,
+        v.topLocked ? h('p.wk-muted', t('league.topLocked', { league: leagueName(LEAGUE.leagues) })) : null);
     }
 
     function platinumCard(st, v) {
@@ -184,45 +182,46 @@ export const leaguePanel = {
       if (!p.live) return null;
       const hours = Math.round(p.goldenHourMs / 3_600_000);
       const reward = h('div.lg-plat-pay', price({ coins: p.coins, acorns: p.acorns }),
-        h('span.wk-plus', icon('bunting', { size: 24 }), 'the champion banner'),
-        h('span.wk-plus', svgIcon('sun', 20), `a ${hours}-hour Golden Hour from Monday`));
+        h('span.wk-plus', icon('bunting', { size: 24 }), t('league.rw.banner')),
+        h('span.wk-plus', svgIcon('sun', 20), t('league.plat.golden', { n: hours })));
       let lines;
       if (!p.open) {
-        lines = [h('p.lg-plat-line', 'Platinum waits for the ', h('b', 'Town Fair Grounds'), ' (Restoration project 5).'),
-          kit.button({ label: 'See the Ledger', cls: 'btn--small btn--paper', key: 'lg:ledger', gate: () => null,
+        lines = [h('p.lg-plat-line', tParts('league.plat.waits', { b: h('b', t('league.plat.grounds')) })),
+          kit.button({ label: t('league.plat.ledger'), cls: 'btn--small btn--paper', key: 'lg:ledger', gate: () => null,
             onClick: () => ctx.ui.panels.open('restoration', { id: p.project }) })];
       } else if (p.got) {
-        lines = [h('p.lg-plat-line.got', svgIcon('check', 20), h('b', 'Platinum this week!'), ` ${fmtPts(p.p10)} of ${fmtPts(p.need10)} points.`)];
+        lines = [h('p.lg-plat-line.got', svgIcon('check', 20), tParts('league.plat.got', { b: h('b', t('league.plat.gotB')), p: fmtPts(p.p10), w: fmtPts(p.need10) }))];
       } else if (p.isOpen) {
-        lines = [h('p.lg-plat-line', h('b', `${fmtPts(p.toGo10)} more points`), ` reach Platinum (${fmtPts(p.need10)}).`)];
-      } else lines = [h('p.lg-plat-line', `Platinum is ${fmtPts(p.need10)} points: 1.4 times the week's target.`)];
+        lines = [h('p.lg-plat-line', tParts('league.plat.toGo', { b: h('b', t('weekly.morePts', { pts: fmtPts(p.toGo10), n: p.toGo10 / 10 })), need: fmtPts(p.need10) }))];
+      } else lines = [h('p.lg-plat-line', t('league.plat.is', { pts: fmtPts(p.need10) }))];
       const buff = p.buff ? h('p.lg-plat-buff', svgIcon('sun', 20),
-        p.buff.from > ctx.now() ? h('span', 'Your Platinum Golden Hour starts Monday at midnight')
-          : h('span', 'Platinum Golden Hour: everything started takes 10 % less time for ', h('b', fmtDuration(p.buff.until - ctx.now())))) : null;
+        p.buff.from > ctx.now() ? h('span', t('league.plat.buffSoon'))
+          : h('span', tParts('league.plat.buff', { left: h('b', fmtDuration(p.buff.until - ctx.now())) }))) : null;
       return h(`section.wk-card.lg-plat${p.open ? '' : '.locked'}`,
         h('div.lg-plat-head', medalArt('platinum', '', 46, { dim: !p.open }),
-          h('div', h('b', 'Platinum'), h('small', '1.4 × the week\'s target'))),
+          h('div', h('b', t('league.plat.name')), h('small', t('league.plat.target')))),
         ...lines, buff, reward);
     }
 
     function historyCard(v) {
       const rows = v.history.slice(0, 6).map((r) => h(`li.lg-hist-row.m${r.move > 0 ? 'up' : r.move < 0 ? 'down' : 'stay'}`,
         crest(Number(r.to ?? r.tier) || 1, 24),
-        h('span', h('b', r.p > 0 ? moveText(r.move) : 'An empty week'),
-          h('small', `${ordinal(r.rank)} in the ${leagueName(Number(r.tier) || 1)}${r.p > 0 ? ` · ${fmtPts(r.p)} pts` : ''}`)),
-        r.acorns ? h('span.lg-hist-pay', `+${r.acorns}`, icon('acorns', { size: 20, alt: 'Acorns' })) : null));
-      return h('section.wk-card.lg-hist', h('h3.pn-h', h('span', 'Past weeks')),
-        rows.length ? h('ul.lg-hist-list', ...rows) : h('p.wk-muted', 'Your first league week ends on Sunday at 20:00.'));
+        h('span', h('b', r.p > 0 ? moveText(r.move) : t('league.hist.empty')),
+          h('small', r.p > 0 ? t('league.hist.rowPts', { rank: ordinal(r.rank), league: leagueName(Number(r.tier) || 1), pts: fmtPts(r.p) })
+            : t('league.hist.row', { rank: ordinal(r.rank), league: leagueName(Number(r.tier) || 1) }))),
+        r.acorns ? h('span.lg-hist-pay', `+${r.acorns}`, icon('acorns', { size: 20, alt: t('league.acornsAlt') })) : null));
+      return h('section.wk-card.lg-hist', h('h3.pn-h', h('span', t('league.hist.head'))),
+        rows.length ? h('ul.lg-hist-list', ...rows) : h('p.wk-muted', t('league.hist.none')));
     }
 
     function rulesCard(v) {
-      return h('section.wk-card.wk-rules', h('h3.pn-h', h('span', 'How the league works')),
+      return h('section.wk-card.wk-rules', h('h3.pn-h', h('span', t('league.rules.head'))),
         h('ul.wk-bullets',
-          h('li', 'Your Fair points are your league score: the two of you compete ', h('b', 'together'), ', never against each other.'),
-          h('li', `After Sunday's judging the top ${LEAGUE.promote} farms move up a league and the last one moves down.`),
-          h('li', `Every week the league pays its number in Acorns: the ${leagueName(v.tier)} pays ${leagueAcorns(v.tier)}.`),
-          h('li', 'A week without a single Fair point holds your league and pays nothing.'),
-          v.table.W ? h('li', `This week's target is ${fmtPts(v.table.W * 10)} points: the other farms finish between 60 % and 130 % of it.`) : null));
+          h('li', tParts('league.rules.1', { b: h('b', t('league.rules.1b')) })),
+          h('li', t('league.rules.2', { n: LEAGUE.promote })),
+          h('li', t('league.rules.3', { league: leagueName(v.tier), n: leagueAcorns(v.tier) })),
+          h('li', t('league.rules.4')),
+          v.table.W ? h('li', t('league.rules.5', { pts: fmtPts(v.table.W * 10) })) : null));
     }
 
     update(true);
@@ -248,27 +247,28 @@ export function leagueResult(state, w = null) {
 }
 
 export const leagueResultPanel = {
-  title: 'League table',
+  get title() { return t('league.res.title'); },
   icon: 'purple_rosette',
   size: 'card',
   mount(body, ctx) {
     const r = leagueResult(ctx.store.state, Number.isSafeInteger(ctx.args?.w) ? ctx.args.w : null);
-    if (!r) { fill(body, h('p.wk-muted', 'No league week has finished yet.')); return {}; }
-    const head = r.empty ? `A quiet week in the ${r.fromName}` : r.move > 0 ? `Up to the ${r.toName}!` : r.move < 0 ? `Down to the ${r.toName}` : `Another week in the ${r.toName}`;
-    const lead = r.empty ? 'No Fair points this week, so the league held your place. It is waiting for you.'
-      : r.move > 0 ? `You finished ${ordinal(r.rank)} in the ${r.fromName}. Judge Pemberton moves your stall up a league!`
-        : r.move < 0 ? `You finished ${ordinal(r.rank)} of ${r.rows}. Next week the ${r.toName}: a fine place to bake your way back.`
-          : `You finished ${ordinal(r.rank)} of ${r.rows}.${r.to >= LEAGUE.leagues ? ' Champions of the county!' : ''}`;
+    if (!r) { fill(body, h('p.wk-muted', t('league.res.none'))); return {}; }
+    const head = r.empty ? t('league.res.quiet', { league: r.fromName }) : r.move > 0 ? t('league.res.up', { league: r.toName })
+      : r.move < 0 ? t('league.res.down', { league: r.toName }) : t('league.res.stay', { league: r.toName });
+    const lead = r.empty ? t('league.res.emptyLead')
+      : r.move > 0 ? t('league.res.upLead', { rank: ordinal(r.rank), league: r.fromName })
+        : r.move < 0 ? t('league.res.downLead', { rank: ordinal(r.rank), of: r.rows, league: r.toName })
+          : r.to >= LEAGUE.leagues ? t('league.res.champions', { rank: ordinal(r.rank), of: r.rows }) : t('league.res.stayLead', { rank: ordinal(r.rank), of: r.rows });
     fill(body, h(`div.lg-res.m${r.move > 0 ? 'up' : r.move < 0 ? 'down' : 'stay'}`,
       h('div.lg-res-art', r.move !== 0 ? [crest(r.from, 64, { dim: true }), h('span.lg-res-arrow', { 'aria-hidden': 'true' }, '➜'), crest(r.to, 100, { label: r.toName })]
         : crest(r.to, 100, { label: r.toName })),
-      ctx.args?.catchUp ? h('p.wk-cere-away', 'While you were away, the league was judged') : null,
+      ctx.args?.catchUp ? h('p.wk-cere-away', t('league.res.away')) : null,
       h('h2.lg-res-title', head),
       h('p.lg-res-lead', lead),
-      r.acorns ? h('div.lg-res-pay', h('span', 'The league paid'), rewardChips({ acorns: r.acorns })) : null,
+      r.acorns ? h('div.lg-res-pay', h('span', t('league.res.paid')), rewardChips({ acorns: r.acorns })) : null,
       h('div.wk-cere-acts',
-        h('button.btn.btn--sun', { type: 'button', on: { click: () => ctx.close() } }, r.move > 0 ? 'Wonderful!' : r.move < 0 ? 'We\'ll be back' : 'Onwards'),
-        h('button.btn.btn--paper.btn--small', { type: 'button', on: { click: () => { ctx.close(); ctx.ui.panels.open('league'); } } }, 'See the table'))));
+        h('button.btn.btn--sun', { type: 'button', on: { click: () => ctx.close() } }, r.move > 0 ? t('league.res.wonderful') : r.move < 0 ? t('league.res.back') : t('league.res.onwards')),
+        h('button.btn.btn--paper.btn--small', { type: 'button', on: { click: () => { ctx.close(); ctx.ui.panels.open('league'); } } }, t('league.res.see')))));
     return {};
   },
 };
@@ -276,8 +276,8 @@ export const leagueResultPanel = {
 // ---- install ------------------------------------------------------------------------------------------------------
 
 /** The "Progress" dock button: one mini, on the hub's first open panel (the drip-feed: no button before anything opens). */
-export const HUB_DOCK = Object.freeze({ label: 'Progress', icon: 'rainbow_rosette', order: 5.5, mini: true,
-  hint: 'Ribbon Track, league, horse show, perks, duel and Legacy' });
+export const HUB_DOCK = Object.freeze({ get label() { return t('league.dock'); }, icon: 'rainbow_rosette', order: 5.5, mini: true,
+  get hint() { return t('league.dockHint'); } });
 
 /** The panel that carries the hub's dock button for this farmer now (the first open one), or null. Pure. */
 export function hubOwner(state, pid, now) {
@@ -298,7 +298,8 @@ export function installLeague(ui, deps = {}) {
     const [{ horseShowPanel }, { seasonTrackPanel }, { perksPanel }, { legacyPanel }, D] = await Promise.all([
       import('./horseshow.js'), import('./season-track.js'), import('./perks.js'), import('./legacy.js'), import('./duel.js')]);
     if (dead) return;
-    const docked = (name, spec) => Object.defineProperty({ ...spec }, 'dock', {
+    // copy descriptors, not values: a spec's title is a getter that follows the language
+    const docked = (name, spec) => Object.defineProperty(Object.defineProperties({}, Object.getOwnPropertyDescriptors(spec)), 'dock', {
       enumerable: true,
       get: () => (store && hubOwner(store.state, store.pid, store.now()) === name ? HUB_DOCK : null),
     });
@@ -324,9 +325,9 @@ export function installLeague(ui, deps = {}) {
  */
 function startBanners(ui, store) {
   let tiers = [];
-  let t = 0;
+  let tmr = 0;
   const flush = () => {
-    t = 0;
+    tmr = 0;
     const st = store.state;
     if (!st || !tiers.length) return;
     const top = Math.max(...tiers);
@@ -334,27 +335,27 @@ function startBanners(ui, store) {
     tiers = [];
     const v = trackOf(st, store.now());
     const tier = v?.tiers?.find((x) => x.n === top);
-    ui.banner?.({ id: 'lg-track', kind: 'quest', ribbon: 'Ribbon Track',
-      message: n > 1 ? `Tiers ${top - n + 1} to ${top} reached! Their prizes wait for you.` : `Tier ${top} reached! Its prize waits for you.`,
+    ui.banner?.({ id: 'lg-track', kind: 'quest', ribbon: t('league.hub.track'),
+      message: n > 1 ? t('league.banner.tiers', { a: top - n + 1, b: top }) : t('league.banner.tier', { n: top }),
       things: tier ? rewardParts(tier.reward, { level: levelOf(st), season: v.season }).slice(0, 3).map((x) => ({ icon: x.icon, name: x.text })) : [],
-      actions: ui.panels.has('seasonTrack') ? [{ label: 'Claim', kind: 'sun', fn: () => ui.panels.open('seasonTrack') }] : [], ttl: 9000 });
+      actions: ui.panels.has('seasonTrack') ? [{ label: t('league.track.claim'), kind: 'sun', fn: () => ui.panels.open('seasonTrack') }] : [], ttl: 9000 });
   };
   const offs = [
     store.on('celebrate', ({ ev } = {}) => {
       if (!ev || ev.e !== 'trackTier' || ev.catchUp) return;
       tiers.push(ev.tier);
-      if (!t) t = setTimeout(flush, 350);
+      if (!tmr) tmr = setTimeout(flush, 350);
     }),
   ].filter((f) => typeof f === 'function');
-  return () => { clearTimeout(t); for (const f of offs) f(); };
+  return () => { clearTimeout(tmr); for (const f of offs) f(); };
 }
 
 /** The hub's badge on its dock button (whichever panel carries it), at most every 400 ms. */
 function startHubBadge(ui, store) {
-  let t = 0;
+  let tmr = 0;
   let lastOwner = null;
   const run = () => {
-    t = 0;
+    tmr = 0;
     const st = store.state;
     if (!st || !store.pid) return;
     const now = store.now();
@@ -367,11 +368,11 @@ function startHubBadge(ui, store) {
     // '!' (an invite, a show ribbon to enter) is "look now"; a count (prizes to claim, points to spend) is calm
     ui.panels.badge(owner, b, b === '!' ? null : 'calm');
   };
-  const kick = () => { if (!t) t = setTimeout(run, 400); };
+  const kick = () => { if (!tmr) tmr = setTimeout(run, 400); };
   const offs = [store.on('change', kick), store.on('welcome', kick)].filter((f) => typeof f === 'function');
   const iv = setInterval(kick, 60_000);
   kick();
-  return () => { clearTimeout(t); clearInterval(iv); for (const f of offs) f(); };
+  return () => { clearTimeout(tmr); clearInterval(iv); for (const f of offs) f(); };
 }
 
 /**

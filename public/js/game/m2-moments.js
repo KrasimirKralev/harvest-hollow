@@ -20,17 +20,23 @@ import { duelOf } from '../../../shared/rules/actions/duel.js';
 import { breedingOf } from '../../../shared/rules/actions/breeding.js';
 import { perkPoints, perkSpent, perksLive } from '../../../shared/rules/actions/perks.js';
 import { animalName, pairWords } from './pairing.js';
+import { t as tr, tn, lang, ctext, N } from '../i18n/index.js';
 
-const nameOf = (state, pid) => (state && Object.hasOwn(state.players, pid) ? state.players[pid].name : 'Your partner');
-const kindName = (kind) => DUEL?.kinds?.find((k) => k.id === kind)?.name ?? 'Friendly Duel';
+const nameOf = (state, pid) => (state && Object.hasOwn(state.players, pid) ? state.players[pid].name : tr('common.partner'));
+// content texts (DUEL, FISHING: lanes B / C translate them in i18n/bg/text-*.js; English is the table itself)
+const kindName = (kind) => {
+  const en = DUEL?.kinds?.find((k) => k.id === kind)?.name;
+  return en ? ctext('DUEL', `kind.${kind}`, 'name', en) : tr('game.duel.friendly');
+};
+const line = (key, en) => ctext('DUEL', 'lines', key, DUEL?.lines?.[key] ?? en);
 const fill = (t, o) => t.replace(/\{(\w+)\}/g, (_, k) => (o[k] ?? ''));
 
 /** The partner's invitation in words (DUEL.lines.invite: "{name} challenges you to a {duel}! ..."). */
 export function inviteLine(state, cur) {
   const duel = kindName(cur.kind);
-  // "a Order Rush" -> "an Order Rush": the article goes with the duel's own name
-  const t = (DUEL?.lines?.invite ?? '{name} challenges you to a {duel}! Until Sunday evening. Just for fun.')
-    .replace(/\b([Aa]) \{duel\}/, (m, a) => `${/^[aeiou]/i.test(duel) ? `${a}n` : a} {duel}`);
+  // "a Order Rush" -> "an Order Rush": the article goes with the duel's own name (English only)
+  let t = line('invite', tr('game.duel.invite'));
+  if (lang() === 'en') t = t.replace(/\b([Aa]) \{duel\}/, (m, a) => `${/^[aeiou]/i.test(duel) ? `${a}n` : a} {duel}`);
   return fill(t, { name: nameOf(state, cur.by), duel });
 }
 
@@ -55,10 +61,11 @@ export function createM2Moments({ store, ui, controller, audio = null }) {
     try { d = duelOf(s, me(), store.now()); } catch { return; }
     if (!d || d.phase !== 'invited' || !d.cur) return;
     if (!once(`duel:${d.cur.by}:${d.cur.at}`)) return;
-    const line = inviteLine(s, d.cur);
+    // a function: the content line is filled in code, so a language switch while it is up asks it again
+    const line = () => inviteLine(s, d.cur);
     audio?.play('duel_start', { gain: 0.5 });
-    if (has('duel')) notice(line, { label: 'See the duel', fn: () => open(['duel'], {}) });
-    else notice(line, { label: "Let's duel!", fn: () => controller.do('duelAccept', {}) });
+    if (has('duel')) notice(line, { label: tr('game.duel.see'), fn: () => open(['duel'], {}) });
+    else notice(line, { label: tr('game.duel.go'), fn: () => controller.do('duelAccept', {}) });
   }
 
   /** The bred baby is ready to come home. */
@@ -67,11 +74,10 @@ export function createM2Moments({ store, ui, controller, audio = null }) {
     const cur = s ? breedingOf(s) : null;
     if (!cur || !(cur.readyAt <= store.now())) return;
     if (!once(`breed:${cur.at}`)) return;
-    const pair = pairWords(s, cur.a, cur.b);
-    const sp = (animalOf(cur.sp)?.name ?? 'animal').toLowerCase();
-    const who = pair.startsWith('Two ') ? `A baby ${sp}` : `${pair}'s baby ${sp}`;
-    notice(`${who} is ready in the Breeding Barn!`, {
-      label: 'Bring it home',
+    const named = (id) => typeof s.farm?.names?.[id]?.name === 'string';
+    const sp = animalOf(cur.sp) ? N(cur.sp) : tr('game.pair.theAnimal');
+    notice(named(cur.a) || named(cur.b) ? tr('game.breed.readyOf', { pair: pairWords(s, cur.a, cur.b), sp }) : tr('game.breed.ready', { sp }), {
+      label: tr('game.breed.home'),
       fn: () => { if (!open(['breeding'], { collect: true })) controller.do('breedCollect', {}); },
     });
   }
@@ -83,8 +89,8 @@ export function createM2Moments({ store, ui, controller, audio = null }) {
     const free = perkPoints(s, me()) - perkSpent(s, me());
     if (free <= 0) return;
     if (!once(`perk:${perkPoints(s, me())}`)) return;
-    notice(free === 1 ? 'You have a perk point to spend.' : `You have ${free} perk points to spend.`,
-      has('perks') ? { label: 'Choose a perk', fn: () => open(['perks'], {}) } : null, 15_000);
+    notice(tn('game.perk.points', free),
+      has('perks') ? { label: tr('game.perk.choose'), fn: () => open(['perks'], {}) } : null, 15_000);
   }
 
   /** Called on state changes and every few seconds (readiness is a matter of time). */
@@ -112,42 +118,45 @@ export function createM2Moments({ store, ui, controller, audio = null }) {
       case 'duelAccepted':
         // the inviter hears it from the partner's confirmed acceptance; the one who accepted from their own click
         if (local || !mine) {
-          const t = DUEL?.lines?.accept ?? 'Game on!';
-          ui?.toast?.(mine ? t : `${nameOf(s, by)} accepted! ${t}`, { kind: 'ok', ms: 5000 });
+          const said = () => { const t = line('accept', tr('game.duel.on')); return mine ? t : tr('game.duel.accepted', { name: nameOf(s, by), line: t }); };
+          ui?.toast?.(said, { kind: 'ok', ms: 5000 });
         }
         break;
       case 'duelDeclined':
-        if (!local && !mine) ui?.toast?.(`${nameOf(s, by)} would rather not duel this week. Maybe another time!`, { kind: 'info', ms: 5000 });
+        if (!local && !mine) ui?.toast?.(tr('game.duel.declined', { name: nameOf(s, by) }), { kind: 'info', ms: 5000 });
         break;
       case 'duelLapsed':
-        if (!local && ev.to === me()) ui?.toast?.('Your duel invitation lapsed. Ask again any day before Sunday evening.', { kind: 'info', ms: 5000 });
+        if (!local && ev.to === me()) ui?.toast?.(tr('game.duel.lapsed'), { kind: 'info', ms: 5000 });
         break;
       case 'nursed':
         if (local && mine && Number.isSafeInteger(ev.n) && ev.n >= (ev.of ?? 3) && once(`nurse:${ev.id}`)) {
           const named = typeof s.farm.names?.[ev.id]?.name === 'string';
-          const n = named ? animalName(s, ev.id) : `The young ${(animalOf(ev.animal)?.name ?? 'animal').toLowerCase()}`;
-          notice(`${n}'s care card is full! Pick a personality and a specialty.`,
-            { label: 'Choose', fn: () => open(['nursery', 'animals'], { id: ev.id, pick: true }) }, 15_000);
+          const sp = animalOf(ev.animal) ? N(ev.animal) : tr('game.pair.theAnimal');
+          notice(named ? tr('game.nurse.fullNamed', { name: animalName(s, ev.id) }) : tr('game.nurse.full', { sp }),
+            { label: tr('game.nurse.choose'), fn: () => open(['nursery', 'animals'], { id: ev.id, pick: true }) }, 15_000);
         }
         break;
       case 'bred':
-        if (!local && ev.golden) ui?.toast?.(`A golden ${animalOf(ev.species)?.name?.toLowerCase() ?? 'baby'}! The rarest coat of all.`, { kind: 'ok', ms: 6000 });
+        if (!local && ev.golden) {
+          ui?.toast?.(animalOf(ev.species) ? tr('game.breed.golden', { sp: N(ev.species) }) : tr('game.breed.goldenBaby'), { kind: 'ok', ms: 6000 });
+        }
         break;
       case 'fishTogether':
         if (!local && once(`fishTogether:${Math.floor(store.now() / 86_400_000)}`)) {
-          ui?.toast?.(FISHING?.lines?.together ?? 'Two lines in the water. Nobody is in a hurry.', { kind: 'love', ms: 5000 });
+          ui?.toast?.(() => ctext('FISHING', 'lines', 'together', FISHING?.lines?.together ?? tr('game.fish.together')), { kind: 'love', ms: 5000 });
         }
         break;
       case 'rested':
         // rested XP (GDD §4.7, M2): the returning farmer's own pool; said once a day, on the server's word
         if (!local && ev.pid === me() && once(`rested:${Math.floor(store.now() / 86_400_000)}`)) {
-          ui?.toast?.('Welcome back! You are rested: your own XP counts double for a while.', { kind: 'ok', ms: 6000 });
+          ui?.toast?.(tr('game.rested'), { kind: 'ok', ms: 6000 });
         }
         break;
       case 'fishCaught':
         if (!local && !mine && ev.record) {
           const f = FISHING?.fish?.find((x) => x.id === ev.fish);
-          ui?.toast?.(`${nameOf(s, by)} landed a ${ev.cm} cm ${f ? f.name : 'fish'}: a new record for the dock!`, { kind: 'ok', ms: 6000 });
+          const fish = () => (f ? ctext('FISHING', `fish.${f.id}`, 'name', f.name) : tr('game.fish.fish'));
+          ui?.toast?.(() => tr('game.fish.partnerRecord', { name: nameOf(s, by), cm: ev.cm, fish: fish() }), { kind: 'ok', ms: 6000 });
         }
         break;
       default:
@@ -159,8 +168,8 @@ export function createM2Moments({ store, ui, controller, audio = null }) {
     if (ev.e === 'duelEnded' && ev.scored) {
       const s = store.state;
       const lines = DUEL?.lines ?? {};
-      const text = ev.tie ? (lines.tie ?? 'A dead heat! Two crowns this week.')
-        : fill(lines.win ?? '{name} wins the {duel}!', { name: nameOf(s, ev.win), duel: kindName(ev.kind) });
+      const text = () => (ev.tie ? ctext('DUEL', 'lines', 'tie', lines.tie ?? tr('game.duel.tie'))
+        : fill(ctext('DUEL', 'lines', 'win', lines.win ?? tr('game.duel.win')), { name: nameOf(s, ev.win), duel: kindName(ev.kind) }));
       ui?.toast?.(text, { kind: 'ok', ms: 7000 });
     }
   }));

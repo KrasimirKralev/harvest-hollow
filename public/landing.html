@@ -3,61 +3,148 @@
 <head>
   <meta charset="utf-8">
   <!-- The multi-farm front door (docs/agent-briefs/multi-farm.md): served at / when HH_MODE=multi. The game page itself is
-       /f/<farmId> (index.html). Static: it needs no build stamp. -->
+       /f/<farmId> (index.html). Static: it needs no build stamp. One screen (owner request 2026-10-05, "simpler, more
+       vibrant, more futuristic"): a golden-hour sky, the living farm in a glass orb, and three actions: Play (start a
+       new farm), Star us on GitHub, Open GitHub. Everything else is a small link that opens a sheet (js/landing.js).
+       First view: this file, css/landing.css, one font, the logo and the orb's still; the farm video, the sheets' styles
+       and the star count come after the first paint. Words: the i18n catalogs ([data-i18n] keys: area 'front', the title
+       and the description 'multi.ld.*'), English or Bulgarian with the English · Български toggle in the top corner; the
+       English here is the no-script fallback. -->
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#4C9A3E">
-  <meta name="description" content="Harvest Hollow: a cozy 3D farm for two, in your browser. Start a farm in one tap and invite a friend to farm with you, live.">
+  <meta name="theme-color" content="#2A1458">
+  <meta name="description" content="Harvest Hollow: a cozy 3D farm for two, in your browser. Start a farm in one tap and invite a friend to farm with you, live. Free and open source." data-i18n-attr="content:multi.ld.description">
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="apple-touch-icon" href="/assets/pwa/apple-touch-icon.png">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="Harvest Hollow">
-  <meta name="color-scheme" content="light">
+  <meta name="color-scheme" content="dark">
   <title>Harvest Hollow · a cozy farm for two</title>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="preload" href="/assets/fonts/fredoka-latin.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="preload" href="/assets/fonts/baloo2-latin.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="/css/style.css">
   <link rel="stylesheet" href="/css/landing.css">
+  <!-- i18n: the remembered language, else the browser's (bg* -> Bulgarian; in step with i18n/core.js detectLang).
+       A Bulgarian page waits (at most a second) for its catalog before it shows, so it never flashes English -->
+  <script>
+    (function () {
+      var L = '';
+      try { L = localStorage.getItem('hh.lang') || ''; } catch (e) { L = ''; }
+      if (L !== 'en' && L !== 'bg') {
+        var n = (navigator.languages && navigator.languages[0]) || navigator.language || '';
+        L = /^bg\b/i.test(n) ? 'bg' : 'en';
+      }
+      document.documentElement.lang = L;
+      if (L !== 'en') {
+        document.documentElement.classList.add('i18n-wait');
+        setTimeout(function () { document.documentElement.classList.remove('i18n-wait'); }, 1000);
+      }
+    })();
+  </script>
 </head>
 <body class="landing">
+  <div class="ld-sky" aria-hidden="true">
+    <span class="ld-glow ld-glow--teal"></span><span class="ld-glow ld-glow--rose"></span>
+    <svg class="ld-hills" viewBox="0 0 1440 240" preserveAspectRatio="none" focusable="false">
+      <path class="ld-hill ld-hill--far" d="M0 120 C160 70 300 70 440 104 C600 142 720 66 900 78 C1060 88 1180 132 1300 110 C1370 98 1410 92 1440 96 V240 H0Z"/>
+      <path class="ld-hill ld-hill--mid" d="M0 162 C140 120 280 128 420 150 C560 172 700 120 860 128 C1020 136 1120 176 1260 160 C1340 151 1400 140 1440 142 V240 H0Z"/>
+      <path class="ld-hill ld-hill--near" d="M0 196 C180 168 360 172 540 190 C700 206 860 178 1020 182 C1180 186 1320 210 1440 198 V240 H0Z"/>
+    </svg>
+    <!-- fireflies rise from the hills, pollen drifts across (CSS only, still under reduced motion) -->
+    <span class="ld-motes">
+      <i class="ld-fly" style="--x:8%;--y:84%;--d:11s;--t:-2s"></i><i class="ld-fly" style="--x:19%;--y:90%;--d:14s;--t:-9s"></i>
+      <i class="ld-fly" style="--x:31%;--y:80%;--d:12s;--t:-5s"></i><i class="ld-fly" style="--x:46%;--y:92%;--d:16s;--t:-12s"></i>
+      <i class="ld-fly" style="--x:58%;--y:86%;--d:13s;--t:-1s"></i><i class="ld-fly" style="--x:71%;--y:82%;--d:15s;--t:-7s"></i>
+      <i class="ld-fly" style="--x:83%;--y:90%;--d:12s;--t:-10s"></i><i class="ld-fly" style="--x:93%;--y:78%;--d:17s;--t:-4s"></i>
+      <i class="ld-fly" style="--x:38%;--y:70%;--d:18s;--t:-14s"></i><i class="ld-fly" style="--x:66%;--y:68%;--d:19s;--t:-6s"></i>
+      <i class="ld-dust" style="--x:12%;--y:40%;--d:21s;--t:-3s"></i><i class="ld-dust" style="--x:26%;--y:22%;--d:25s;--t:-15s"></i>
+      <i class="ld-dust" style="--x:52%;--y:12%;--d:23s;--t:-8s"></i><i class="ld-dust" style="--x:77%;--y:30%;--d:27s;--t:-19s"></i>
+      <i class="ld-dust" style="--x:88%;--y:52%;--d:22s;--t:-11s"></i><i class="ld-dust" style="--x:5%;--y:62%;--d:26s;--t:-21s"></i>
+    </span>
+  </div>
+
   <main class="ld" id="landing">
-    <h1 class="ld-logo"><picture><source srcset="/assets/art/logo.webp" type="image/webp">
-      <img src="/assets/art/logo.png" alt="Harvest Hollow" width="1200" height="538"></picture></h1>
-    <p class="ld-tag outlined-thin">A cozy farm for two. Plant, harvest and build it together, live, right in your browser.</p>
-
-    <section class="ld-card wood" aria-labelledby="ld-start-title">
-      <div class="ld-paper paper">
-        <h2 class="ld-h" id="ld-start-title">Your own farm, in one tap</h2>
-        <p class="ld-sub" id="ld-start-sub">No account, no e-mail. Grandma Hazel shows you around, and you can invite a friend whenever you like.</p>
-        <button class="btn ld-start" id="ld-start" type="button" aria-describedby="ld-start-sub">Start a new farm</button>
-        <p class="ld-status" id="ld-status" role="status" aria-live="polite"></p>
-        <p class="ld-warn" id="ld-storage" hidden>This browser window does not keep anything once it closes, so this device will
-          forget your farm. In the game, Settings &rsaquo; Farm has your personal farm link: keep it somewhere safe.</p>
+    <!-- English · Български (ui/lang-toggle.js, js/landing.js) -->
+    <div class="ld-lang" id="ld-lang"></div>
+    <div class="ld-stage">
+      <!-- the living farm: the still first, the orbit video once the page has painted (js/landing.js) -->
+      <div class="ld-orb" id="ld-orb" aria-hidden="true">
+        <span class="ld-sun"></span>
+        <span class="ld-orbit ld-orbit--back"><i></i></span>
+        <span class="ld-orb-ring"></span>
+        <span class="ld-orb-view" id="ld-orb-view"><img class="ld-orb-still" src="/assets/landing/farm-orbit.webp" width="480" height="480" alt="" fetchpriority="low" decoding="async"></span>
+        <span class="ld-orb-shine"></span>
+        <span class="ld-orbit ld-orbit--front"><i></i></span>
       </div>
+      <h1 class="ld-logo"><img src="/assets/landing/logo-wide_560.webp" srcset="/assets/landing/logo-wide_560.webp 560w, /assets/landing/logo-wide_880.webp 880w, /assets/landing/logo-wide_1120.webp 1120w"
+        sizes="(max-width: 699px) 290px, (max-height: 760px) 440px, 520px" width="1400" height="336" alt="Harvest Hollow" fetchpriority="high"></h1>
+      <p class="ld-tag" data-i18n="front.hero.tag">A cozy 3D farm for two, live in your browser.</p>
+    </div>
+
+    <section class="ld-dock" id="ld-dock" aria-labelledby="ld-dock-title">
+      <h2 class="sr-only" id="ld-dock-title" data-i18n="front.act.title">Play, or help Harvest Hollow grow</h2>
+      <div class="ld-acts">
+        <button class="ld-act ld-act--play" id="ld-start" type="button" aria-describedby="ld-ttl">
+          <span class="ld-act-ic" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M8 5.6v12.8a1.2 1.2 0 0 0 1.8 1l10-6.4a1.2 1.2 0 0 0 0-2l-10-6.4A1.2 1.2 0 0 0 8 5.6Z"/></svg></span>
+          <span class="ld-act-txt"><span class="ld-act-t" data-i18n="front.act.play">Play</span><span class="ld-act-s" id="ld-start-sub" data-i18n="front.act.playSub">Start a new farm</span></span>
+        </button>
+        <a class="ld-act ld-act--star" id="ld-star-btn" href="https://github.com/KrasimirKralev/harvest-hollow" target="_blank" rel="noopener">
+          <span class="ld-act-ic" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M12 2.8l2.7 5.6 6.1.8-4.5 4.2 1.1 6.1L12 16.6l-5.4 2.9 1.1-6.1-4.5-4.2 6.1-.8L12 2.8Z"/></svg></span>
+          <span class="ld-act-txt"><span class="ld-act-t" data-i18n="front.act.star">Star us</span><span class="ld-act-s" data-i18n="front.act.starSub">on GitHub</span></span>
+          <span class="ld-star-n" id="ld-star-n" hidden></span>
+        </a>
+        <a class="ld-act ld-act--gh" id="ld-repo" href="https://github.com/KrasimirKralev/harvest-hollow" target="_blank" rel="noopener">
+          <span class="ld-act-ic" aria-hidden="true"><svg viewBox="0 0 16 16" focusable="false"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg></span>
+          <span class="ld-act-txt"><span class="ld-act-t" data-i18n="front.act.github">Open GitHub</span><span class="ld-act-s" data-i18n="front.act.githubSub">See how it is made</span></span>
+        </a>
+      </div>
+      <p class="ld-why" data-i18n="front.act.why">Free and open source: a ⭐ helps other couples find it.</p>
+      <p class="ld-ttl" id="ld-ttl"><span class="ld-ttl-moon" aria-hidden="true"></span><span data-i18n="front.act.ttl">Farms idle for 7 days are deleted.</span></p>
+      <p class="ld-status" id="ld-status" role="status" aria-live="polite"></p>
+      <div class="ld-note" id="ld-full" hidden>
+        <h2 class="ld-note-t" id="ld-full-title" data-i18n="front.full.title">The valley is full right now</h2>
+        <p data-i18n="front.full.text">Every farm Harvest Hollow can keep is taken. Farms nobody visits for 7 days are deleted, so room opens up again: please try once more tomorrow.</p>
+      </div>
+      <p class="ld-note" id="ld-storage" hidden data-i18n="front.storage">This browser window does not keep anything once it closes, so this device will forget your farm. In the game, Settings › Farm has your personal farm link: keep it somewhere safe.</p>
     </section>
 
-    <section class="ld-card wood" id="ld-farms" aria-labelledby="ld-farms-title" hidden>
-      <div class="ld-paper paper">
-        <h2 class="ld-h" id="ld-farms-title">Your farms on this device</h2>
-        <ul class="ld-list" id="ld-list"></ul>
-      </div>
+    <section class="ld-farms" id="ld-farms" aria-labelledby="ld-farms-title" hidden>
+      <h2 class="ld-farms-t" id="ld-farms-title" data-i18n="front.farms.title">Your farms on this device</h2>
+      <ul class="ld-list" id="ld-list"></ul>
     </section>
 
-    <section class="ld-card wood" id="ld-full" aria-labelledby="ld-full-title" hidden>
-      <div class="ld-paper paper">
-        <h2 class="ld-h" id="ld-full-title">The valley is full right now</h2>
-        <p class="ld-sub">Every farm Harvest Hollow can keep is taken. Farms nobody visits for 7 days are deleted, so room opens up
-          again: please try once more tomorrow.</p>
-      </div>
-    </section>
-
-    <footer class="ld-foot">
-      <p class="ld-ttl outlined-thin">Farms nobody visits for 7 days are deleted.</p>
-      <p class="ld-links"><a id="ld-repo" href="https://github.com/KrasimirKralev/harvest-hollow" rel="noopener">Harvest Hollow on GitHub</a></p>
-    </footer>
+    <nav class="ld-more" aria-label="If you need more" data-i18n-attr="aria-label:front.more.nav">
+      <button class="ld-link" id="ld-back-open" type="button" aria-haspopup="dialog" data-i18n="front.more.back">Already have a farm?</button>
+      <button class="ld-link" id="ld-ideas-open" type="button" aria-haspopup="dialog" data-i18n="front.more.ideas">Suggest an idea</button>
+      <button class="ld-link" id="ld-shots-open" type="button" aria-haspopup="dialog" data-i18n="front.more.shots">Screenshots</button>
+      <a class="ld-link" id="ld-privacy" href="/privacy" data-i18n="front.more.privacy">Privacy</a>
+      <a class="ld-link" id="ld-host" href="https://github.com/KrasimirKralev/harvest-hollow#quick-start" target="_blank" rel="noopener" data-i18n="front.more.host">Self-host it</a>
+    </nav>
   </main>
-  <noscript><p class="ld-noscript">Harvest Hollow needs JavaScript and WebGL2.</p></noscript>
+
+  <!-- the sheets (js/landing.js): the way back in, the ideas box. In a home-screen app that knows no farm yet, the way
+       back moves onto the page, before the actions (its storage is apart from the browser's on iOS). -->
+  <dialog class="ld-sheet" id="ld-sheet-back" aria-labelledby="ld-back-title">
+    <section class="ld-sheet-in" id="ld-back" aria-labelledby="ld-back-title">
+      <header class="ld-sheet-head">
+        <h2 class="ld-sheet-t" id="ld-back-title" data-i18n="front.back.title">Already have a farm?</h2>
+        <button class="ld-sheet-x" type="button" data-close aria-label="Close" data-i18n-attr="aria-label:front.sheet.close">✕</button>
+      </header>
+      <p class="ld-sheet-sub" id="ld-back-lead" data-i18n="front.back.lead">Open it on this device with your personal farm link: paste it, or scan its QR code.</p>
+      <div id="ld-back-slot"></div>
+    </section>
+  </dialog>
+  <dialog class="ld-sheet" id="ld-sheet-ideas" aria-labelledby="ld-ideas-title">
+    <section class="ld-sheet-in" id="ld-ideas" aria-labelledby="ld-ideas-title">
+      <header class="ld-sheet-head">
+        <h2 class="ld-sheet-t" id="ld-ideas-title" data-i18n="front.ideas.title">Got an idea for the farm?</h2>
+        <button class="ld-sheet-x" type="button" data-close aria-label="Close" data-i18n-attr="aria-label:front.sheet.close">✕</button>
+      </header>
+      <p class="ld-sheet-sub" data-i18n="front.ideas.sub">A crop you miss, an animal, a building, something that bugged you: tell us. We read every one, and the best grow into the game.</p>
+      <div id="ld-idea-form" class="ld-idea-slot"></div>
+    </section>
+  </dialog>
+  <noscript><p class="ld-noscript">Harvest Hollow needs JavaScript and WebGL2. · Harvest Hollow има нужда от JavaScript и WebGL2.
+    <a href="https://github.com/KrasimirKralev/harvest-hollow">GitHub</a></p></noscript>
   <script type="module" src="/js/landing.js"></script>
 </body>
 </html>

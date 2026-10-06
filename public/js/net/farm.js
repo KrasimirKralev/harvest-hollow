@@ -9,14 +9,21 @@
 //   session                      { pid, secret } of this page's farmer (set by main.js at each welcome)
 //   createFarmScope(id)          the same for any farm id (the landing page stores a new farm's secret with it)
 //   farmIdOf(pathname)           '/f/abc123def4' -> 'abc123def4', else null
-//   readLaunch(loc)              { key, join } from '#k=<secret>' and '?join=<token>' (validated, else null)
-//   cleanUrl(loc, { join })      the address without '#k=' (and without '?join=' when join is true)
-//   personalLink / inviteLink    the two links the Settings and the invite card show
+//   readLaunch(loc)              { key, join, rejoin } from '#k=<secret>', '?join=<token>' and '?rejoin=<token>'
+//   cleanUrl(loc, { join, rejoin })  the address without '#k=' (and without the used one-time token)
+//   personalLink / inviteLink / rejoinLink   the links the Settings, the invite card and a new key show
+//   parseFarmLink(text, { origin, farmId })  { id, key, join, rejoin } from a pasted or scanned farm link, else null
 //   farmLabel(state)             the list's name for a farm (its own, else "Rowan & Mia's farm")
 //   rememberFarm / farmsOnDevice / forgetFarm   localStorage 'hh.farms' = [{ id, name, lastOpen }] (no secrets)
 //   startFarm(fetch, { tz })     POST /api/farms { tz } -> { ok, id, secret } | { ok: false, code: 'RATE'|'FULL'|'NET', retryAfter? }
 //   createInvite(fetch, id, secret) -> { ok, token, expiresAt } | { ok: false, code: 'FULL'|'AUTH'|'RATE'|'NET' }
+//   createRekey(fetch, id, secret, pid) -> { ok, pid, token, expiresAt } | { ok: false, code: 'AUTH'|'BAD'|'RATE'|'NET' }
+//                                (a new key for another farmer: POST /api/f/:id/rekey, the key in the header only)
+//   farmStatus(fetch, id, secret) -> the farm's status as this member sees it (waiting new keys), or null
+//   deleteFarm(fetch, id, secret) -> { ok, gone? } | { ok: false, code: 'AUTH'|'RATE'|'NET' }   "Delete this farm now"
+//   isStandalone(), isAndroid()  a home-screen app; Android (one storage for the browser and its home-screen apps)
 //   ttlDays(status)              the retention in days (GET /api/f/:id/status `ttlDays`, default 7)
+import { t } from '../i18n/multi.js';
 
 /** A farm id in a page path: the server's ids are >= 10 base32 characters; accept the URL-safe alphabet. */
 export const FARM_PATH = /^\/f\/([A-Za-z0-9_-]{6,64})\/?$/;
@@ -27,7 +34,8 @@ const LIST_KEY = 'hh.farms';
 const LIST_MAX = 12;
 
 /** Storage keys that belong to a farm: identity, the tab's farmer, tips and drafts seen there, the camera. */
-const FARM_KEYS = new Set(['hh.tokens', 'hh.key', 'hh.slot', 'hh.unsaved', 'hh.reloadedFor', 'hh.camera', 'hh.invite', 'hh.inviteNudge']);
+const FARM_KEYS = new Set(['hh.tokens', 'hh.key', 'hh.slot', 'hh.unsaved', 'hh.reloadedFor', 'hh.camera', 'hh.invite', 'hh.inviteNudge',
+  'hh.keySave', 'hh.rejoins', 'hh.rekeyed']);
 const FARM_PREFIXES = ['hh.tips.', 'hh.coach.hidden.', 'hh.duelSeen.', 'hh.naming.later.', 'hh.notesSeen.', 'hh.saving.',
   'hh.seen.', 'hh.story.', 'hh.tracker.', 'hh.weeds.'];
 const farmOwned = (k) => FARM_KEYS.has(k) || FARM_PREFIXES.some((p) => k.startsWith(p));
@@ -62,17 +70,21 @@ export const farm = createFarmScope(typeof location !== 'undefined' ? farmIdOf(l
 export const session = { pid: null, secret: null, ttlDays: TTL_DAYS };
 
 
-/** The personal key in the fragment (never sent to the server) and the invite token in the query. */
+/**
+ * The personal key in the fragment (never sent to the server), the invite token and a farmer's new key (the rejoin
+ * token) in the query: both single-use, wiped from the address bar once used.
+ */
 export function readLaunch(loc) {
   const hash = new URLSearchParams(String(loc?.hash ?? '').replace(/^#/, ''));
   const query = new URLSearchParams(String(loc?.search ?? ''));
-  return { key: validSecret(hash.get('k')), join: validSecret(query.get('join')) };
+  return { key: validSecret(hash.get('k')), join: validSecret(query.get('join')), rejoin: validSecret(query.get('rejoin')) };
 }
 
-/** The address bar without the key (always) and without the invite (once it is used). Keeps every other param. */
-export function cleanUrl(loc, { join = false } = {}) {
+/** The address bar without the key (always) and without a used invite / rejoin token. Keeps every other param. */
+export function cleanUrl(loc, { join = false, rejoin = false } = {}) {
   const query = new URLSearchParams(String(loc?.search ?? ''));
   if (join) query.delete('join');
+  if (rejoin) query.delete('rejoin');
   const hash = new URLSearchParams(String(loc?.hash ?? '').replace(/^#/, ''));
   hash.delete('k');
   const q = query.toString();
@@ -82,6 +94,42 @@ export function cleanUrl(loc, { join = false } = {}) {
 
 export const personalLink = (origin, id, secret) => `${origin}/f/${encodeURIComponent(id)}#k=${encodeURIComponent(secret)}`;
 export const inviteLink = (origin, id, token) => `${origin}/f/${encodeURIComponent(id)}?join=${encodeURIComponent(token)}`;
+export const rejoinLink = (origin, id, token) => `${origin}/f/${encodeURIComponent(id)}?rejoin=${encodeURIComponent(token)}`;
+
+/**
+ * A pasted or scanned farm link (or just its '#k=…' part, for this farm) -> { id, key, join, rejoin } | null. Pure: the
+ * farm gate, the scanner and the landing page all open what it returns.
+ */
+export function parseFarmLink(text, { origin = '', farmId = null } = {}) {
+  const raw = String(text ?? '').trim();
+  if (!raw) return null;
+  let url;
+  try {
+    url = new URL(raw, origin || 'http://x.invalid');
+  } catch { return null; }
+  if (!/^https?:$/.test(url.protocol)) return null;
+  const id = farmIdOf(url.pathname) ?? (raw.startsWith('#') || raw.startsWith('?') ? farmId : null);
+  if (!id) return null;
+  const { key, join, rejoin } = readLaunch(url);
+  return key || join || rejoin ? { id, key, join, rejoin } : null;
+}
+
+/** Where a parsed farm link goes on this site: the key in the fragment, a one-time token in the query. */
+export const farmLinkPath = (got) => (got.key ? personalLink('', got.id, got.key)
+  : got.rejoin ? rejoinLink('', got.id, got.rejoin) : inviteLink('', got.id, got.join));
+
+/** A home-screen app (the display mode, or iOS Safari's own flag). */
+export function isStandalone(win = globalThis) {
+  try {
+    return Boolean(win.matchMedia?.('(display-mode: standalone)').matches || win.navigator?.standalone === true);
+  } catch { return false; }
+}
+
+/**
+ * Android keeps ONE storage for the browser and the apps it puts on the home screen (a farm's key needs no carrying
+ * there), and Chrome makes an installed app only from an http(s) manifest. iOS keeps a home-screen app's storage apart.
+ */
+export const isAndroid = (nav = globalThis.navigator) => /Android/i.test(String(nav?.userAgent ?? ''));
 
 // ---- the farms this device has opened (the landing page's list) ---------------------------------------------------
 const readList = (st) => {
@@ -105,7 +153,7 @@ export function rememberFarm(st, { id, name = null, at = Date.now() }) {
 }
 
 /** Every new farm is called this until its farmers rename it (shared/rules/state.js createFarm). */
-const DEFAULT_NAME = 'Harvest Hollow';
+const DEFAULT_NAME = 'Harvest Hollow'; // i18n-ok: the brand
 
 /**
  * The name a farm goes by in the device's list: its own name once the farmers gave it one, else whose farm it is
@@ -115,7 +163,9 @@ export function farmLabel(state) {
   const own = typeof state?.farm?.name === 'string' ? state.farm.name.trim() : '';
   if (own && own !== DEFAULT_NAME) return own;
   const names = Object.keys(state?.players ?? {}).sort().map((pid) => state.players[pid]?.name).filter((n) => typeof n === 'string' && n.trim());
-  return names.length ? `${names.map((n) => n.trim()).join(' & ')}'s farm` : own || null;
+  if (!names.length) return own || null;
+  const nm = names.map((n) => n.trim());
+  return nm.length === 1 ? t('multi.farmOf', { name: nm[0] }) : t('multi.farmOf2', { a: nm[0], b: nm.slice(1).join(' & ') });
 }
 
 /** Drop a farm from the device (its list row and every key it owns): the server deleted it or it is not ours. */
@@ -190,6 +240,57 @@ export async function createInvite(fetcher, id, secret) {
   if (res.status === 401 || res.status === 403) return { ok: false, code: 'AUTH' };
   if (res.status === 429) return { ok: false, code: 'RATE', retryAfter: retryOf(res, body) };
   return { ok: false, code: 'NET' };
+}
+
+/** POST /api/f/:id/rekey { pid } with this member's secret (the Authorization header only). Never throws. */
+export async function createRekey(fetcher, id, secret, pid) {
+  if (!createFarmScope(id).multi || !validSecret(secret) || typeof pid !== 'string') return { ok: false, code: 'AUTH' };
+  let res;
+  try {
+    res = await fetcher(`/api/f/${encodeURIComponent(id)}/rekey`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${secret}` },
+      body: JSON.stringify({ pid }),
+      cache: 'no-store',
+    });
+  } catch { return { ok: false, code: 'NET' }; }
+  const body = await jsonOf(res);
+  if (res.ok && body && validSecret(body.token)) {
+    return { ok: true, pid: body.pid ?? pid, token: body.token, expiresAt: Number.isFinite(body.expiresAt) ? body.expiresAt : null };
+  }
+  if (res.status === 401 || res.status === 403) return { ok: false, code: 'AUTH' };
+  if (res.status === 400) return { ok: false, code: 'BAD' };
+  if (res.status === 429) return { ok: false, code: 'RATE', retryAfter: retryOf(res, body) };
+  return { ok: false, code: 'NET' };
+}
+
+/**
+ * "Delete this farm now": POST /api/f/:id/delete with this member's secret (the Authorization header only). Never
+ * throws. { ok: true } also when the farm is already gone (404: the partner deleted it a moment before).
+ */
+export async function deleteFarm(fetcher, id, secret) {
+  if (!createFarmScope(id).multi || !validSecret(secret)) return { ok: false, code: 'AUTH' };
+  let res;
+  try {
+    res = await fetcher(`/api/f/${encodeURIComponent(id)}/delete`, {
+      method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${secret}` }, body: '{}', cache: 'no-store' });
+  } catch { return { ok: false, code: 'NET' }; }
+  const body = await jsonOf(res);
+  if (res.ok && body?.ok === true) return { ok: true };
+  if (res.status === 404) return { ok: true, gone: true };
+  if (res.status === 401 || res.status === 403) return { ok: false, code: 'AUTH' };
+  if (res.status === 429) return { ok: false, code: 'RATE', retryAfter: retryOf(res, body) };
+  return { ok: false, code: 'NET' };
+}
+
+/** GET /api/f/:id/status as this member (the seats waiting for their new key), or null. Never throws. */
+export async function farmStatus(fetcher, id, secret) {
+  if (!createFarmScope(id).multi) return null;
+  try {
+    const res = await fetcher(`/api/f/${encodeURIComponent(id)}/status`, {
+      headers: validSecret(secret) ? { authorization: `Bearer ${secret}` } : {}, cache: 'no-store' });
+    return res.ok ? await jsonOf(res) : null;
+  } catch { return null; }
 }
 
 export const ttlDays = (status) => {

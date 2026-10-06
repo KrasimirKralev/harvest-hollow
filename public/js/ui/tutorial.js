@@ -13,9 +13,14 @@ import { sortedKeys } from '../../../shared/rules/order.js';
 import { footprint } from '../../../shared/rules/grid.js';
 import { h, kv, touchPlayer, touchText } from './dom.js';
 import { LAYOUT_Q } from './layout.js';
+import { t as tr, lang, ctext } from '../i18n/index.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
-const TRACK_LABEL = { fields: 'Fields', barnyard: 'Barnyard', together: 'Together', start: 'Welcome', choose: 'First steps' };
+// track -> catalog key ('moments.track.*')
+const TRACK_LABEL = { fields: 'fields', barnyard: 'barnyard', together: 'together', start: 'start', choose: 'choose' };
+/** A guide step's words in the language in effect (TUTORIAL is content: lane C translates it, i18n/bg/text-c.js
+ *  TUTORIAL['step.<id>'].text and TUTORIAL['firstUse.<id>'].text). */
+const stepText = (step) => (step.id === 'choose' ? tr('moments.coach.choose') : ctext('TUTORIAL', `step.${step.id}`, 'text', step.text));
 
 /**
  * Grandma's welcome and the farm naming belong to a NEW farm (GDD §7.4, minute 0:05): a farm the couple never named
@@ -42,7 +47,7 @@ export function coachStep(state, pid) {
   const own = currentStep(state, pid);
   if (t && !t.skip && !t.track) {
     // not assigned yet: the first deed of either track picks it ("auto-assigned by who acts first")
-    return { step: { id: 'choose', text: 'Start where you like: drag Wheat seeds across the plots, or click the weeds in the yard.', task: null },
+    return { step: { id: 'choose', text: tr('moments.coach.choose'), task: null },
       list: 'track', track: 'choose', have: 0, need: 1 };
   }
   const together = farm && farm.list === 'together' ? farm.step : null;
@@ -106,7 +111,7 @@ export function grandmaPortrait(size = 60) {
   img.src = `/assets/art/npc/${size <= 64 ? 'hazel_face' : 'hazel_128'}.webp`;
   img.width = size;
   img.height = size;
-  img.alt = 'Grandma Hazel';
+  img.alt = tr('moments.coach.grandma');
   img.decoding = 'async';
   img.draggable = false;
   img.style.cssText = 'border-radius:50%;object-fit:cover;flex:none;background:#F3E6CF;box-shadow:0 0 0 2px #FFF8E6,0 0 0 4px #8A5A2B';
@@ -284,33 +289,33 @@ export function createTutorial(S) {
     if (kv.get(hiddenKey(), false)) { closeCoach(); return; }
     const c = coachStep(state, store.pid);
     if (!c) { closeCoach(); return; }
-    const key = `${c.track}:${c.step.id}:${c.have}:${c.waiting || ''}`;
+    const key = `${c.track}:${c.step.id}:${c.have}:${c.waiting || ''}:${lang()}`;
     if (key !== coachKey) {
       coachKey = key;
       menuOpen = false;
       const pct = Math.round((Math.min(c.have, c.need) / Math.max(1, c.need)) * 100);
       const acts = [];
       if (c.step.id === 'welcome' && ACTIONS.tutDone) {
-        acts.push(h('button.btn.btn--small', { type: 'button', on: { click: () => S.controller.do('tutDone', { step: 'welcome' }) } }, 'Let\'s go!'));
+        acts.push(h('button.btn.btn--small', { type: 'button', on: { click: () => S.controller.do('tutDone', { step: 'welcome' }) } }, tr('moments.coach.go')));
       } else if (c.step.id === 'name_farm') {
-        acts.push(h('button.btn.btn--sky.btn--small', { type: 'button', on: { click: () => ui.nameFarm() } }, 'Name it'));
+        acts.push(h('button.btn.btn--sky.btn--small', { type: 'button', on: { click: () => ui.nameFarm() } }, tr('moments.coach.nameIt')));
       } else if (c.step.id === 'say_hello' && ACTIONS.tutDone) {
-        acts.push(h('button.btn.btn--sky.btn--small', { type: 'button', on: { click: () => S.social?.sendEmote('wave') } }, 'Wave 👋'));
+        acts.push(h('button.btn.btn--sky.btn--small', { type: 'button', on: { click: () => S.social?.sendEmote('wave') } }, tr('moments.coach.wave')));
       }
       // the rarer choices live behind one "⋯" button with 36 px rows: four 21 px links 2 px apart made one stray
       // click end the guide for good (QA wave 1 UI-04)
       const more = coachChoices(state, c).map(([label, fn, cls]) => h(`button.coach-item${cls ? `.${cls}` : ''}`, {
         type: 'button', role: 'menuitem', on: { click: () => { setMenu(false); fn(); } } }, label));
-      const menu = more.length ? h('div.coach-menu.paper', { role: 'menu', 'aria-label': 'Guide choices', hidden: true }, ...more) : null;
-      const moreBtn = menu ? h('button.coach-more', { type: 'button', 'aria-haspopup': 'menu', 'aria-expanded': 'false', 'aria-label': 'More choices for the guide',
-        'data-tip': 'Skip, swap or hide the guide', on: { click: () => setMenu(!menuOpen) } }, h('span', { 'aria-hidden': 'true' }, '⋯')) : null;
-      const said = touchText(c.step.text, touchPlayer(S.controller));      // a phone taps, and has no G key
-      const text = c.waiting ? `${said} (when the farm reaches level ${c.waiting})` : said;
+      const menu = more.length ? h('div.coach-menu.paper', { role: 'menu', 'aria-label': tr('moments.coach.menu'), hidden: true }, ...more) : null;
+      const moreBtn = menu ? h('button.coach-more', { type: 'button', 'aria-haspopup': 'menu', 'aria-expanded': 'false', 'aria-label': tr('moments.coach.more'),
+        'data-tip': tr('moments.coach.moreTip'), on: { click: () => setMenu(!menuOpen) } }, h('span', { 'aria-hidden': 'true' }, '⋯')) : null;
+      const said = touchText(stepText(c.step), touchPlayer(S.controller));      // a phone taps, and has no G key
+      const text = c.waiting ? tr('moments.coach.waiting', { said, level: c.waiting }) : said;
       const next = h('section.coach.wood', { role: 'status', 'aria-live': 'polite', dataset: { step: c.step.id } },
         h('div.paper.coach-paper',
           grandmaPortrait(52),
           h('div.say',
-            h('div.who', 'Grandma Hazel', h(`span.track.${c.track}`, TRACK_LABEL[c.track] || 'First steps')),
+            h('div.who', tr('moments.coach.grandma'), h(`span.track.${c.track}`, tr(`moments.track.${TRACK_LABEL[c.track] || 'choose'}`))),
             h('p.line', { title: text }, text),
             c.need > 1 || c.have > 0 ? h('div.prog', h('span.bar', h('i', { style: { width: `${pct}%` } })), `${Math.min(c.have, c.need)} / ${c.need}`) : null),
           h('div.acts', acts, moreBtn ? h('div.coach-more-wrap', moreBtn, menu) : null)));
@@ -358,18 +363,18 @@ export function createTutorial(S) {
     const out = [];
     const me = state.players[store.pid];
     if (c.list === 'track' && c.track !== 'choose' && ACTIONS.tutSkip) {
-      out.push(['Skip this step', () => S.controller.do('tutSkip', {})]);
+      out.push([tr('moments.coach.skip'), () => S.controller.do('tutSkip', {})]);
       // GDD §7.4: the two tracks are "auto-assigned by who acts first and swappable"
       if (ACTIONS.tutSwap && (c.track === 'fields' || c.track === 'barnyard')) {
-        out.push([c.track === 'fields' ? 'Do the animals instead' : 'Do the fields instead', () => S.controller.do('tutSwap', {})]);
+        out.push([c.track === 'fields' ? tr('moments.coach.swapAnimals') : tr('moments.coach.swapFields'), () => S.controller.do('tutSwap', {})]);
       }
     }
-    out.push(['Hide the guide for now', () => { kv.set(hiddenKey(), true); closeCoach(); }]);
+    out.push([tr('moments.coach.hide'), () => { kv.set(hiddenKey(), true); closeCoach(); }]);
     if (me && me.tut && !me.tut.skip && ACTIONS.tutSkip && c.list !== 'start') {
-      out.push(['I know farming: end the guide', async () => {
-        const ok = await ui.confirm({ title: 'End the guide?', lead: 'Grandma stops showing you the first steps.',
-          body: 'You can bring her back any time: Settings, Farm, "Show the guide again".', glyph: 'letter',
-          ok: 'End the guide', okKind: 'sun', cancel: 'Keep the guide' });
+      out.push([tr('moments.coach.end'), async () => {
+        const ok = await ui.confirm({ title: tr('moments.coach.endTitle'), lead: tr('moments.coach.endLead'),
+          body: tr('moments.coach.endBody'), glyph: 'letter',
+          ok: tr('moments.coach.endOk'), okKind: 'sun', cancel: tr('moments.coach.endKeep') });
         if (ok) S.controller.do('tutSkip', { all: 'yes' });
       }, 'danger']);
     }
@@ -397,13 +402,14 @@ export function createTutorial(S) {
     // a tool's tip goes on top of its open tray; a panel's tip into the coach column
     const trayOpen = !document.getElementById('seed-tray')?.hidden || !document.getElementById('build-tray')?.hidden;
     if (trayOpen && !TIP_PANELS.has(id)) {
-      trayTip.replaceChildren(h('b', 'Tip: '), touchText(tip.text, touchPlayer(S.controller)));
+      const words = ctext('TUTORIAL', `firstUse.${id}`, 'text', tip.text);
+      trayTip.replaceChildren(h('b', tr('moments.coach.tip')), touchText(words, touchPlayer(S.controller)));
       trayTip.hidden = false;
       clearTimeout(trayTip._t);
       trayTip._t = setTimeout(() => { trayTip.hidden = true; }, ms);
       return;
     }
-    hint = h('div.hint', { role: 'status' }, h('b', 'Tip: '), touchText(tip.text, touchPlayer(S.controller)));
+    hint = h('div.hint', { role: 'status' }, h('b', tr('moments.coach.tip')), touchText(ctext('TUTORIAL', `firstUse.${id}`, 'text', tip.text), touchPlayer(S.controller)));
     slot.append(hint);
     const mine = hint;
     setTimeout(() => { if (mine.isConnected) { mine.style.transition = 'opacity 300ms'; mine.style.opacity = '0'; setTimeout(() => mine.remove(), 320); } }, ms);
@@ -452,7 +458,7 @@ export function createTutorial(S) {
       coachKey = '';
       const me = store.state && store.state.players[store.pid];
       if (ACTIONS.tutRestart) S.controller.do('tutRestart', {});
-      else if (me && me.tut && me.tut.skip) ui.toast('Grandma\'s guide is switched off for you on this farm.', { kind: 'info', ms: 5000 });
+      else if (me && me.tut && me.tut.skip) ui.toast(tr('moments.coach.off'), { kind: 'info', ms: 5000 });
       render();
     },
     /** True while the coach is on screen (other teaching cards wait). */

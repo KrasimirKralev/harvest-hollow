@@ -14,6 +14,8 @@ import { unseenBeats } from '../../../shared/rules/actions/quests.js';
 import { h, icon, svgIcon, fmt, fmtDuration, playerMark } from './dom.js';
 import { feedText, foldGiants } from './feed.js';
 import { unlocksFor, showMeTarget } from './levelup.js';
+import { unlockName } from './hud.js';
+import { t, tn, name as cname, ctext } from '../i18n/index.js';
 
 // ui-weekly's reader of the Fair / Barge / townsfolk / village state (GDD §5.8: the recap names "the Fair and barge
 // status"), loaded with the panels so the shell keeps no static import of them
@@ -64,14 +66,15 @@ export function buildRecap(state, pid, now) {
   return r;
 }
 
+// [catalog key, glyph]
 const TITLES = {
-  ripened: ['Ready for you', 'basket'],
-  partnerDid: ['While you were away', null],
-  keepsakes: ['Gifts on your shelf', 'heart'],
-  notes: ['Notes for you', 'note'],
-  newUnlocks: ['New on the farm', 'star'],
-  storyBeats: ['A letter arrived', 'letter'],
-  weekly: ['This week', 'star'],
+  ripened: ['moments.recap.ripened', 'basket'],
+  partnerDid: ['moments.recap.partnerDid', null],
+  keepsakes: ['moments.recap.keepsakes', 'heart'],
+  notes: ['moments.recap.notes', 'note'],
+  newUnlocks: ['moments.recap.newUnlocks', 'star'],
+  storyBeats: ['moments.recap.storyBeats', 'letter'],
+  weekly: ['moments.recap.weekly', 'star'],
 };
 
 export function createRecap(S) {
@@ -80,50 +83,58 @@ export function createRecap(S) {
   let data = null;
 
   function section(sec) {
-    const [title, glyph] = TITLES[sec.name] || [sec.name, 'star'];
-    const head = h('h3', glyph ? (glyph === 'basket' ? icon('basket', { size: 26 }) : svgIcon(glyph, 26)) : null, title);
+    const [key, glyph] = TITLES[sec.name] || [null, 'star'];
+    const head = h('h3', glyph ? (glyph === 'basket' ? icon('basket', { size: 26 }) : svgIcon(glyph, 26)) : null, key ? t(key) : sec.name);
     const st = store.state;
     switch (sec.name) {
       case 'ripened': {
         const r = sec.items;
-        const bits = [r.crops && `${fmt(r.crops)} ${r.crops === 1 ? 'plot' : 'plots'} of crops`, r.animals && `${fmt(r.animals)} animals with goods`,
-          r.trees && `${fmt(r.trees)} trees full of fruit`, r.trays && `${fmt(r.trays)} finished trays`].filter(Boolean);
-        return h('section', head, h('p.body', { style: 'margin:0' }, `${bits.join(', ')}. Everything waited for you.`));
+        const bits = [r.crops && tn('moments.recap.crops', r.crops), r.animals && tn('moments.recap.animals', r.animals),
+          r.trees && tn('moments.recap.trees', r.trees), r.trays && tn('moments.recap.trays', r.trays)].filter(Boolean);
+        return h('section', head, h('p.body', { style: 'margin:0' }, t('moments.recap.waited', { list: bits.join(', ') })));
       }
       case 'partnerDid':
         return h('section', head, h('ul', foldGiants(sec.items).slice(-8).map((row) => {
-          const t = feedText(row, st, store.pid);
+          const ft = feedText(row, st, store.pid);
           const p = st.players[row.by];
           const glyph = row.k === 'quest' ? 'letter' : row.k === 'level' ? 'star' : row.k === 'name' ? 'note' : 'sprout';
           return h('li', p ? playerMark(row.by, p) : null,
-            t.icon ? icon(t.icon, { size: 26 }) : svgIcon(glyph, 26), h('span', h('b', t.actor), ` ${t.text}`));
+            ft.icon ? icon(ft.icon, { size: 26 }) : svgIcon(glyph, 26), h('span', h('b', ft.actor), ` ${ft.text}`));
         })));
       case 'keepsakes':
         return h('section', head, h('div.grid', sec.items.map((k) => h('div.cell', icon(k.item, { size: 44 }),
-          CONTENT.items.get(k.item)?.name ?? k.item))));
+          CONTENT.items.get(k.item) ? cname(k.item, { family: 'items' }) : k.item))));
       case 'notes':
         return h('section', head, h('ul', sec.items.slice(0, 4).map((n) => h('li', svgIcon('note', 22),
-          h('span', h('b', st.players[n.by]?.name ?? 'Note'), `: “${n.text}”`)))));
+          h('span', h('b', st.players[n.by]?.name ?? t('moments.recap.note')), t('moments.recap.noteText', { text: n.text }))))));
       case 'newUnlocks':
-        return h('section', head, h('div.grid', sec.items.slice(0, 10).map((u) => h('div.cell', u.icon ? icon(u.icon, { size: 44 }) : svgIcon('star', 44), u.name))));
+        // the names are said now (the card's data was worked out at the welcome, maybe in the other language)
+        return h('section', head, h('div.grid', sec.items.slice(0, 10).map((u) => h('div.cell', u.icon ? icon(u.icon, { size: 44 }) : svgIcon('star', 44),
+          u.family && u.id ? unlockName(u) : u.name))));
       case 'storyBeats':
-        return h('section', head, h('ul', sec.items.map((b) => h('li', svgIcon('letter', 24), h('span', h('b', b.title), ` — ${b.text}`)))));
-      case 'weekly':
-        return h('section', head, h('ul', sec.items.map((l) => h('li', icon(l.icon, { size: 24 }), h('span', l.text)))));
+        return h('section', head, h('ul', sec.items.map((b) => h('li', svgIcon('letter', 24),
+          h('span', h('b', ctext('STORY_BEATS', b.id, 'title', b.title)), t('moments.recap.beatText', { text: ctext('STORY_BEATS', b.id, 'text', b.text) }))))));
+      case 'weekly': {
+        // the week's lines are read again as the card is drawn (a language switch re-mounts it): words of the moment
+        let lines = sec.items;
+        try { const now = weeklyLines ? weeklyLines(st, store.pid, store.now()) : null; if (now && now.length) lines = now; } catch { /* keep the welcome's */ }
+        return h('section', head, h('ul', lines.map((l) => h('li', icon(l.icon, { size: 24 }), h('span', l.text)))));
+      }
       default:
         return null;
     }
   }
 
   ui.panels.register('recap', {
-    title: 'Welcome back!',
+    get title() { return t('moments.recap.title'); },
     size: 'wide',
     modal: true,
     mount(body, ctx) {
       const d = data || buildRecap(store.state, store.pid, store.now());
       const away = store.now() - d.since;
       const me = store.state.players[store.pid];
-      const lead = h('p.hello', `Hello again, ${me ? me.name : 'farmer'}! You were away for ${fmtDuration(away).replace(/ 0\d?[ms]$/, '')}.`);
+      const lead = h('p.hello', me ? t('moments.recap.hello', { name: me.name, d: fmtDuration(away, { cut: 'ms<10' }) })
+        : t('moments.recap.helloAny', { d: fmtDuration(away, { cut: 'ms<10' }) }));
       const done = () => {
         // the tour of new unlocks counts as seen once the card is closed (per player, in the rules)
         const lvl = Math.max(0, ...d.sections.filter((s) => s.name === 'newUnlocks').flatMap((s) => s.items.map((u) => u.level)));
@@ -134,11 +145,11 @@ export function createRecap(S) {
         ctx.close();
       };
       const news = d.sections.find((x) => x.name === 'newUnlocks');
-      const first = news ? news.items.map((u) => showMeTarget(u, store.state)).find((t) => t && ui.panels.has(t.panel)) : null;
+      const first = news ? news.items.map((u) => showMeTarget(u, store.state)).find((x) => x && ui.panels.has(x.panel)) : null;
       body.append(h('div.recap', lead, ...d.sections.map(section).filter(Boolean),
         h('div.acts',
-          first ? h('button.btn.btn--sky', { type: 'button', on: { click: () => { done(); ui.panels.open(first.panel, first.args); } } }, 'Show me the new things') : null,
-          h('button.btn', { type: 'button', on: { click: done } }, 'Let\'s farm!'))));
+          first ? h('button.btn.btn--sky', { type: 'button', on: { click: () => { done(); ui.panels.open(first.panel, first.args); } } }, t('moments.recap.showNew')) : null,
+          h('button.btn', { type: 'button', on: { click: done } }, t('moments.recap.farm')))));
     },
   });
 

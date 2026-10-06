@@ -10,6 +10,7 @@ import {
   legacyOpen, legacyLiveBuild, levelOf, featureLevel, featureLive, seasonCoatOf, LEAGUE, SEASONAL_TRACK_UNLOCK, MAX_LEVEL, DUEL,
 } from './league-rules.js';
 import { SEASONAL_TRACK } from '../../../../shared/content/index.js';
+import { t, lang, list, Q, ctext, name as cname } from '../../i18n/index.js';
 
 const trackLiveBuild = () => Boolean(SEASONAL_TRACK) && systemLive(SEASONAL_TRACK);
 const leagueLiveBuild = () => Boolean(LEAGUE) && systemLive(LEAGUE);
@@ -24,24 +25,24 @@ const INK = '#3E2612';
  * it opens at) and badge(state, pid, now) -> number | '!' | null (what waits there for THIS farmer).
  */
 export const HUB = Object.freeze([
-  { name: 'seasonTrack', label: 'Ribbon Track', icon: 'ticket_stub', at: () => SEASONAL_TRACK_UNLOCK,
+  { name: 'seasonTrack', get label() { return t('league.hub.track'); }, icon: 'ticket_stub', at: () => SEASONAL_TRACK_UNLOCK,
     build: () => trackLiveBuild(), open: (st) => trackOpen(st),
     badge: (st, pid, now) => trackOf(st, now)?.claimable || null },
-  { name: 'league', label: 'League', icon: 'purple_rosette', at: () => LEAGUE?.unlock ?? 27,
+  { name: 'league', get label() { return t('league.hub.league'); }, icon: 'purple_rosette', at: () => LEAGUE?.unlock ?? 27,
     build: () => leagueLiveBuild(), open: (st) => leagueOpen(st), badge: () => null },
-  { name: 'horseShow', label: 'Horse show', icon: 'show_ribbon', at: () => featureLevel('horse_show', 25),
+  { name: 'horseShow', get label() { return t('league.hub.show'); }, icon: 'show_ribbon', at: () => featureLevel('horse_show', 25),
     build: () => featureLive('horse_show'), open: (st) => horseShowOpen(st), badge: (st, pid, now) => {
       const v = showOf(st, now);
       return v.open && v.isOpen && v.have > 0 && v.left > 0 ? '!' : null;
     } },
-  { name: 'perks', label: 'Perks', icon: 'mastery_sign_gold', at: () => featureLevel('perks', 12),
+  { name: 'perks', get label() { return t('league.hub.perks'); }, icon: 'mastery_sign_gold', at: () => featureLevel('perks', 12),
     build: () => perksLiveBuild(), open: (st) => perksOpen(st), badge: (st, pid, now) => perksOf(st, pid, now)?.free || null },
-  { name: 'duel', label: 'Duel', icon: 'ribbon_trophy', at: () => DUEL?.unlock ?? featureLevel('friendly_duel', 29),
+  { name: 'duel', get label() { return t('league.hub.duel'); }, icon: 'ribbon_trophy', at: () => DUEL?.unlock ?? featureLevel('friendly_duel', 29),
     build: () => duelLiveBuild(), open: (st) => duelOpen(st), badge: (st, pid, now) => {
       const d = duelOf(st, pid, now);
       return d.phase === 'invited' || (d.unseen && d.last?.scored) ? '!' : null;
     } },
-  { name: 'legacy', label: 'Legacy', icon: 'golden_gate', at: () => MAX_LEVEL,
+  { name: 'legacy', get label() { return t('league.hub.legacy'); }, icon: 'golden_gate', at: () => MAX_LEVEL,
     build: () => legacyLiveBuild(), open: (st) => legacyOpen(st), badge: () => null },
 ]);
 
@@ -94,12 +95,12 @@ export function hubNav(ctx, active) {
     type: 'button', 'aria-current': e.name === active ? 'page' : null, dataset: { hub: e.name },
     on: { click: () => { if (e.name !== active) ctx.ui.panels.open(e.name); } },
   }, icon(e.icon, { size: 26, alt: '' }), h('span', e.label),
-  e.badge && e.name !== active ? h(`span.lg-hub-badge${e.badge === '!' ? '' : '.calm'}`, { 'aria-label': e.badge === '!' ? 'something new' : `${e.badge} waiting` }, String(e.badge)) : null));
+  e.badge && e.name !== active ? h(`span.lg-hub-badge${e.badge === '!' ? '' : '.calm'}`, { 'aria-label': e.badge === '!' ? t('league.hub.new') : t('league.hub.waiting', { n: e.badge }) }, String(e.badge)) : null));
   if (nextLocked) {
-    tabs.push(h('span.lg-hub-tab.locked', { title: `${nextLocked.label} opens at farm level ${nextLocked.at}`, dataset: { hub: nextLocked.name } },
-      svgIcon('lock', 18), h('span', nextLocked.label), h('small', `L${nextLocked.at}`)));
+    tabs.push(h('span.lg-hub-tab.locked', { title: t('league.hub.opensAt', { name: nextLocked.label, n: nextLocked.at }), dataset: { hub: nextLocked.name } },
+      svgIcon('lock', 18), h('span', nextLocked.label), h('small', t('league.hub.lvl', { n: nextLocked.at }))));
   }
-  return h('nav.lg-hub', { 'aria-label': 'Seasons, league and perks' }, ...tabs);
+  return h('nav.lg-hub', { 'aria-label': t('league.hub.label') }, ...tabs);
 }
 
 // ---- art ----------------------------------------------------------------------------------------------------------
@@ -210,8 +211,8 @@ export function ring(p, size = 64, label = '', { cls = '', color = null } = {}) 
 
 // ---- rewards ------------------------------------------------------------------------------------------------------
 
-const nameOf = (id) => itemOf(id)?.name ?? defOf(id)?.name ?? String(id).replace(/_/g, ' ').replace(/^./, (c) => c.toUpperCase());
-const decorName = (id) => (id ? nameOf(id) : 'a decor piece');
+const nameOf = (id) => (itemOf(id) || defOf(id) ? cname(id) : String(id).replace(/_/g, ' ').replace(/^./, (c) => c.toUpperCase()));
+const decorName = (id) => (id ? nameOf(id) : t('league.rw.decorPiece'));
 
 /**
  * One reward (the content shape of SEASONAL_TRACK.rewards / LEGACY.pool / a rules payout) as [{ icon, text, kind }]:
@@ -222,30 +223,30 @@ const decorName = (id) => (id ? nameOf(id) : 'a decor piece');
 export function rewardParts(r = {}, { level = 1, season = 'autumn' } = {}) {
   const out = [];
   if (!r || typeof r !== 'object') return out;
-  if (r.acorns) out.push({ icon: 'acorns', text: `${fmt(r.acorns)} Acorn${r.acorns === 1 ? '' : 's'}`, kind: 'acorns' });
-  if (r.coins) out.push({ icon: 'coins', text: `${fmtShort(r.coins)} coins`, kind: 'coins' });
-  if (r.coinsHoursBp) out.push({ icon: 'coins', text: `${fmtShort(eHours(level, r.coinsHoursBp))} coins`, kind: 'coins' });
+  if (r.acorns) out.push({ icon: 'acorns', text: t('league.rw.acorns', { n: r.acorns }), kind: 'acorns' });
+  if (r.coins) out.push({ icon: 'coins', text: t('league.rw.coins', { n: fmtShort(r.coins) }), kind: 'coins' });
+  if (r.coinsHoursBp) out.push({ icon: 'coins', text: t('league.rw.coins', { n: fmtShort(eHours(level, r.coinsHoursBp)) }), kind: 'coins' });
   if (r.goldenSeeds) {
     const seeds = (BOOSTS.goldenSeeds?.seeds ?? 5) * r.goldenSeeds;
-    out.push({ icon: 'golden_seeds', text: r.goldenSeeds === 1 ? `a Golden Seed Packet (${seeds} seeds)` : `${r.goldenSeeds} Golden Seed Packets`, kind: 'seeds' });
+    out.push({ icon: 'golden_seeds', text: r.goldenSeeds === 1 ? t('league.rw.goldenOne', { n: seeds }) : t('league.rw.golden', { n: r.goldenSeeds }), kind: 'seeds' });
   }
   if (r.seedPacket) {
-    out.push({ icon: 'seed_packet', text: r.seedPacket === 1 ? `a seed packet (${BOOSTS.seedPacket?.plantings ?? 5} plantings)` : `${r.seedPacket} seed packets`, kind: 'seeds' });
+    out.push({ icon: 'seed_packet', text: r.seedPacket === 1 ? t('league.rw.packetOne', { n: BOOSTS.seedPacket?.plantings ?? 5 }) : t('league.rw.packets', { n: r.seedPacket }), kind: 'seeds' });
   }
   if (r.items && typeof r.items === 'object') {
-    for (const [id, n] of Object.entries(r.items)) out.push({ icon: id, text: `${fmt(n)} ${nameOf(id)}`, kind: 'item' });
+    for (const [id, n] of Object.entries(r.items)) out.push({ icon: id, text: t('league.rw.item', { n, item: nameOf(id), q: Q(id, n) }), kind: 'item' });
   }
-  if (r.compost) out.push({ icon: 'compost', text: `${fmt(r.compost)} Compost`, kind: 'item' });
-  if (r.hearts) out.push({ icon: 'hearts', text: `${fmt(r.hearts)} Heart${r.hearts === 1 ? '' : 's'} each`, kind: 'hearts' });
+  if (r.compost) out.push({ icon: 'compost', text: t('league.rw.compost', { q: Q('compost', r.compost) }), kind: 'item' });
+  if (r.hearts) out.push({ icon: 'hearts', text: t('league.rw.hearts', { n: r.hearts }), kind: 'hearts' });
   if (r.decor) {
     const id = r.decor === 'season' ? DAILY_GIFT.seasonDecor?.[season] : typeof r.decor === 'string' ? r.decor : null;
     out.push({ icon: id ?? 'bunting', text: decorName(id), kind: 'decor', id });
   }
   if (r.coat) {
     const c = typeof r.coat === 'string' && r.coat !== 'season' ? { id: r.coat } : seasonCoatOf(season);
-    out.push({ icon: 'saddle_rack', text: c ? `the ${nameOf(c.id)} coat for an animal` : 'a season coat for an animal', kind: 'coat', hue: c?.hue ?? null });
+    out.push({ icon: 'saddle_rack', text: c ? t('league.rw.coat', { coat: ctext('coats', c.id, 'name', nameOf(c.id)) }) : t('league.rw.seasonCoat'), kind: 'coat', hue: c?.hue ?? null });
   }
-  if (r.banner) out.push({ icon: typeof r.banner === 'string' ? r.banner : 'bunting', text: typeof r.banner === 'string' ? nameOf(r.banner) : 'the champion banner', kind: 'decor' });
+  if (r.banner) out.push({ icon: typeof r.banner === 'string' ? r.banner : 'bunting', text: typeof r.banner === 'string' ? nameOf(r.banner) : t('league.rw.banner'), kind: 'decor' });
   return out;
 }
 
@@ -263,6 +264,7 @@ export function rewardChips(r, { size = 28, words = true, level = 1, season = 'a
 export function rewardText(r, opts = {}) {
   const parts = rewardParts(r, opts).map((p) => p.text);
   if (parts.length <= 1) return parts[0] ?? '';
+  if (lang() !== 'en') return list(parts);
   return `${parts.slice(0, -1).join(', ')} and ${parts.at(-1)}`;
 }
 

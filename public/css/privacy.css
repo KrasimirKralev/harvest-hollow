@@ -1,0 +1,134 @@
+/* The privacy page (public/privacy.html). On top of css/style.css (tokens, fonts, .paper, .btn). Phone first, one
+   scrolling column of parchment on the landing page's meadow: the carved logo and the language switch, the note itself
+   (EN or BG; without JavaScript both, one under the other), the request form, a wood band at the foot. Every text sits
+   on parchment or wood in ink-900/700 (well above AA); links are underlined; controls are at least 44 px tall. */
+html, body.pv-page { height: auto; min-height: 100%; overflow-x: hidden; overflow-y: auto; }
+html:has(body.pv-page) { background: #A9D67E; scroll-behavior: smooth; }
+body.pv-page { min-height: 100vh; min-height: 100dvh; -webkit-text-size-adjust: 100%;
+  background:
+    radial-gradient(60% 30% at 15% 0%, rgba(255, 255, 255, .25), transparent 70%),
+    linear-gradient(180deg, #CDEBFA 0, #E6F6FF 140px, #BFE29A 141px, #A9D67E 520px, #BFE29A 100%); }
+
+.pv-top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px;
+  width: min(820px, 100%); margin: 0 auto;
+  padding: calc(14px + env(safe-area-inset-top, 0px)) calc(16px + env(safe-area-inset-right, 0px)) 14px calc(16px + env(safe-area-inset-left, 0px)); }
+.pv-home { display: block; width: min(250px, 62vw); line-height: 0; border-radius: var(--r-s); }
+.pv-home img { display: block; width: 100%; height: auto; filter: drop-shadow(0 4px 6px rgba(62, 38, 18, .3)); }
+.pv-home:focus-visible { outline: 3px solid var(--sky-900); outline-offset: 4px; }
+
+/* the language switch: two pill halves on wood; the shown language is pressed in */
+.pv-lang { display: inline-flex; padding: 4px; gap: 4px; border-radius: var(--r-pill);
+  background: linear-gradient(180deg, var(--wood-100), var(--wood-300)); box-shadow: 0 0 0 2.5px var(--wood-900), var(--drop-soft); }
+.pv-lang a { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; min-width: 44px; padding: 8px 14px;
+  border-radius: var(--r-pill); font: 700 1rem/1.1 var(--font-ui); color: var(--ink-900); text-decoration: none; background: var(--paper-50);
+  box-shadow: inset 0 0 0 2px var(--paper-edge); }
+.pv-lang a[aria-current="true"] { color: #fff; text-shadow: 0 1px 0 var(--go-900); background: linear-gradient(180deg, var(--go-500), var(--go-700));
+  box-shadow: inset 0 2px 0 rgba(0, 0, 0, .18), 0 0 0 2px var(--go-900); }
+.pv-lang a:focus-visible { outline: 3px solid var(--sky-900); outline-offset: 2px; }
+
+.pv-main { display: grid; gap: 24px; width: min(820px, 100%); margin: 0 auto;
+  padding: 0 calc(12px + env(safe-area-inset-right, 0px)) 28px calc(12px + env(safe-area-inset-left, 0px)); }
+.pv-doc { padding: 22px 18px 18px; border-radius: var(--r-l);
+  box-shadow: inset 0 0 0 2px var(--paper-edge), inset 0 0 24px rgba(160, 110, 40, .22), 0 0 0 2.5px var(--wood-700), var(--drop); }
+.pv-doc[hidden] { display: none; }
+.pv-doc :where(p, li, dd) { font: 500 1.0625rem/1.6 var(--font-ui); color: var(--ink-900); overflow-wrap: anywhere; }
+.pv-doc :where(p) { margin: 0 0 12px; }
+.pv-doc a { color: var(--sky-900); text-decoration: underline; text-underline-offset: 3px; text-decoration-thickness: 2px; }
+.pv-doc b, .pv-doc strong { font-weight: 700; }
+.pv-doc section { margin-top: 26px; scroll-margin-top: 16px; }
+
+.pv-h1 { margin: 0 0 10px; text-wrap: balance; font: 800 clamp(1.75rem, 7.4vw, 2.375rem)/1.1 var(--font-display); color: var(--ink-900); }
+.pv-lead { font-size: 1.1875rem; font-weight: 600; color: var(--ink-700); text-wrap: pretty; }
+.pv-updated { font: 700 .9375rem/1.3 var(--font-ui); color: var(--ink-700); }
+/* section titles: a small honey-wood signboard, like the landing page's */
+.pv-h2 { display: inline-block; margin: 0 0 12px; padding: 6px 16px 8px; border-radius: 12px; text-wrap: balance;
+  font: 800 clamp(1.25rem, 5.4vw, 1.5rem)/1.15 var(--font-display); color: #fff; scroll-margin-top: 16px;
+  text-shadow: -1.5px -1.5px 0 var(--wood-900), 1.5px -1.5px 0 var(--wood-900), -1.5px 1.5px 0 var(--wood-900), 1.5px 1.5px 0 var(--wood-900), 0 2.5px 0 var(--wood-900);
+  background: linear-gradient(180deg, var(--wood-100), var(--wood-300) 58%, var(--wood-500));
+  box-shadow: inset 0 2px 0 rgba(255, 255, 255, .45), inset 0 -3px 0 rgba(90, 50, 21, .35), 0 0 0 2.5px var(--wood-900); }
+.pv-h3 { margin: 0 0 8px; font: 800 1.25rem/1.2 var(--font-display); color: var(--ink-900); }
+.pv-h3 span { margin-right: 4px; }
+
+.pv-doc .pv-short { margin-top: 18px; padding: 14px 16px 6px; border-radius: var(--r-m); background: #FFF0C2; box-shadow: inset 0 0 0 2px var(--sun-700); }
+.pv-short .pv-h2 { margin-bottom: 8px; }
+.pv-doc ul, .pv-doc ol { margin: 0 0 12px; padding-left: 1.4em; }
+.pv-doc li { margin: 0 0 6px; }
+.pv-short li::marker { color: var(--go-700); }
+
+.pv-item { margin: 0 0 14px; padding: 14px 16px 4px; border-radius: var(--r-m); background: rgba(255, 251, 238, .78);
+  box-shadow: inset 0 0 0 2px var(--paper-edge), 0 3px 0 rgba(90, 50, 21, .18); }
+
+.pv-times { margin: 0; display: grid; gap: 10px; }
+.pv-times > div { padding: 10px 14px; border-radius: var(--r-m); background: rgba(255, 251, 238, .78); box-shadow: inset 0 0 0 2px var(--paper-edge); }
+.pv-times dt { margin: 0 0 2px; font: 800 1.0625rem/1.3 var(--font-display); color: var(--ink-900); }
+.pv-times dd { margin: 0; }
+@media (min-width: 640px) {
+  .pv-times > div { display: grid; grid-template-columns: 11em 1fr; gap: 12px; align-items: baseline; }
+}
+
+.pv-steps li { padding-left: 4px; }
+.pv-steps li::marker { font-weight: 800; color: var(--go-900); }
+
+.pv-note { margin: 26px 0 0; padding: 12px 14px; border-radius: var(--r-m); font-size: 1rem; color: var(--ink-700);
+  background: rgba(255, 251, 238, .6); box-shadow: inset 0 0 0 2px var(--paper-edge); }
+
+/* ---- the request form ------------------------------------------------------------------------------------------- */
+.pv-ask { padding: 16px; border-radius: var(--r-l); background: rgba(255, 251, 238, .85);
+  box-shadow: inset 0 0 0 2px var(--paper-edge), 0 0 0 2.5px var(--wood-700), var(--drop-soft); }
+.pv-form { display: grid; gap: 16px; }
+.pv-form[hidden] { display: none; }
+.pv-kinds { min-width: 0; margin: 0; padding: 0; border: 0; display: grid; gap: 8px; }
+.pv-label { display: block; margin: 0 0 6px; padding: 0; font: 800 1.125rem/1.25 var(--font-display); color: var(--ink-900); }
+.pv-opt { font: 600 .9375rem/1 var(--font-ui); color: var(--ink-700); }
+.pv-kind { position: relative; display: flex; align-items: center; gap: 10px; min-height: 48px; padding: 8px 12px; border-radius: 12px; cursor: pointer;
+  font: 700 1rem/1.3 var(--font-ui); color: var(--ink-900); background: var(--paper-50); box-shadow: inset 0 0 0 2px var(--paper-edge), 0 3px 0 var(--paper-edge); }
+.pv-kind input { flex: none; width: 22px; height: 22px; margin: 0; accent-color: var(--go-700); }
+.pv-kind:has(input:checked) { background: #E4F5D0; box-shadow: inset 0 0 0 3px var(--go-700), 0 3px 0 var(--go-900); }
+.pv-kind:has(input:focus-visible) { outline: 3px solid var(--sky-900); outline-offset: 2px; }
+.pv-kinds[aria-invalid="true"] .pv-kind { box-shadow: inset 0 0 0 2px var(--stop-700), 0 3px 0 var(--stop-900); }
+.pv-field { min-width: 0; }
+.pv-input { display: block; width: 100%; min-height: 48px; padding: 11px 12px; border: 0; border-radius: 12px;
+  font: 600 1rem/1.4 var(--font-ui); color: var(--ink-900); background: #FFFDF6;
+  box-shadow: inset 0 0 0 2px var(--paper-edge), inset 0 2px 5px rgba(90, 50, 21, .12); }
+.pv-input:focus { outline: 3px solid var(--sky-700); outline-offset: 1px; }
+.pv-input[aria-invalid="true"] { box-shadow: inset 0 0 0 2px var(--stop-700), inset 0 2px 5px rgba(90, 50, 21, .12); }
+.pv-text { min-height: 128px; resize: vertical; }
+.pv-hint { margin: 6px 0 0; font: 600 .9375rem/1.4 var(--font-ui); color: var(--ink-700); }
+.pv-err { margin: 6px 0 0; font: 700 .9375rem/1.35 var(--font-ui); color: var(--stop-900); }
+/* the honeypot: off-screen, out of the tab order and the accessibility tree */
+.pv-trap { position: absolute; left: -10000px; top: auto; width: 1px; height: 1px; overflow: hidden; }
+.pv-acts { display: flex; justify-content: center; }
+.pv-send { min-width: min(280px, 100%); min-height: 54px; font-size: 1.1875rem; white-space: normal; text-align: center; line-height: 1.2; }
+.pv-status { margin: 0; text-align: center; font-weight: 700; color: var(--ink-700); }
+.pv-status:empty { display: none; }
+.pv-status.bad { padding: 8px 12px; border-radius: var(--r-s); color: var(--stop-900); background: #FFE7E2; box-shadow: inset 0 0 0 2px var(--stop-300); }
+.pv-done { padding: 12px 6px 2px; text-align: center; outline: none; }
+.pv-done[hidden] { display: none; }
+.pv-done-title { margin: 0 0 6px; font: 800 1.75rem/1.15 var(--font-display); color: var(--go-900); }
+
+/* ---- the foot -------------------------------------------------------------------------------------------------- */
+.pv-foot { padding: 18px calc(16px + env(safe-area-inset-right, 0px)) calc(22px + env(safe-area-inset-bottom, 0px)) calc(16px + env(safe-area-inset-left, 0px));
+  background: repeating-linear-gradient(180deg, transparent 0 38px, rgba(0, 0, 0, .12) 38px 40px), linear-gradient(180deg, var(--wood-700), var(--wood-900));
+  box-shadow: inset 0 3px 0 rgba(255, 255, 255, .18); }
+.pv-links { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; }
+.pv-links a { display: inline-flex; align-items: center; min-height: 44px; padding: 8px 16px; border-radius: var(--r-pill);
+  font: 700 .9375rem/1.2 var(--font-ui); color: var(--ink-900); text-decoration: none; background: var(--paper-100);
+  box-shadow: inset 0 0 0 2px var(--paper-edge), 0 3px 0 rgba(0, 0, 0, .25); }
+.pv-links a:focus-visible { outline: 3px solid #fff; outline-offset: 3px; }
+/* the start page link names itself in the page's language once js/privacy.js chose one */
+html[data-pv-lang="en"] .pv-links [lang="bg"], html[data-pv-lang="bg"] .pv-links [lang="en"],
+html[data-pv-lang] .pv-sep { display: none; }
+
+@media (min-width: 700px) {
+  .pv-doc { padding: 30px 34px 26px; }
+  .pv-ask { padding: 20px 22px; }
+  .pv-kinds { grid-template-columns: 1fr 1fr; }
+  .pv-kinds legend, .pv-kinds .pv-err { grid-column: 1 / -1; }
+}
+/* hover only where a pointer really hovers: on a phone a tapped link would keep it */
+@media (hover: hover) {
+  .pv-lang a:not([aria-current="true"]):hover { background: #fff; text-decoration: underline; }
+  .pv-doc a:hover { color: var(--ink-900); }
+  .pv-links a:hover { background: #fff; text-decoration: underline; }
+}
+@media (prefers-reduced-motion: reduce) { html:has(body.pv-page) { scroll-behavior: auto; } }

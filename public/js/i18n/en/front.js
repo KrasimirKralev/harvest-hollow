@@ -1,0 +1,115 @@
+// English catalog, area 'front': the landing page (public/landing.html, js/landing.js), its screenshots
+// (front/gallery.js), the ideas box (front/ideas.js, on the landing page and in the game) and the game's ideas entry and
+// GitHub star card (ui/ideas.js, ui/star-nudge.js). Loaded on its own by i18n/front.js (the landing page loads no game
+// text). The landing page's title and meta description stay in the 'multi' area (multi.ld.*).
+export default {
+  // the one screen: the tagline and the three actions
+  'front.hero.tag': 'A cozy 3D farm for two, live in your browser.',
+  'front.act.title': 'Play, or help Harvest Hollow grow',
+  'front.act.play': 'Play',
+  'front.act.playSub': 'Start a new farm',
+  'front.act.star': 'Star us',
+  'front.act.starSub': 'on GitHub',
+  'front.act.github': 'Open GitHub',
+  'front.act.githubSub': 'See how it is made',
+  'front.act.why': 'Free and open source: a ⭐ helps other couples find it.',
+  'front.act.ttl': 'Farms idle for 7 days are deleted.',
+
+  // starting a farm (js/landing.js)
+  'front.start.busy': 'Planting your farm…',
+  'front.start.ready': 'Your farm is ready. Opening the gate…',
+  'front.start.full': 'The valley is full right now. Please try again tomorrow.',
+  'front.start.rate': { one: 'Lots of new farms were just started from this network. Try again in {n} minute.', other: 'Lots of new farms were just started from this network. Try again in {n} minutes.' },
+  'front.start.rateLater': 'Lots of new farms were just started from this network. Try again a little later.',
+  'front.start.net': 'The farm server did not answer. Try again in a moment.',
+  'front.full.title': 'The valley is full right now',
+  'front.full.text': 'Every farm Harvest Hollow can keep is taken. Farms nobody visits for 7 days are deleted, so room opens up again: please try once more tomorrow.',
+  'front.storage': 'This browser window does not keep anything once it closes, so this device will forget your farm. In the game, Settings › Farm has your personal farm link: keep it somewhere safe.',
+
+  // this device's farms
+  'front.farms.title': 'Your farms on this device',
+  'front.farms.unnamed': 'A new farm',
+  'front.farms.last': 'Last opened {when}',
+  'front.farms.forget': 'Forget on this device',
+  'front.farms.forgetLabel': 'Forget {name} on this device',
+  'front.farms.forgetAsk': 'Forget "{name}" on this device? The farm itself stays; you get back in only with your personal farm link.',
+  'front.farms.this': 'this farm',
+  'front.ago.now': 'just now',
+  'front.ago.minute': { one: '{n} minute ago', other: '{n} minutes ago' },
+  'front.ago.hour': { one: '{n} hour ago', other: '{n} hours ago' },
+  'front.ago.day': { one: '{n} day ago', other: '{n} days ago' },
+
+  // where to go if you need (the link row) and its sheets
+  'front.more.nav': 'If you need more',
+  'front.more.back': 'Already have a farm?',
+  'front.more.ideas': 'Suggest an idea',
+  'front.more.shots': 'Screenshots',
+  'front.more.privacy': 'Privacy',
+  'front.more.host': 'Self-host it',
+  'front.sheet.close': 'Close',
+  // the way-back sheet ("Already have a farm?"; its insides are ui/link-open.js, area 'keep')
+  'front.back.title': 'Already have a farm?',
+  'front.back.lead': 'Open it on this device with your personal farm link: paste it, or scan its QR code.',
+
+  // the screenshots (the picture viewer)
+  'front.shot.farm': 'A farm in full swing: fields, sheep, the orchard and the farmhouse',
+  'front.shot.together': 'Two farmers in one field, live: a wave from one, a heart from the other',
+  'front.shot.animals': 'Chickens and cows, each with something ready to collect',
+  'front.shot.bakery': 'The bakery turns your harvest into bread, muffins and pancakes',
+  'front.shot.phone': 'The same farm on a phone, made for thumbs',
+  'front.box.label': 'Screenshots from the game',
+  'front.box.close': 'Close',
+  'front.box.prev': 'Previous picture',
+  'front.box.next': 'Next picture',
+  'front.box.count': 'Picture {n} of {total}',
+
+  // the ideas box (landing and in game)
+  'front.ideas.title': 'Got an idea for the farm?',
+  'front.ideas.sub': 'A crop you miss, an animal, a building, something that bugged you: tell us. We read every one, and the best grow into the game.',
+  'front.ideas.cat': 'What is it about?',
+  'front.ideas.cat.content': 'A new crop, animal or building',
+  'front.ideas.cat.feature': 'A feature',
+  'front.ideas.cat.bug': 'Something bugged me',
+  'front.ideas.cat.other': 'Something else',
+  'front.ideas.text': 'Your idea',
+  'front.ideas.textHint': 'A duck pond by the river, with ducklings that follow you around…',
+  'front.ideas.count': '{n} / {max}',
+  'front.ideas.name': 'Your name',
+  'front.ideas.contact': 'How can we reach you?',
+  'front.ideas.optional': '(optional)',
+  'front.ideas.contactHint': 'Optional: we only use it to reply to you',
+  'front.ideas.privacyLink': 'Privacy',
+  'front.ideas.trap': 'Leave this field empty',
+  'front.ideas.privacy': 'We keep your idea, the name and contact you give, your language and your browser\'s name (and the farm, if you send it from one). Never your IP address.',
+  'front.ideas.send': 'Send my idea',
+  'front.ideas.sending': 'Sending…',
+  'front.ideas.thanks': 'Thank you! 🌻',
+  'front.ideas.thanksText': 'Your idea is planted in our seed box. We read every one.',
+  'front.ideas.another': 'Send another idea',
+  'front.ideas.github': 'Prefer GitHub? Share it in our Discussions',
+  'front.ideas.err.category': 'Pick what your idea is about.',
+  'front.ideas.err.short': { one: 'A few more words, please: at least {min} characters ({n} more).', other: 'A few more words, please: at least {min} characters ({n} more).' },
+  'front.ideas.err.long': 'That is over {max} characters. Could you make it a little shorter?',
+  'front.ideas.err.name': 'A name of up to {max} characters, please.',
+  'front.ideas.err.contact': 'A contact of up to {max} characters, please.',
+  'front.ideas.err.RATE': 'Lots of ideas from this network just now. Please try again a little later.',
+  'front.ideas.err.FULL': 'The idea box is full for today. Please come back tomorrow.',
+  'front.ideas.err.BAD': 'Something in the form was not right. Please check it and try again.',
+  'front.ideas.err.NET': 'The farm server did not answer. Your words are still here: try again in a moment.',
+
+  // the GitHub star count (the Star us button)
+  'front.star.count': { one: '{n} star', other: '{n} stars' },
+
+  // in the game: the menu entry, Settings, the ideas card, the star card
+  'front.game.suggest': 'Suggest an idea',
+  'front.game.ideasTile': 'Ideas',
+  'front.game.ideasRow': 'Ideas for the game',
+  'front.game.ideasHelp': 'Tell us what you would love to see. We read every one.',
+  'front.game.ideasHelpGithub': 'Opens the ideas board on GitHub.',
+  'front.game.ideasLead': 'What would make your farm even cozier? A crop, an animal, a building, or something that bugged you.',
+  'front.game.starRibbon': 'Enjoying Harvest Hollow?',
+  'front.game.starText': 'A ⭐ on GitHub helps other couples find it.',
+  'front.game.starIt': 'Star it',
+  'front.game.later': 'Maybe later',
+  'front.game.never': "Don't ask again",
+};

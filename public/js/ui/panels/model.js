@@ -21,6 +21,7 @@ import * as treesA from '../../../../shared/rules/actions/trees.js';
 import * as calendar from '../../../../shared/rules/calendar.js';
 import * as boostsA from '../../../../shared/rules/actions/boosts.js';
 import * as marketA from '../../../../shared/rules/actions/market.js';
+import { t, t as tr, N, Q, name as cname, ctext, list as listOf, fmtNum, getters, lang } from '../../i18n/index.js';
 
 const own = (o, k) => (o && Object.hasOwn(o, k) ? o[k] : 0);
 const sum = (a) => a.reduce((s, v) => s + v, 0);
@@ -38,11 +39,12 @@ export function grow(base, bp, n) {
 
 /** Barn filter groups (GDD §7.3 "Barn (all items, filters ...)"), in display order. */
 export const ITEM_GROUPS = Object.freeze([
-  { id: 'crops', label: 'Crops', kinds: ['crop'] },
-  { id: 'fruit', label: 'Fruit', kinds: ['fruit'] },
-  { id: 'animal', label: 'Animal goods', kinds: ['animal', 'premium'] },
-  { id: 'goods', label: 'Goods', kinds: ['craft'] },
-  { id: 'supplies', label: 'Supplies', kinds: ['material', 'feed', 'consumable'] },
+  // labels are getters: they follow the language (i18n), read when a panel draws
+  { id: 'crops', get label() { return t('market.group.crops'); }, kinds: ['crop'] },
+  { id: 'fruit', get label() { return t('market.group.fruit'); }, kinds: ['fruit'] },
+  { id: 'animal', get label() { return t('market.group.animal'); }, kinds: ['animal', 'premium'] },
+  { id: 'goods', get label() { return t('market.group.goods'); }, kinds: ['craft'] },
+  { id: 'supplies', get label() { return t('market.group.supplies'); }, kinds: ['material', 'feed', 'consumable'] },
 ]);
 const GROUP_OF = Object.freeze(Object.fromEntries(ITEM_GROUPS.flatMap((g) => g.kinds.map((k) => [k, g.id]))));
 export const groupOf = (item) => GROUP_OF[itemOf(item)?.kind] ?? 'supplies';
@@ -104,7 +106,7 @@ export function barnView(state) {
     const n = available(state, id);
     const keep = keepOf(state, id);
     return {
-      id, name: it.name, n, over: own(state.farm.overflow, id), group: groupOf(id), kind: it.kind, sell: it.sell,
+      id, name: cname(id), n, over: own(state.farm.overflow, id), group: groupOf(id), kind: it.kind, sell: it.sell,
       sellable: it.sellable, giftable: it.giftable, keep: keep.n, keepBy: keep.by, free: Math.max(0, n - keep.n),
       noFeed: nf.has(id), value: it.sell * n,
     };
@@ -193,14 +195,14 @@ export function sellList(state, now) {
 
 /** Store tabs (GDD §7.3: Seeds · Trees · Animals · Buildings · Decor · Land · Tools · Acorn shop). */
 export const STORE_TABS = Object.freeze([
-  { id: 'seeds', label: 'Seeds', icon: 'wheat' },
-  { id: 'trees', label: 'Trees', icon: 'apple_tree' },
-  { id: 'animals', label: 'Animals', icon: 'chicken' },
-  { id: 'buildings', label: 'Buildings', icon: 'bakery' },
-  { id: 'decor', label: 'Decor', icon: 'flower_bed' },
-  { id: 'land', label: 'Land', icon: 'plot' },
-  { id: 'tools', label: 'Tools', icon: 'watering_can' },
-  { id: 'acorn', label: 'Acorn shop', icon: 'acorns' },
+  { id: 'seeds', get label() { return t('market.tab.seeds'); }, icon: 'wheat' },
+  { id: 'trees', get label() { return t('market.tab.trees'); }, icon: 'apple_tree' },
+  { id: 'animals', get label() { return t('market.tab.animals'); }, icon: 'chicken' },
+  { id: 'buildings', get label() { return t('market.tab.buildings'); }, icon: 'bakery' },
+  { id: 'decor', get label() { return t('market.tab.decor'); }, icon: 'flower_bed' },
+  { id: 'land', get label() { return t('market.tab.land'); }, icon: 'plot' },
+  { id: 'tools', get label() { return t('market.tab.tools'); }, icon: 'watering_can' },
+  { id: 'acorn', get label() { return t('market.tab.acorn'); }, icon: 'acorns' },
 ]);
 
 const isFreeObj = (o) => Boolean(o && (o.free || o.gift || o.rcpt?.free));
@@ -290,9 +292,9 @@ export function gateOf(state, { unlock = 1, coins = 0, acorns = 0, owned = 0, ca
 
 const fmtMs = (ms) => {
   const m = Math.round(ms / 60_000);
-  if (m < 60) return `${m} min`;
+  if (m < 60) return t('market.dur.m', { m });
   const h = Math.floor(m / 60);
-  return m % 60 ? `${h} h ${m % 60} min` : `${h} h`;
+  return m % 60 ? t('market.dur.hm', { h, m: m % 60 }) : t('market.dur.h', { h });
 };
 export const durationText = fmtMs;
 
@@ -345,7 +347,7 @@ function storeCardsRaw(state, tab, env) {
         const ms = starsOf(state, 'crops', c.id);
         const inSeason = env.now !== undefined && typeof economy.inSeason === 'function' ? economy.inSeason(state, c.id, env.now) : false;
         return {
-          id: c.id, icon: c.id, kind: 'seed', name: c.name, unlock: c.unlock, price: { coins: c.seed, acorns: 0 },
+          id: c.id, icon: c.id, kind: 'seed', name: cname(c.id), unlock: c.unlock, price: { coins: c.seed, acorns: 0 },
           code: level < c.unlock ? 'LOCKED' : null, hint: { unlock: c.unlock }, grow: fmtMs(c.growMs), growMs: c.growMs,
           yield: c.yield, sell: unitPriceOf(state, c.id, env.now ?? 0), xp: c.xp, season: c.season, inSeason,
           waterable: c.waterable, stars: ms.stars, isNew: isNewAt(c.unlock, level), packets: own(state.farm.seeds, c.id),
@@ -353,13 +355,13 @@ function storeCardsRaw(state, tab, env) {
       });
     case 'trees':
       return live('trees').filter((t) => t.shop !== false).map((t) => card(t.id, {
-        kind: 'tree', name: t.name, unlock: t.unlock, cycle: fmtMs(t.cycleMs), yield: t.yield, product: t.product,
+        kind: 'tree', name: cname(t.id), unlock: t.unlock, cycle: fmtMs(t.cycleMs), yield: t.yield, product: t.product,
         xp: t.xp, size: t.size, stars: starsOf(state, 'trees', t.id).stars,
       }));
     case 'animals': {
       const out = [];
       for (const home of live('homes').filter((x) => x.shop !== false)) {
-        out.push(card(home.id, { kind: 'home', name: home.name, unlock: home.unlock, size: home.size,
+        out.push(card(home.id, { kind: 'home', name: cname(home.id), unlock: home.unlock, size: home.size,
           capacity: home.capacity, capacityMax: typeof grid.homeMaxOf === 'function' ? grid.homeMaxOf(home) : home.capacityMax,
           species: home.species }));
         for (const sp of home.species) {
@@ -367,7 +369,7 @@ function storeCardsRaw(state, tab, env) {
           if (!a || !isLive(a) || a.shop === false) continue;
           const homes = placedOf(state, home.id);
           const room = sum(homes.map((hid) => homeRoom(state, hid)));
-          const extra = { kind: 'animal', name: a.name, unlock: a.unlock, home: home.id, homeName: home.name, homes,
+          const extra = { kind: 'animal', name: cname(a.id), unlock: a.unlock, home: home.id, homeName: cname(home.id), homes,
             room, cycle: fmtMs(a.cycleMs), product: a.product, feed: a.feed, babyGrow: fmtMs(a.babyMs),
             owned: placedOf(state, sp).length, cap: Infinity, tray: 0, stars: starsOf(state, 'animals', sp).stars };
           for (const adult of [false, true]) {
@@ -378,7 +380,7 @@ function storeCardsRaw(state, tab, env) {
             const c = card(a.id, { ...extra, adult, opts: { adult },
               ...(grows ? { price: { coins: plan.coins, acorns: 0 }, grow: { step: plan.step, home: plan.home } } : {}) });
             // the most useful reason first: no home, then no room, then the price
-            if (level >= a.unlock && !homes.length) c.code = 'LOCKED', c.hint = { text: `Place the ${home.name} first` };
+            if (level >= a.unlock && !homes.length) c.code = 'LOCKED', c.hint = { text: t('market.animal.placeHome', { home: N(home.id) }) };
             else if (level >= a.unlock && room <= 0 && !grows) {
               c.code = 'CAP';
               // a full home that cannot grow: what is in the way (the rules' homeGrowth of the home animalBuyPlan names),
@@ -386,8 +388,8 @@ function storeCardsRaw(state, tab, env) {
               const stuck = plan && (plan.code === 'BLOCKED' || plan.code === 'OUT_OF_BOUNDS');
               const g = stuck && plan.blocked && typeof animalsA.homeGrowth === 'function' ? animalsA.homeGrowth(state, plan.blocked) : null;
               const why = stuck ? blockerText(state, g ? g.blockers : []) : '';
-              c.hint = { text: stuck ? `The ${home.name} is full and has no room to grow: ${why}` : `The ${home.name} is full` };
-              if (stuck && plan.blocked) c.blocked = { home: plan.blocked, name: home.name, why };
+              c.hint = { text: stuck ? t('market.animal.fullStuck', { home: N(home.id), why }) : t('market.animal.full', { home: N(home.id) }) };
+              if (stuck && plan.blocked) c.blocked = { home: plan.blocked, name: cname(home.id), why };
             }
             if (c.code) c.big = false;
             out.push(c);
@@ -398,24 +400,24 @@ function storeCardsRaw(state, tab, env) {
     }
     case 'buildings':
       return live('buildings').filter((b) => b.shop !== false).map((b) => card(b.id, {
-        kind: 'building', name: b.name, unlock: b.unlock, size: b.size, slots: b.slots,
+        kind: 'building', name: cname(b.id), unlock: b.unlock, size: b.size, slots: b.slots,
         recipes: recipesOf(b.id).length, free: b.cost === 0,
       }));
     case 'decor':
       return live('decor').filter((d) => d.shop !== false && d.tier === 'coin').map((d) => card(d.id, {
-        kind: 'decor', name: d.name, unlock: d.unlock, size: d.size, beauty: d.beauty10 / 10, text: d.text,
+        kind: 'decor', name: cname(d.id), unlock: d.unlock, size: d.size, beauty: d.beauty10 / 10, text: ctext('decor', d.id, 'desc', d.text),
         cap: Infinity,
       }));
     case 'acorn': {
       const out = live('decor').filter((d) => d.shop !== false && d.tier === 'acorn').map((d) => card(d.id, {
-        kind: 'decor', name: d.name, unlock: d.unlock, size: d.size, beauty: d.beauty10 / 10, text: d.text,
+        kind: 'decor', name: cname(d.id), unlock: d.unlock, size: d.size, beauty: d.beauty10 / 10, text: ctext('decor', d.id, 'desc', d.text),
         cap: Infinity,
       }));
       const gs = BOOSTS.goldenSeeds;
       if (isLive({ m: gs.m })) {
-        out.unshift({ id: 'golden_seeds', icon: 'golden_seeds', kind: 'boost', name: 'Golden Seed Packet',
+        out.unshift({ id: 'golden_seeds', icon: 'golden_seeds', kind: 'boost', name: t('market.golden.name'),
           unlock: gs.unlock, price: { coins: 0, acorns: gs.acorns }, owned: goldenSeedsOf(state), cap: null, tray: 0,
-          text: `${gs.seeds} golden seeds: a plot planted with one is always a blue-ribbon harvest.`,
+          text: t('market.golden.text', { n: gs.seeds }),
           big: bigSpend(state, 0, gs.acorns, env), isNew: isNewAt(gs.unlock, level),
           ...gateOf(state, { unlock: gs.unlock, acorns: gs.acorns }) });
       }
@@ -425,17 +427,17 @@ function storeCardsRaw(state, tab, env) {
       const owned = toolsOwned(state);
       const out = live('tools').filter((t) => t.upgrades).map((t) => {
         const has = owned.has(t.id);
-        const g = has ? { code: 'ALREADY_DONE', hint: { done: 'Owned' } } : gateOf(state, { unlock: t.unlock, coins: t.cost });
-        return { id: t.id, icon: t.id, kind: 'tool', name: t.name, unlock: t.unlock, price: { coins: t.cost, acorns: 0 },
-          text: t.text, brush: t.brush, upgrades: t.upgrades, owned: has ? 1 : 0, cap: 1, tray: 0, ...g,
+        const g = has ? { code: 'ALREADY_DONE', hint: { done: tr('market.tool.owned') } } : gateOf(state, { unlock: t.unlock, coins: t.cost });
+        return { id: t.id, icon: t.id, kind: 'tool', name: cname(t.id), unlock: t.unlock, price: { coins: t.cost, acorns: 0 },
+          text: ctext('tools', t.id, 'desc', t.text), brush: t.brush, upgrades: t.upgrades, owned: has ? 1 : 0, cap: 1, tray: 0, ...g,
           big: !has && bigSpend(state, t.cost, 0, env), isNew: isNewAt(t.unlock, level) };
       });
       for (const f of live('feeds')) {
         if (!f.storePrice) continue;
         const g = gateOf(state, { unlock: f.unlock, coins: f.storePrice * f.out });
-        out.push({ id: f.id, icon: f.id, kind: 'goods', name: `Emergency ${f.name}`, unlock: f.unlock,
+        out.push({ id: f.id, icon: f.id, kind: 'goods', name: t('market.feed.emergency', { feed: N(f.id) }), unlock: f.unlock,
           price: { coins: f.storePrice * f.out, acorns: 0 }, qty: f.out, owned: available(state, f.id), cap: null, tray: 0,
-          text: `${f.out} ${f.name} straight into the Barn (the Feed Mill makes it far cheaper).`, ...g,
+          text: t('market.feed.emergencyText', { q: Q(f.id, f.out) }), ...g,
           big: false, isNew: false });
       }
       return out;
@@ -462,14 +464,14 @@ export function homeRoom(state, homeId) {
  */
 export function blockerText(state, blockers) {
   const ids = Array.isArray(blockers) ? blockers : [];
-  if (!ids.length) return 'it is at the edge of your land';
+  if (!ids.length) return t('market.blocker.edge');
   const nameOf = (id) => {
     const o = Object.hasOwn(state.farm.objects, id) ? state.farm.objects[id] : null;
-    return o ? (state.farm.names?.[id]?.name ?? defOf(o.def)?.name ?? 'something') : 'something';
+    return o ? (state.farm.names?.[id]?.name ?? (defOf(o.def) ? cname(o.def, { form: lang() === 'bg' ? 'lc' : 'label' }) : null) ?? t('market.blocker.something')) : t('market.blocker.something');
   };
   const names = [...new Set(ids.map(nameOf))];
-  const list = names.length > 2 ? `${names.slice(0, 2).join(', ')} and ${names.length - 2} more` : names.join(' and ');
-  return `${list} ${ids.length > 1 ? 'are' : 'is'} in the way`;
+  const who = names.length > 2 ? t('market.blocker.andMore', { a: names[0], b: names[1], n: names.length - 2 }) : listOf(names);
+  return t(ids.length > 1 ? 'market.blocker.many' : 'market.blocker.one', { list: who });
 }
 
 /** A home's capacity including upgrades (GDD §3.4: +upgradeStep per upgrade to capacityMax). */
@@ -529,18 +531,18 @@ export function landCards(state, env = {}) {
     // `now`: "own 2 Apple Trees" counts settled trees only (RC-05), as the Buy button's rules do
     const proof = proofOf(state, e, env.now);
     let gate;
-    if (owned) gate = { code: 'ALREADY_DONE', hint: { done: 'Ours' } };
-    else if (e.k !== nextK) gate = { code: 'LOCKED', hint: { text: 'Buy the land before it first' } };
+    if (owned) gate = { code: 'ALREADY_DONE', hint: { done: t('market.land.ours') } };
+    else if (e.k !== nextK) gate = { code: 'LOCKED', hint: { text: t('market.land.before') } };
     else if (level < e.unlock) gate = { code: 'LOCKED', hint: { unlock: e.unlock } };
     else {
       const miss = needs.filter((x) => x.have < x.n).map((x) => ({ item: x.item, n: x.n - x.have }));
       const rulesCode = typeof expansionsA.expandCode === 'function' ? expansionsA.expandCode(state, e.id, env.now) : null;
-      if (proof.some((p) => p.have < p.qty) || rulesCode === 'NOT_READY') gate = { code: 'NOT_READY', hint: { what: 'The proof task' } };
+      if (proof.some((p) => p.have < p.qty) || rulesCode === 'NOT_READY') gate = { code: 'NOT_READY', hint: { what: 'The proof task', text: t('market.land.proofNotReady') } }; // i18n-ok: `what` is the old field, the text shows
       else if (miss.length || rulesCode === 'NO_ITEMS') gate = { code: 'NO_ITEMS', hint: { missing: miss } };
       else gate = gateOf(state, { coins: e.cost });
     }
-    return { id: e.id, k: e.k, icon: 'plot', kind: 'land', name: e.name, unlock: e.unlock, opened: proofOpened(state, e.id),
-      price: { coins: e.cost, acorns: 0 }, needs, proof, proofText: e.proofText, reveals: e.reveals, rects: e.rects,
+    return { id: e.id, k: e.k, icon: 'plot', kind: 'land', name: cname(e.id, { family: 'expansions' }), unlock: e.unlock, opened: proofOpened(state, e.id),
+      price: { coins: e.cost, acorns: 0 }, needs, proof, proofText: e.proofText ? ctext('expansions', e.id, 'proofText', e.proofText) : null, reveals: ctext('expansions', e.id, 'reveals', e.reveals), rects: e.rects,
       owned, isNext: e.k === nextK, ...gate, big: !owned && bigSpend(state, e.cost, 0, env), isNew: isNewAt(e.unlock, level) };
   });
 }
@@ -586,7 +588,7 @@ export function craftMs(state, recipe, now, { slow = false } = {}) {
 }
 
 /** Ingredient classes in words ("Need 2 more grain"). */
-export const CLASS_NAMES = Object.freeze({ grain: 'grain (any)', root: 'root crops (any)', produce: 'crops or fruit (any)' });
+export const CLASS_NAMES = getters({ grain: () => t('market.class.grain'), root: () => t('market.class.root'), produce: () => t('market.class.produce') });
 
 /**
  * Inputs of a recipe or feed with what the barn has: [{ item, need, have }], or class rows for feeds:
@@ -622,14 +624,13 @@ function skippedOf(state, members) {
   return out;
 }
 
-const NUM = new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 });
-const fmtN = (n) => NUM.format(Math.trunc(Number(n) || 0));
-const nameOf = (id) => itemOf(id)?.name ?? String(id).replace(/_/g, ' ');
+const fmtN = fmtNum;
+const nameOf = (id) => (itemOf(id) ? cname(id) : String(id).replace(/_/g, ' '));
 
 /** Why the Feed Mill leaves a member alone, in words (the card's line, the item bubble). */
-export const SKIP_WHY = Object.freeze({
-  noFeed: 'marked "not for feed" in the Barn',
-  valuable: 'worth too much to feed without asking',
+export const SKIP_WHY = getters({
+  noFeed: () => t('market.skip.noFeed'),
+  valuable: () => t('market.skip.valuable'),
 });
 
 /**
@@ -637,16 +638,19 @@ export const SKIP_WHY = Object.freeze({
  * (Keep 80)", "Wheat 76 — 70 kept (Keep 70)", "Sunflower 12 — worth too much to feed without asking".
  */
 export function skipText(x) {
-  const head = `${nameOf(x.id)} ${fmtN(x.n)}`;
-  if (x.why === 'kept') return `${head} — ${x.kept >= x.n ? `all ${fmtN(x.n)}` : fmtN(x.kept)} kept (Keep ${fmtN(x.keep)})`;
-  return `${head} — ${SKIP_WHY[x.why] ?? 'not used'}`;
+  const item = nameOf(x.id);
+  if (x.why === 'kept') {
+    return x.kept >= x.n ? t('market.skip.keptAll', { item, n: x.n, keep: x.keep })
+      : t('market.skip.keptSome', { item, n: x.n, kept: x.kept, keep: x.keep });
+  }
+  return t('market.skip.line', { item, n: x.n, why: SKIP_WHY[x.why] ?? t('market.skip.notUsed') });
 }
 
 /** The one-tap way out of a skip: 'allow' (noFeed off), 'unkeep' (Keep N to 0), 'confirm' (Make, then "Use anyway"). */
 export const SKIP_FIX = Object.freeze({
-  noFeed: { kind: 'allow', label: 'Allow for feed' },
-  kept: { kind: 'unkeep', label: 'Stop keeping' },
-  valuable: { kind: 'confirm', label: 'Use anyway…' },
+  noFeed: Object.freeze({ kind: 'allow', get label() { return t('market.skip.fix.allow'); } }),
+  kept: Object.freeze({ kind: 'unkeep', get label() { return t('market.skip.fix.unkeep'); } }),
+  valuable: Object.freeze({ kind: 'confirm', get label() { return t('market.skip.fix.confirm'); } }),
 });
 
 /**
@@ -680,14 +684,14 @@ export function feedSkips(state, r) {
 
 /** "Not used for feed: Wheat 76, Corn 4 (marked in the Barn)" (the muted line of a feed that can be made anyway). */
 export const quietText = (quiet) => (quiet.length
-  ? `Not used for feed: ${quiet.map((x) => `${nameOf(x.id)} ${fmtN(x.n)}`).join(', ')} (marked in the Barn)` : '');
+  ? t('market.skip.quiet', { list: quiet.map((x) => t('market.skip.stack', { item: nameOf(x.id), n: x.n })).join(', ') }) : '');
 
 /** The Undo toast after the Barn switch or an "Allow for feed": "Wheat won't be used for animal feed". */
-export const noFeedText = (item, on) => (on ? `${nameOf(item)} won't be used for animal feed`
-  : `${nameOf(item)} can be used for animal feed again`);
+export const noFeedText = (item, on) => (on ? t('market.skip.noFeedOn', { item: N(item) })
+  : t('market.skip.noFeedOff', { item: N(item) }));
 
 /** The Undo toast after "Stop keeping": "Wheat isn't kept any more (was Keep 80)". */
-export const unkeepText = (item, was) => `${nameOf(item)} isn't kept any more (was Keep ${fmtN(was)})`;
+export const unkeepText = (item, was) => t('market.skip.unkept', { item: N(item), was });
 
 /** True when some building of the farm has this recipe in its queue or tray (it counts as "made" for "Try it"). */
 export function queuedAnywhere(state, recipeId) {
@@ -749,7 +753,7 @@ export function buildingView(state, id, now) {
       label: x.cls ? CLASS_NAMES[x.cls] ?? x.cls : undefined }));
     const st = starsOf(state, 'recipes', r.id);
     return {
-      id: r.id, name: r.name, out: r.out, ms: craftMs(state, r, now), baseMs: r.ms, slowMs: r.duet ? craftMs(state, r, now, { slow: true }) : null,
+      id: r.id, name: cname(r.id), out: r.out, ms: craftMs(state, r, now), baseMs: r.ms, slowMs: r.duet ? craftMs(state, r, now, { slow: true }) : null,
       unlock: r.unlock, locked: level < r.unlock, isFeed: !r.inputs, inputs: ins, missing, sell: r.sell, xp: r.xp,
       duetXp: r.duetXp ?? null, tier: r.tier ?? null, duet: Boolean(r.duet), stars: st.stars, mastery: st,
       tryIt: level >= r.unlock && neverMade(state, r.id) && !queuedAnywhere(state, r.id),
@@ -758,7 +762,7 @@ export function buildingView(state, id, now) {
   });
   const collector = def.collector ? collectorOf(obj, def) : null;
   return {
-    id, def, name: def.name, obj, queue, slots, max: def.slots[1] + (obj.xs ?? 0), nextCost, bought,
+    id, def, name: cname(def.id), obj, queue, slots, max: def.slots[1] + (obj.xs ?? 0), nextCost, bought,
     tray: queue.filter((q) => q.status === 'done').length,
     trayUnits: sum(queue.filter((q) => q.status === 'done').map((q) => q.out)),
     free: slots - queue.length, running: queue.find((q) => q.status === 'running') ?? null,
@@ -828,7 +832,7 @@ export function homeView(state, id, now) {
   const count = (st) => animals.filter((a) => a.status === st).length;
   const growth = typeof animalsA.homeGrowth === 'function' ? animalsA.homeGrowth(state, homeId) : null;
   return {
-    id: homeId, def, obj: o, name: def.name, animals, cap, room: Math.max(0, cap - animals.length),
+    id: homeId, def, obj: o, name: cname(def.id), animals, cap, room: Math.max(0, cap - animals.length),
     // wave 4b: homes grow past the old capacityMax (the rules' homeGrowth owns the next room step and the cap)
     upgrade: growth && growth.code !== 'CAP' ? { coins: growth.coins, add: growth.next - growth.cap, to: growth.next,
       grows: growth.grows, size: growth.nextSize, code: growth.code, blockers: growth.blockers } : null,
@@ -851,7 +855,7 @@ export function treeView(state, id, now) {
   const st = starsOf(state, 'trees', def.id);
   const bonus = (grove ? GROWTH.grove.bonusUnits : 0) + (o.compost ? GROWTH.compost.treeBonusUnits : 0);
   return {
-    id, def, obj: o, name: def.name, sapling, ripe, status: sapling ? 'sapling' : ripe ? 'ripe' : 'growing',
+    id, def, obj: o, name: cname(def.id), sapling, ripe, status: sapling ? 'sapling' : ripe ? 'ripe' : 'growing',
     start: sapling ? o.placedAt : o.startedAt ?? null, end: sapling ? o.matureAt : o.readyAt ?? null,
     yield: def.yield, bonus, product: def.product, chop: def.tool === 'axe', grove, harvests: o.cycle ?? 0,
     watered: o.water ?? null, tended: o.tend ?? null, composted: Boolean(o.compost), stars: st.stars, mastery: st,

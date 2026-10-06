@@ -22,12 +22,12 @@
 //   M2: perks { t: { tree: n }, r } (actions/perks.js)   rested { xp, at } rested XP (actions/rested.js)
 import {
   CONTENT, ORDERS, COOP, FEED, TUTORIAL, ALMANAC, isLive, itemOf, questOf, ribbonOf, cropOf, recipeOf, recipesOf,
-  levelFromXp, xpForLevel, unlocksAt, liveAt, MASTERY, QUEST_VERBS, pluralOf, BOOSTS, BARGE, TOWNSFOLK, MEDAL_RANKS,
+  levelFromXp, xpForLevel, unlocksAt, liveAt, MASTERY, BOOSTS, BARGE, TOWNSFOLK, MEDAL_RANKS,
   FAIR, MILESTONE, DUEL, NURSERY, BREEDING, animalOf, expansionOf, homeOf,
 } from '../content/index.js';
 import { PLAYER_SLOTS } from '../content/config.js';
 import { dayOf, systemLive } from './coop.js';
-import { initialQuests, taskProgress, isStateTask, moreText, blockerOf } from './actions/quests.js';
+import { initialQuests, taskProgress, isStateTask, blockerOf } from './actions/quests.js';
 import { initialDaily, initialChallenge, initialPlayerPlay, initialAlmanac, almanacLiveSlot } from './daily.js';
 import { initialTut, initialFarmTut } from './actions/tutorial.js';
 import { feedRows } from './feed.js';
@@ -66,6 +66,10 @@ import { FERTILIZER, fertilizerLive } from './actions/farming.js';
 import { relicView } from './relics.js';
 import { cratesOn } from './actions/crates.js';
 import { farmhandTargets, turnerTargets } from './actions/relics.js';
+import {
+  GOALS_RULES_EN, msg, said, enText, int, name, qtyRef, noun, ms, pts as ptsRef, ctextRef, join, sub, nameOf,
+  mmss as mmssEn, taskMsg, taskLabelMsg, moreMsg, almanacMsg, duelRef,
+} from './goal-text.js';
 
 export const GOALS_FARM_KEYS = Object.freeze(['orders', 'quests', 'ribbons', 'daily', 'challenge', 'coop', 'feed',
   'notes', 'tut', 'stars', 'names', 'fair', 'barge', 'album', 'folk', 'made', 'memory',
@@ -162,7 +166,7 @@ export function validateGoalsFarm(f, bad) {
   else {
     for (const [id, a] of Object.entries(q.active)) {
       if (!questOf(id) || !isObj(a) || !isCount(a.at) || !counts(a.n)) bad(`farm.quests.active.${id}`);
-      if (Object.hasOwn(q.done, id)) bad(`farm.quests: ${id} both active and done`);
+      if (Object.hasOwn(q.done, id)) bad(`farm.quests: ${id} both active and done`);   // i18n-ok: a validator message, never shown
     }
     for (const [id, at] of Object.entries(q.done)) if (!questOf(id) || !isCount(at)) bad(`farm.quests.done.${id}`);
   }
@@ -223,7 +227,7 @@ export function validateGoalsFarm(f, bad) {
         || n.text.length > COOP.notes.maxChars
         || !isCount(n.x) || !isCount(n.z)) bad(`farm.notes.${id}`);
     }
-    if (Object.keys(f.notes).length > COOP.notes.maxOpen) bad('farm.notes: too many');
+    if (Object.keys(f.notes).length > COOP.notes.maxOpen) bad('farm.notes: too many');   // i18n-ok: a validator message, never shown
   }
   const t = f.tut;
   if (!isObj(t) || !isCount(t.s) || !isCount(t.t) || !isCount(t.n) || !isObj(t.fin)
@@ -493,13 +497,7 @@ function readiness(state, now) {
 }
 
 /** A wait for a card: "4:05" (m:ss) under an hour, "2:15 h" (h:mm) under 10 hours, then "23 h 59 m" (RC-26). */
-export const mmss = (ms) => {
-  const s = Math.max(0, Math.ceil(ms / 1000));
-  if (s < 3600) return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
-  const m = Math.ceil(s / 60);
-  if (m < 600) return `${Math.floor(m / 60)}:${String(m % 60).padStart(2, '0')} h`;
-  return `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, '0')} m`;
-};
+export const mmss = mmssEn;
 
 /** How far another NOW card must outrank the one shown before it takes its place (RC-19). */
 export const KEEP_MARGIN = 1.0;
@@ -558,19 +556,21 @@ export function goals(state, pid, now, opts = {}) {
   let nowCard = strip(pick('now'));
   if (!nowCard) {
     // the fallback chain ends in a promise (and, with a plot free, the crop that fits the wait): never empty
-    const wait = Number.isFinite(r.next) ? `next ready in ${mmss(r.next - now)}.` : 'take a breath.';
-    let text = `Everything is growing \u2014 ${wait}`;
+    const next = Number.isFinite(r.next);
+    let m = msg(next ? 'goals.r.tip.next' : 'goals.r.tip.rest', next ? { t: ms(r.next - now) } : {});
     let ref = null;
     if (r.idle > 0) {
-      const c = cropForWait(L, Number.isFinite(r.next) ? r.next - now : Infinity);
-      text += ` Tip: ${c.name} grows in ${mmss(c.growMs)}.`;
+      const c = cropForWait(L, next ? r.next - now : Infinity);
+      m = msg(next ? 'goals.r.tip.nextTip' : 'goals.r.tip.restTip',
+        { ...m.params, crop: name(c.id, c.name, 'crops'), g: ms(c.growMs) });
       ref = c.id;
     }
-    nowCard = { slot: 'now', kind: 'tip', text, ref, eta: Number.isFinite(r.next) ? r.next : null };
+    nowCard = { slot: 'now', kind: 'tip', ...said(m), ref, eta: next ? r.next : null };
   }
   const lvl = levelProgress(state, L);
   const soonCard = strip(pick('soon'))
-    ?? { slot: 'soon', kind: 'level', text: `Level ${L + 1} is ${lvl.need - lvl.have} XP away`, ...lvl };
+    ?? { slot: 'soon', kind: 'level', ...said(msg('goals.r.level.away', { level: int(L + 1), xp: int(lvl.need - lvl.have) })),
+      ...lvl };
   const out = { now: nowCard, soon: soonCard, big: strip(pick('big')) };
   // opts.ranked: the scored NOW candidates too (tests and tools; the tracker never asks)
   if (opts.ranked) {
@@ -583,8 +583,7 @@ export function goals(state, pid, now, opts = {}) {
 }
 
 /** What the BIG level card says past the build's last unlock (RC-14), per milestone. */
-const CHAPTER_DONE = { M1a: 'Evening One is complete', M1b: 'The first two months are complete',
-  M2: 'Every corner of the valley is open' };
+const CHAPTER_DONE = { M1a: 'goals.r.chapter.M1a', M1b: 'goals.r.chapter.M1b', M2: 'goals.r.chapter.M2' };
 
 /** XP into the current level and the size of the level. */
 function levelProgress(state, L) {
@@ -596,36 +595,36 @@ function levelProgress(state, L) {
 function nowCandidates(state, pid, now, r, add) {
   // a full Barn first: ripe things then wait where they are (GDD §9 #4)
   if (!canIntake(state)) {
-    add({ slot: 'now', kind: 'barn', text: 'The Barn is full: sell or use some goods', domain: 'market',
+    add({ slot: 'now', kind: 'barn', ...said(msg('goals.r.barnFull')), domain: 'market',
       need: barnCap(state) }, 12);
   }
   if (r.ready > 0) {
     const dom = [...r.kinds.entries()].sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1))[0]?.[0] ?? 'fields';
-    add({ slot: 'now', kind: 'collect', text: `Collect ${r.ready} ready ${r.ready === 1 ? 'thing' : 'things'}`,
+    add({ slot: 'now', kind: 'collect', ...said(msg('goals.r.collect', { n: int(r.ready) })),
       domain: dom, need: r.ready }, 10);
   }
   for (const [id, o] of [...r.giants].sort((a, b) => (a[0] < b[0] ? -1 : 1))) {
     const crop = cropOf(o.crop.def);
     const chops = Math.max(1, Math.ceil((o.crop.hp ?? COOP.giant?.hp ?? 60) / 10));
-    add({ slot: 'now', kind: 'giant', id, ref: o.crop.def, text: `Fell the Giant ${crop?.name ?? o.crop.def}: `
-      + `${chops} ${chops === 1 ? 'chop' : 'chops'}, quicker together`, domain: 'fields',
+    add({ slot: 'now', kind: 'giant', id, ref: o.crop.def,
+      ...said(msg('goals.r.giant', { crop: name(o.crop.def, crop?.name ?? o.crop.def, 'crops'), n: int(chops) })), domain: 'fields',
     target: { tile: { x: o.x + 1, z: o.z + 1 }, tool: 'axe' } }, 10.5);
   }
   if (r.idle > 0) {
     // `ref`: the crop that best fills the wait for the next ready thing (RC-09: not always the fastest)
     const crop = cropForWait(levelFromXp(state.farm.xp), Number.isFinite(r.next) ? r.next - now : Infinity);
-    add({ slot: 'now', kind: 'plant', text: `Plant ${r.idle} empty ${r.idle === 1 ? 'plot' : 'plots'}`,
+    add({ slot: 'now', kind: 'plant', ...said(msg('goals.r.plant', { n: int(r.idle) })),
       domain: 'fields', need: r.idle, ref: crop.id }, 8);
   }
   const slots = state.farm.orders?.slots ?? {};
   for (const k of sortedKeys(slots)) {
     const o = slots[k].order;
     if (o && fillable(state, o)) {
-      add({ slot: 'now', kind: 'order', text: o.golden ? 'Fill a golden order' : 'Fill an order from the Barn',
+      add({ slot: 'now', kind: 'order', ...said(msg(o.golden ? 'goals.r.order.golden' : 'goals.r.order.fill')),
         domain: 'market', ref: k, pin: `order:${k}` }, o.golden ? 9 : 7);
     }
     if (o && slots[k].flag && slots[k].flag !== pid) {
-      add({ slot: 'soon', kind: 'help', text: 'Your partner flagged an order: "Need help"', domain: 'market',
+      add({ slot: 'soon', kind: 'help', ...said(msg('goals.r.order.help')), domain: 'market',
         ref: k }, 6);
     }
   }
@@ -640,15 +639,13 @@ function nowCandidates(state, pid, now, r, add) {
       // a micro-task the player can advance this minute is a NOW card; otherwise it waits in SOON
       const nowable = (t.verb === 'harvest' && (r.readyCrops.get(t.ref) ?? 0) > 0)
         || (t.verb === 'plant' && r.idle > 0) || (t.verb === 'clear' && debris > 0);
-      add({ slot: nowable ? 'now' : 'soon', kind: 'almanac', text: almanacText(t), ref: slot, have: t.n, need,
+      add({ slot: nowable ? 'now' : 'soon', kind: 'almanac', ...said(almanacMsg(t)), ref: slot, have: t.n, need,
         domain: verbDomain(t.verb) }, (nowable ? 3.5 : 4) + 3 * (t.n / need));
     }
   }
-  if (debris > 0) add({ slot: 'now', kind: 'debris', text: 'Clear a weed or a rock', domain: 'farm' }, 3);
+  if (debris > 0) add({ slot: 'now', kind: 'debris', ...said(msg('goals.r.debris')), domain: 'farm' }, 3);
   spendCandidates(state, now, add);
 }
-
-const fmtCoins = (n) => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
 
 /** How long one spend card holds the NOW slot before the next one takes its turn (integration-qa1 open item 5). */
 export const SPEND_ROTATE_MS = 4 * MIN;
@@ -684,8 +681,8 @@ function spendList(state, now, push, add) {
   // the seed basket (GDD §9 #31): a broke farm with empty plots gets 12 free Wheat plantings
   if (basketCode(state, now) === null) {
     const B = BOOSTS.seedBasket;
-    const text = `Grandma's seed basket: ${B.plantings} free ${cropOf(B.crop).name} plantings`;
-    add({ slot: 'now', kind: 'basket', text, domain: 'fields', ref: B.crop, target: { act: 'seedBasket', args: {} } }, 11);
+    const m = msg('goals.r.basket', { n: int(B.plantings), crop: name(B.crop, cropOf(B.crop).name, 'crops') });
+    add({ slot: 'now', kind: 'basket', ...said(m), domain: 'fields', ref: B.crop, target: { act: 'seedBasket', args: {} } }, 11);
   }
   let build = null;
   for (const b of liveAt('buildings', L)) {
@@ -706,13 +703,13 @@ function spendList(state, now, push, add) {
   }
   if (build && (!slotUp || build.coins <= slotUp.coins)) {
     push({ slot: 'now', kind: 'build', id: build.id,
-      text: `Build the ${build.name} (${fmtCoins(build.coins)}). You have ${fmtCoins(coins)}`, domain: 'workshop',
+      ...said(msg('goals.r.build', { b: name(build.id, build.name), c: build.coins, have: coins })), domain: 'workshop',
       need: build.coins,
     target: { panel: 'market', args: { tab: 'buildings', focus: build.id } } }, 6.5);
   } else if (slotUp) {
-    const name = CONTENT.buildings.get(slotUp.def).name;
-    push({ slot: 'now', kind: 'build', id: slotUp.def, text: `Add a slot to the ${name} (${fmtCoins(slotUp.coins)}). `
-      + `You have ${fmtCoins(coins)}`, domain: 'workshop', need: slotUp.coins,
+    const bName = CONTENT.buildings.get(slotUp.def).name;
+    push({ slot: 'now', kind: 'build', id: slotUp.def,
+      ...said(msg('goals.r.slot', { b: name(slotUp.def, bName), c: slotUp.coins, have: coins })), domain: 'workshop', need: slotUp.coins,
     target: { panel: 'building', args: { id: slotUp.id } } }, 6);
   }
   const land = nextExpansion(state);
@@ -723,8 +720,10 @@ function spendList(state, now, push, add) {
       const p = proofProgress(state, land.id, i, now);
       const left = { ...t, qty: p.need - p.have, ref: Array.isArray(t.ref) ? t.ref[0] : t.ref };
       // a task with several goods names every one ("Make 3 more Cotton Totes or Wool Pillows"), as the Land card does
-      const alt = Array.isArray(t.ref) ? t.ref.slice(1).map((r) => ` or ${pluralOf(nameOf(r), left.qty)}`).join('') : '';
-      push({ slot: 'now', kind: 'land', id: land.id, ref: String(i), text: `${land.name}: ${moreText(left)}${alt}`,
+      const alts = Array.isArray(t.ref) ? t.ref.slice(1).map((r) => noun(r, left.qty, nameOf(r))) : [];
+      const lm = msg(alts.length ? 'goals.r.land.taskOr' : 'goals.r.land.task', { land: name(land.id, land.name, 'expansions'),
+        task: sub(moreMsg(left)), ...(alts.length ? { alts: join(alts, 'or') } : {}) });
+      push({ slot: 'now', kind: 'land', id: land.id, ref: String(i), ...said(lm),
         have: p.have, need: p.need, domain: verbDomain(t.verb), target: { panel: 'expansion', args: { id: land.id } } },
       4 + 2 * (p.have / p.need));
     } else {
@@ -739,18 +738,20 @@ function spendList(state, now, push, add) {
       const maker = need ? recipeOf(need.ref)?.building ?? null : null;
       const owned = maker ? (objectsByDef(state).get(maker) ?? []).length > 0 : true;
       if (need && owned) {
-        push({ slot: 'now', kind: 'land', id: land.id, ref: need.ref, text: `${land.name}: ${moreText(need)}`,
+        push({ slot: 'now', kind: 'land', id: land.id, ref: need.ref,
+          ...said(msg('goals.r.land.task', { land: name(land.id, land.name, 'expansions'), task: sub(moreMsg(need)) })),
           domain: 'workshop', target }, 5.5);
       } else if (need) {
         const p = buyPrice(state, maker);
         if (!p.code && !(p.acorns > 0) && p.coins <= coins && hasSpot(state, maker)) {
-          push({ slot: 'now', kind: 'build', id: maker, text: `${land.name} needs ${need.qty} `
-            + `${pluralOf(nameOf(need.ref), need.qty)}: build the ${CONTENT.buildings.get(maker).name} `
-            + `(${fmtCoins(p.coins)})`, domain: 'workshop', need: p.coins,
+          push({ slot: 'now', kind: 'build', id: maker, ...said(msg('goals.r.land.needBuild', {
+            land: name(land.id, land.name, 'expansions'), q: qtyRef(need.ref, need.qty, nameOf(need.ref)),
+            b: name(maker, CONTENT.buildings.get(maker).name), c: p.coins })), domain: 'workshop', need: p.coins,
           target: { panel: 'market', args: { tab: 'buildings', focus: maker } } }, 5.5);
         }
       } else if (land.cost <= coins) {
-        push({ slot: 'now', kind: 'land', id: land.id, ref: 'buy', text: `Buy ${land.name} (${fmtCoins(land.cost)})`,
+        push({ slot: 'now', kind: 'land', id: land.id, ref: 'buy',
+          ...said(msg('goals.r.land.buy', { land: name(land.id, land.name, 'expansions'), c: land.cost })),
           domain: 'market', need: land.cost, target }, 7);
       }
     }
@@ -770,21 +771,24 @@ function spendList(state, now, push, add) {
     for (const d of shop) if (!decor || d.cost < decor.cost || (d.cost === decor.cost && d.id < decor.id)) decor = d;
   }
   if (decor) {
-    push({ slot: 'now', kind: 'decor', id: decor.id, text: `Decorate: ${decor.name} (${fmtCoins(decor.cost)})`,
+    push({ slot: 'now', kind: 'decor', id: decor.id, ...said(msg('goals.r.decor', { d: name(decor.id, decor.name, 'decor'), c: decor.cost })),
       domain: 'farm', target: { panel: 'market', args: { tab: 'decor', focus: decor.id } } }, 2.5);
   }
   // wave 4 (owner wish E): an upgrade the farm can buy right now takes its turn with the other spend cards
   const up = upgradeOptions(state).find((v) => v.code === null);
   if (up) {
-    push({ slot: 'now', kind: 'upgrade', id: up.id, ref: up.target, text: `Upgrade the ${up.name}: ${up.next.name} `
-      + `(${costText(up.next)})`, domain: 'farm', need: up.next.coins,
+    push({ slot: 'now', kind: 'upgrade', id: up.id, ref: up.target, ...said(upgradeMsg(up)), domain: 'farm', need: up.next.coins,
     target: { panel: 'upgrades', args: { id: up.id } } }, 5);
   }
 }
 
 /** "1,500 coins + 2 Planks" for an upgrade tier. */
-const costText = (n) => [n.coins > 0 ? `${fmtCoins(n.coins)} coins` : null,
-  ...sortedKeys(n.items).map((i) => `${n.items[i]} ${pluralOf(nameOf(i), n.items[i])}`)].filter(Boolean).join(' + ');
+const costRef = (n) => join([n.coins > 0 ? sub(msg('goals.r.cost.coins', { n: n.coins })) : null,
+  ...sortedKeys(n.items).map((i) => qtyRef(i, n.items[i], nameOf(i), 'items'))].filter(Boolean), 'plus');
+
+/** "Upgrade the Cow Barn: Roomy Barn (1,500 coins + 2 Planks)": the tier's own name is content (ctext 'upgrades'). */
+const upgradeMsg = (v) => msg('goals.r.upgrade', { b: name(v.def, v.name), cost: costRef(v.next),
+  tier: ctextRef('upgrades', `${v.target}.${v.next.tier}`, 'name', v.next.name) });
 
 /**
  * The next tier of every upgradable target the farm owns (wave 4): one view per farm-wide target (its first copy) and
@@ -841,16 +845,15 @@ function w4Candidates(state, now, add) {
         && (cropOf(c.def)?.growMs ?? 0) >= 30 * MIN) n++;
     }
     if (n > 0) {
-      add({ slot: 'now', kind: 'fertilize', ref: FERTILIZER.item, text: `Spread Fertilizer on ${n === 1 ? 'a growing crop'
-        : `${n} growing crops`}: sooner and bigger harvests`, domain: 'fields', need: n,
+      add({ slot: 'now', kind: 'fertilize', ref: FERTILIZER.item, ...said(msg('goals.r.fertilize', { n: int(n) })), domain: 'fields', need: n,
       target: { tool: 'fertilizer' } }, 4.4);
     }
   }
   const save = upgradeOptions(state).find((v) => v.code === 'NO_COINS' || v.code === 'NO_ITEMS');
   if (save) {
     const have = Math.min(state.farm.wallet.coins, save.next.coins);
-    add({ slot: 'soon', kind: 'upgrade', id: save.id, ref: save.target, text: `Upgrade the ${save.name}: `
-      + `${save.next.name} (${costText(save.next)})`, have, need: Math.max(1, save.next.coins), domain: 'farm',
+    add({ slot: 'soon', kind: 'upgrade', id: save.id, ref: save.target, ...said(upgradeMsg(save)), have,
+      need: Math.max(1, save.next.coins), domain: 'farm',
     target: { panel: 'upgrades', args: { id: save.id } } }, 3 + 2 * (have / Math.max(1, save.next.coins)));
   }
 }
@@ -865,19 +868,19 @@ export function w4bCandidates(state, pid, now, add) {
   const crate = cratesOn(state)[0];
   if (crate) {
     const o = state.farm.objects[crate];
-    add({ slot: 'now', kind: 'crate', id: crate, text: 'Open the crate the balloon dropped', domain: 'farm',
+    add({ slot: 'now', kind: 'crate', id: crate, ...said(msg('goals.r.crate')), domain: 'farm',
       target: { tile: { x: o.x, z: o.z }, act: 'openCrate', args: { id: crate } } }, 7);
   }
   const ctx = { now, pid: 'sys', grace: 0, rng: () => 0.5 };
   const relics = relicView(state, now);
   const owned = (id) => relics.some((r) => r.id === id && r.owned && !r.used);
   if (owned('farmhand') && farmhandTargets(state, ctx).length) {
-    add({ slot: 'now', kind: 'relic', ref: 'farmhand', text: 'Send the Farmhand round the animals (once a day)',
+    add({ slot: 'now', kind: 'relic', ref: 'farmhand', ...said(msg('goals.r.farmhand')),
       domain: 'barnyard', target: { act: 'farmhand', args: {} } }, 6.5);
   }
   if (owned('time_turner') && turnerTargets(state, now).length) {
     add({ slot: 'now', kind: 'relic', ref: 'time_turner', domain: 'workshop',
-      text: 'Turn the Time Turner: every queue finishes now (once a day)', target: { act: 'turnTime', args: {} } }, 4);
+      ...said(msg('goals.r.turner')), target: { act: 'turnTime', args: {} } }, 4);
   }
   // the one this player picked to save for (saveFor), else the cheapest the level allows
   const mine = state.players[pid]?.save;
@@ -885,11 +888,11 @@ export function w4bCandidates(state, pid, now, add) {
     .sort((a, b) => a.acorns - b.acorns || (a.id < b.id ? -1 : 1))[0];
   if (!want) return;
   if (want.code === null) {
-    add({ slot: 'now', kind: 'relic', ref: want.id, text: `The ${want.name} is yours for ${want.acorns} Acorns`,
+    add({ slot: 'now', kind: 'relic', ref: want.id, ...said(msg('goals.r.relic.buy', { relic: ctextRef(null, want.id, 'name', want.name), n: int(want.acorns) })),
       domain: 'farm', target: { panel: 'relics', args: { relic: want.id } } }, 3.5);
   } else {
-    add({ slot: 'soon', kind: 'relic', ref: want.id, text: `Saving for the ${want.name}: ${want.have} / ${want.acorns} `
-      + 'Acorns', have: want.have, need: want.acorns, domain: 'farm',
+    add({ slot: 'soon', kind: 'relic', ref: want.id, ...said(msg('goals.r.relic.save', { relic: ctextRef(null, want.id, 'name', want.name),
+      have: int(want.have), n: int(want.acorns) })), have: want.have, need: want.acorns, domain: 'farm',
     target: { panel: 'relics', args: { relic: want.id } } }, 2 + 2 * (want.have / want.acorns));
   }
 }
@@ -905,7 +908,8 @@ function soonCandidates(state, now, L, add) {
       if (p.done) return;
       // a card that waits on something names it (RC-10): "Baby Steps: build the Dairy first"
       const b = blockerOf(state, t, now);
-      add({ slot: 'soon', kind: 'quest', id: qid, ref: String(i), text: `${q.title}: ${b ? b.text : taskText(t)}`,
+      const qm = msg('goals.r.quest', { title: ctextRef('quests', qid, 'title', q.title), task: sub(b ? b.msg : taskMsg(t)) });
+      add({ slot: 'soon', kind: 'quest', id: qid, ref: String(i), ...said(qm),
         have: p.have, need: p.need, domain: verbDomain(t.verb), state: isStateTask(t),
         ...(b ? { blocker: b.text } : {}) },
       5 + 3 * (p.have / p.need) - (b ? 3 : 0));
@@ -918,7 +922,7 @@ function soonCandidates(state, now, L, add) {
       if (!rcp.inputs || CONTENT.feeds.has(rcp.id)) continue;
       if (!isLive(rcp) || rcp.unlock > L || rcp.duet || (state.farm.stats[`craft.${rcp.id}`] ?? 0) > 0) continue;
       if (Object.keys(rcp.inputs ?? {}).every((i) => available(state, i) >= rcp.inputs[i])) {
-        add({ slot: 'soon', kind: 'try', id: rcp.id, text: `Try a new recipe: ${rcp.name}`, domain: 'workshop' }, 4.5);
+        add({ slot: 'soon', kind: 'try', id: rcp.id, ...said(msg('goals.r.try', { r: name(rcp.id, rcp.name, 'items') })), domain: 'workshop' }, 4.5);
       }
     }
   }
@@ -931,10 +935,11 @@ function bigCandidates(state, pid, L, add) {
   // past the milestone's last unlock (M1a: L13+) the card says so instead of an empty "Level 14" (RC-14); a Legacy
   // level (M2, L41+) names its reward: no empty levels, ever
   const legacy = legacyLive() && L + 1 >= legacyFrom() ? legacyReward(L + 1 - legacyFrom() + 1) : null;
-  const text = legacy ? `Legacy level ${L + 1}: ${prizeText(legacy)}`
-    : unlock ? `Level ${L + 1}: ${nameOf(unlock.id)}`
-      : `Level ${L + 1}: ${CHAPTER_DONE[MILESTONE] ?? CHAPTER_DONE.M1b}. More of the valley opens soon`;
-  add({ slot: 'big', kind: 'level', text, ...lvl }, 3 + 4 * (lvl.have / lvl.need));
+  const level = int(L + 1);
+  const lm = legacy ? msg('goals.r.level.legacy', { level, prize: sub(prizeMsg(legacy)) })
+    : unlock ? msg('goals.r.level.unlock', { level, thing: name(unlock.id, nameOf(unlock.id)) })
+      : msg('goals.r.level.chapter', { level, chapter: sub(msg(CHAPTER_DONE[MILESTONE] ?? CHAPTER_DONE.M1b)) });
+  add({ slot: 'big', kind: 'level', ...said(lm), ...lvl }, 3 + 4 * (lvl.have / lvl.need));
   const me = state.players[pid];
   for (const rb of CONTENT.ribbons.values()) {
     if (!systemLive(rb) || rb.hidden) continue;
@@ -944,7 +949,8 @@ function bigCandidates(state, pid, L, add) {
     const v = ribbonValue(state, rb, pid);
     const need = rb.tiers[t];
     if (v * 10 >= need * 8) {
-      add({ slot: 'big', kind: 'ribbon', id: rb.id, text: `${rb.name}: ${rb.text}`, have: v, need },
+      add({ slot: 'big', kind: 'ribbon', id: rb.id, ...said(msg('goals.r.ribbon', { name: ctextRef('ribbons', rb.id, 'name', rb.name),
+        text: ctextRef('ribbons', rb.id, 'text', rb.text) })), have: v, need },
         3 + 4 * (v / need));
     }
   }
@@ -956,19 +962,17 @@ function bigCandidates(state, pid, L, add) {
       const need = m.def.mastery[s];
       const v = state.farm.mastery[id];
       if (v * 10 >= need * 8) {
-        add({ slot: 'big', kind: 'mastery', id, text: `${m.def.name}: star ${s + 1}`, have: v, need },
+        add({ slot: 'big', kind: 'mastery', id, ...said(msg('goals.r.mastery', { name: name(m.def.id ?? id, m.def.name), n: int(s + 1) })), have: v, need },
           3 + 4 * (v / need));
       }
     }
   }
   const ch = state.farm.challenge?.cur;
   if (ch && !ch.done) {
-    add({ slot: 'big', kind: 'challenge', id: ch.tpl, text: 'This week\'s Couple Challenge', have: ch.n,
+    add({ slot: 'big', kind: 'challenge', id: ch.tpl, ...said(msg('goals.r.challenge')), have: ch.n,
       need: ch.target }, 3 + 3 * (ch.n / ch.target));
   }
 }
-
-const pts = (p10) => `${Math.floor(p10 / 10)}.${p10 % 10}`;
 
 /**
  * The M1b weekly and album systems as goals (GDD §5.1 candidates: "goals >= 80 % done (achievements, mastery,
@@ -982,21 +986,21 @@ function weeklyCandidates(state, now, add) {
     const open = b.crates.filter((c) => c.by === null);
     const ready = open.filter((c) => c.ready).sort((x, y) => y.coins - x.coins || x.i - y.i)[0];
     if (ready) {
-      add({ slot: 'now', kind: 'barge', ref: String(ready.i), text: `Load a barge crate: ${ready.qty} `
-        + `${pluralOf(nameOf(ready.item), ready.qty)} (${fmtCoins(ready.coins)})`, domain: 'market',
+      add({ slot: 'now', kind: 'barge', ref: String(ready.i), ...said(msg('goals.r.barge.load', {
+        q: qtyRef(ready.item, ready.qty, nameOf(ready.item), 'items'), c: ready.coins })), domain: 'market',
       target: { panel: 'barge', args: { i: ready.i } } }, 7.5);
     }
     for (const c of open.filter((x) => !x.ready).slice(0, 3)) {
       const have = Math.min(c.qty, available(state, c.item));
-      const text = `Barge crate: ${c.qty} ${pluralOf(nameOf(c.item), c.qty)}`;
-      add({ slot: 'soon', kind: 'barge', ref: String(c.i), text, have, need: c.qty, domain: 'market',
+      const m = msg('goals.r.barge.crate', { q: qtyRef(c.item, c.qty, nameOf(c.item), 'items') });
+      add({ slot: 'soon', kind: 'barge', ref: String(c.i), ...said(m), have, need: c.qty, domain: 'market',
         target: { panel: 'barge', args: { i: c.i } } }, 4 + 3 * (have / c.qty));
     }
     const rowsDone = Object.keys(b.paid).length;
     if (b.rows > 0 && rowsDone < b.rows) {
       const loaded = b.crates.filter((c) => c.by !== null).length;
-      const text = `River Barge: ${rowsDone} of ${b.rows} ${b.rows === 1 ? 'row' : 'rows'} loaded`;
-      add({ slot: 'big', kind: 'barge', text, have: loaded, need: b.crates.length, target: { panel: 'barge' } },
+      const m = msg('goals.r.barge.rows', { done: int(rowsDone), n: int(b.rows) });
+      add({ slot: 'big', kind: 'barge', ...said(m), have: loaded, need: b.crates.length, target: { panel: 'barge' } },
         3 + 4 * (loaded / b.crates.length));
     }
   }
@@ -1004,16 +1008,16 @@ function weeklyCandidates(state, now, add) {
   if (folk && folk.unlocked) {
     for (const p of folk.posts) {
       if (p.done !== null) continue;
-      const who = CONTENT.npcs.get(p.npc)?.name ?? p.npc;
+      const who = name(p.npc, CONTENT.npcs.get(p.npc)?.name ?? p.npc, 'npcs');
       if (p.fillable) {
-        add({ slot: 'now', kind: 'folk', ref: String(p.i), text: `Hand in ${who}'s request (${fmtCoins(p.coins)})`,
+        add({ slot: 'now', kind: 'folk', ref: String(p.i), ...said(msg('goals.r.folk.hand', { npc: who, c: p.coins })),
           domain: 'market', target: { panel: 'townsfolk', args: { i: p.i } } }, 7);
       } else {
         const items = sortedKeys(p.items);
         const have = items.reduce((n, i) => n + Math.min(p.items[i], available(state, i)), 0);
         const need = items.reduce((n, i) => n + p.items[i], 0);
-        add({ slot: 'soon', kind: 'folk', ref: String(p.i), text: `${who}'s request: ${items.map((i) => `${p.items[i]} `
-          + `${pluralOf(nameOf(i), p.items[i])}`).join(', ')}`, have, need, domain: 'market',
+        add({ slot: 'soon', kind: 'folk', ref: String(p.i), ...said(msg('goals.r.folk.need', { npc: who,
+          items: join(items.map((i) => qtyRef(i, p.items[i], nameOf(i), 'items')), 'comma') })), have, need, domain: 'market',
         target: { panel: 'townsfolk', args: { i: p.i } } }, 3.5 + 3 * (have / need));
       }
     }
@@ -1027,15 +1031,14 @@ function weeklyCandidates(state, now, add) {
       .sort((a, b) => (itemOf(a.item)?.sell ?? 0) - (itemOf(b.item)?.sell ?? 0) || (a.item < b.item ? -1 : 1));
     const best = reach[0] ?? list[0];
     if (best) {
-      add({ slot: 'now', kind: 'fair', ref: best.item, text: `Enter ${nameOf(best.item)} at the Fair `
-        + `(+${pts(best.p10)} points)`, domain: 'workshop', target: { panel: 'fair', args: { item: best.item } } },
+      add({ slot: 'now', kind: 'fair', ref: best.item, ...said(msg('goals.r.fair.enter', {
+        item: name(best.item, nameOf(best.item), 'items'), p: ptsRef(best.p10) })), domain: 'workshop', target: { panel: 'fair', args: { item: best.item } } },
       6.8);
     }
     if (fair.next) {
-      const name = FAIR_MEDAL_NAME(fair.next.id);
+      const medal = ctextRef('FAIR', `medal.${fair.next.id}`, 'name', FAIR_MEDAL_NAME(fair.next.id));
       const need10 = fair.next.need10 + fair.p10;
-      add({ slot: fair.medal ? 'soon' : 'big', kind: 'fair', text: `County Fair: ${pts(fair.next.need10)} points to `
-        + `${name}`, have: Math.floor(fair.p10 / 10), need: Math.ceil(need10 / 10), target: { panel: 'fair' } },
+      add({ slot: fair.medal ? 'soon' : 'big', kind: 'fair', ...said(msg('goals.r.fair.medal', { p: ptsRef(fair.next.need10), medal })), have: Math.floor(fair.p10 / 10), need: Math.ceil(need10 / 10), target: { panel: 'fair' } },
       3 + 4 * (fair.p10 / Math.max(1, need10)) + (medalRank(fair.medal) > 0 ? 0.5 : 0));
     }
   }
@@ -1044,11 +1047,12 @@ function weeklyCandidates(state, now, add) {
       if (set.done !== null) continue;
       const found = set.items.filter((i) => i.n > 0).length;
       if (set.dupes >= 3 && set.missing > 0) {
-        add({ slot: 'now', kind: 'album', id: set.id, text: `Trade 3 duplicates for a missing ${set.name} piece`,
+        add({ slot: 'now', kind: 'album', id: set.id, ...said(msg('goals.r.album.trade', { set: ctextRef('collections', set.id, 'name', set.name) })),
           domain: 'farm', target: { panel: 'collections', args: { set: set.id } } }, 4);
       }
       if (found * 10 >= set.items.length * 8) {
-        add({ slot: 'big', kind: 'album', id: set.id, text: `${set.name}: ${found} of ${set.items.length} found`,
+        add({ slot: 'big', kind: 'album', id: set.id, ...said(msg('goals.r.album.found', { set: ctextRef('collections', set.id, 'name', set.name),
+          found: int(found), n: int(set.items.length) })),
           have: found, need: set.items.length, target: { panel: 'collections', args: { set: set.id } } },
         3 + 4 * (found / set.items.length));
       }
@@ -1066,18 +1070,18 @@ const FAIR_MEDAL_NAME = (id) => FAIR.medals.find((m) => m.id === id)?.name ?? id
 function longTermCandidates(state, now, add) {
   const tc = state.farm.town?.cur;
   if (tc && tc.buildAt === undefined && Array.isArray(tc.goods)) {
-    const name = CONTENT.townProjects.get(tc.id)?.name ?? 'the Town Project';
+    const tp = name(tc.id, CONTENT.townProjects.get(tc.id)?.name ?? 'the Town Project', 'townProjects');   // i18n-ok: the English fallback
     const give = tc.goods.find((g) => g.got < g.qty && available(state, g.item) > 0);
     if (give) {
       const n = Math.min(give.qty - give.got, available(state, give.item));
-      add({ slot: 'now', kind: 'town', ref: give.item, text: `Give ${n} ${pluralOf(nameOf(give.item), n)} to the `
-        + `${name}`, domain: 'farm', target: { panel: 'town' } }, 5.5);
+      add({ slot: 'now', kind: 'town', ref: give.item, ...said(msg('goals.r.give', { q: qtyRef(give.item, n, nameOf(give.item), 'items'),
+        to: tp })), domain: 'farm', target: { panel: 'town' } }, 5.5);
     }
     const goods = tc.goods.reduce((s, g) => s + g.qty, 0);
     const got = tc.goods.reduce((s, g) => s + Math.min(g.got, g.qty), 0);
     // coins count as ten more steps of the same bar
     const paid = tc.coins > 0 ? Math.floor((Math.min(tc.paid, tc.coins) * 10) / tc.coins) : 10;
-    add({ slot: 'big', kind: 'town', text: `${name}: goods and coins for the village`, have: got + paid,
+    add({ slot: 'big', kind: 'town', ...said(msg('goals.r.town.big', { project: tp })), have: got + paid,
       need: goods + 10, target: { panel: 'town' } }, 2.5 + 4 * ((got + paid) / (goods + 10)));
   }
   const proj = openProject(state);
@@ -1095,18 +1099,18 @@ function longTermCandidates(state, now, add) {
       });
     }
     if (best) {
-      add({ slot: 'soon', kind: 'restore', id: proj.id, ref: best.item, text: `Give ${best.give} `
-        + `${pluralOf(nameOf(best.item), best.give)} to the ${proj.name}`, domain: 'farm',
+      add({ slot: 'soon', kind: 'restore', id: proj.id, ref: best.item, ...said(msg('goals.r.give', {
+        q: qtyRef(best.item, best.give, nameOf(best.item), 'items'), to: name(proj.id, proj.name, 'restoration') })), domain: 'farm',
       target: { panel: 'restoration', args: { id: proj.id } } }, 5);
     }
-    add({ slot: 'big', kind: 'restore', id: proj.id, text: `Restore the ${proj.name}`, have: done,
+    add({ slot: 'big', kind: 'restore', id: proj.id, ...said(msg('goals.r.restore', { project: name(proj.id, proj.name, 'restoration') })), have: done,
       need: proj.bundles.length, target: { panel: 'restoration', args: { id: proj.id } } },
     3 + 4 * (done / proj.bundles.length));
   }
   if (beautyLive(state)) {
     const b = beautyOf(state, now);
     if (b.next) {
-      add({ slot: 'big', kind: 'beauty', text: `Farm Beauty: star ${b.stars + 1} at ${fmtCoins(b.next)}`,
+      add({ slot: 'big', kind: 'beauty', ...said(msg('goals.r.beauty', { n: int(b.stars + 1), score: b.next })),
         have: b.score, need: b.next, domain: 'farm', target: { panel: 'beauty' } }, 2.8 + 4 * (b.score / b.next));
     }
   }
@@ -1119,7 +1123,7 @@ function longTermCandidates(state, now, add) {
 function petCandidates(state, pid, now, add) {
   if (!petsLive(state) || !Object.hasOwn(state.players, pid)) return;
   if (!petOf(state, pid)) {
-    add({ slot: 'now', kind: 'pet', text: 'Adopt a dog or a cat of your own', domain: 'farm',
+    add({ slot: 'now', kind: 'pet', ...said(msg('goals.r.pet.adopt')), domain: 'farm',
       target: { panel: 'pets', args: {} } }, 5);
     return;
   }
@@ -1128,25 +1132,31 @@ function petCandidates(state, pid, now, add) {
     const pet = petOf(state, owner);
     const treat = pet ? petKind(pet.kind)?.treat : null;
     if (!pet || !treat || pet.fed === day || available(state, treat) < 1) continue;
-    add({ slot: 'now', kind: 'pet', ref: treat, text: `Give ${pet.name} a ${nameOf(treat)}: a find tomorrow morning`,
+    add({ slot: 'now', kind: 'pet', ref: treat, ...said(msg('goals.r.pet.treat', { pet: pet.name, treat: name(treat, nameOf(treat), 'items') })),
       domain: 'farm', target: { panel: 'pets', args: {} } }, 3.5);
     return;
   }
 }
 
 /** A content prize in words ("10 Acorns", "a Golden Seed Packet", "the Legacy Statue"): the tracker's cards. */
-export function prizeText(r) {
+export function prizeMsg(r) {
   const parts = [];
-  if (r.acorns > 0) parts.push(`${r.acorns} ${r.acorns === 1 ? 'Acorn' : 'Acorns'}`);
-  if (r.goldenSeeds > 0) parts.push(r.goldenSeeds === 1 ? 'a Golden Seed Packet' : `${r.goldenSeeds} Golden Seed Packets`);
-  if (r.seedPacket > 0) parts.push(r.seedPacket === 1 ? 'a seed packet' : `${r.seedPacket} seed packets`);
-  if (r.hearts > 0) parts.push(`${r.hearts} Hearts each`);
-  if (r.coinsHoursBp > 0) parts.push('coins');
-  if (r.items) parts.push(sortedKeys(r.items).map((i) => `${r.items[i]} ${pluralOf(nameOf(i), r.items[i])}`).join(', '));
-  if (r.decor) parts.push(r.decor === 'season' ? 'a season planter' : `the ${nameOf(r.decor)}`);
-  if (r.coat) parts.push('the season\'s animal coat');
-  return parts.join(' and ') || 'a gift';
+  const part = (key, params) => parts.push(sub(msg(key, params)));
+  if (r.acorns > 0) part('goals.r.prize.acorns', { n: int(r.acorns) });
+  if (r.goldenSeeds > 0) part('goals.r.prize.golden', { n: int(r.goldenSeeds) });
+  if (r.seedPacket > 0) part('goals.r.prize.packet', { n: int(r.seedPacket) });
+  if (r.hearts > 0) part('goals.r.prize.hearts', { n: int(r.hearts) });
+  if (r.coinsHoursBp > 0) part('goals.r.prize.coins');
+  if (r.items) parts.push(join(sortedKeys(r.items).map((i) => qtyRef(i, r.items[i], nameOf(i), 'items')), 'comma'));
+  if (r.decor) {
+    if (r.decor === 'season') part('goals.r.prize.planter');
+    else part('goals.r.prize.decor', { d: name(r.decor, nameOf(r.decor), 'decor') });
+  }
+  if (r.coat) part('goals.r.prize.coat');
+  return parts.length ? msg('goals.r.prize.list', { list: join(parts, 'and') }) : msg('goals.r.prize.gift');
 }
+/** The same prize in English. */
+export const prizeText = (r) => enText(prizeMsg(r));
 
 /**
  * The M2 goals as cards (wave 3). Scores: a tier to claim is a reward waiting like a ripe plot (7.8: above a barge crate
@@ -1161,55 +1171,60 @@ function m2Candidates(state, pid, now, add) {
   if (!Object.hasOwn(state.players, pid)) return;
   const pv = perksView(state, pid, now);
   if (pv.live && pv.trees.some((t) => t.perks.some((x) => x.affordable))) {
-    add({ slot: 'now', kind: 'perk', text: `${pv.free} perk ${pv.free === 1 ? 'point' : 'points'} to spend: pick a perk`,
+    add({ slot: 'now', kind: 'perk', ...said(msg('goals.r.perk', { n: int(pv.free) })),
       domain: 'farm', have: pv.spent, need: pv.points, target: { panel: 'perks' } }, 4.2);
   }
   const tv = trackView(state, now);
   if (tv.open && tv.s === state.farm.track?.s) {
     const claim = tv.tiers.find((t) => t.claimable);
     if (claim) {
-      add({ slot: 'now', kind: 'track', ref: String(claim.n), text: `Season Track tier ${claim.n}: claim `
-        + `${prizeText(claim.reward)}`, domain: 'farm', target: { panel: 'seasonTrack', args: { tier: claim.n } } }, 7.8);
+      add({ slot: 'now', kind: 'track', ref: String(claim.n), ...said(msg('goals.r.track.claim', { n: int(claim.n),
+        prize: sub(prizeMsg(claim.reward)) })), domain: 'farm', target: { panel: 'seasonTrack', args: { tier: claim.n } } }, 7.8);
     }
     if (!tv.done) {
       const next = tv.tiers[tv.tier];
-      add({ slot: 'big', kind: 'track', ref: String(tv.tier + 1), text: `Season Track tier ${tv.tier + 1}: `
-        + `${fmtCoins(tv.toNext)} XP to ${prizeText(next.reward)}`, have: tv.inTier, need: tv.need,
+      add({ slot: 'big', kind: 'track', ref: String(tv.tier + 1), ...said(msg('goals.r.track.next', { n: int(tv.tier + 1),
+        xp: tv.toNext, prize: sub(prizeMsg(next.reward)) })), have: tv.inTier, need: tv.need,
       target: { panel: 'seasonTrack' } }, 2.6 + 4 * (tv.inTier / tv.need));
     }
   }
   const du = duelUnlocked(state) ? duelOf(state, pid, now) : null;
   if (du && du.phase === 'invited') {
-    const who = state.players[du.cur.by]?.name ?? 'Your partner';
+    const who = state.players[du.cur.by]?.name;
     const k = DUEL.kinds.find((x) => x.id === du.cur.kind);
-    add({ slot: 'now', kind: 'duel', ref: du.cur.kind, text: `${who} challenges you to ${/^[AEIOU]/.test(k?.name ?? '') ? 'an' : 'a'} ${k?.name ?? 'Friendly Duel'}`,
+    const duel = duelRef(k);
+    add({ slot: 'now', kind: 'duel', ref: du.cur.kind, ...said(msg(who ? 'goals.r.duel.invite' : 'goals.r.duel.invite.partner',
+      { ...(who ? { who } : {}), _a: /^[AEIOU]/.test(k?.name ?? '') ? 'an' : 'a', duel })),
       domain: 'farm', target: { panel: 'duel' } }, 7.2);
   } else if (du && du.phase === 'live') {
     const k = DUEL.kinds.find((x) => x.id === du.cur.kind);
     const sc = (n) => (k?.scale > 1 ? Math.floor(n / k.scale) : n);
-    const them = state.players[du.them]?.name ?? 'your partner';
-    add({ slot: 'soon', kind: 'duel', ref: du.cur.kind, text: `${k?.name ?? 'Friendly Duel'}: you ${sc(du.mine)}, `
-      + `${them} ${sc(du.theirs)}`, have: du.mine, need: Math.max(1, du.mine, du.theirs), domain: 'farm',
+    const them = state.players[du.them]?.name;
+    add({ slot: 'soon', kind: 'duel', ref: du.cur.kind, ...said(msg(them ? 'goals.r.duel.live' : 'goals.r.duel.live.partner',
+      { duel: duelRef(k), mine: int(sc(du.mine)), ...(them ? { them } : {}), theirs: int(sc(du.theirs)) })),
+      have: du.mine, need: Math.max(1, du.mine, du.theirs), domain: 'farm',
     target: { panel: 'duel' } }, 3.6);
   }
   const g = grandmaView(state, now, pid);
   if (g && g.here) {
-    add({ slot: 'now', kind: 'grandma', ref: g.stop, text: `Grandma Hazel is at the ${g.stop}: say hello`,
+    const stopKey = `goals.r.grandma.${g.stop}`;
+    add({ slot: 'now', kind: 'grandma', ref: g.stop, ...said(Object.hasOwn(GOALS_RULES_EN, stopKey) ? msg(stopKey)
+      : msg('goals.r.grandma.any', { stop: String(g.stop) })),
       domain: 'farm', target: { panel: 'farmhouse', args: { grandma: true } } }, 3.2);
   }
   homeCandidates(state, pid, now, add);
   const lt = leagueUnlocked(state) ? fairStanding(state, now)?.league : null;
   if (lt && lt.open && lt.rows.length) {
     const me = lt.rows.findIndex((r) => r.farm);
-    const name = LEAGUE.names?.[lt.tier - 1] ?? `League ${lt.tier}`;
+    const league = ctextRef('FAIR', `league.${lt.tier}`, 'name', LEAGUE.names?.[lt.tier - 1] ?? `League ${lt.tier}`);   // i18n-ok: the English, Bulgarian reads the ctext
     if (lt.tier < lt.top && me >= LEAGUE.promote) {
       const target = lt.rows.filter((r) => !r.farm)[LEAGUE.promote - 1];
       const need10 = Math.max(1, target.p10 + 1 - lt.rows[me].p10);
-      add({ slot: 'big', kind: 'league', text: `${name}: ${pts(need10)} points to a promotion place`,
+      add({ slot: 'big', kind: 'league', ...said(msg('goals.r.league.promo', { league, p: ptsRef(need10) })),
         have: lt.rows[me].p10, need: lt.rows[me].p10 + need10, target: { panel: 'league' } },
       2.7 + 3 * (lt.rows[me].p10 / Math.max(1, lt.rows[me].p10 + need10)));
     } else if (me < LEAGUE.promote && lt.tier < lt.top) {
-      add({ slot: 'big', kind: 'league', text: `${name}: in a promotion place, hold it until Sunday`,
+      add({ slot: 'big', kind: 'league', ...said(msg('goals.r.league.hold', { league })),
         target: { panel: 'league' } }, 3);
     }
   }
@@ -1220,10 +1235,15 @@ function m2Candidates(state, pid, now, add) {
  * card to choose who the baby is), and my hourly cast when the farm has a fishing spot. The panels' badges say the same.
  */
 function homeCandidates(state, pid, now, add) {
-  const nameOf2 = (id, o) => state.farm.names?.[id]?.name ?? `the ${animalOf(o.def)?.name ?? 'baby'}`;
+  // a named baby by its name, else "the Cow": two keys, so Bulgarian can say the species its own way
+  const babyOf = (key, id, o, params = {}) => {
+    const given = state.farm.names?.[id]?.name;
+    return given ? msg(`${key}.named`, { name: given, ...params })
+      : msg(key, { animal: name(o.def, animalOf(o.def)?.name ?? 'baby', 'animals'), ...params });
+  };
   const cur = breedingOpen(state) ? breedingOf(state) : null;
   if (cur && cur.readyAt <= now) {
-    add({ slot: 'now', kind: 'breed', ref: cur.sp, text: `Bring the new baby ${animalOf(cur.sp)?.name ?? 'animal'} home from the Breeding Barn`,
+    add({ slot: 'now', kind: 'breed', ref: cur.sp, ...said(msg('goals.r.breed.home', { animal: name(cur.sp, animalOf(cur.sp)?.name ?? 'animal', 'animals') })),
       domain: 'farm', target: { panel: 'breeding', args: { collect: true } } }, 6);
   }
   // the Breeding Barn on a full farm (wave-3 playtest: every home at capacity, so every pair answered CAP all evening):
@@ -1241,8 +1261,8 @@ function homeCandidates(state, pid, now, add) {
       const hd = homeOf(state.farm.objects[home]?.def);
       const max = hd ? homeMaxOf(hd) : null;                 // wave 4b: homes grow past the old capacityMax
       const canGrow = Number.isSafeInteger(max) && capacityOf(state, home) < max;
-      add({ slot: 'now', kind: 'breed', ref: sp, text: canGrow ? `Make room for a baby ${def.name}: upgrade the ${hd.name}`
-        : `Make room for a baby ${def.name}: the ${hd?.name ?? 'home'} is full`,
+      add({ slot: 'now', kind: 'breed', ref: sp, ...said(msg(canGrow ? 'goals.r.breed.upgrade' : 'goals.r.breed.full', {
+        animal: name(sp, def.name, 'animals'), home: name(hd?.id ?? 'home', hd?.name ?? 'home', 'homes') })),
         domain: 'farm', target: { panel: 'animals', args: { id: home } } }, 1.5);
     }
   }
@@ -1254,70 +1274,34 @@ function homeCandidates(state, pid, now, add) {
       const step = nextCareStep(o);
       if (step === null) {
         if (o.spec === undefined && o.nurse) {
-          add({ slot: 'now', kind: 'nursery', id, ref: o.def, text: `Choose who ${nameOf2(id, o)} is: the Nursery card is full`,
+          add({ slot: 'now', kind: 'nursery', id, ref: o.def, ...said(babyOf('goals.r.nursery.choose', id, o)),
             domain: 'farm', target: { panel: 'nursery', args: { id, pick: true } } }, 3.6);
           break;
         }
         continue;
       }
       if ((!o.nurse && !cardOpen(o, now)) || now < nextCareAt(o) || available(state, def.bottle) < NURSERY.bottlesPerStep) continue;
-      const verb = { feed: 'Feed', play: 'Play with', groom: 'Groom' }[step] ?? 'Look after';
-      add({ slot: 'now', kind: 'nursery', id, ref: o.def, text: `${verb} ${nameOf2(id, o)}: ${NURSERY.bottlesPerStep} `
-        + `${pluralOf(nameOf(def.bottle), NURSERY.bottlesPerStep)}`, domain: 'farm', target: { panel: 'nursery', args: { id } } }, 3.1);
+      const verb = ['feed', 'play', 'groom'].includes(step) ? step : 'look';
+      add({ slot: 'now', kind: 'nursery', id, ref: o.def, ...said(babyOf(`goals.r.nursery.${verb}`, id, o,
+        { q: qtyRef(def.bottle, NURSERY.bottlesPerStep, nameOf(def.bottle), 'items') })), domain: 'farm',
+      target: { panel: 'nursery', args: { id } } }, 3.1);
       break;
     }
   }
   const spots = fishingSpots(state);
   if (spots.length && !lineOf(state, pid) && nextCastAt(state, pid) <= now) {
     const pond = spots[0].pond ? expansionOf(spots[0].pond)?.name : null;
-    add({ slot: 'now', kind: 'fish', text: `Cast a line${pond ? ` at ${pond}` : ' at the Fishing Dock'}: a fish an hour`,
+    add({ slot: 'now', kind: 'fish', ...said(pond ? msg('goals.r.fish.pond', { pond: name(spots[0].pond, pond, 'expansions') })
+      : msg('goals.r.fish.dock')),
       domain: 'farm', target: { panel: 'fishing' } }, 1.6);
   }
 }
 
-const SPECIAL_NAMES = {
-  order: ['order', 'orders'], debris: ['piece of debris', 'pieces of debris'], plot: ['plot', 'plots'],
-  barn: ['the Barn', 'the Barn'], slot: ['building slot', 'building slots'],
-  demand: ['Demand good', 'Demand goods'], prized: ['blue-ribbon crop', 'blue-ribbon crops'],
-  crate: ['barge crate', 'barge crates'], row: ['full barge row', 'full barge rows'],
-  fair: ['good at the Fair', 'goods at the Fair'], hamper: ['hamper at the Fair', 'hampers at the Fair'],
-  bundle: ['Restoration bundle', 'Restoration bundles'], project: ['Restoration project', 'Restoration projects'],
-  town_project: ['Town Project', 'Town Projects'], beauty_star: ['Farm Beauty star', 'Farm Beauty stars'],
-  forage: ['bee forage', 'bee forage'],
-};
-
-/** The M1b specials that read better as their own sentence (count 1 / count n). */
-const SPECIAL_TEXT = {
-  'reach:fair_silver': () => 'Win a Silver medal at the County Fair',
-  'reach:league': (n) => `Reach League ${n} at the County Fair`,
-  'together:bench': () => 'Sit together for Golden Hour',
-  'together:duet': (n) => (n === 1 ? 'Cook a duet together' : `Cook ${n} duets together`),
-  'together:help_flag': (n) => `Fill ${n} of your partner's help flags`,
-  'together:giant': (n) => (n === 1 ? 'Fell a giant crop together' : `Fell ${n} giant crops together`),
-  'together:dock': () => 'Go fishing together on the dock',
-};
-
-/** "Fill 3 orders", "Make 2 Bread", "Buy the land: Creekside Meadow" (QUEST_VERBS text). */
-export function taskText(t) {
-  const verb = QUEST_VERBS[t.verb]?.text ?? t.verb;
-  const special = SPECIAL_NAMES[t.ref];
-  const own = SPECIAL_TEXT[`${t.verb}:${t.ref}`];
-  if (own) return own(t.qty);
-  if (t.verb === 'expand') return `${verb}: ${nameOf(t.ref)}`;
-  const what = special ? special[t.qty === 1 ? 0 : 1] : pluralOf(nameOf(t.ref), t.qty);
-  if (t.qty === 1 && what.startsWith('the ')) return `${verb} ${what}`;          // "Upgrade the Barn" (RC-26)
-  return `${verb} ${t.qty} ${what}`;
-}
+/** "Fill 3 orders", "Make 2 Bread", "Buy the land: Creekside Meadow" (QUEST_VERBS text; goal-text.js taskMsg). */
+export const taskText = (t) => enText(taskMsg(t));
 
 /** The task without its count, for a "have/need" line: "Fill orders", "Collect Egg", "Buy the land: Creekside". */
-export function taskLabel(t) {
-  const verb = QUEST_VERBS[t.verb]?.text ?? t.verb;
-  const own = SPECIAL_TEXT[`${t.verb}:${t.ref}`];
-  if (own) return own(t.qty);
-  if (t.verb === 'expand') return `${verb}: ${nameOf(t.ref)}`;
-  const special = SPECIAL_NAMES[t.ref];
-  return `${verb} ${special ? special[t.qty === 1 ? 0 : 1] : pluralOf(nameOf(t.ref), t.qty)}`;
-}
+export const taskLabel = (t) => enText(taskLabelMsg(t));
 
 function verbDomain(verb) {
   switch (verb) {
@@ -1328,15 +1312,3 @@ function verbDomain(verb) {
     default: return 'farm';
   }
 }
-
-function nameOf(ref) {
-  const d = itemOf(ref) ?? CONTENT.buildings.get(ref) ?? CONTENT.homes.get(ref) ?? CONTENT.trees.get(ref)
-    ?? CONTENT.animals.get(ref) ?? CONTENT.expansions.get(ref) ?? CONTENT.decor.get(ref) ?? recipeOf(ref);
-  return d ? d.name : ref;
-}
-
-function almanacText(t) {
-  const what = t.ref === '*' ? 'crops' : t.ref === 'animal' ? 'animals' : t.ref === 'order' ? 'order' : nameOf(t.ref);
-  return `${t.verb[0].toUpperCase()}${t.verb.slice(1)} ${t.qty} ${what}`;
-}
-

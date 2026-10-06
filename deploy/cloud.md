@@ -40,7 +40,11 @@ docker run -p 3000:3000 -v hh-data:/data harvest-hollow      # http://localhost:
 | `HH_TRUST_PROXY` | `1` | Reverse proxies in front of the server. Railway, Fly and Render have exactly one: keep `1`. Set `0` only when the container is reached directly (then X-Forwarded-For is ignored). |
 | `HH_BACKUP_HOURS` / `HH_BACKUP_DAYS` | `3` / `3` | Backups kept per farm (the newest of each of the last N hours / days). |
 | `HH_TZ` | container zone (UTC) | The calendar zone of a farm whose creator's browser did not send one (`POST /api/farms { tz }`). |
-| `HH_LOG` | `json` | One JSON object per log line. No request logging; keys and farm ids are never logged. |
+| `HH_LOG` | `json` | One JSON object per log line. No request logging; keys, farm ids and full client addresses are never logged (an abuse warning names the /24 or /48 network only). |
+| `HH_ADMIN_TOKEN` | unset | Turns on the ideas admin routes (`/api/admin/ideas`, see "Ideas from players"). At least 24 characters, e.g. `openssl rand -hex 32`; a shorter one leaves them off. Unset: those routes answer 404. |
+| `HH_IDEAS_PER_DAY` | `200` | Ideas accepted in any 24 hours, from everyone together (on top of 5 an hour and 20 a day per address). |
+| `HH_DELETE_PER_HOUR` | `10` | "Delete this farm now" requests per client address an hour. |
+| `HH_STARS_URL` | GitHub API | Where the server asks for the landing page's GitHub star count (at most once an hour; visitors' browsers never call GitHub). `off` = no count. |
 
 Never set `HH_DEV=1` in production (time-warp and other test routes, loopback only). With `NODE_ENV=production`
 (the image sets it) the server refuses to start in multi mode when `HH_DEV=1` is set: behind a reverse proxy on the
@@ -149,6 +153,35 @@ The game page (`/f/<id>`) and the landing page (`/`) are `no-cache` with an ETag
 pack is requested with a content hash (`?v=<hash>`) and answered `Cache-Control: public, max-age=31536000, immutable`,
 so a platform CDN in front of the container can cache them safely; a new deploy changes the hashes. Nothing under
 `/api/` or `/ws` is cacheable.
+
+## Ideas from players
+
+The landing page and the game's "Suggest an idea" (More menu, Settings) post to `POST /api/ideas`. Each idea is one
+line of `<HH_DATA_DIR>/ideas/ideas.jsonl` on the volume (0600): an id, the time, the category, the text, the optional
+name and contact, the farm id when it came from inside a farm, the language and the browser family ("Safari on iOS").
+No address is stored: the per-address limits key on a salted hash kept in memory only. A filled honeypot field is
+answered like a success and dropped. Text is plain text, never rendered as HTML.
+
+Review them with `GET /api/admin/ideas?status=new|all` and `POST /api/admin/ideas/<id> { "status": "liked", "note": "…" }`
+(statuses `new liked planned done declined`; each change is a line of `ideas/status.jsonl`, append-only), with
+`Authorization: Bearer <HH_ADMIN_TOKEN>`. Ten wrong tokens from one address in 15 minutes lock that address out for
+the rest of the window. `tools/ideas.mjs` does all of this from a terminal (the token from a 0600 file).
+
+## Privacy
+
+`/privacy` (public/privacy.html, English and Bulgarian) tells players what is kept, why and for how long; keep it true
+when the code changes (test/privacy-page.test.js ties its numbers to the code). In short:
+
+- Ideas and privacy requests older than 365 days are deleted by the hourly sweep. `DELETE /api/admin/ideas/<id>`
+  removes one idea for good (both files rewritten atomically).
+- The page's form posts `POST /api/privacy` (what: delete my idea, a farm I lost access to, a copy of my data,
+  something else; a description; an optional contact) to `<HH_DATA_DIR>/privacy/requests.jsonl` (0600, no address, no
+  browser). `node tools/ideas.mjs list` shows open requests first; `privacy`, `privacy done <id>`, `delete <idea>` and
+  `delete-farm <farm id or address>` (`DELETE /api/admin/farms/<id>`) answer them. Answer within one month.
+- "Delete this farm now" (Settings > Farm, any farmer): `POST /api/f/<id>/delete`; the folder, backups included, goes
+  at once and every open screen is told.
+- The platform keeps its own request logs (on Railway: time, path, client IP, user agent) under its own retention;
+  the page says so.
 
 ## Operating it
 

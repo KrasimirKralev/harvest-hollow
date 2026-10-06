@@ -101,7 +101,7 @@
   .unlock-banner .btn--small, .toast .btn--small, .coach .btn--small { min-height: 42px; }
   .hud-tr .pill::before { content: ''; position: absolute; inset: -6px -3px; }
   .hammer-hint .hint-btn { min-height: 40px; padding: 0 14px; }
-  .keys.gestures kbd { white-space: nowrap; }
+  .keys.gestures kbd { white-space: nowrap; flex: none; }
   .ss-seed, .ss-more { width: 44px; height: 44px; }
   /* every button a finger presses in a sheet: 44 px at least (mobile QA P1-4, astra P1-1: Feed / Sell / Collect were
      26 px, stacked 4 px apart). A range slider takes `height` (Chrome ignores its min-height) */

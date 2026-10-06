@@ -7,9 +7,9 @@
 //                                             id, type, title, hidden, disabled, tabindex, ... set as attributes;
 //                                             booleans true = present, false/null/undefined = absent)
 //   icon(id, { size, alt, cls }) -> <img>    a render-life icon by content id (iconUrl), lazy and undraggable
-//   fmt(n) / fmtShort(n)                     12,340 / 12.3k
-//   fmtDuration(ms)                          '2h 05m' | '4m 10s' | '12s' (never negative)
-//   plural(n, one, many?)                    '1 plot' / '3 plots'
+//   fmt(n) / fmtShort(n)                     12,340 / 12.3k (by language: i18n/core.js fmtNum / fmtShort)
+//   fmtDuration(ms, opts?)                   '2h 05m' | '4m 10s' | '12s' (never negative; i18n/core.js, by language)
+//   plural(n, one, many?)                    '1 plot' / '3 plots' (English words only: new code uses tn())
 //   focusables(root) -> Element[]            tabbable descendants in DOM order
 //   svgIcon(name, size?) -> SVGElement       the shell's inline SVG glyphs (GDD §7.3 dock + right edge)
 //   touchPlayer(controller?) -> bool         the player is on a phone or tablet (a touch last, or a coarse pointer)
@@ -17,6 +17,7 @@
 import { iconUrl } from '../render/icons.js';
 import { portraitSpec, peekPortrait } from '../render/portrait.js';
 import { farm } from '../net/farm.js';
+import { fmtNum, fmtShort as i18nShort, fmtDuration as i18nDuration, lang, touchOf } from '../i18n/index.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
@@ -75,28 +76,13 @@ export function icon(id, { size = 32, alt = '', cls = '' } = {}) {
   return img;
 }
 
-// one formatter for the whole UI: toLocaleString builds a new one per call, and the coin pill formats every frame of
-// a roll (QA wave 1 UI-30)
-const NUM = new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 });
-export const fmt = (n) => NUM.format(Math.trunc(Number(n) || 0));
+// one formatter per language for the whole UI (i18n/core.js caches them): toLocaleString builds a new one per call, and
+// the coin pill formats every frame of a roll (QA wave 1 UI-30)
+export const fmt = (n) => fmtNum(n);
 
-export function fmtShort(n) {
-  const v = Math.trunc(Number(n) || 0);
-  const a = Math.abs(v);
-  if (a < 10_000) return fmt(v);
-  if (a < 1_000_000) return `${(v / 1000).toFixed(a < 100_000 ? 1 : 0).replace(/\.0$/, '')}k`;
-  return `${(v / 1_000_000).toFixed(1).replace(/\.0$/, '')}M`;
-}
+export const fmtShort = (n) => i18nShort(n);
 
-export function fmtDuration(ms) {
-  const s = Math.max(0, Math.ceil((Number(ms) || 0) / 1000));
-  if (s < 60) return `${s}s`;
-  const m = Math.floor(s / 60);
-  if (m < 60) return `${m}m ${String(s % 60).padStart(2, '0')}s`;
-  const hrs = Math.floor(m / 60);
-  if (hrs < 48) return `${hrs}h ${String(m % 60).padStart(2, '0')}m`;
-  return `${Math.floor(hrs / 24)}d ${hrs % 24}h`;
-}
+export const fmtDuration = (ms, opts) => i18nDuration(ms, opts);
 
 export const plural = (n, one, many = `${one}s`) => `${fmt(n)} ${n === 1 ? one : many}`;
 
@@ -328,14 +314,22 @@ export function touchPlayer(controller) {
 }
 
 /**
- * Hint text for a touch player: "click" reads "tap" and a key hint in brackets ("(G)", "(2)") drops out (a phone has
- * no keyboard). Other text, and every text for a mouse player, is returned as it is. Pure.
+ * Hint text for a touch player: a line the catalogs gave touch words to says those (i18n touch variants, any language:
+ * "Затвори (Esc)" -> "Затвори"); English source text otherwise reads "tap" for "click" and drops a key hint in brackets
+ * ("(G)", "(2)"): a phone has no keyboard. Every text for a mouse player is returned as it is. Pure.
  */
 export function touchText(text, touch) {
   if (!touch || typeof text !== 'string') return text;
+  const twin = touchOf(text);
+  if (twin !== undefined) return twin;
+  // Bulgarian is written for both at once ("натисни" is a click and a tap; i18n glossary rule 9), and a line of it that
+  // names a key has touch words in its catalog: nothing to rewrite
+  if (lang() !== 'en') return text;
   return text
     // the Hammer's first tip (shared/content/tutorial.js): the touch build bar's buttons do it on a phone
-    .replace(/\bR rotates, Esc cancels\./g, '⟳ turns it, ✕ cancels.')
+    .replace(/\bR rotates, Esc cancels\./g, '⟳ turns it, ✕ cancels.') // i18n-ok: English only (Bulgarian has touch words)
+    // the Hand's tip (shared/content/tools.js): a finger uproots with a long press on the crop
+    .replace(/ Shift uproots\.$/, '') // i18n-ok: English only (Bulgarian has touch words)
     .replace(/\b([Cc])lick(s|ed|ing)?\b/g, (_, c, suf = '') => `${c === 'C' ? 'T' : 't'}ap${suf === 'ed' ? 'ped' : suf === 'ing' ? 'ping' : suf}`)
     .replace(/ \((?:[A-Z0-9]|(?:Ctrl|Shift|Alt)\+\w+|wheel|Space|Esc|Del)\)(?=[\s.,:;!?)]|$)/g, '');
 }

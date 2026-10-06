@@ -19,15 +19,16 @@ import * as FARMING from '../../../shared/rules/actions/farming.js';
 import * as UPG from '../../../shared/rules/upgrades.js';
 import * as WEEDS from '../../../shared/rules/actions/weeds.js';
 import { isCrateDef, crateOf, treeAgeOf, treeStageOf, ageLine } from './panels/w4b-rules.js';
+import { t, t as tt, tn, onLang, name as cname, N, Q, ctext, fmtDuration } from '../i18n/index.js';
 
 const $ = (id) => document.getElementById(id);
 
 /** Display name of an unlock row from content.unlocksAt(). */
 export function unlockName({ family, id }) {
-  if (family === 'barn') return `Barn upgrade ${id}`;
+  if (family === 'barn') return t('hud.unlock.barn', { id });
   const fam = CONTENT[family];
   const def = fam && typeof fam.get === 'function' ? fam.get(id) : null;
-  return (def && def.name) || id;
+  return def && def.name ? cname(id, { family }) : id;
 }
 
 /** The icon id for an unlock row (features and barn rows have none of their own). */
@@ -65,10 +66,15 @@ export const PHONE_Q = '(max-width: 600px), (max-height: 500px)';
 /** A treasury number as the phone's top row shows it: exact below 100,000, then "735k" / "1.2M". Pure. */
 export const phoneCoins = (v) => (Math.abs(v) >= 100_000 ? fmtShort(v) : fmt(v));
 
-/** A player's shown title: a chosen one (rules-goals may store it), else the personal-level title. */
+/** A player's shown title: a chosen one (rules-goals may store it), else the personal-level title. In the language in
+ *  effect: content CONTENT.titles rows by level (lane B translates them, i18n/bg/text-b.js `titles`). */
 export function titleOf(p) {
-  if (p && typeof p.title === 'string' && p.title) return p.title;
-  return titleFor(personalLevelFromXp((p && p.xp) || 0));
+  return titleWord(p && typeof p.title === 'string' && p.title ? p.title : titleFor(personalLevelFromXp((p && p.xp) || 0)));
+}
+/** A personal title (the English one the rules use) in the language in effect. */
+export function titleWord(en) {
+  const row = (CONTENT.titles || []).find((r) => r.title === en);
+  return row ? ctext('titles', String(row.level), 'title', en) : en;
 }
 
 /** A farmer's initial: the first character of the name (a whole code point: an emoji or an accented capital stays
@@ -111,14 +117,16 @@ export function showPortrait(face, spec, view) {
   else delete face.dataset.pk;
 }
 
+// labels are read at render time (getters): a language switch re-draws the dock (renderDock after a reset, below)
+const dockItem = (o, key) => Object.defineProperty(o, 'label', { get: () => t(key), enumerable: true });
 const DOCK_BUILTIN = [
-  { name: 'build', label: 'Build', icon: 'hammer', order: 10, hotkey: 'B' },
-  { name: 'market', label: 'Market', icon: 'market_stand', order: 20, hotkey: 'M' },
-  { name: 'barn', label: 'Barn', icon: 'barn', order: 30, hotkey: 'I' },
+  dockItem({ name: 'build', icon: 'hammer', order: 10, hotkey: 'B' }, 'hud.dock.build'),
+  dockItem({ name: 'market', icon: 'market_stand', order: 20, hotkey: 'M' }, 'hud.dock.market'),
+  dockItem({ name: 'barn', icon: 'barn', order: 30, hotkey: 'I' }, 'hud.dock.barn'),
 ];
 const MINI_BUILTIN = [
-  { name: 'orders', label: 'Orders', icon: 'order_board', glyph: 'orders', order: 40, hotkey: 'O' },
-  { name: 'journal', label: 'Journal', glyph: 'journal', order: 50, hotkey: 'J' },
+  dockItem({ name: 'orders', icon: 'order_board', glyph: 'orders', order: 40, hotkey: 'O' }, 'hud.dock.orders'),
+  dockItem({ name: 'journal', glyph: 'journal', order: 50, hotkey: 'J' }, 'hud.dock.journal'),
 ];
 
 function pictogram(iconId, glyph, size) {
@@ -174,19 +182,19 @@ export function createHud(S) {
     const bar = $('hud-xp-bar');
     bar.setAttribute('aria-valuenow', String(xp - from));
     bar.setAttribute('aria-valuemax', String(span));
-    bar.setAttribute('aria-valuetext', `${fmt(xp - from)} of ${fmt(span)} XP to level ${level + 1}`);
+    bar.setAttribute('aria-valuetext', t('hud.xp.valuetext', { a: xp - from, b: span, level: level + 1 }));
     // " XP" is its own span: a phone's narrow bar drops it (css/mobile.css), the numbers stay. ONE child span: the
     // label is a grid, and a bare text node beside the unit would become a second grid row
-    $('hud-xp-text').replaceChildren(h('span', `${fmtShort(xp - from)} / ${fmtShort(span)}`, h('span.xp-unit', ' XP')));
+    $('hud-xp-text').replaceChildren(h('span', `${fmtShort(xp - from)} / ${fmtShort(span)}`, h('span.xp-unit', t('hud.xp.unit'))));
     const next = nextUnlocks(level);
     star.dataset.tip = next.length
-      ? `Farm level ${level}. Next: ${next.map((u) => `${u.name} (Lv ${u.level})`).join(', ')}`
-      : `Farm level ${level}`;
-    star.setAttribute('aria-label', `Farm level ${level}. ${fmt(xp - from)} of ${fmt(span)} XP to the next level`);
+      ? t('hud.level.tipNext', { level, next: next.map((u) => t('hud.level.unlockAt', { name: u.name, level: u.level })).join(', ') })
+      : t('hud.level.tip', { level });
+    star.setAttribute('aria-label', t('hud.level.label', { level, a: xp - from, b: span }));
   }
 
   function renderFarmName() {
-    const name = store.state.farm.name || 'Harvest Hollow';
+    const name = store.state.farm.name || 'Harvest Hollow'; // i18n-ok: the brand
     $('hud-farm-name').textContent = name;
   }
 
@@ -218,7 +226,7 @@ export function createHud(S) {
     const w = store.state.farm.wallet;
     setNum($('hud-coins'), pills.coins, w.coins, animate, coinFmt);
     setNum($('hud-acorns'), pills.acorns, w.acorns, animate, coinFmt);
-    if (phoneMq?.matches) pills.coins.setAttribute('aria-label', `${fmt(w.coins)} coins. Open the Market`);
+    if (phoneMq?.matches) pills.coins.setAttribute('aria-label', tn('hud.coins.label', w.coins));
     else pills.coins.removeAttribute('aria-label');
   }
   phoneMq?.addEventListener?.('change', () => { if (store.state) renderWallet(false); });
@@ -233,18 +241,19 @@ export function createHud(S) {
     pills.barn.classList.toggle('overflow', b.mode === 'overflow' || b.mode === 'full');
     pills.barn.classList.toggle('near', b.mode === 'near');
     pills.barn.dataset.tip = b.mode === 'full'
-      ? `The Barn is full (${fmt(b.total)} of ${fmt(b.cap * 2)} with overflow). Sell surplus or upgrade the Barn. (I)`
+      ? t('hud.barn.full', { total: b.total, max: b.cap * 2 })
       : b.mode === 'overflow'
-        ? `Overflow: ${fmt(b.total)} in a Barn for ${fmt(b.cap)}. Nothing is lost; sell or use some soon. (I)`
-        : `The Barn: ${fmt(b.total)} of ${fmt(b.cap)} (I)`;
-    pills.barn.setAttribute('aria-label', `Barn, ${fmt(b.total)} of ${fmt(b.cap)} items${b.over ? `, ${fmt(b.over)} in overflow` : ''}`);
+        ? t('hud.barn.overflow', { total: b.total, cap: b.cap })
+        : t('hud.barn.tip', { total: b.total, cap: b.cap });
+    pills.barn.setAttribute('aria-label', b.over ? t('hud.barn.labelOver', { total: b.total, cap: b.cap, over: b.over })
+      : t('hud.barn.label', { total: b.total, cap: b.cap }));
     return b;
   }
   pills.coins.addEventListener('click', () => openOr('market', { tab: 'sell' }, 'barn'));
   pills.acorns.addEventListener('click', () => openOr('market', { tab: 'acorn' }));
   // until the wardrobe exists the hearts pill opens Journal > Together (Hearts per farmer), never a dead click
   pills.hearts.addEventListener('click', () => (ui.panels.has('wardrobe') ? openOr('wardrobe', {}) : openOr('journal', { tab: 'stats' })));
-  pills.hearts.dataset.tip = 'Your hearts (personal): earned by playing together. Open Together in the Journal';
+  pills.hearts.dataset.tip = t('hud.hearts.tip');
   pills.barn.addEventListener('click', () => ui.panels.toggle('barn'));
 
   /** Open `name` (toggle when already open), else the fallback panel, else say what it is. */
@@ -280,11 +289,11 @@ export function createHud(S) {
           // there (or for good without WebGL); the name plate: the name (ellipsized), "(you)" beside it, the title below
           const btn = h('button.farmer', { type: 'button', on: { click: go } },
             portraitFace(), h('span.tag', { 'aria-hidden': 'true' },
-              h('span.who', h('span.nm'), pid === store.pid ? h('span.you', '(you)') : null), h('span.title')));
+              h('span.who', h('span.nm'), pid === store.pid ? h('span.you', t('hud.you')) : null), h('span.title')));
           const li = h('li', { dataset: { pid, slot: slotOf(pid) } }, btn);
           // my own chip carries a little ✎: "Your look" (wave 4, wish 9); a phone has it in the Menu and Settings
           if (pid === store.pid) {
-            li.append(h('button.look-btn', { type: 'button', 'aria-label': 'Change your look', 'data-tip': 'Your look: hair, clothes, hat',
+            li.append(h('button.look-btn', { type: 'button', 'aria-label': t('settings.farm.look'), 'data-tip': t('hud.lookTip'),
               on: { click: (e) => { e.stopPropagation(); if (ui.panels.has('avatar')) ui.panels.open('avatar'); } } }, svgIcon('smile', 18)));
           }
           chips.set(pid, li);
@@ -301,14 +310,14 @@ export function createHud(S) {
       const title = titleOf(p);
       li.className = `${on ? 'online' : 'offline'}${me ? ' me' : ' partner'}`;
       for (const [k, v] of Object.entries(playerVars(p.color))) li.style.setProperty(k, v);
-      btn.setAttribute('aria-label', `${p.name}${me ? ' (you)' : ''}, ${title}, ${on ? 'online' : 'away'}${me ? '. Find yourself' : '. Go to them'}`);
-      btn.dataset.tip = me ? `${p.name}: ${title}. Click to find yourself (Space)` : `${p.name}: ${title}. ${on ? 'Click to go to them (F)' : 'Away. The farm keeps growing.'}`;
+      btn.setAttribute('aria-label', t(me ? 'hud.farmer.labelMe' : on ? 'hud.farmer.labelOn' : 'hud.farmer.labelAway', { name: p.name, title }));
+      btn.dataset.tip = t(me ? 'hud.farmer.tipMe' : on ? 'hud.farmer.tipOn' : 'hud.farmer.tipAway', { name: p.name, title });
       const face = li.querySelector('.face');
       face.querySelector('.ltr').textContent = initialOf(p.name);
       showPortrait(face, portraitSpec(pid, p), view);
       const nm = li.querySelector('.nm');
       if (nm.textContent !== (p.name || '')) nm.textContent = p.name || '';
-      li.querySelector('.title').textContent = on || me ? title : 'Away';
+      li.querySelector('.title').textContent = on || me ? title : t('shell.slot.away');
     }
     if (typeof ResizeObserver !== 'function') fitSoon();         // else the observer below sees the chips change size
   }
@@ -341,30 +350,47 @@ export function createHud(S) {
     if (typeof controller.focusPartner === 'function' && Object.keys(store.state.players).length === 2) { controller.focusPartner(); return; }
     const pose = view.partner && view.partner.pose ? view.partner.pose(pid) : null;
     if (pose) view.focus(pose.x, pose.z);
-    else ui.toast(`${store.state.players[pid]?.name ?? 'Your partner'} is away right now.`, { kind: 'info' });
+    else ui.toast(t('hud.farmer.awayNow', { name: store.state.players[pid]?.name ?? t('common.partner') }), { kind: 'info' });
   }
 
   // ---- right edge ------------------------------------------------------------------------------------------
   // Five buttons on the right edge (QA wave 1 UI-40): zoom and turn, plus one utility button whose little menu holds
   // the photo, Settings (also the , key) and the sound switch.
   const edge = $('hud-right');
-  const edgeBtn = (glyph, label, key, fn, extra = {}) => h('button.edge-btn', {
-    type: 'button', 'aria-label': label, 'data-tip': key ? `${label} (${key})` : label, on: { click: fn }, ...extra,
-  }, svgIcon(glyph, 30));
-  const menuBtn = (glyph, label, key, fn, extra = {}) => h('button.edge-item', {
-    type: 'button', role: 'menuitem', on: { click: (e) => { fn(e); if (!extra.keepOpen) closeMenu(); } }, ...(extra.id ? { id: extra.id } : {}),
-  }, svgIcon(glyph, 26), h('span.lbl', label), key ? h('kbd', key) : null);
-  const soundBtn = menuBtn('sound', 'Sound on', null, () => { S.settings.set({ muted: !S.settings.get().muted }); }, { id: 'hud-sound', keepOpen: true });
-  const menu = h('div.edge-menu.paper', { role: 'menu', 'aria-label': 'More', hidden: true },
-    menuBtn('photo', 'Take a photo', 'P', () => (typeof controller.photo === 'function' ? controller.photo() : ui.photoMode(true))),
-    menuBtn('gear', 'Settings', ',', () => ui.panels.toggle('settings'), { id: 'hud-settings' }),
-    menuBtn('smile', 'Your look', null, () => { if (ui.panels.has('avatar')) ui.panels.open('avatar'); }, { id: 'hud-look' }),
+  // labels are catalog keys kept on the buttons (data-lk): relabelEdge() re-reads them after a language switch
+  const keyCap = (key) => (key === 'wheel' ? t('hud.key.wheel') : key);
+  const labelEdge = (b) => {
+    const label = t(b.dataset.lk);
+    b.setAttribute('aria-label', label);
+    b.dataset.tip = b.dataset.kk ? `${label} (${keyCap(b.dataset.kk)})` : label;
+    b.dataset.tipTouch = label;                                  // a finger has no keys and no wheel
+  };
+  const edgeBtn = (glyph, lk, key, fn, extra = {}) => {
+    const b = h('button.edge-btn', { type: 'button', dataset: { lk, kk: key || '' }, on: { click: fn }, ...extra }, svgIcon(glyph, 30));
+    labelEdge(b);
+    return b;
+  };
+  const menuBtn = (glyph, lk, key, fn, extra = {}) => h('button.edge-item', {
+    type: 'button', role: 'menuitem', dataset: { mk: lk }, on: { click: (e) => { fn(e); if (!extra.keepOpen) closeMenu(); } }, ...(extra.id ? { id: extra.id } : {}),
+  }, svgIcon(glyph, 26), h('span.lbl', t(lk)), key ? h('kbd', key) : null);
+  const soundBtn = menuBtn('sound', 'hud.edge.soundOn', null, () => { S.settings.set({ muted: !S.settings.get().muted }); }, { id: 'hud-sound', keepOpen: true });
+  const menu = h('div.edge-menu.paper', { role: 'menu', 'aria-label': t('hud.edge.menu'), hidden: true },
+    menuBtn('photo', 'game.key.photo', 'P', () => (typeof controller.photo === 'function' ? controller.photo() : ui.photoMode(true))),
+    menuBtn('gear', 'game.key.settings', ',', () => ui.panels.toggle('settings'), { id: 'hud-settings' }),
+    menuBtn('smile', 'hud.edge.look', null, () => { if (ui.panels.has('avatar')) ui.panels.open('avatar'); }, { id: 'hud-look' }),
     // multi-farm mode only (ui/invite.js): a one-time link for the second farmer
-    S.invite ? menuBtn('letter', 'Invite a friend', null, () => S.invite.open(), { id: 'hud-invite' }) : null,
+    S.invite ? menuBtn('letter', 'multi.invite.title', null, () => S.invite.open(), { id: 'hud-invite' }) : null,
     soundBtn);
-  const moreBtn = edgeBtn('gear', 'More: photo, settings, sound', null, () => (menu.hidden ? openMenu() : closeMenu()),
+  const moreBtn = edgeBtn('gear', 'hud.edge.more', null, () => (menu.hidden ? openMenu() : closeMenu()),
     { id: 'hud-more', 'aria-haspopup': 'menu', 'aria-expanded': 'false' });
+  function relabelEdge() {
+    for (const b of edge.querySelectorAll('.edge-btn')) labelEdge(b);
+    for (const b of menu.querySelectorAll('[data-mk]')) b.querySelector('.lbl').textContent = t(b.dataset.mk);
+    menu.setAttribute('aria-label', t('hud.edge.menu'));
+    renderSound();
+  }
   const moreWrap = h('div.edge-more', moreBtn, menu);
+  if (S.ideas) menu.insertBefore(S.ideas.menuItem(closeMenu), soundBtn);
   function openMenu() {
     menu.hidden = false;
     moreBtn.setAttribute('aria-expanded', 'true');
@@ -386,19 +412,19 @@ export function createHud(S) {
   });
   document.addEventListener('pointerdown', (e) => { if (!moreWrap.contains(e.target)) closeMenu(); }, true);
   edge.append(
-    edgeBtn('plus', 'Zoom in', 'wheel', () => view.camera.zoom(1 / 1.25)),
-    edgeBtn('minus', 'Zoom out', 'wheel', () => view.camera.zoom(1.25)),
+    edgeBtn('plus', 'game.key.zoomIn', 'wheel', () => view.camera.zoom(1 / 1.25)),
+    edgeBtn('minus', 'game.key.zoomOut', 'wheel', () => view.camera.zoom(1.25)),
     h('div.edge-gap'),
-    edgeBtn('rotl', 'Turn left', 'Q', () => view.camera.rotate(-1)),
-    edgeBtn('rotr', 'Turn right', 'E', () => view.camera.rotate(1)),
+    edgeBtn('rotl', 'hud.edge.turnLeft', 'Q', () => view.camera.rotate(-1)),
+    edgeBtn('rotr', 'hud.edge.turnRight', 'E', () => view.camera.rotate(1)),
     h('div.edge-gap'),
     moreWrap,
   );
   function renderSound() {
     const muted = S.settings.get().muted;
     soundBtn.firstChild.replaceWith(svgIcon(muted ? 'mute' : 'sound', 26));
-    soundBtn.querySelector('.lbl').textContent = muted ? 'Sound is off' : 'Sound is on';
-    soundBtn.setAttribute('aria-label', muted ? 'Sound off. Turn it on' : 'Sound on. Mute');
+    soundBtn.querySelector('.lbl').textContent = muted ? t('hud.edge.soundIsOff') : t('hud.edge.soundIsOn');
+    soundBtn.setAttribute('aria-label', muted ? t('hud.edge.soundOffLabel') : t('hud.edge.soundOnLabel'));
     soundBtn.setAttribute('role', 'menuitemcheckbox');
     soundBtn.setAttribute('aria-checked', String(!muted));
   }
@@ -407,7 +433,7 @@ export function createHud(S) {
 
   // ---- dock --------------------------------------------------------------------------------------------------
   const dock = $('dock');
-  const minis = h('div.dock-minis', { role: 'group', 'aria-label': 'Goals and journal' });
+  const minis = h('div.dock-minis', { role: 'group', 'aria-label': t('hud.dock.minis') });
   dock.after(minis);
   function dockEntries() {
     const reg = new Map(ui.panels.list().map((p) => [p.name, p]));
@@ -441,7 +467,7 @@ export function createHud(S) {
     let badge = btn.querySelector('.badge');
     if (badgeVal) {
       if (!badge) { badge = h('span.badge'); btn.append(badge); }
-      badge.textContent = badgeVal;
+      badge.textContent = badgeVal === 'New' ? t('toolbar.new') : badgeVal; // i18n-ok: 'New' is the panels' sentinel value
       badge.classList.toggle('badge--new', badgeVal === 'New');
       badge.classList.toggle('badge--calm', calm);
     } else if (badge) badge.remove();
@@ -515,29 +541,29 @@ export function createHud(S) {
     if (status === 'open') {
       if (was === 'reconnecting' || was === 'asleep') {
         conn.classList.add('ok');
-        conn.append(svgIcon('check', 20), 'Back on the farm');
+        conn.append(svgIcon('check', 20), t('hud.conn.back'));
         okTimer = setTimeout(() => { conn.replaceChildren(); conn.className = 'conn'; }, 1800);
       }
       return;
     }
     if (status === 'mismatch') {
       conn.classList.add('bad');
-      conn.append(h('span.cg', { 'aria-hidden': 'true' }, '!'), 'The farm server runs other game files. Restart it, then reload.',
-        h('button.btn.btn--sun.btn--small', { type: 'button', on: { click: () => location.reload() } }, 'Reload'));
+      conn.append(h('span.cg', { 'aria-hidden': 'true' }, '!'), t('shell.boot.mismatch'),
+        h('button.btn.btn--sun.btn--small', { type: 'button', on: { click: () => location.reload() } }, t('common.reload')));
       return;
     }
     if (status === 'degraded') {
       conn.classList.add('bad');
-      conn.append(h('span.cg', { 'aria-hidden': 'true' }, '!'), 'The farm server cannot save right now. Your last action was not applied.');
+      conn.append(h('span.cg', { 'aria-hidden': 'true' }, '!'), t('hud.conn.degraded'));
       return;
     }
-    conn.append(h('span.spin', { 'aria-hidden': 'true' }), status === 'reconnecting' ? 'Reconnecting… your moves are kept' : 'Connecting to the farm…');
+    conn.append(h('span.spin', { 'aria-hidden': 'true' }), status === 'reconnecting' ? t('hud.conn.reconnecting') : t('err.NOT_JOINED'));
     if (status === 'reconnecting') {
       // GDD §6.3: after 30 s offline the client stops predicting; say plainly that the server is away
       sleepTimer = setTimeout(() => {
         if (connState !== 'reconnecting') return;
         connState = 'asleep';
-        conn.replaceChildren(h('span.spin', { 'aria-hidden': 'true' }), 'The farm is asleep (the server is off). Nothing is lost; waiting for it…');
+        conn.replaceChildren(h('span.spin', { 'aria-hidden': 'true' }), t('hud.conn.asleep'));
       }, 30_000);
     }
   }
@@ -580,6 +606,27 @@ export function createHud(S) {
   store.subscribe('coop', renderBuffs);
   store.subscribe('players', renderBuffs);
 
+  // a language switch: the edge buttons and the dock re-label (the shell then calls refresh(), ui/index.js relocalize)
+  onLang(() => {
+    relabelEdge();
+    minis.setAttribute('aria-label', t('hud.dock.minis'));
+    pills.hearts.dataset.tip = t('hud.hearts.tip');
+    for (const [key, btn] of dockBtns) {
+      const name = key.slice(2);
+      const d = [...DOCK_BUILTIN, ...MINI_BUILTIN].find((x) => x.name === name) ?? ui.panels.list().find((p) => p.name === name)?.dock;
+      const lbl = btn.querySelector('.lbl');
+      if (d && lbl) lbl.textContent = d.label;
+    }
+    for (const li of chips.values()) {
+      const you = li.querySelector('.you');
+      if (you) you.textContent = t('hud.you');
+      const look = li.querySelector('.look-btn');
+      if (look) { look.setAttribute('aria-label', t('settings.farm.look')); look.dataset.tip = t('hud.lookTip'); }
+    }
+    if (connState === 'asleep') conn.replaceChildren(h('span.spin', { 'aria-hidden': 'true' }), t('hud.conn.asleep'));
+    else if (connState !== 'open') setConnection(connState);
+  });
+
   function refresh() {
     if (!store.state) return;
     renderLevel();
@@ -610,7 +657,7 @@ export function createHud(S) {
       }
       conn.dataset.pending = '1';
       conn.className = 'conn pending';
-      conn.replaceChildren(h('span.spin', { 'aria-hidden': 'true' }), p.n > 1 ? `Saving ${fmt(p.n)} moves…` : 'Saving…');
+      conn.replaceChildren(h('span.spin', { 'aria-hidden': 'true' }), p.n > 1 ? tn('hud.conn.savingN', p.n) : t('hud.conn.saving'));
     },
     renderDock,
     get connection() { return connState; },
@@ -626,9 +673,13 @@ const fmtClock = (ms) => {
 export function buffItems(st, pid, now) {
   const items = [];
   const g = st.farm.coop && st.farm.coop.golden;
-  if (g && g.until > now) items.push({ cls: 'golden', glyph: 'sun', name: 'Golden Hour', text: `Golden Hour ${fmtClock(g.until - now)}`, tip: 'Everything you start now grows 10 % faster' });
+  if (g && g.until > now) {
+    items.push({ cls: 'golden', glyph: 'sun', name: t('hud.buff.golden'), text: t('hud.buff.goldenClock', { clock: fmtClock(g.until - now) }), tip: t('hud.buff.goldenTip') });
+  }
   const me = st.players[pid];
-  if (me && Number.isSafeInteger(me.spark) && me.spark > now) items.push({ cls: 'spark', glyph: 'star', name: 'Spark', text: `Spark ${fmtClock(me.spark - now)}`, tip: 'High-five Spark: +10 % personal XP' });
+  if (me && Number.isSafeInteger(me.spark) && me.spark > now) {
+    items.push({ cls: 'spark', glyph: 'star', name: t('hud.buff.spark'), text: t('hud.buff.sparkClock', { clock: fmtClock(me.spark - now) }), tip: t('hud.buff.sparkTip') });
+  }
   return items;
 }
 
@@ -637,8 +688,8 @@ export function buffAnnouncements(prevKeys, items) {
   if (prevKeys === null) return [];                      // the first render after a load is not news
   const now = new Set(items.map((i) => i.cls));
   const out = [];
-  for (const i of items) if (!prevKeys.includes(i.cls)) out.push(`${i.name} started: ${i.tip}.`);
-  for (const k of prevKeys) if (!now.has(k)) out.push(`${k === 'golden' ? 'Golden Hour' : 'Spark'} is over.`);
+  for (const i of items) if (!prevKeys.includes(i.cls)) out.push(t('hud.buff.started', { name: i.name, tip: i.tip }));
+  for (const k of prevKeys) if (!now.has(k)) out.push(t('hud.buff.over', { name: k === 'golden' ? t('hud.buff.golden') : t('hud.buff.spark') }));
   return out;
 }
 
@@ -653,24 +704,24 @@ export function worldTip(state, pick, now, me = null, { riding = null } = {}) {
   const o = state.farm.objects[pick.id];
   const def = defOfSafe(o.def);
   if (!def) return null;
-  const tip = { title: o.name ? `${o.name} the ${def.name}` : def.name, icon: o.def, lines: [] };
+  const tip = { title: o.name ? t('hud.tip.named', { name: o.name, def: N(o.def) }) : cname(o.def), icon: o.def, lines: [] };
   // a balloon crate (wave 4b, wish 1): open it; nobody's: it goes to the Barn on its own after a while
   if (isCrateDef(def)) return crateTip(state, pick.id, now);
   if (def.kind === 'plot') {
     if (!o.crop) {
-      tip.title = 'Empty plot'; tip.icon = 'plot'; tip.lines.push('Plant a seed here (drag to plant a row)');
+      tip.title = t('hud.tip.emptyPlot'); tip.icon = 'plot'; tip.lines.push(t('hud.tip.plantHere'));
       const sp = spreadLine(state, o, me, false, true);
       if (sp) tip.lines.push(sp);
       return tip;
     }
     const c = CONTENT.crops.get(o.crop.def);
-    tip.title = c ? c.name : o.crop.def;
+    tip.title = c ? cname(o.crop.def) : o.crop.def;
     tip.icon = o.crop.def;
     const span = Math.max(1, o.crop.readyAt - o.crop.plantedAt);
     const left = o.crop.readyAt - now;
     tip.ready = left <= 0;
     tip.kind = 'plot';
-    tip.lines.push(left <= 0 ? 'Ready to harvest!' : `Ready in ${fmtDurationShort(left)}`);
+    tip.lines.push(left <= 0 ? t('hud.tip.readyHarvest') : t('hud.tip.readyIn', { d: fmtDuration(left) }));
     // the blue pin over a crop means "needs water" (RD-15): the tooltip says who watered and what it saved
     const growMs = c ? c.growMs : 0;
     if (left > 0 && growMs >= GROWTH.water.minCropMs) tip.lines.push(waterLine(state, o.crop, me, GROWTH.water.cropBp));
@@ -692,10 +743,13 @@ export function worldTip(state, pick, now, me = null, { riding = null } = {}) {
       const sapling = Number.isSafeInteger(o.matureAt) && o.matureAt > now;
       tip.title = ageLine(tip.title, treeAgeOf(o), sapling);
     }
-    tip.lines.push(left <= 0 ? 'Ready!' : `Ready in ${fmtDurationShort(left)}`);
+    tip.lines.push(left <= 0 ? t('hud.tip.ready') : t('hud.tip.readyIn', { d: fmtDuration(left) }));
     if (def.kind === 'tree' && !(Number.isSafeInteger(o.matureAt) && o.matureAt > now)) {
       const a = treeStageOf(treeAgeOf(o));
-      if (a.stage.bonus > 0 || a.index > 0) tip.lines.push(`${a.stage.name} tree${a.stage.bonus > 0 ? ` · +${a.stage.bonus} fruit a harvest` : ''}`);
+      // the stage's own name ("Old", "Ancient") is lane D's (panels/w4b-rules.js); the sentence around it is here
+      if (a.stage.bonus > 0 || a.index > 0) {
+        tip.lines.push(a.stage.bonus > 0 ? tn('hud.tip.treeStageBonus', a.stage.bonus, { stage: a.stage.name }) : t('hud.tip.treeStage', { stage: a.stage.name }));
+      }
     }
     if (def.kind === 'tree' && left > 0) tip.lines.push(waterLine(state, o, me, GROWTH.water.treeBp));
     if (def.kind === 'tree') { const sp = spreadLine(state, o, me, true, false); if (sp) tip.lines.push(sp); }
@@ -709,7 +763,10 @@ export function worldTip(state, pick, now, me = null, { riding = null } = {}) {
   // a Fishing Dock: the Hand sits and casts, when the hour's rest ends, the partner fishing now (client's dockText)
   const dock = me && !ride ? dockText(state, pick.id, me, now) : null;
   if (dock) tip.lines.push(dock);
-  else if (!ride && def.text && tip.lines.length === 0) tip.lines.push(def.text.length > 90 ? `${def.text.slice(0, 88)}…` : def.text);
+  else if (!ride && def.text && tip.lines.length === 0) {
+    const text = String(ctext(null, o.def, 'desc', def.text));
+    tip.lines.push(text.length > 90 ? `${text.slice(0, 88)}…` : text);
+  }
   // the farmhouse, the Well, the Market Stand and the benches: their upgrade tier (wave 4, wish E)
   const up = upgradeLine(o);
   if (up) tip.lines.push(up);
@@ -726,13 +783,13 @@ export function spreadLine(state, o, me, tree, empty) {
   // the rules keep it on the crop (`crop.fert`, who spread it) or on the plot / tree itself
   const fert = o.crop?.fert ?? o.fert;
   if (fert !== undefined && fert !== false && F) {
-    const by = typeof fert === 'string' && Object.hasOwn(state.players, fert) ? ` by ${fert === me ? 'you' : state.players[fert].name}` : '';
+    const who = typeof fert === 'string' && Object.hasOwn(state.players, fert) ? (fert === me ? t('hud.tip.byYou') : state.players[fert].name) : null;
     const pct = Math.round((tree ? F.treeTimeBp ?? F.timeBp : F.timeBp) / 100);
     const units = tree ? F.treeBonusUnits ?? F.bonusUnits : F.bonusUnits;
-    return empty ? `Fertilizer${by}: the next crop grows ${pct} % sooner, +${units} at harvest`
-      : `Fertilizer${by} · ${pct} % sooner · +${units} at harvest`;
+    const k = empty ? 'hud.tip.fertNext' : 'hud.tip.fert';
+    return who ? t(`${k}By`, { who, pct, units }) : t(k, { pct, units });
   }
-  if (o.compost) return `Compost · +${tree ? GROWTH.compost.treeBonusUnits : GROWTH.compost.bonusUnits} at harvest, a blue-ribbon chance`;
+  if (o.compost) return t('hud.tip.compost', { units: tree ? GROWTH.compost.treeBonusUnits : GROWTH.compost.bonusUnits });
   return null;
 }
 
@@ -741,16 +798,16 @@ export function spreadLine(state, o, me, tree, empty) {
 export function crateTip(state, id, now) {
   const c = crateOf(state, id);
   const left = c && Number.isSafeInteger(c.until) ? c.until - now : null;
-  return { title: 'Balloon Crate', icon: 'loot_crate', kind: 'crate', ready: true,
-    lines: [touchPlayer() ? 'Tap it to open it: coins, XP and a surprise!' : 'Click it to open it: coins, XP and a surprise!',
-      left !== null && left > 0 ? `Left alone, it goes to the Barn in ${fmtDurationShort(left)}` : 'Either of you can open it'] };
+  return { title: t('hud.crate.title'), icon: 'loot_crate', kind: 'crate', ready: true,
+    lines: [touchPlayer() ? t('hud.crate.tap') : t('hud.crate.click'),
+      left !== null && left > 0 ? t('hud.crate.left', { d: fmtDuration(left) }) : t('hud.crate.either')] };
 }
 
 export function weedTip(state, now) {
   const W = WEEDS.WEEDS ?? { coins: 0 };
   const left = typeof WEEDS.weedPayLeft === 'function' ? WEEDS.weedPayLeft(state, now) : 0;
-  return { title: 'Wild weeds', icon: 'weed', kind: 'weed', lines: ['The Hand pulls them up for good (for both of you)',
-    W.coins > 0 && left > 0 ? `+${W.coins} coins each, ${fmt(left)} more today` : 'Just tidier land now: no coins left today'] };
+  return { title: t('hud.weeds.title'), icon: 'weed', kind: 'weed', lines: [t('hud.weeds.hand'),
+    W.coins > 0 && left > 0 ? t('hud.weeds.pay', { coins: W.coins, left }) : t('hud.weeds.none')] };
 }
 
 /** "Upgrades ★1 of 3: Stone Rim" for an upgradable object (rules' upgrade table), else null. Pure. */
@@ -759,18 +816,19 @@ export function upgradeLine(o) {
   const tiers = target ? UPG.UPGRADES?.[target]?.tiers : null;
   if (!Array.isArray(tiers) || !tiers.length) return null;
   const n = typeof UPG.tierOf === 'function' ? UPG.tierOf(o) : 0;
-  return n ? `Upgrades ★${n} of ${tiers.length}: ${tiers[n - 1]?.name ?? ''}`.trim() : `Upgrades: 0 of ${tiers.length} (the Hammer shows them)`;
+  // the tier's own name is the rules' content (lane B: shared/rules/upgrades.js through ctext('upgrades', ...))
+  const tier = n ? ctext('upgrades', `${target}.${n}`, 'name', tiers[n - 1]?.name ?? '') : '';
+  return n ? t('hud.tip.upgrades', { n, of: tiers.length, tier }).trim() : t('hud.tip.upgradesNone', { of: tiers.length });
 }
 
 /** "Watered by Mia · -15 % · tended by you · -5 %", or "Needs water (-15 %)". `rec` is a crop or tree record;
  * 'sys' is the rain or a Sprinkler at planting. */
 function waterLine(state, rec, me, bp) {
-  const who = (pid) => (pid === me ? 'you' : state.players[pid]?.name || 'your partner');
-  const pct = (b) => `-${Math.round(b / 100)} %`;
-  if (rec.water === undefined) return `Needs water (${pct(bp)})`;
-  const by = rec.water === 'sys' ? '' : ` by ${who(rec.water)}`;
-  const tend = rec.tend !== undefined ? ` · tended by ${who(rec.tend)} · ${pct(COOP.partnerTend.bp)}` : '';
-  return `Watered${by} · ${pct(bp)}${tend}`;
+  const who = (pid) => (pid === me ? t('hud.tip.byYou') : state.players[pid]?.name || t('hud.tip.yourPartner'));
+  const pct = (b) => Math.round(b / 100);
+  if (rec.water === undefined) return t('hud.tip.needsWater', { pct: pct(bp) });
+  const tend = rec.tend !== undefined ? t('hud.tip.tended', { who: who(rec.tend), pct: pct(COOP.partnerTend.bp) }) : '';
+  return rec.water === 'sys' ? t('hud.tip.watered', { pct: pct(bp), tend }) : t('hud.tip.wateredBy', { who: who(rec.water), pct: pct(bp), tend });
 }
 
 function defOfSafe(id) {
@@ -781,14 +839,6 @@ function defOfSafe(id) {
   return null;
 }
 
-function fmtDurationShort(ms) {
-  const s = Math.max(0, Math.ceil(ms / 1000));
-  if (s < 60) return `${s}s`;
-  const m = Math.floor(s / 60);
-  if (m < 60) return `${m}m ${String(s % 60).padStart(2, '0')}s`;
-  const hr = Math.floor(m / 60);
-  return hr < 48 ? `${hr}h ${String(m % 60).padStart(2, '0')}m` : `${Math.floor(hr / 24)}d ${hr % 24}h`;
-}
 
 export function createTips(S) {
   const tip = document.getElementById('tip');
@@ -858,7 +908,7 @@ export function createTips(S) {
       worldPick = null;
       clearInterval(worldTimer);
       hide();
-    } } }, 'Pull it up');
+    } } }, t('hud.tip.pull'));
     pull = { id, el };
     return el;
   }
@@ -868,36 +918,36 @@ export function createTips(S) {
    * live requests 2026-10-04). Where the card can be acted on (a touch card, a clicked card) they are buttons, built
    * once per plot and refreshed in place; a mouse that only hovers is told a click offers them.
    */
-  function finishRow(pick, t, actionable) {
-    if (t.ready) return null;
+  function finishRow(pick, wt, actionable) {
+    if (wt.ready) return null;
     const st = S.store.state;
     const now = S.store.now();
-    const m = hurryOf(st, pick.id, t, now);
+    const m = hurryOf(st, pick.id, wt, now);
     if (!m) return null;
     if (!actionable) {
       if (m.code === 'LOCKED' || S.controller?.tool?.id !== 'hand') return null;
       // the Smart Hand waters a thirsty crop first (free, and it grows faster): then the next click offers Finish now
       const thirsty = probe({ state: st, pid: S.store.pid, now: () => now }, 'water', { id: pick.id }) === null;
       return h('div.s.tip-finish-hint', svgIcon('acorn', 16),
-        thirsty ? `Water it, then click: Finish now · ${fmt(m.acorns)}` : `Click: Finish now · ${fmt(m.acorns)}`);
+        thirsty ? t('hud.finish.waterHint', { n: m.acorns }) : t('hud.finish.hint', { n: m.acorns }));
     }
     if (!fin || fin.id !== pick.id) fin = buildFinish(pick.id);
     const wallet = st.farm.wallet.acorns;
     const off = (code) => !(code === null || SOFT.has(code));
     const one = off(m.code) ? hurryReason(m.code, { acorns: m.acorns, wallet }) : '';
-    fin.oneLabel.textContent = `Finish now · ${fmt(m.acorns)}`;
+    fin.oneLabel.textContent = t('hud.finish.now', { n: m.acorns });
     setOff(fin.one, one, fin.oneWhy);
-    fin.one.setAttribute('aria-label', `Finish now for ${fmt(m.acorns)} Acorn${m.acorns === 1 ? '' : 's'}`);
+    fin.one.setAttribute('aria-label', tn('hud.finish.nowLabel', m.acorns));
     // a fruit tree finishes on its own: no "Finish all" row
-    if (t.kind === 'tree') { fin.all.hidden = true; fin.allWhy.hidden = true; fin.crop = null; return fin.el; }
+    if (wt.kind === 'tree') { fin.all.hidden = true; fin.allWhy.hidden = true; fin.crop = null; return fin.el; }
     const f = fieldHurry(st, m.crop, now, S.store.pid);
     fin.crop = m.crop;
     const many = f.plots > 1;
     fin.all.hidden = !many;
     fin.allWhy.hidden = true;
     if (many) {
-      fin.allLabel.textContent = `Finish all growing ${pluralOf(f.name, 2)}`;
-      fin.allSub.textContent = `${fmt(f.plots)} plots · ${fmt(f.acorns)}`;
+      fin.allLabel.textContent = t('hud.finish.all', { crop: N(m.crop) });
+      fin.allSub.textContent = tn('hud.finish.allSub', f.plots, { acorns: f.acorns });
       fin.all.setAttribute('aria-label', fieldLabel(f));
       setOff(fin.all, off(f.code) ? hurryReason(f.code, f) : '', fin.allWhy);
     }
@@ -908,8 +958,8 @@ export function createTips(S) {
    * so everywhere). Only where the card can be acted on, only while the rules would take it (one Compost or Fertilizer a
    * cycle); without Fertilizer in the barn it says where it comes from.
    */
-  function fertRow(pick, t, actionable) {
-    if (!actionable || t.kind !== 'plot' || t.ready) return null;
+  function fertRow(pick, wt, actionable) {
+    if (!actionable || wt.kind !== 'plot' || wt.ready) return null;
     const st = S.store.state;
     const F = FARMING.FERTILIZER;
     if (!F || typeof FARMING.fertilizerLive !== 'function' || !FARMING.fertilizerLive(st)) return null;
@@ -919,11 +969,13 @@ export function createTips(S) {
     if (code !== null && code !== 'NO_ITEMS' && !SOFT.has(code)) return null;
     if (!fert || fert.id !== pick.id) fert = buildFert(pick.id);
     const have = (st.farm.inventory[F.item] ?? 0) + (st.farm.overflow[F.item] ?? 0);
-    fert.label.textContent = 'Spread Fertilizer';
-    fert.sub.textContent = `${Math.round(F.timeBp / 100)} % sooner · +${F.bonusUnits} at harvest${have ? ` · ${fmt(have)} in the barn` : ''}`;
+    fert.label.textContent = t('hud.fert.spread');
+    fert.sub.textContent = have ? t('hud.fert.subHave', { pct: Math.round(F.timeBp / 100), units: F.bonusUnits, have })
+      : t('hud.fert.sub', { pct: Math.round(F.timeBp / 100), units: F.bonusUnits });
     const r = CONTENT.recipes?.get?.(F.item);
-    const how = r && r.inputs ? Object.entries(r.inputs).map(([k, n]) => `${n} ${CONTENT.items.get(k)?.name ?? k}`).join(' + ') : null;
-    setOff(fert.btn, code === 'NO_ITEMS' ? `Make Fertilizer at the Compost Bin${how ? ` (${how})` : ''}` : '', fert.why);
+    // "2 Compost + 1 Manure": each input as a sentence says it ("2 кофи компост")
+    const how = r && r.inputs ? Object.entries(r.inputs).map(([k, n]) => (CONTENT.items.get(k) ? t('hud.fert.input', { q: Q(k, n) }) : `${n} ${k}`)).join(' + ') : null;
+    setOff(fert.btn, code === 'NO_ITEMS' ? (how ? t('hud.fert.makeHow', { how }) : t('hud.fert.make')) : '', fert.why);
     return fert.el;
   }
   function buildFert(id) {
@@ -985,7 +1037,9 @@ export function createTips(S) {
     if (!text || el.closest('[hidden]')) return;
     hudEl = el;
     tip.className = 'tip';
-    tip.replaceChildren(touchText(text, touchPlayer(S.controller)));
+    // a tip put together in code says its touch words itself (data-tip-touch); a catalog line has them in its catalog
+    const touch = touchPlayer(S.controller);
+    tip.replaceChildren(touch && el.dataset.tipTouch ? el.dataset.tipTouch : touchText(text, touch));
     tip.hidden = false;
     const r = el.getBoundingClientRect();
     const below = r.top < 90;
@@ -1055,7 +1109,7 @@ export function createTips(S) {
       h('div.t', t.icon ? icon(t.icon, { size: 32 }) : null, t.title),
       ...t.lines.map((l) => h(`div.s${t.ready ? '.ready' : ''}`, l)),
       Number.isFinite(t.bar) && !t.ready ? h('div.mini', h('i', { style: { width: `${Math.round(t.bar * 100)}%` } })) : null,
-      p ? h('div.by', playerMark(t.by, p), `${t.kind === 'plot' ? 'Planted' : 'Placed'} by ${t.by === S.store.pid ? 'you' : p.name}`) : null,
+      p ? h('div.by', playerMark(t.by, p), tt(t.kind === 'plot' ? 'hud.tip.plantedBy' : 'hud.tip.placedBy', { who: t.by === S.store.pid ? tt('hud.tip.byYou') : p.name })) : null,
       finish,
       fertEl,
       act,

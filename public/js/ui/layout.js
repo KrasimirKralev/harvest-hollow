@@ -15,6 +15,7 @@
 //                panel; also on the ui facade as ui.layout (additive)
 import { h, svgIcon, fmt, fmtShort } from './dom.js';
 import { barnStatus } from './hud.js';
+import { t, tn, onLang } from '../i18n/index.js';
 
 /** The media queries of css/mobile.css (the same strings, so both always agree). */
 export const LAYOUT_Q = Object.freeze({
@@ -50,8 +51,9 @@ export function menuNames(list, dockless) {
 export function menuBadge(list, dockless) {
   const inside = menuNames(list, dockless).filter((p) => p.badge !== null && p.badge !== undefined && p.badge !== false);
   if (!inside.length) return null;
-  if (inside.some((p) => p.badgeTone !== 'calm' && p.badge !== 'New')) return { text: '!', tone: 'red' };
-  if (inside.every((p) => p.badge === 'New')) return { text: 'New', tone: 'new' };
+  // 'New' is the panels' badge sentinel, not shown text (renderBadge shows the language's word)
+  if (inside.some((p) => p.badgeTone !== 'calm' && p.badge !== 'New')) return { text: '!', tone: 'red' }; // i18n-ok
+  if (inside.every((p) => p.badge === 'New')) return { text: 'New', tone: 'new' }; // i18n-ok
   return { text: String(inside.length), tone: 'calm' };
 }
 
@@ -67,19 +69,25 @@ export function createLayout(S) {
   const badge = h('span.badge', { hidden: true, 'aria-hidden': 'true' });
   const menuBtn = h('button.m-menu-btn#m-menu-btn', {
     type: 'button', 'aria-haspopup': 'dialog', 'aria-expanded': 'false', 'aria-controls': 'panel-menu',
-    'aria-label': 'Farm menu: orders, journal, together, settings', 'data-tip': 'Farm menu',
+    'aria-label': t('social.menu.label'), 'data-tip': t('social.menu.title'),
     on: { click: () => ui.panels.toggle('menu') },
-  }, h('span.m-menu-ico', { 'aria-hidden': 'true' }, h('i'), h('i'), h('i')), h('span.lbl', 'Menu'), badge);
+  }, h('span.m-menu-ico', { 'aria-hidden': 'true' }, h('i'), h('i'), h('i')), h('span.lbl', t('social.menu.btn')), badge);
   document.getElementById('tray-wrap')?.append(menuBtn);
 
   function renderBadge() {
     const b = menuBadge(ui.panels.list(), matches(LAYOUT_Q.dockless));
     badge.hidden = !b;
-    if (!b) { menuBtn.setAttribute('aria-label', 'Farm menu: orders, journal, together, settings'); return; }
-    badge.textContent = b.text;
+    if (!b) { menuBtn.setAttribute('aria-label', t('social.menu.label')); return; }
+    // 'New' is the badge's sentinel value (panels set it); the word shown is the language's
+    badge.textContent = b.text === 'New' ? t('toolbar.new') : b.text; // i18n-ok: the sentinel
     badge.className = `badge${b.tone === 'calm' ? ' badge--calm' : b.tone === 'new' ? ' badge--new' : ''}`;
-    menuBtn.setAttribute('aria-label', `Farm menu (${b.tone === 'red' ? 'something needs you' : 'something to do'}): orders, journal, together, settings`);
+    menuBtn.setAttribute('aria-label', t(b.tone === 'red' ? 'social.menu.labelNeeds' : 'social.menu.labelTodo'));
   }
+  onLang(() => {
+    menuBtn.dataset.tip = t('social.menu.title');
+    menuBtn.querySelector('.lbl').textContent = t('social.menu.btn');
+    renderBadge();
+  });
   ui.panels.on('badge', renderBadge);
   ui.panels.on('register', renderBadge);
   ui.panels.on('open', (n) => { if (n === 'menu') menuBtn.setAttribute('aria-expanded', 'true'); });
@@ -106,37 +114,38 @@ export function createLayout(S) {
       soundIco, soundLbl);
     function paintSound() {
       soundIco.replaceChildren(svgIcon(muted() ? 'mute' : 'sound', 30));
-      soundLbl.textContent = muted() ? 'Sound off' : 'Sound on';
+      soundLbl.textContent = muted() ? t('social.menu.soundOff') : t('social.menu.soundOn');
       sound.setAttribute('aria-checked', String(!muted()));
     }
     paintSound();
     const tiles = [
-      h('button.m-tile', { type: 'button', on: { click: () => ui.panels.open('settings') } }, h('span.m-ico', svgIcon('gear', 30)), h('span.lbl', 'Settings')),
+      h('button.m-tile', { type: 'button', dataset: { tile: 'settings' }, on: { click: () => ui.panels.open('settings') } }, h('span.m-ico', svgIcon('gear', 30)), h('span.lbl', t('game.key.settings'))),
       // wave 4 (wish 9): the farmer's look
-      ui.panels.has('avatar') ? h('button.m-tile', { type: 'button', on: { click: () => ui.panels.open('avatar') } }, h('span.m-ico', svgIcon('smile', 30)), h('span.lbl', 'Your look')) : null,
+      ui.panels.has('avatar') ? h('button.m-tile', { type: 'button', on: { click: () => ui.panels.open('avatar') } }, h('span.m-ico', svgIcon('smile', 30)), h('span.lbl', t('hud.edge.look'))) : null,
       // multi-farm mode only (ui/invite.js)
       // "Invite" on the tile (the label pill is as wide as its neighbours'), the full words for a screen reader
-      S.invite ? h('button.m-tile', { type: 'button', 'aria-label': 'Invite a friend', dataset: { invite: 'open' }, on: { click: () => S.invite.open() } }, h('span.m-ico', svgIcon('letter', 30)), h('span.lbl', 'Invite')) : null,
+      S.invite ? h('button.m-tile', { type: 'button', 'aria-label': t('multi.invite.title'), dataset: { invite: 'open' }, on: { click: () => S.invite.open() } }, h('span.m-ico', svgIcon('letter', 30)), h('span.lbl', t('social.menu.invite'))) : null,
       sound,
       h('button.m-tile', { type: 'button', on: { click: () => { ctx.close(); typeof controller.photo === 'function' ? controller.photo() : ui.photoMode(true); } } },
-        h('span.m-ico', svgIcon('photo', 30)), h('span.lbl', 'Photo')),
+        h('span.m-ico', svgIcon('photo', 30)), h('span.lbl', t('social.menu.photo'))),
     ];
     // Ctrl+Z on a keyboard: my newest purchase or move inside its 10 minutes (mobile QA M-06: no touch route before)
     if (typeof controller.undo === 'function') {
-      tiles.push(h('button.m-tile', { type: 'button', 'aria-label': 'Undo my last purchase or move', on: { click: () => { ctx.close(); controller.undo(); } } },
-        h('span.m-ico', svgIcon('rotl', 30)), h('span.lbl', 'Undo')));
+      tiles.push(h('button.m-tile', { type: 'button', 'aria-label': t('social.menu.undoLabel'), on: { click: () => { ctx.close(); controller.undo(); } } },
+        h('span.m-ico', svgIcon('rotl', 30)), h('span.lbl', t('social.menu.undo'))));
     }
     if (fullscreenOk()) {
-      const fsLbl = h('span.lbl', fullscreenOn() ? 'Exit full screen' : 'Full screen');
+      const fsLbl = h('span.lbl', fullscreenOn() ? t('social.menu.fsExit') : t('settings.fullscreen'));
       tiles.push(h('button.m-tile', { type: 'button', on: { click: () => {
         ctx.close();
         // a user gesture is required (this tap); refusals (a policy, an iframe) leave the page as it was
-        const fail = () => ui.toast('Full screen is not available in this browser.', { kind: 'info' });
+        const fail = () => ui.toast(t('social.menu.fsNo'), { kind: 'info' });
         if (fsDevice()) { fsDevice().toggle()?.catch?.(fail); return; }
         const p = document.fullscreenElement ? document.exitFullscreen?.() : document.documentElement.requestFullscreen({ navigationUI: 'hide' });
         p?.catch?.(fail);
       } } }, h('span.m-ico', svgIcon('fullscreen', 30)), fsLbl));
     }
+    if (S.ideas) tiles.push(S.ideas.tile(() => ctx.close()));
     return h('div.m-tiles', ...tiles.filter(Boolean));
   }
 
@@ -146,16 +155,16 @@ export function createLayout(S) {
     const me = st.players[store.pid];
     const b = barnStatus(st);
     return h('div.m-stats',
-      h('button.m-stat', { type: 'button', 'aria-label': `Your hearts: ${fmt(me?.hearts || 0)}. Open Together in the Journal`,
+      h('button.m-stat', { type: 'button', 'aria-label': t('social.menu.heartsLabel', { n: me?.hearts || 0 }),
         on: { click: () => (ui.panels.has('wardrobe') ? ui.panels.open('wardrobe') : ui.panels.open('journal', { tab: 'stats' })) } },
-      h('img.ic', { src: '/assets/icons/hearts.png', alt: '', width: 28, height: 28, draggable: 'false' }), h('b', fmt(me?.hearts || 0)), h('span', 'hearts')),
-      h('button.m-stat', { type: 'button', 'aria-label': `The Barn: ${fmt(b.total)} of ${fmt(b.cap)}. Open the Barn`, dataset: { mode: b.mode },
+      h('img.ic', { src: '/assets/icons/hearts.png', alt: '', width: 28, height: 28, draggable: 'false' }), h('b', fmt(me?.hearts || 0)), h('span', tn('social.menu.hearts', me?.hearts || 0))),
+      h('button.m-stat', { type: 'button', 'aria-label': t('social.menu.barnLabel', { total: b.total, cap: b.cap }), dataset: { mode: b.mode },
         on: { click: () => ui.panels.open('barn') } },
-      h('img.ic', { src: '/assets/icons/barn.png', alt: '', width: 28, height: 28, draggable: 'false' }), h('b', fmtShort(b.total)), h('span', `/ ${fmtShort(b.cap)} in the barn`)));
+      h('img.ic', { src: '/assets/icons/barn.png', alt: '', width: 28, height: 28, draggable: 'false' }), h('b', fmtShort(b.total)), h('span', t('social.menu.barn', { cap: fmtShort(b.cap) }))));
   }
 
   ui.panels.register('menu', {
-    title: 'Farm menu',
+    get title() { return t('social.menu.title'); },
     size: 'card',
     topics: ['players', 'inventory', 'barn'],
     mount(body, ctx) {
@@ -168,10 +177,10 @@ export function createLayout(S) {
       // append() turns a null into the text "null" (a landscape tablet keeps its dock in the bar): drop the gaps
       body.append(...[
         stats,
-        dockless && nodes.dock ? sec('Farm', nodes.dock) : null,
-        nodes.minis && nodes.minis.children.length ? sec('Goals and places', nodes.minis) : null,
-        nodes.social ? sec('Together', nodes.social) : null,
-        sec('Game', settingsRow(ctx)),
+        dockless && nodes.dock ? sec(t('social.menu.farm'), nodes.dock) : null,
+        nodes.minis && nodes.minis.children.length ? sec(t('social.menu.places'), nodes.minis) : null,
+        nodes.social ? sec(t('social.menu.together'), nodes.social) : null,
+        sec(t('social.menu.game'), settingsRow(ctx)),
       ].filter(Boolean));
       // a tap on a tile closes the menu FIRST (capture phase), then the tile's own handler runs with its button back
       // home on the HUD: the chat line, the emote wheel, the build tray and a panel all open over the farm, and the

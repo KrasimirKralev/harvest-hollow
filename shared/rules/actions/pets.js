@@ -36,8 +36,8 @@ const today = (state, now) => dayIndex(now, state.meta.tz);
  * them, else three each. The first is the look of a pet adopted without a breed (older saves).
  */
 const BREEDS_DEFAULT = Object.freeze({
-  dog: [{ id: 'shiba', name: 'Shiba Inu' }, { id: 'husky', name: 'Husky' }, { id: 'shepherd', name: 'German Shepherd' }],
-  cat: [{ id: 'orange', name: 'Orange Tabby' }, { id: 'black', name: 'Black Cat' }, { id: 'white', name: 'White Cat' }],
+  dog: [{ id: 'shiba', name: 'Shiba Inu' }, { id: 'husky', name: 'Husky' }, { id: 'shepherd', name: 'German Shepherd' }], // i18n-ok: fallback breed names; the client shows them through ctext('PETS', 'breed.<id>', 'name', …) (text-b)
+  cat: [{ id: 'orange', name: 'Orange Tabby' }, { id: 'black', name: 'Black Cat' }, { id: 'white', name: 'White Cat' }], // i18n-ok: fallback breed names; the client shows them through ctext('PETS', 'breed.<id>', 'name', …) (text-b)
 });
 export const petBreeds = (kind) => petKind(kind)?.breeds ?? BREEDS_DEFAULT[kind] ?? [];
 /** True when `breed` is one of the breeds of pet kind `kind`. */

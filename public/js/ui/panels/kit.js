@@ -14,10 +14,33 @@
 import { h, icon, svgIcon, fmt, fmtShort, fmtDuration, playerMark } from '../index.js';
 import { itemOf } from '../../../../shared/content/index.js';
 import { probe, passes, reason } from './core.js';
+import { t, t as tr, lang, qty, name as cname } from '../../i18n/index.js';
 
 export { h, icon, svgIcon, fmt, fmtShort, fmtDuration, playerMark };
 
 const val = (v) => (typeof v === 'function' ? v() : v);
+
+/**
+ * A panel title that fits a phone's title ribbon (about 14 letters): Bulgarian runs longer, so a narrow screen gets the
+ * short key; English always reads the long one (unchanged).
+ */
+export function phoneTitle(longKey, shortKey, params) {
+  const narrow = typeof globalThis.matchMedia === 'function' && globalThis.matchMedia('(max-width: 520px)').matches;
+  return narrow && lang() !== 'en' ? t(shortKey, params) : t(longKey, params);
+}
+
+/**
+ * A whole catalog sentence as h() children: Node-valued params (a player's mark, a price chip) stay nodes, the rest is
+ * text. Like i18n tNodes(), but an array (no DocumentFragment, so the node tests' small DOM builds it too).
+ */
+export function tParts(key, params = {}) {
+  const marks = new Map();
+  const p = {};
+  for (const [k, v] of Object.entries(params)) {
+    if (v && typeof v === 'object' && typeof v.nodeType === 'number') { const m = `\u0001${k}\u0001`; marks.set(m, v); p[k] = m; } else p[k] = v;
+  }
+  return t(key, p).split(/(\u0001[\w$]+\u0001)/).filter(Boolean).map((x) => marks.get(x) ?? x);
+}
 
 export function createKit(ctx) {
   const buttons = new Set();
@@ -91,7 +114,7 @@ export function createKit(ctx) {
     if (!t.el.isConnected && t.mounted) { timers.delete(t); return; }
     t.mounted = true;
     const left = Math.max(0, t.end - now);
-    t.el.textContent = left > 0 ? `${t.prefix || ''}${fmtDuration(left)}` : (t.doneText ?? 'Ready!');
+    t.el.textContent = left > 0 ? `${t.prefix || ''}${fmtDuration(left)}` : (t.doneText ?? tr('market.kit.ready'));
     if (t.bar && Number.isFinite(t.start) && t.end > t.start) {
       const p = Math.max(0, Math.min(1, (now - t.start) / (t.end - t.start)));
       t.bar.style.setProperty('--p', String(p));
@@ -146,7 +169,7 @@ export function createKit(ctx) {
       if (!armed) {
         armed = setTimeout(() => { armed = 0; b.classList.remove('pn-armed'); if (label) label.textContent = val(spec.label); }, 4000);
         b.classList.add('pn-armed');
-        if (label) label.textContent = val(spec.confirm) || 'Sure?';
+        if (label) label.textContent = val(spec.confirm) || t('market.kit.sure');
         return;
       }
       clearTimeout(armed);
@@ -178,6 +201,8 @@ const UNCOUNTED = new Set(['wheat', 'corn', 'flour', 'wool', 'milk', 'butter', '
 
 /** "6 Wheat", "3 Eggs", "2 Wooden Crates", "1 Strawberry", "4 Strawberries" (English plurals for item names). */
 export function counted(n, id, name) {
+  // Bulgarian counts by the names table ("6 снопа пшеница", "3 яйца", "2 моркова")
+  if (lang() !== 'en' && itemOf(id)) return qty(id, n);
   const nm = name ?? itemOf(id)?.name ?? String(id).replace(/_/g, ' ');
   if (n === 1 || UNCOUNTED.has(id) || /s$/i.test(nm)) return `${fmt(n)} ${nm}`;
   if (/[^aeiou]y$/i.test(nm)) return `${fmt(n)} ${nm.slice(0, -1)}ies`;
@@ -187,13 +212,13 @@ export function counted(n, id, name) {
 }
 
 /** "1,200 coins" / "12 Acorns" chips with the shell's glyphs. */
-export function price({ coins = 0, acorns = 0 } = {}, { big = false, free = 'Free', short = false } = {}) {
+export function price({ coins = 0, acorns = 0 } = {}, { big = false, free = t('market.kit.free'), short = false } = {}) {
   const parts = [];
   const f = short ? fmtShort : fmt;
   if (coins > 0) parts.push(h('span.pn-cost.pn-coins', svgIcon('coin', 20), h('b', f(coins))));
   if (acorns > 0) parts.push(h('span.pn-cost.pn-acorns', svgIcon('acorn', 20), h('b', f(acorns))));
   if (!parts.length) parts.push(h('span.pn-cost.pn-free', free));
-  return h(`span.pn-price${big ? '.pn-big' : ''}`, { title: big ? 'A big purchase: your partner gets a heads-up' : null },
+  return h(`span.pn-price${big ? '.pn-big' : ''}`, { title: big ? t('market.why.bigSpend') : null },
     parts);
 }
 
@@ -201,8 +226,8 @@ export function price({ coins = 0, acorns = 0 } = {}, { big = false, free = 'Fre
 export function stars(n, max = 3, { label = true } = {}) {
   const gold = n >= 4;
   const el = h(`span.pn-stars${gold ? '.pn-gold' : ''}`, {
-    role: 'img', 'aria-label': label ? (gold ? 'Gold mastery' : `${n} of ${max} mastery stars`) : null,
-    title: label ? (gold ? 'Gold mastery' : `Mastery ${'★'.repeat(n)}${'☆'.repeat(Math.max(0, max - n))}`) : null,
+    role: 'img', 'aria-label': label ? (gold ? t('market.kit.goldMastery') : t('market.kit.starsOf', { n, max })) : null,
+    title: label ? (gold ? t('market.kit.goldMastery') : t('market.kit.mastery', { stars: `${'★'.repeat(n)}${'☆'.repeat(Math.max(0, max - n))}` })) : null,
   });
   for (let i = 0; i < max; i++) el.append(h(`span.pn-star${i < n ? '.on' : ''}`, { 'aria-hidden': 'true' }, '★'));
   return el;
@@ -215,7 +240,7 @@ export function stars(n, max = 3, { label = true } = {}) {
  */
 export function chip(item, { have, need, n, size = 40, label = false, inline = false, tab = false } = {}) {
   const it = itemOf(item);
-  const name = it ? it.name : item;
+  const name = it ? cname(item) : item;
   let count = null;
   let state = '';
   if (need !== undefined) {
@@ -224,7 +249,7 @@ export function chip(item, { have, need, n, size = 40, label = false, inline = f
     count = h('span.pn-chip-n', `${fmt(Math.min(have ?? 0, 9999))}/${fmt(need)}`);
   } else if (n !== undefined) count = h('span.pn-chip-n', `×${fmt(n)}`);
   return h(`span.pn-chip${state}${inline ? '.inline' : ''}`, {
-    title: need !== undefined ? `${name}: ${fmt(have ?? 0)} in the barn, ${fmt(need)} needed` : name,
+    title: need !== undefined ? t('market.kit.chipNeed', { item: name, have: have ?? 0, need }) : name,
     dataset: need !== undefined ? { item, need: String(need) } : { item },
     tabindex: need !== undefined || tab ? '0' : null,
   }, icon(item, { size, alt: name }), count, label ? h('span.pn-chip-name', name) : null,
@@ -273,18 +298,18 @@ export const ribbonTag = (text, cls = '') => h(`span.pn-ribbon${dots(cls)}`, tex
 /** Player mark (initial in a ringed circle / rounded square) + name: identity is never colour alone (GDD §7.5). */
 export function who(state, pid, { me } = {}) {
   const p = state?.players?.[pid];
-  if (!p) return h('span.pn-who.pn-sys', pid === 'sys' ? 'The farm' : 'Someone');
+  if (!p) return h('span.pn-who.pn-sys', pid === 'sys' ? t('market.kit.theFarm') : t('market.kit.someone'));
   return h('span.pn-who', { style: { '--who': p.color }, dataset: { slot: pid } }, playerMark(pid, p),
-    pid === me ? `${p.name} (you)` : p.name);
+    pid === me ? t('market.kit.youName', { name: p.name }) : p.name);
 }
 
 /** "3m ago" style relative time from server-clock timestamps. */
 export function ago(ms) {
   const s = Math.max(0, Math.floor(ms / 1000));
-  if (s < 45) return 'just now';
+  if (s < 45) return t('market.kit.justNow');
   const m = Math.round(s / 60);
-  if (m < 60) return `${m}m ago`;
+  if (m < 60) return t('market.kit.agoM', { m });
   const hr = Math.round(m / 60);
-  if (hr < 36) return `${hr}h ago`;
-  return `${Math.round(hr / 24)}d ago`;
+  if (hr < 36) return t('market.kit.agoH', { h: hr });
+  return t('market.kit.agoD', { n: Math.round(hr / 24) });
 }

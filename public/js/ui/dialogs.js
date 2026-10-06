@@ -13,6 +13,7 @@ import { inputsFor, recipeDef, FEED_VALUABLE_MUL } from '../../../shared/rules/a
 import { CONTENT, defOf, itemOf, SAFETY, pluralOf } from '../../../shared/content/index.js';
 import { ERR } from '../../../shared/net/protocol.js';
 import { h, icon, svgIcon, fmt } from './dom.js';
+import { t, tn, N, Q, name as cname } from '../i18n/index.js';
 
 /** Coins and Acorns an action would spend, from a dry run on a deep clone (null when it cannot run). */
 export function dryCost(state, type, args, pid, now) {
@@ -41,19 +42,19 @@ export function partnerHeadsUp(ev, state, who) {
   const before = state.farm.wallet.coins + coins;
   const big = (coins > SAFETY.bigSpend.minCoins && coins * 10000 > before * SAFETY.bigSpend.shareBp) || acorns >= SAFETY.bigSpend.acorns;
   if (!big) return null;
-  const what = ev.def ? (defOf(ev.def)?.name ?? ev.def)
-    : ev.expansion ? (CONTENT.expansions.get(ev.expansion)?.name ?? 'new land')
-      : ev.tool ? (CONTENT.tools.get(ev.tool)?.name ?? 'a tool') : 'a Barn upgrade';
-  return `${who} is buying ${what} — ${coins ? `${fmt(coins)} coins` : `${fmt(acorns)} acorns`}`;
+  const what = ev.def ? (defOf(ev.def) ? cname(ev.def) : ev.def)
+    : ev.expansion ? (CONTENT.expansions.get(ev.expansion) ? cname(ev.expansion, { family: 'expansions' }) : t('toasts.dlg.newLand'))
+      : ev.tool ? (CONTENT.tools.get(ev.tool) ? cname(ev.tool, { family: 'tools' }) : t('toasts.dlg.aTool')) : t('toasts.dlg.barnUpgrade');
+  return t('toasts.dlg.headsUp', { who, what, price: coins ? tn('toasts.dlg.coins', coins) : tn('toasts.dlg.acorns', acorns) });
 }
 
 /** What a thing the action names is called ("a Pie Oven", "Eggs"). */
 function subjectOf(args) {
   if (!args) return null;
   const d = args.def ? defOf(args.def) : null;
-  if (d) return { name: d.name || args.def, icon: args.def };
+  if (d) return { name: d.name ? N(args.def) : args.def, id: args.def, icon: args.def };
   const it = args.item ? itemOf(args.item) : null;
-  if (it) return { name: it.name || args.item, icon: args.item };
+  if (it) return { name: it.name ? N(args.item) : args.item, id: args.item, icon: args.item };
   return null;
 }
 
@@ -61,7 +62,7 @@ function subjectOf(args) {
 export function softCopy(code, { state, pid, args, cost, now = 0 }) {
   const subj = subjectOf(args);
   const players = state ? state.players : {};
-  const nameOf = (p) => (p && Object.hasOwn(players, p) ? (p === pid ? 'You' : players[p].name) : 'Your partner');
+  const nameOf = (p) => (p && Object.hasOwn(players, p) ? players[p].name : t('common.partner'));
   if (code === ERR.BIG_SPEND) {
     const coins = cost && cost.coins;
     const acorns = cost && cost.acorns;
@@ -72,49 +73,53 @@ export function softCopy(code, { state, pid, args, cost, now = 0 }) {
     let today = 0;
     try { today = state && acorns > 0 && acorns < B.acorns ? acornsToday(state, pid, now) : 0; } catch { today = 0; }
     return {
-      title: 'A big purchase',
-      lead: subj ? `Buy ${subj.name}?` : 'Spend this much?',
+      title: t('toasts.dlg.bigTitle'),
+      lead: subj ? t('toasts.dlg.buyThing', { thing: subj.name }) : t('toasts.dlg.spendThis'),
       body: acorns >= B.acorns
-        ? `That is ${fmt(acorns)} Acorns from the farm's shared stash.`
+        ? tn('toasts.dlg.acornsStash', acorns)
         : acorns > 0 && today + acorns >= B.acornsPerPlayerDay
-          ? `That makes ${fmt(today + acorns)} Acorns you spent today (${partner ?? 'your partner'} gets a heads-up from ${fmt(B.acornsPerPlayerDay)}).`
+          ? tn('toasts.dlg.acornsToday', today + acorns, { partner: partner ?? t('hud.tip.yourPartner'), from: B.acornsPerPlayerDay })
           : share !== null && share > 0
-            ? `That is about ${Math.min(100, share)} % of the farm treasury you share.`
-            : 'This spends a big part of the farm treasury you share.',
-      fine: 'Your partner gets a friendly heads-up. Undo works for 10 minutes while it is untouched.',
-      ok: 'Buy it', okKind: 'go', icon: subj ? subj.icon : 'coins', cost,
+            ? t('toasts.dlg.share', { pct: Math.min(100, share) })
+            : t('toasts.dlg.bigPart'),
+      fine: t('toasts.dlg.bigFine'),
+      ok: t('toasts.dlg.buyIt'), okKind: 'go', icon: subj ? subj.icon : 'coins', cost,
     };
   }
   if (code === ERR.RESERVED) {
     const feed = feedAsk(state, args);
     if (feed) return feed;
     const k = state && args && args.item ? keptOf(state, args.item) : { n: 0, by: null };
-    const item = subj ? subj.name : 'these';
+    const mine = k.by === pid;
+    let lead;
+    if (k.n && subj) lead = t(mine ? 'toasts.dlg.keepMine' : 'toasts.dlg.keepTheirs', { name: nameOf(k.by), q: Q(subj.id, k.n) });
+    else if (k.n) lead = tn(mine ? 'toasts.dlg.keepMineAny' : 'toasts.dlg.keepTheirsAny', k.n, { name: nameOf(k.by) });
+    else lead = subj ? t('toasts.dlg.someKept', { item: N(subj.id) }) : t('toasts.dlg.someKeptAny');
     return {
-      title: 'Kept for later',
-      lead: k.n ? `${nameOf(k.by)} ${k.by === pid ? 'keep' : 'keeps'} ${fmt(k.n)} ${subj ? pluralOf(subj.name, k.n) : item}.` : `Some ${subj ? pluralOf(item, 2) : item} are kept for later.`,
-      body: 'Use them anyway? The barn will go below the kept amount.',
-      ok: 'Use anyway', okKind: 'sun', icon: subj ? subj.icon : 'barn',
+      title: t('toasts.dlg.keptTitle'),
+      lead,
+      body: t('toasts.dlg.keptBody'),
+      ok: t('toasts.dlg.useAnyway'), okKind: 'sun', icon: subj ? subj.icon : 'barn',
     };
   }
   if (code === ERR.PINNED) {
     return {
-      title: 'Pinned',
-      lead: 'Your partner pinned this.',
-      body: 'Change it anyway? They will see a note and can put it back.',
-      ok: 'Change it', okKind: 'sun', icon: subj ? subj.icon : null,
+      title: t('toasts.dlg.pinnedTitle'),
+      lead: t('err.PINNED'),
+      body: t('toasts.dlg.pinnedBody'),
+      ok: t('toasts.dlg.changeIt'), okKind: 'sun', icon: subj ? subj.icon : null,
     };
   }
   if (code === 'PRICE') {
     // the partner bought one a moment ago: the next copy costs more than the price that was on screen (RC-18)
-    const now = cost && cost.coins ? `${fmt(cost.coins)} coins` : 'a little more';
+    const now = cost && cost.coins ? tn('toasts.dlg.coins', cost.coins) : t('toasts.dlg.littleMore');
     return {
-      title: 'The price went up',
-      lead: subj ? `${partnerOf(state, pid)} just bought one. The next ${subj.name} is ${now}.` : `The next one is ${now}.`,
-      body: 'Buy it at the new price?', ok: 'Buy it', okKind: 'go', icon: subj ? subj.icon : 'coins', cost,
+      title: t('toasts.dlg.priceTitle'),
+      lead: subj ? t('toasts.dlg.priceLead', { name: partnerOf(state, pid), thing: subj.name, now }) : t('toasts.dlg.priceLeadAny', { now }),
+      body: t('toasts.dlg.priceBody'), ok: t('toasts.dlg.buyIt'), okKind: 'go', icon: subj ? subj.icon : 'coins', cost,
     };
   }
-  return { title: 'Are you sure?', lead: 'Go ahead?', ok: 'Yes', okKind: 'go' };
+  return { title: t('toasts.dlg.sure'), lead: t('toasts.dlg.goAhead'), ok: t('common.yes'), okKind: 'go' };
 }
 
 /**
@@ -128,23 +133,23 @@ function feedAsk(state, args) {
   const take = inputsFor(state, r, { valuable: true });
   if (!take) return null;
   const items = Object.keys(take).sort();
-  const words = items.map((id) => `${fmt(take[id])} ${pluralOf(itemOf(id)?.name ?? id, take[id])}`);
-  const list = words.length > 1 ? `${words.slice(0, -1).join(', ')} and ${words.at(-1)}` : words[0];
+  const words = items.map((id) => (itemOf(id) ? t('hud.fert.input', { q: Q(id, take[id]) }) : `${fmt(take[id])} ${id}`));
+  const list = words.length > 1 ? t('toasts.bloom.and', { list: words.slice(0, -1).join(', '), last: words.at(-1) }) : words[0];
   const dear = items.filter((id) => (itemOf(id)?.sell ?? 0) > FEED_VALUABLE_MUL * (r.sell ?? 0))
     .sort((a, b) => (itemOf(b)?.sell ?? 0) - (itemOf(a)?.sell ?? 0));
   const top = dear[0] ? itemOf(dear[0]) : null;
+  const feed = N(r.id, 'recipes');
   return {
-    title: 'Worth a lot',
-    lead: `Use ${list} for ${r.name}?`,
-    body: top ? `${pluralOf(top.name, 2)} sell for ${fmt(top.sell)} coins each; ${r.name} is worth ${fmt(r.sell ?? 0)}. `
-      + 'The Feed Mill never uses them without asking.' : 'The Feed Mill never uses these without asking.',
-    ok: 'Use anyway', okKind: 'sun', icon: top ? top.id : r.id,
+    title: t('toasts.dlg.worthTitle'),
+    lead: t('toasts.dlg.worthLead', { list, feed }),
+    body: top ? t('toasts.dlg.worthBody', { item: N(top.id), sell: top.sell, feed, worth: r.sell ?? 0 }) : t('toasts.dlg.worthBodyAny'),
+    ok: t('toasts.dlg.useAnyway'), okKind: 'sun', icon: top ? top.id : r.id,
   };
 }
 
 function partnerOf(state, pid) {
   const other = state ? Object.keys(state.players).find((p) => p !== pid) : null;
-  return other ? state.players[other].name : 'Your partner';
+  return other ? state.players[other].name : t('common.partner');
 }
 
 export function createDialogs(S) {
@@ -158,15 +163,15 @@ export function createDialogs(S) {
   }
 
   ui.panels.register('confirm', {
-    title: (a) => a.title || 'Are you sure?',
+    title: (a) => a.title || t('toasts.dlg.sure'),
     size: 'card',
     modal: true,
     mount(body, ctx) {
       const o = (pending && pending.opts) || ctx.args;
       const yes = h(`button.btn${o.okKind && o.okKind !== 'go' ? `.btn--${o.okKind}` : ''}`, {
         type: 'button', on: { click: () => { settle(true); ctx.close(); } },
-      }, o.ok || 'Yes');
-      const no = h('button.btn.btn--paper', { type: 'button', on: { click: () => { settle(false); ctx.close(); } } }, o.cancel || 'Not now');
+      }, o.ok || t('common.yes'));
+      const no = h('button.btn.btn--paper', { type: 'button', on: { click: () => { settle(false); ctx.close(); } } }, o.cancel || t('toasts.dlg.notNow'));
       const costRow = o.cost && (o.cost.coins || o.cost.acorns)
         ? h('div.cost', o.cost.coins ? [icon('coins', { size: 30 }), fmt(o.cost.coins)] : null,
           o.cost.acorns ? [icon('acorns', { size: 30 }), fmt(o.cost.acorns)] : null)
@@ -188,7 +193,7 @@ export function createDialogs(S) {
     settle(false);
     return new Promise((resolve) => {
       pending = { resolve, opts };
-      const args = { title: opts.title || 'Are you sure?' };
+      const args = { title: opts.title || t('toasts.dlg.sure') };
       if (!ui.panels.open('confirm', args, { stack: true })) settle(false);
     });
   }

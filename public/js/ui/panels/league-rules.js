@@ -22,6 +22,7 @@ import * as LE from '../../../../shared/rules/actions/legacy.js';
 import * as DU from '../../../../shared/rules/actions/duel.js';
 import * as CO from '../../../../shared/rules/coop.js';
 import { available } from '../../../../shared/rules/economy.js';
+import { t, lang, fmtDec, ctext, getters } from '../../i18n/index.js';
 
 const { systemLive, weekOf } = CO;
 const isObj = (v) => Boolean(v) && typeof v === 'object' && !Array.isArray(v);
@@ -91,13 +92,21 @@ export const LEAGUE = FAIR.league;
 export const LEAGUE_NAMES = Object.freeze(Array.isArray(LEAGUE?.names) && LEAGUE.names.length
   ? [...LEAGUE.names] : Array.from({ length: LEAGUE?.leagues ?? 5 }, (_, i) => `League ${i + 1}`));
 
-export const leagueName = (tier) => LEAGUE_NAMES[Math.min(Math.max(1, tier), LEAGUE_NAMES.length) - 1];
+export const leagueName = (tier) => {
+  const k = Math.min(Math.max(1, tier), LEAGUE_NAMES.length);
+  return ctext('FAIR', `league.${k}`, 'name', LEAGUE_NAMES[k - 1]);
+};
+
+/** An NPC farm's key in the text table: 'Mill Creek' -> 'mill_creek' (text-b FAIR['npc.<key>']). */
+const npcKey = (name) => String(name).toLowerCase().replace(/[^a-z0-9]+/g, '_');
 
 /** The NPC farm of a name (content FAIR.league.npcs: farmer, hue, motto), with its index. */
 export function npcFarm(name) {
   const i = LEAGUE.farms.indexOf(name);
   const n = Array.isArray(LEAGUE.npcs) ? LEAGUE.npcs.find((x) => x.name === name) ?? LEAGUE.npcs[i] : null;
-  return { i, name, farmer: n?.farmer ?? '', hue: n?.hue ?? null, motto: n?.motto ?? '' };
+  const k = `npc.${npcKey(name)}`;
+  return { i, name: ctext('FAIR', k, 'name', name), farmer: ctext('FAIR', k, 'farmer', n?.farmer ?? ''), hue: n?.hue ?? null,
+    motto: ctext('FAIR', k, 'motto', n?.motto ?? '') };
 }
 
 /** The league plays in this build and the farm has its level (L27). */
@@ -126,24 +135,24 @@ export function leagueTable(state, now) {
   const f = fn(LG, 'leagueTable');
   if (!f || !leagueOpen(state)) return null;
   const win = fairWindow(state, now);
-  const t = f(state, now, win.openAt, win.closeAt);
-  if (!t) return null;
-  const rows = t.rows.map((r, k) => {
+  const tb = f(state, now, win.openAt, win.closeAt);
+  if (!tb) return null;
+  const rows = tb.rows.map((r, k) => {
     const us = Boolean(r.farm);
-    return { key: us ? 'farm' : `npc:${r.name}`, name: us ? (state.farm.name || 'Your farm') : r.name, p10: r.p10, us,
+    return { key: us ? 'farm' : `npc:${r.name}`, name: us ? (state.farm.name || t('league.yourFarm')) : ctext('FAIR', `npc.${npcKey(r.name)}`, 'name', r.name), p10: r.p10, us,
       rank: k + 1, zone: r.zone ?? null, npc: us ? null : npcFarm(r.name) };
   });
   const us = rows.find((r) => r.us) ?? null;
   const cur = state.farm.fair?.cur;
-  const W = cur && cur.w === t.w ? cur.W : null;
+  const W = cur && cur.w === tb.w ? cur.W : null;
   // the NPC finals of the week, best first: the couple reaches rank r with p >= the r-th best final (a tie is theirs)
-  const finals = W !== null && fn(LG, 'npcFinals') ? LG.npcFinals(state, t.w, W, t.tier).slice().sort((a, b) => b - a) : [];
+  const finals = W !== null && fn(LG, 'npcFinals') ? LG.npcFinals(state, tb.w, W, tb.tier).slice().sort((a, b) => b - a) : [];
   const p = us ? us.p10 : 0;
-  const live = t.open && finals.length > 0;
-  const upTo10 = live && t.tier < t.top ? Math.max(0, finals[LEAGUE.promote - 1] - p) : 0;
-  const safe10 = live && t.tier > 1 ? Math.max(0, finals[finals.length - 1] - p) : 0;
-  return { ...t, W, rows, us, rank: us ? us.rank : rows.length, finals, upTo10, safe10,
-    secured: live && t.tier < t.top && p > 0 && upTo10 === 0, closesAt: win.closeAt, openAt: win.openAt };
+  const live = tb.open && finals.length > 0;
+  const upTo10 = live && tb.tier < tb.top ? Math.max(0, finals[LEAGUE.promote - 1] - p) : 0;
+  const safe10 = live && tb.tier > 1 ? Math.max(0, finals[finals.length - 1] - p) : 0;
+  return { ...tb, W, rows, us, rank: us ? us.rank : rows.length, finals, upTo10, safe10,
+    secured: live && tb.tier < tb.top && p > 0 && upTo10 === 0, closesAt: win.closeAt, openAt: win.openAt };
 }
 
 // ---- Platinum (GDD §5.6: 1.40 × W, needs Restoration project 5) ------------------------------------------------
@@ -210,7 +219,8 @@ export function showOf(state, now) {
 /** The level the Seasonal Ribbon Track opens at (L24). */
 export const SEASONAL_TRACK_UNLOCK = SEASONAL_TRACK?.unlock ?? 24;
 
-export const SEASON_NAMES = Object.freeze({ spring: 'Spring', summer: 'Summer', autumn: 'Autumn', winter: 'Winter' });
+export const SEASON_NAMES = getters({ spring: () => t('league.season.spring'), summer: () => t('league.season.summer'),
+  autumn: () => t('league.season.autumn'), winter: () => t('league.season.winter') });
 const SEASON_FIRST_MONTH = { spring: 3, summer: 6, autumn: 9, winter: 12 };
 
 export const trackOpen = (state) => Boolean(fn(TR, 'trackUnlocked')?.(state));
@@ -228,49 +238,36 @@ export function trackOf(state, now) {
   if (!v) return null;
   const y = Number(String(v.s ?? '').split('-')[0]) || new Date(now).getUTCFullYear();
   const start = CO.localAt(state.meta.tz, CO.dayOfCivil(y, SEASON_FIRST_MONTH[v.season] ?? 9, 1), 0);
-  return { ...v, name: SEASON_NAMES[v.season] ?? 'Season', start, end: v.endsAt, coatDef: seasonCoatOf(v.season) };
+  return { ...v, name: SEASON_NAMES[v.season] ?? t('league.season.any'), start, end: v.endsAt, coatDef: seasonCoatOf(v.season) };
 }
 
 // ---- perks and rested XP (GDD §4.7; perks.js, rested.js) -------------------------------------------------------------
 
 export const TREE_ORDER = Object.freeze(Array.isArray(PK.PERK_TREES) ? [...PK.PERK_TREES] : Object.keys(PERKS.trees));
-export const TREE_NAMES = Object.freeze({ grower: 'Grower', rancher: 'Rancher', orchardist: 'Orchardist', artisan: 'Artisan' });
+export const TREE_NAMES = getters({ grower: () => t('league.perk.tree.grower'), rancher: () => t('league.perk.tree.rancher'),
+  orchardist: () => t('league.perk.tree.orchardist'), artisan: () => t('league.perk.tree.artisan') });
 
-const pct = (bp) => `${(bp / 100).toFixed(bp % 100 ? 1 : 0)} %`;
+const pct = (bp) => (lang() === 'bg' ? `${fmtDec(bp / 100, 1)}\u00a0%` : `${(bp / 100).toFixed(bp % 100 ? 1 : 0)} %`);
 
 /** The words of one perk effect (content PERKS.trees[tree][i]), as the GDD §4.7 table says it. */
 export function perkText(tree, i, fx = PERKS.trees[tree]?.[i] ?? {}) {
   const [k, v] = Object.entries(fx)[0] ?? [];
   switch (k) {
-    case 'cropXpBp': return `+${pct(v)} XP from crops`;
-    case 'animalXpBp': return `+${pct(v)} XP from animals`;
-    case 'treeXpBp': return `+${pct(v)} XP from trees`;
-    case 'craftXpBp': return `+${pct(v)} XP from workshops`;
-    case 'seedBp': return `Seeds cost ${pct(v)} less`;
-    case 'bonusUnitBp': return `${pct(v)} chance of +1 crop`;
-    case 'waterBp': return `Watering cuts ${pct(v)} more time`;
-    case 'ribbonBp': return `+${v / 100} points of blue-ribbon chance`;
-    case 'babyBp': return `Babies grow ${pct(v)} faster`;
-    case 'doubleBp': return tree === 'artisan' ? `${pct(v)} chance of a double output` : `${pct(v)} chance of a double product`;
-    case 'freeFeedBp': return `${pct(v)} chance a tend uses no feed`;
-    case 'prizedSoonerBp': return `Blue ribbons after ${pct(v)} fewer collections`;
-    case 'treeWaterBp': return `Tree watering cuts ${pct(v)} more time`;
-    case 'bonusFruitBp': return `${pct(v)} chance of +1 fruit`;
-    case 'treeCostBp': return `Trees cost ${pct(v)} less`;
-    case 'heirloomAt': return `Heirloom after ${v} harvests instead of 60`;
-    case 'queueTimeBp': return `Your queued items take ${pct(v)} less time`;
-    case 'craftSellBp': return `+${pct(v)} on crafted goods you sell`;
-    case 'duetSecondBp': return `Duets: ${pct(v)} chance of a second output`;
+    case 'ribbonBp': return t('league.perk.fx.ribbonBp', { pts: v / 100 });
+    case 'heirloomAt': return t('league.perk.fx.heirloomAt', { n: v });
+    case 'doubleBp': return t(tree === 'artisan' ? 'league.perk.fx.doubleOutput' : 'league.perk.fx.doubleProduct', { pct: pct(v) });
+    case 'cropXpBp': case 'animalXpBp': case 'treeXpBp': case 'craftXpBp': case 'seedBp': case 'bonusUnitBp': case 'waterBp':
+    case 'babyBp': case 'freeFeedBp': case 'prizedSoonerBp': case 'treeWaterBp': case 'bonusFruitBp': case 'treeCostBp':
+    case 'queueTimeBp': case 'craftSellBp': case 'duetSecondBp':
+      return t(`league.perk.fx.${k}`, { pct: pct(v) });
     default: return k ? `${k} ${v}` : '';
   }
 }
 
 /** A short name per perk (the card title). */
-export const PERK_NAMES = Object.freeze({
-  grower: ['Green Thumb', 'Seed Saver', 'Bumper Rows', 'Rain Dancer', 'Blue-Ribbon Eye'],
-  rancher: ['Barn Friend', 'Little Ones', 'Plenty Pen', 'Light Eater', 'Show Stock'],
-  orchardist: ['Branch Reader', 'Deep Roots', 'Full Basket', 'Nursery Deal', 'Heirloom Keeper'],
-  artisan: ['Steady Hands', 'Quick Batch', 'Double Batch', 'Market Smile', 'Duet Magic'],
+const perkNames = (tree) => () => [0, 1, 2, 3, 4].map((i) => t(`league.perk.name.${tree}.${i}`));
+export const PERK_NAMES = getters({
+  grower: perkNames('grower'), rancher: perkNames('rancher'), orchardist: perkNames('orchardist'), artisan: perkNames('artisan'),
 });
 
 /** Perks play in this build (their milestone and feature), whatever the level. */
@@ -289,10 +286,10 @@ export function perksOf(state, pid, now) {
   const v = PK.perksView(state, pid, now);
   const level = personalLevelFromXp(int(state.players[pid].xp));
   const owned = {};
-  const trees = v.trees.map((t) => {
-    owned[t.id] = t.n;
-    return { id: t.id, name: TREE_NAMES[t.id] ?? t.id, owned: t.n, cost: PERKS.costs.reduce((a, c) => a + c, 0),
-      perks: t.perks.map((p) => ({ i: p.i, cost: p.cost, text: perkText(t.id, p.i, p.effect), name: PERK_NAMES[t.id]?.[p.i] ?? `Perk ${p.i + 1}`,
+  const trees = v.trees.map((tr) => {
+    owned[tr.id] = tr.n;
+    return { id: tr.id, name: TREE_NAMES[tr.id] ?? tr.id, owned: tr.n, cost: PERKS.costs.reduce((a, c) => a + c, 0),
+      perks: tr.perks.map((p) => ({ i: p.i, cost: p.cost, text: perkText(tr.id, p.i, p.effect), name: PERK_NAMES[tr.id]?.[p.i] ?? t('league.perk.nth', { n: p.i + 1 }),
         owned: p.owned, next: p.next, afford: p.affordable })) };
   });
   const nextPoint = v.points >= PERKS.maxPoints ? null : (v.points + 1) * PERKS.pointsEvery;
@@ -348,8 +345,9 @@ export function legacyOf(state) {
 
 /** The duel kinds (content DUEL.kinds: id, name, text, unlock, scale) with a picture each. */
 const KIND_ICON = { pumpkins: 'pumpkin', pies: 'apple_pie', orders: 'order_board' };
-export const duelKinds = () => (fn(DU, 'duelKinds')?.() ?? DUEL?.kinds ?? []).map((k) => ({ ...k, icon: KIND_ICON[k.id] ?? 'ribbon_rosette' }));
-export const duelKind = (id) => duelKinds().find((k) => k.id === id) ?? { id, name: 'Friendly Duel', text: '', scale: 1, icon: 'ribbon_rosette' };
+export const duelKinds = () => (fn(DU, 'duelKinds')?.() ?? DUEL?.kinds ?? []).map((k) => ({ ...k, icon: KIND_ICON[k.id] ?? 'ribbon_rosette',
+  name: ctext('DUEL', `kind.${k.id}`, 'name', k.name), text: ctext('DUEL', `kind.${k.id}`, 'text', k.text ?? '') }));
+export const duelKind = (id) => duelKinds().find((k) => k.id === id) ?? { id, name: t('league.duel.friendly'), text: '', scale: 1, icon: 'ribbon_rosette' };
 
 /** A score as the duel counts it ("3", "2¼": the order kind stores quarters, its scale 4). */
 export function duelScoreText(n, scale = 1) {
@@ -358,7 +356,7 @@ export function duelScoreText(n, scale = 1) {
   const whole = Math.floor(v / s);
   const q = v % s;
   if (!q) return String(whole);
-  const frac = s === 4 ? ['', '¼', '½', '¾'][q] : s === 2 ? '½' : `.${String(Math.round((q * 100) / s)).padStart(2, '0')}`;
+  const frac = s === 4 ? ['', '¼', '½', '¾'][q] : s === 2 ? '½' : `${lang() === 'bg' ? ',' : '.'}${String(Math.round((q * 100) / s)).padStart(2, '0')}`;
   return `${whole || (s === 4 || s === 2 ? '' : '0')}${frac}`;
 }
 

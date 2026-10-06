@@ -18,6 +18,7 @@ import { proofLine, openProof } from './market.js';
 import { I } from './intents.js';
 import { h, fmt, fmtShort, createKit, price, pill, chip, svgIcon, icon, hintable, fill, bar } from './kit.js';
 import { atlasSvg } from './home-art.js';
+import { t, N, Q, ctext, name as cname } from '../../i18n/index.js';
 
 const PLOTS_PER_PARCEL = 6;
 
@@ -25,10 +26,10 @@ const PLOTS_PER_PARCEL = 6;
 export function featureText(feature) {
   if (!feature || typeof feature !== 'object') return null;
   const out = [];
-  if (feature.bargeRowBonusBp) out.push(`River Barge rows pay +${Math.round(feature.bargeRowBonusBp / 100)} %`);
-  if (feature.truffleSpeedBp) out.push(`pigs here dig ${Math.round(feature.truffleSpeedBp / 100)} % faster`);
-  if (feature.fishingSpot) out.push('a fishing spot on the pond dock');
-  if (feature.goldenHourBonusMs) out.push(`Golden Hour lasts ${Math.round(feature.goldenHourBonusMs / 60_000)} min longer up here`);
+  if (feature.bargeRowBonusBp) out.push(t('farm.map.feat.barge', { n: Math.round(feature.bargeRowBonusBp / 100) }));
+  if (feature.truffleSpeedBp) out.push(t('farm.map.feat.truffle', { n: Math.round(feature.truffleSpeedBp / 100) }));
+  if (feature.fishingSpot) out.push(t('farm.map.feat.fishing'));
+  if (feature.goldenHourBonusMs) out.push(t('farm.map.feat.golden', { n: Math.round(feature.goldenHourBonusMs / 60_000) }));
   return out.length ? out.join(', ') : null;
 }
 
@@ -60,23 +61,25 @@ export function atlasView(state, env = {}) {
     else if (card && card.isNext && level >= e.unlock) status = 'sale';
     else if (card && card.isNext) status = 'soon';
     else status = 'later';
-    const label = status === 'home' ? 'Homestead' : status === 'sale' ? fmtShort(e.cost)
-      : status === 'ours' ? e.name : `Lv ${e.unlock}`;
-    const word = { home: 'our homestead', ours: 'ours', sale: `for sale, ${fmt(e.cost)} coins`, soon: `next, from level ${e.unlock}`,
-      later: live ? `from level ${e.unlock}` : `from level ${e.unlock}, coming soon` }[status];
-    return { id: e.id, k: e.k, name: e.name, unlock: e.unlock, rects: e.rects, status, live, owned: owned || e.k === 0, card,
-      cost: e.cost, planks: e.planks, crates: e.crates, reveals: e.reveals, proofText: e.proofText ?? null,
-      feature: featureText(e.feature), label, aria: `${e.k ? `${e.k}. ` : ''}${e.name}: ${word}` };
+    const name = cname(e.id, { family: 'expansions' });
+    const label = status === 'home' ? t('farm.map.homestead') : status === 'sale' ? fmtShort(e.cost)
+      : status === 'ours' ? name : t('common.levelShort', { n: e.unlock });
+    const word = status === 'home' ? t('farm.map.word.home') : status === 'ours' ? t('farm.map.word.ours')
+      : status === 'sale' ? t('farm.map.word.sale', { n: e.cost }) : status === 'soon' ? t('farm.map.word.soon', { n: e.unlock })
+        : live ? t('farm.map.word.later', { n: e.unlock }) : t('farm.map.word.laterSoon', { n: e.unlock });
+    return { id: e.id, k: e.k, name, unlock: e.unlock, rects: e.rects, status, live, owned: owned || e.k === 0, card,
+      cost: e.cost, planks: e.planks, crates: e.crates, reveals: ctext('expansions', e.id, 'reveals', e.reveals), proofText: e.proofText ? ctext('expansions', e.id, 'proofText', e.proofText) : null,
+      feature: featureText(e.feature), label, aria: `${e.k ? `${e.k}. ` : ''}${name}: ${word}` };
   });
   const mp = meadowProject();
   if (mp) {
     const done = projectDone(state, mp.id);
-    parcels.push({ id: mp.reward.land.id ?? 'hollow_meadow', k: null, name: 'Hollow Meadow', unlock: mp.unlock,
+    parcels.push({ id: mp.reward.land.id ?? 'hollow_meadow', k: null, name: t('farm.map.meadow'), unlock: mp.unlock,
       rects: mp.reward.land.rects, status: done ? 'meadow-ours' : 'meadow-later', live: isLive(mp), owned: done, card: null,
-      cost: 0, planks: 0, crates: 0, project: mp.id, projectName: mp.name,
-      reveals: 'Wildflowers taller than Grandma: bee forage x3 for the hives in reach',
-      feature: `+${fmt(mp.reward.land.plotCap ?? 0)} plot cap`, label: done ? 'Meadow' : 'Meadow',
-      aria: `Hollow Meadow: ${done ? 'ours' : `a gift of the ${mp.name} restoration`}` });
+      cost: 0, planks: 0, crates: 0, project: mp.id, projectName: cname(mp.id, { family: 'restoration' }),
+      reveals: t('farm.map.meadowReveals'),
+      feature: t('farm.map.meadowCap', { n: mp.reward.land.plotCap ?? 0 }), label: t('farm.map.meadowLabel'),
+      aria: done ? t('farm.map.meadowOurs') : t('farm.map.meadowGift', { name: mp.name, proj: N(mp.id, 'restoration') }) });
   }
   const bought = parcels.filter((p) => p.status === 'ours').length;
   const total = all.filter((e) => e.k > 0).length;
@@ -102,22 +105,22 @@ export function atlasView(state, env = {}) {
 // ---- the panel --------------------------------------------------------------------------------------------------
 
 const STATUS_PILL = {
-  home: ['Home', 'pn-owned'], ours: ['Ours', 'pn-owned'], sale: ['For sale', 'pn-warn'], soon: ['Next', ''],
-  later: ['Later', ''], 'meadow-ours': ['Ours', 'pn-owned'], 'meadow-later': ['A restoration gift', ''],
+  home: ['farm.map.pill.home', 'pn-owned'], ours: ['farm.map.pill.ours', 'pn-owned'], sale: ['farm.map.pill.sale', 'pn-warn'], soon: ['farm.map.pill.soon', ''],
+  later: ['farm.map.pill.later', ''], 'meadow-ours': ['farm.map.pill.ours', 'pn-owned'], 'meadow-later': ['farm.map.pill.gift', ''],
 };
 
 function statStrip(v) {
   const p = v.plots;
-  const parts = [`${fmt(p.base)} to start`, p.fromLevels ? `+${fmt(p.fromLevels)} from levels` : null,
-    p.fromLand ? `+${fmt(p.fromLand)} from land` : null, p.fromMeadow ? `+${fmt(p.fromMeadow)} Hollow Meadow` : null].filter(Boolean);
+  const parts = [t('farm.map.capStart', { n: p.base }), p.fromLevels ? t('farm.map.capLevels', { n: p.fromLevels }) : null,
+    p.fromLand ? t('farm.map.capLand', { n: p.fromLand }) : null, p.fromMeadow ? t('farm.map.capMeadow', { n: p.fromMeadow }) : null].filter(Boolean);
   const up = v.upcoming;
-  const next = !up ? 'Every parcel to the hilltop is ours' : up.status === 'sale' ? `Next: ${up.name}, for sale now`
-    : up.live ? `Next: ${up.name}, from level ${up.unlock}` : `Next: ${up.name}, level ${up.unlock} (coming soon)`;
+  const next = !up ? t('farm.map.allOurs') : up.status === 'sale' ? t('farm.map.nextSale', { name: up.name })
+    : up.live ? t('farm.map.nextFrom', { name: up.name, n: up.unlock }) : t('farm.map.nextSoon', { name: up.name, n: up.unlock });
   return h('div.hm-stats',
-    h('div.hm-stat', svgIcon('hammer', 30), h('div', h('b', `${fmt(v.bought)} of ${fmt(v.total)}`), h('small', 'parcels bought')),
+    h('div.hm-stat', svgIcon('hammer', 30), h('div', h('b', t('market.facts.of', { n: v.bought, cap: v.total })), h('small', t('farm.map.bought'))),
       bar(v.total ? v.bought / v.total : 0, null, 'pn-thin pn-go'), h('small.hm-stat-why', next)),
     h('div.hm-stat', { title: parts.join(' · ') }, icon('plot', { size: 34, alt: '' }),
-      h('div', h('b', `${fmt(p.placed)} / ${fmt(p.cap)}`), h('small', 'plots placed / plot cap')),
+      h('div', h('b', `${fmt(p.placed)} / ${fmt(p.cap)}`), h('small', t('farm.map.plotsCap'))),
       h('small.hm-stat-why', parts.join(' · '))));
 }
 
@@ -127,72 +130,70 @@ const req = (ok, text, extra = null) => h(`li.pn-req${ok ? '.ok' : ''}`,
 
 function parcelCard(ctx, kit, p, v) {
   const st = ctx.store.state;
-  const [pillText, pillCls] = STATUS_PILL[p.status] ?? ['', ''];
+  const [pillKey, pillCls] = STATUS_PILL[p.status] ?? [null, ''];
   const head = h('header.hm-card-head',
     p.k ? h('span.hm-k', String(p.k)) : h('span.hm-k.hm-k-home', svgIcon(p.status === 'home' ? 'barn' : 'flower', 22)),
-    h('div', h('h3', p.name), h('small', p.status === 'home' ? 'Where it all began'
-      : p.k ? `Expansion ${p.k} of ${v.total} · from level ${p.unlock}` : `The ${p.projectName} restoration`)),
-    pill(pillText, pillCls));
+    h('div', h('h3', p.name), h('small', p.status === 'home' ? t('farm.map.began')
+      : p.k ? t('farm.map.expansionOf', { k: p.k, total: v.total, n: p.unlock }) : t('farm.map.projectOf', { name: p.projectName, proj: N(p.project, 'restoration') }))),
+    pill(pillKey ? t(pillKey) : '', pillCls));
   const facts = h('ul.hm-facts',
-    p.reveals ? h('li', svgIcon('sprout', 20), h('span', h('b', 'What is there: '), p.reveals)) : null,
-    p.feature ? h('li', svgIcon('star', 20), h('span', h('b', 'For good: '), p.feature)) : null,
-    p.k ? h('li', icon('plot', { size: 20, alt: '' }), h('span', h('b', 'Plot cap: '), `+${PLOTS_PER_PARCEL} plots`)) : null);
+    p.reveals ? h('li', svgIcon('sprout', 20), h('span', h('b', t('farm.map.whatThere')), p.reveals)) : null,
+    p.feature ? h('li', svgIcon('star', 20), h('span', h('b', t('farm.map.forGood')), p.feature)) : null,
+    p.k ? h('li', icon('plot', { size: 20, alt: '' }), h('span', h('b', t('farm.map.plotCap')), t('farm.map.plusPlots', { n: PLOTS_PER_PARCEL }))) : null);
   let body = null;
   if (p.status === 'home') {
-    body = h('p.hm-note', `The farmhouse, the barn and Grandma's old field. ${fmt(v.plots.placed)} plots are placed of the ${fmt(v.plots.cap)} the farm may have now.`);
+    body = h('p.hm-note', t('farm.map.homeNote', { placed: v.plots.placed, cap: v.plots.cap }));
   } else if (p.status === 'meadow-ours' || p.status === 'meadow-later') {
     body = h('div.hm-meadow',
-      h('p.hm-note', p.status === 'meadow-ours' ? 'The Stone Bridge carries you over the brook: this meadow is ours for good.'
-        : `It comes with the ${p.projectName} in the Restoration Ledger (from level ${p.unlock}): no coins, just bundles given together.`),
+      h('p.hm-note', p.status === 'meadow-ours' ? t('farm.map.meadowOursNote')
+        : t('farm.map.meadowLaterNote', { name: p.projectName, proj: N(p.project, 'restoration'), n: p.unlock })),
       p.status === 'meadow-later' ? h('button.btn.btn--sky.pn-sm', { type: 'button', dataset: { open: 'restoration' },
-        on: { click: () => ctx.open('restoration', { id: p.project }) } }, svgIcon('book', 22), 'Open the Ledger') : null);
+        on: { click: () => ctx.open('restoration', { id: p.project }) } }, svgIcon('book', 22), t('farm.unlock.restoration.label')) : null);
   } else if (p.status === 'ours') {
-    body = h('p.hm-note', 'Ours. Its debris pays a little XP and Wood when you clear it.');
+    body = h('p.hm-note', t('farm.map.oursNote'));
   } else if (!p.live) {
-    body = h('p.hm-note.hm-note-later', svgIcon('lock', 18), `${p.name} opens with a later chapter of the valley (level ${p.unlock}).`);
+    body = h('p.hm-note.hm-note-later', svgIcon('lock', 18), t('farm.map.laterChapter', { name: p.name, n: p.unlock }));
   } else if (p.card) {
     const c = p.card;
     const level = v.level;
     const rows = [
-      req(level >= c.unlock, `Farm level ${c.unlock}`),
-      req(st.farm.wallet.coins >= c.price.coins, `${fmt(c.price.coins)} coins`),
-      ...c.needs.map((n) => req(n.have >= n.n, `${fmt(n.n)} ${n.item === 'planks' ? 'Planks' : 'Wooden Crates'}`, chip(n.item, { have: n.have, need: n.n, size: 24 }))),
+      req(level >= c.unlock, t('market.land.farmLevel', { n: c.unlock })),
+      req(st.farm.wallet.coins >= c.price.coins, t('market.land.coins', { n: c.price.coins })),
+      ...c.needs.map((n) => req(n.have >= n.n, t(n.item === 'planks' ? 'farm.map.needPlanks' : 'farm.map.needCrates', { n: n.n, q: Q(n.item, n.n) }), chip(n.item, { have: n.have, need: n.n, size: 24 }))),
       ...c.proof.map((t) => {
         const li = req(t.have >= t.qty, proofLine(t), h('span.pn-req-n', `${fmt(t.have)}/${fmt(t.qty)}`));
         return t.have < t.qty && typeof t.ref === 'string' ? hintable(li, t.ref) : li;
       }),
     ];
-    const order = p.status === 'later' ? h('p.hm-note', `Land is bought in order: ${v.next ? v.next.name : 'the parcel before it'} comes first.`) : null;
+    const order = p.status === 'later' ? h('p.hm-note', t('farm.map.inOrder', { name: v.next ? v.next.name : t('farm.map.before') })) : null;
     body = h('div.hm-buy',
       order,
       h('ul.pn-reqs', rows),
-      c.proof.length && p.status !== 'later' ? h('p.pn-land-note', c.opened
-        ? 'The task counts everything you did since this card was first opened.'
-        : 'The task starts counting the moment one of you opens this card.') : null,
+      c.proof.length && p.status !== 'later' ? h('p.pn-land-note', c.opened ? t('market.land.counting') : t('market.land.startsCounting')) : null,
       p.status === 'later' ? null : h('div.pn-card-foot', price(c.price, { big: c.big && c.code === null }),
-        kit.button({ label: 'Buy the land', glyph: 'hammer', cls: 'btn--sun', type: () => I.expand(c.id).type, args: () => I.expand(c.id).args,
+        kit.button({ label: t('market.land.buy'), glyph: 'hammer', cls: 'btn--sun', type: () => I.expand(c.id).type, args: () => I.expand(c.id).args,
           data: { expand: c.id },
           gate: () => {
             const f = atlasView(ctx.store.state, { now: ctx.now(), pid: ctx.store.pid }).parcels.find((x) => x.id === c.id)?.card;
             if (!f || !f.code) return null;
             const left = f.code === 'NOT_READY' ? f.proof.find((t) => t.have < t.qty) : null;
-            return { code: f.code, hint: left ? { text: `First: ${proofLine({ ...left, qty: left.qty - left.have })}` } : f.hint };
+            return { code: f.code, hint: left ? { text: t('farm.map.first', { task: proofLine({ ...left, qty: left.qty - left.have }) }) } : f.hint };
           } })));
   }
   return h(`article.hm-card.hm-st-${p.status}`, { dataset: { exp: p.id } }, head, facts, body);
 }
 
 function ladder(v, sel, pick) {
-  return h('ol.hm-ladder', { 'aria-label': 'Every parcel in buying order' },
+  return h('ol.hm-ladder', { 'aria-label': t('farm.map.ladder') },
     ...v.parcels.filter((p) => p.k).map((p) => h(`li.hm-rung.hm-${p.status}${p.id === sel ? '.sel' : ''}`,
       h('button', { type: 'button', 'aria-pressed': String(p.id === sel), dataset: { key: `rung-${p.id}`, exp: p.id },
         title: p.aria, on: { click: () => pick(p.id) } },
       h('span.hm-rung-k', p.status === 'ours' ? '✓' : String(p.k)), h('span.hm-rung-name', p.name),
-      h('small', p.status === 'ours' ? 'Ours' : p.status === 'sale' ? fmtShort(p.cost) : `Lv ${p.unlock}`)))));
+      h('small', p.status === 'ours' ? t('farm.map.pill.ours') : p.status === 'sale' ? fmtShort(p.cost) : t('common.levelShort', { n: p.unlock }))))));
 }
 
 export const landmapPanel = {
-  title: 'The farm map',
+  title: () => t('farm.map.title'),
   icon: 'plot',
   size: 'full',
   topics: ['expansions', 'proofs', 'wallet', 'inventory', 'overflow', 'xp', 'objects', 'restore'],
@@ -219,8 +220,8 @@ export const landmapPanel = {
       if (p.card && p.card.isNext && !p.card.owned && p.status === 'sale') openProof(ctx, p.card);
       fill(body,
         h('div.hm-atlas',
-          h('div.hm-mapwrap', atlasSvg(v.parcels, { selected: p.id, onPick: pick, label: 'The farm and its land. Pick a parcel to read about it.' }),
-            h('div.hm-legend', h('span.k.ours', 'Ours'), h('span.k.sale', 'For sale'), h('span.k.later', 'Later'))),
+          h('div.hm-mapwrap', atlasSvg(v.parcels, { selected: p.id, onPick: pick, label: t('farm.map.svgLabel') }),
+            h('div.hm-legend', h('span.k.ours', t('farm.map.pill.ours')), h('span.k.sale', t('farm.map.pill.sale')), h('span.k.later', t('farm.map.pill.later')))),
           h('div.hm-side', statStrip(v), parcelCard(ctx, kit, p, v), ladder(v, p.id, pick))));
       kit.refresh();
     }

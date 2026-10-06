@@ -6,6 +6,7 @@ import { START } from '../../../../shared/content/config.js';
 import { spawnAt } from '../../../../shared/rules/grid.js';
 import { h, svgIcon, fmt, createKit, empty, who, ago } from './kit.js';
 import { I } from './intents.js';
+import { t as tr } from '../../i18n/index.js';
 
 const lazy = (f) => ({ type: () => f().type, args: () => f().args });
 
@@ -20,7 +21,7 @@ export function myTile(ctx) {
 }
 
 export const notesPanel = {
-  title: 'Notes',
+  get title() { return tr('farm.notes.title'); },
   icon: null,
   size: 'side',
   topics: ['notes', 'players'],
@@ -28,13 +29,13 @@ export const notesPanel = {
     const kit = createKit(ctx);
     let draft = '';
     const max = COOP.notes.maxChars;
-    const area = h('textarea.pn-input.pn-note-input', { maxlength: String(max), rows: '3', placeholder: 'A note for your partner…',
-      'aria-label': 'Write a note', on: { input: (e) => { draft = e.target.value; count.textContent = `${fmt(draft.length)}/${max}`; kit.refresh(); } } });
+    const area = h('textarea.pn-input.pn-note-input', { maxlength: String(max), rows: '3', placeholder: tr('farm.notes.ph'),
+      'aria-label': tr('farm.notes.write'), on: { input: (e) => { draft = e.target.value; count.textContent = `${fmt(draft.length)}/${max}`; kit.refresh(); } } });
     const count = h('small.pn-note-count', `0/${max}`);
-    const post = kit.button({ label: 'Pin it here', glyph: 'ping', cls: 'pn-sm', data: { note: 'post' },
+    const post = kit.button({ label: tr('farm.notes.pin'), glyph: 'ping', cls: 'pn-sm', data: { note: 'post' },
       ...lazy(() => { const t = myTile(ctx); return I.postNote(draft.trim() || ' ', t.x, t.z); }),
       // the reason is said, not hidden: an empty box is the one thing standing between the player and the pin (UI-28)
-      gate: () => (draft.trim() ? null : { code: 'EMPTY', hint: { text: 'Write a note first' } }),
+      gate: () => (draft.trim() ? null : { code: 'EMPTY', hint: { text: tr('farm.notes.first') } }),
       hint: { cap: COOP.notes.maxOpen },
       after: (r) => { if (r && r.ok) { draft = ''; area.value = ''; count.textContent = `0/${max}`; } } });
     const list = h('div.pn-notes');
@@ -44,16 +45,16 @@ export const notesPanel = {
       const st = ctx.store.state;
       const notes = Object.entries(st.farm.notes ?? {}).sort((a, b) => b[1].at - a[1].at || (a[0] < b[0] ? -1 : 1));
       list.replaceChildren();
-      if (!notes.length) { list.append(empty('No notes yet. Leave one for the next time your partner plays!', 'note')); return; }
+      if (!notes.length) { list.append(empty(tr('farm.notes.none'), 'note')); return; }
       notes.forEach(([id, n], i) => {
         const p = st.players[n.by];
         list.append(h('article.pn-note', { style: { '--who': p?.color ?? '#B9A27A', '--tilt': `${[-1.4, 1, -0.6, 1.3][i % 4]}deg` }, dataset: { note: id } },
           h('span.pn-note-pin', { 'aria-hidden': 'true' }),
           h('p.pn-note-text', n.text),
           h('footer', who(st, n.by, { me: ctx.store.pid }), h('small', ago(ctx.now() - n.at)),
-            typeof ctx.view?.focus === 'function' ? h('button.pn-chipbtn', { type: 'button', title: `Tile ${n.x}, ${n.z}`,
-              on: { click: () => { ctx.view.focus(n.x, n.z); ctx.close(); } } }, svgIcon('ping', 14), 'Show me') : null,
-            kit.button({ label: '×', cls: 'pn-xs pn-ghost', title: 'Take the note down', ...lazy(() => I.removeNote(id)), data: { unnote: id } }))));
+            typeof ctx.view?.focus === 'function' ? h('button.pn-chipbtn', { type: 'button', title: tr('farm.notes.tile', { x: n.x, z: n.z }),
+              on: { click: () => { ctx.view.focus(n.x, n.z); ctx.close(); } } }, svgIcon('ping', 14), tr('farm.crate.show')) : null,
+            kit.button({ label: '×', cls: 'pn-xs pn-ghost', title: tr('farm.notes.remove'), ...lazy(() => I.removeNote(id)), data: { unnote: id } }))));
       });
       kit.refresh();
     });

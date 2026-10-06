@@ -8,6 +8,7 @@
 import { h, svgIcon, createKit, fill } from './kit.js';
 import { actFor } from './w4-rules.js';
 import { LOOKS, lookOf, lookPatch } from './w4-model.js';
+import { t } from '../../i18n/index.js';
 
 const NS = 'http://www.w3.org/2000/svg';
 const HEX = /^#[0-9a-f]{6}$/i;
@@ -147,21 +148,24 @@ export function lookSvg(look, { size = 160, part = 'all', label = null } = {}) {
   const head = part === 'head';
   const svg = el('svg', { viewBox: head ? '10 0 140 128' : '0 0 160 220', width: size, height: head ? Math.round(size * 128 / 140) : Math.round(size * 220 / 160),
     role: label ? 'img' : null, 'aria-label': label, 'aria-hidden': label ? null : 'true', class: 'av-doll' });
-  if (!head) svg.append(body(look));
-  svg.append(hairBack(look.hair, hairC), face(skin), hairFront(look.hair, hairC), hat(look.hat, top));
+  // a part a look does not have (no hat, hair with no back) is null: append() would print it as the text "null"
+  for (const part of [head ? null : body(look), hairBack(look.hair, hairC), face(skin), hairFront(look.hair, hairC), hat(look.hat, top)]) {
+    if (part) svg.append(part);
+  }
   return svg;
 }
 
 // ---- the panel --------------------------------------------------------------------------------------------------------
 
+// labels are getters: they follow the language (i18n)
 const GROUPS = [
-  { key: 'body', label: 'Figure', kind: 'figure' },
-  { key: 'hair', label: 'Hair', kind: 'head' },
-  { key: 'hairColor', label: 'Hair colour', kind: 'swatch' },
-  { key: 'skin', label: 'Skin tone', kind: 'swatch' },
-  { key: 'top', label: 'Shirt', kind: 'swatch' },
-  { key: 'bottom', label: 'Overalls', kind: 'swatch' },
-  { key: 'hat', label: 'Hat', kind: 'head' },
+  { key: 'body', get label() { return t('home.avatar.body'); }, kind: 'figure' },
+  { key: 'hair', get label() { return t('home.avatar.hair'); }, kind: 'head' },
+  { key: 'hairColor', get label() { return t('home.avatar.hairColor'); }, kind: 'swatch' },
+  { key: 'skin', get label() { return t('home.avatar.skin'); }, kind: 'swatch' },
+  { key: 'top', get label() { return t('home.avatar.top'); }, kind: 'swatch' },
+  { key: 'bottom', get label() { return t('home.avatar.bottom'); }, kind: 'swatch' },
+  { key: 'hat', get label() { return t('home.avatar.hat'); }, kind: 'head' },
 ];
 const OPTIONS = { body: LOOKS.bodies, hair: LOOKS.hair, hat: LOOKS.hats, hairColor: LOOKS.hairColor, skin: LOOKS.skin, top: LOOKS.top, bottom: LOOKS.bottom };
 
@@ -177,10 +181,10 @@ export const avatarPanel = {
 
     function paintPreview() {
       const me = ctx.store.state.players[ctx.store.pid];
-      preview.replaceChildren(lookSvg(draft, { size: 168, label: `${me?.name ?? 'Your'} farmer` }));
+      preview.replaceChildren(lookSvg(draft, { size: 168, label: me?.name ? t('home.avatar.doll', { name: me.name }) : t('home.avatar.dollYou') }));
       preview.style.setProperty('--who', me?.color ?? '#2BB3A3');
       const dirty = !same(draft, saved());
-      status.textContent = dirty ? 'Not saved yet' : 'This is how your partner sees you';
+      status.textContent = dirty ? t('home.avatar.unsaved') : t('home.avatar.seen');
       status.classList.toggle('dirty', dirty);
       kit.refresh();
     }
@@ -221,20 +225,20 @@ export const avatarPanel = {
     }
 
     const pickRandom = (list) => list[Math.floor(Math.random() * list.length)];
-    const save = kit.button({ label: 'Save my look', glyph: 'check', cls: 'btn--sun av-save', key: 'av:save', type: actFor('setAvatar'), quiet: ['ALREADY_DONE'],
-      args: () => lookPatch(draft), gate: () => (same(draft, saved()) ? { code: 'ALREADY_DONE', hint: { done: 'Saved' } } : null),
-      after: (r) => { if (r?.ok) ctx.ui.toast('Your new look is on the farm ✨', { kind: 'ok' }); paintPreview(); } });
-    const reset = h('button.btn.btn--paper.pn-sm', { type: 'button', on: { click: () => { draft = { ...saved() }; renderGroups(); paintPreview(); } } }, 'Undo changes');
-    const dice = h('button.btn.btn--paper.pn-sm', { type: 'button', 'aria-label': 'Surprise me: a random look',
+    const save = kit.button({ label: t('home.avatar.save'), glyph: 'check', cls: 'btn--sun av-save', key: 'av:save', type: actFor('setAvatar'), quiet: ['ALREADY_DONE'],
+      args: () => lookPatch(draft), gate: () => (same(draft, saved()) ? { code: 'ALREADY_DONE', hint: { done: t('home.avatar.saved') } } : null),
+      after: (r) => { if (r?.ok) ctx.ui.toast(t('home.avatar.toast'), { kind: 'ok' }); paintPreview(); } });
+    const reset = h('button.btn.btn--paper.pn-sm', { type: 'button', on: { click: () => { draft = { ...saved() }; renderGroups(); paintPreview(); } } }, t('home.avatar.reset'));
+    const dice = h('button.btn.btn--paper.pn-sm', { type: 'button', 'aria-label': t('home.avatar.diceAria'),
       on: { click: () => {
         draft = { ...draft, hair: pickRandom(LOOKS.hair).id, hairColor: pickRandom(LOOKS.hairColor).id, top: pickRandom(LOOKS.top).id,
           bottom: pickRandom(LOOKS.bottom).id, hat: pickRandom(LOOKS.hats).id };
         renderGroups(); paintPreview();
-      } } }, svgIcon('star', 18), 'Surprise me');
+      } } }, svgIcon('star', 18), t('home.avatar.dice'));
 
     fill(body, h('div.av-wrap',
       h('div.av-left', preview, status, h('div.av-acts', save, h('div.av-acts-row', reset, dice)),
-        h('p.av-note', 'Only the look changes: your farmer, tools and pet stay the same. Your partner sees it straight away.')),
+        h('p.av-note', t('home.avatar.note'))),
       groupsEl));
     renderGroups();
     paintPreview();

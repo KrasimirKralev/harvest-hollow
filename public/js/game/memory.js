@@ -9,6 +9,7 @@
 //   mem.photo(blob)                             the photo just taken with P: a 'photo' page asked for within two
 //                                               minutes keeps THIS picture instead of a new snapshot
 //   mem.count() -> number                       pictures kept this session (tests)
+//   forgetPictures(seed, idb?) -> Promise<n>    every picture of one farm, gone (the farm was deleted: main.js gate)
 //
 // When: the CONFIRMED `memoryPage` event (a delta, never the prediction: a refused page must leave no picture), at
 // most once per page number. Size: the capture is scaled to MAX_W pixels wide as a JPEG (a page is ~60-120 KB, the
@@ -75,6 +76,34 @@ async function shrink(blob) {
   } catch {
     return blob;
   }
+}
+
+/**
+ * Forget every picture this browser kept for one farm (its seed): the farm was deleted. Resolves how many went (0 when
+ * IndexedDB is missing or blocked). Never throws.
+ */
+export function forgetPictures(seed, idb = typeof indexedDB !== 'undefined' ? indexedDB : null) {
+  if (!idb || !Number.isSafeInteger(seed) || typeof IDBKeyRange === 'undefined') return Promise.resolve(0);
+  return new Promise((resolve) => {
+    try {
+      const req = idb.open(DB, 1);
+      req.onupgradeneeded = () => { req.result.createObjectStore(STORE); };
+      req.onerror = () => resolve(0);
+      req.onblocked = () => resolve(0);
+      req.onsuccess = () => {
+        const db = req.result;
+        try {
+          const t = db.transaction(STORE, 'readwrite');
+          const range = IDBKeyRange.bound(`${seed}:`, `${seed}:\uffff`);
+          const count = t.objectStore(STORE).count(range);
+          t.objectStore(STORE).delete(range);
+          t.oncomplete = () => { db.close(); resolve(count.result ?? 0); };
+          t.onerror = () => { db.close(); resolve(0); };
+          t.onabort = () => { db.close(); resolve(0); };
+        } catch { db.close(); resolve(0); }
+      };
+    } catch { resolve(0); }
+  });
 }
 
 export function createMemory({ store, view, idb } = {}) {

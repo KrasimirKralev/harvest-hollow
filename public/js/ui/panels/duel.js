@@ -11,20 +11,21 @@
 import { DUEL } from '../../../../shared/content/index.js';
 import { h, icon, svgIcon, createKit, fill, playerMark } from './kit.js';
 import { kv } from '../dom.js';
-import { banner, lockedBody, toTop } from './fair.js';
+import { banner, lockedBody, toTop, tParts } from './fair.js';
 import { probe, passes } from './core.js';
 import { duelOf, duelOpen, duelKinds, kindOpen, duelScoreText, levelOf, actFor, canAct, ARGS, duelLiveBuild, crownsOf } from './league-rules.js';
 import { hubNav, hubSig, crownArt, rewardChips } from './league-kit.js';
+import { t, lang, ctext, onLang } from '../../i18n/index.js';
 
 const DAY = 86_400_000;
 
 /** A content line with its {name} and {duel} filled in. */
-const line = (key, vars) => String(DUEL?.lines?.[key] ?? '').replace(/\{(\w+)\}/g, (_, k) => vars[k] ?? '');
+const line = (key, vars) => String(ctext('DUEL', 'lines', key, DUEL?.lines?.[key] ?? '')).replace(/\{(\w+)\}/g, (_, k) => vars[k] ?? '');
 
 /** Everything the duel panel draws (pure): duelOf + { unlock, level, names, kinds (with `open`), scores as text }. */
 export function duelView(state, pid, now) {
   const d = duelOf(state, pid, now);
-  const name = (p) => state.players?.[p]?.name ?? 'Your partner';
+  const name = (p) => state.players?.[p]?.name ?? t('league.duel.partner');
   const others = Object.keys(state.players ?? {}).filter((p) => p !== pid).sort();
   const them = d.them ?? others[0] ?? null;
   const scale = d.kind?.scale ?? 1;
@@ -32,15 +33,15 @@ export function duelView(state, pid, now) {
     kinds: duelKinds().map((k) => ({ ...k, open: kindOpen(state, k) })),
     myName: name(pid), theirName: them ? name(them) : null, hasPartner: Boolean(them),
     mineText: duelScoreText(d.mine, scale), theirsText: duelScoreText(d.theirs, scale),
-    crownNames: d.crown.map((p) => (p === pid ? 'You' : name(p))), left: Math.max(0, (d.end || 0) - now) };
+    crownNames: d.crown.map((p) => (p === pid ? t('league.duel.you') : name(p))), left: Math.max(0, (d.end || 0) - now) };
 }
 
 /** "3 days left" / "5 hours left" / "42 min left" (the chip drops " left": a bare "minutes" said nothing). */
-export function leftWords(ms) {
-  if (ms >= 2 * DAY) return `${Math.floor(ms / DAY)} days left`;
-  if (ms >= DAY) return '1 day left';
+export function leftWords(ms, { short = false } = {}) {
+  const k = short ? 'league.duel.leftShort' : 'league.duel.left';
+  if (ms >= DAY) return t(`${k}.days`, { n: Math.floor(ms / DAY) });
   const hr = Math.floor(ms / 3_600_000);
-  return hr >= 2 ? `${hr} hours left` : hr === 1 ? '1 hour left' : `${Math.max(1, Math.ceil(ms / 60_000))} min left`;
+  return hr >= 1 ? t(`${k}.hours`, { n: hr }) : t(`${k}.min`, { n: Math.max(1, Math.ceil(ms / 60_000)) });
 }
 
 /** The result in words, from one farmer's side ("Mia wins the Pie Bake-off, 14 to 11"). */
@@ -50,13 +51,13 @@ export function resultLine(v) {
   const sc = l.kind.scale ?? 1;
   const a = duelScoreText(l.mine, sc);
   const b = duelScoreText(l.theirs, sc);
-  if (!l.scored) return `The ${l.kind.name} ended without a score: no crown this time`;
-  if (l.tie) return `A tie in the ${l.kind.name}, ${a} each`;
-  return l.win === v.me ? `You won the ${l.kind.name}, ${a} to ${b}` : `${v.theirName} won the ${l.kind.name}, ${b} to ${a}`;
+  if (!l.scored) return t('league.duel.res.none', { duel: l.kind.name });
+  if (l.tie) return t('league.duel.res.tie', { duel: l.kind.name, a });
+  return l.win === v.me ? t('league.duel.res.won', { duel: l.kind.name, a, b }) : t('league.duel.res.lost', { name: v.theirName, duel: l.kind.name, a: b, b: a });
 }
 
 export const duelPanel = {
-  title: 'Friendly Duel',
+  get title() { return t('league.duel.friendly'); },
   icon: 'ribbon_trophy',
   size: 'wide',
   topics: ['duel', 'players', 'xp', 'meta', 'track', 'fair'],
@@ -76,24 +77,20 @@ export const duelPanel = {
       const now = ctx.now();
       const v = duelView(st, ctx.store.pid, now);
       if (!v.open) {
-        const lines = [
-          'A playful contest between the two of you until Sunday evening: the most Pumpkins, pies or orders.',
-          'Only if you both want it. Nothing on the farm changes: everything still goes to the shared barn.',
-          'The winner wears a crown on the name card for a week; you both get Hearts.',
-        ];
+        const lines = [t('league.duel.locked.1'), t('league.duel.locked.2'), t('league.duel.locked.3')];
         if (v.live && v.level >= v.unlock && !v.hasPartner) {
           // the level is there, the partner is not: say that, not "opens at level N" or "coming soon"
-          fill(body, hubNav(ctx, 'duel'), h('div.wk-locked', banner('h', 'Friendly Duel', 'A duel needs two farmers', { focus: [0.72, 0.5], cls: 'lg-banner' }),
-            h('div.wk-locked-card', svgIcon('heart', 36), h('ul', ...[...lines, 'It opens once your partner has joined the farm.'].map((l) => h('li', l))))));
+          fill(body, hubNav(ctx, 'duel'), h('div.wk-locked', banner('h', t('league.duel.friendly'), t('league.duel.needTwo'), { focus: [0.72, 0.5], cls: 'lg-banner' }),
+            h('div.wk-locked-card', svgIcon('heart', 36), h('ul', ...[...lines, t('league.duel.partnerJoins')].map((l) => h('li', l))))));
           return;
         }
-        fill(body, hubNav(ctx, 'duel'), lockedBody('h', 'Friendly Duel', lines, v.unlock, v.level, v.live));
+        fill(body, hubNav(ctx, 'duel'), lockedBody('h', t('league.duel.friendly'), lines, v.unlock, v.level, v.live));
         return;
       }
-      const sub = v.phase === 'live' ? `${v.kind.name} · ${leftWords(v.left)}` : 'Just for fun: the farm stays one farm';
+      const sub = v.phase === 'live' ? `${v.kind.name} · ${leftWords(v.left)}` : t('league.duel.forFun');
       fill(body,
         hubNav(ctx, 'duel'),
-        banner('h', 'Friendly Duel', sub, { cls: 'lg-banner', focus: [0.72, 0.5] }),
+        banner('h', t('league.duel.friendly'), sub, { cls: 'lg-banner', focus: [0.72, 0.5] }),
         v.phase === 'live' || v.phase === 'over' ? scoreboard(st, v)
           : v.phase === 'invited' ? invitedCard(st, v)
             : v.phase === 'asked' ? askedCard(st, v)
@@ -110,31 +107,31 @@ export const duelPanel = {
       const kinds = v.kinds.map((k) => h(`button.lg-kind${chosen === k.id ? '.on' : ''}${k.open ? '' : '.locked'}`, {
         type: 'button', role: 'radio', 'aria-checked': String(chosen === k.id), 'aria-disabled': k.open ? null : 'true', dataset: { kind: k.id },
         on: { click: () => { if (k.open) { pickKind = k.id; update(true); } } },
-      }, h('span.lg-kind-ic', icon(k.icon, { size: 52, alt: '' })), h('span.lg-kind-text', h('b', k.name), h('small', k.open ? k.text : `Opens at level ${k.unlock}`))));
-      const invite = kit.button({ label: `Invite ${v.theirName}`, cls: 'btn--sun', key: 'duel:invite',
+      }, h('span.lg-kind-ic', icon(k.icon, { size: 52, alt: '' })), h('span.lg-kind-text', h('b', k.name), h('small', k.open ? k.text : t('league.duel.opensAt', { n: k.unlock })))));
+      const invite = kit.button({ label: t('league.duel.invite', { name: v.theirName }), cls: 'btn--sun', key: 'duel:invite',
         type: actFor('duelInvite'), args: () => ARGS.duelInvite(chosen ?? first?.id ?? ''),
-        gate: () => (chosen ? null : { code: 'BAD_ARGS', hint: { text: 'Pick a duel first' } }),
-        hint: { texts: { OCCUPIED: 'A duel is already on', NOT_READY: 'The week is closing: invite again from Monday', LOCKED: 'Not open yet' } } });
+        gate: () => (chosen ? null : { code: 'BAD_ARGS', hint: { text: t('league.duel.pickFirst') } }),
+        hint: { texts: { OCCUPIED: t('league.duel.occupied'), NOT_READY: t('league.duel.closing'), LOCKED: t('league.duel.notOpen') } } });
       return h('section.lg-duel-pick',
-        h('h3.pn-h', h('span', `Challenge ${v.theirName}`)),
-        h('div.lg-kinds', { role: 'radiogroup', 'aria-label': 'Which duel' }, ...kinds),
-        h('div.lg-duel-acts', invite, h('small', `${v.theirName} can say yes or "not this week". It runs until Sunday 20:00 and only counts what each of you does.`)));
+        h('h3.pn-h', h('span', t('league.duel.challenge', { name: v.theirName }))),
+        h('div.lg-kinds', { role: 'radiogroup', 'aria-label': t('league.duel.which') }, ...kinds),
+        h('div.lg-duel-acts', invite, h('small', t('league.duel.inviteNote', { name: v.theirName }))));
     }
 
     function askedCard(st, v) {
       return h('section.lg-duel-wait', h('span.lg-duel-ic', icon(v.kind.icon, { size: 60, alt: '' })),
-        h('div', h('b', `You invited ${v.theirName} to the ${v.kind.name}`),
-          h('small', `Waiting for an answer. The invitation lapses ${v.lapseAt ? whenText(v.lapseAt, st) : 'on Sunday evening'}.`)),
-        kit.button({ label: 'Take it back', cls: 'btn--small btn--paper', key: 'duel:cancel', type: actFor('duelCancel'), args: ARGS.duelCancel() }));
+        h('div', h('b', t('league.duel.asked', { name: v.theirName, duel: v.kind.name })),
+          h('small', v.lapseAt ? t('league.duel.lapses', { when: whenText(v.lapseAt, st) }) : t('league.duel.lapsesSunday'))),
+        kit.button({ label: t('league.duel.takeBack'), cls: 'btn--small btn--paper', key: 'duel:cancel', type: actFor('duelCancel'), args: ARGS.duelCancel() }));
     }
 
     function invitedCard(st, v) {
       return h('section.lg-duel-invite', h('span.lg-duel-ic', icon(v.kind.icon, { size: 60, alt: '' })),
-        h('div', h('b', line('invite', { name: v.theirName, duel: v.kind.name }) || `${v.theirName} challenges you to the ${v.kind.name}!`),
-          h('small', `${v.kind.text}. The winner wears the crown for a week.`)),
+        h('div', h('b', line('invite', { name: v.theirName, duel: v.kind.name }) || t('league.duel.challenges', { name: v.theirName, duel: v.kind.name })),
+          h('small', t('league.duel.invitedNote', { text: v.kind.text }))),
         h('div.lg-duel-acts',
-          kit.button({ label: 'Accept', cls: 'btn--sun', key: 'duel:yes', type: actFor('duelAccept'), args: ARGS.duelAccept() }),
-          kit.button({ label: 'Not this week', cls: 'btn--small btn--paper', key: 'duel:no', type: actFor('duelDecline'), args: ARGS.duelDecline() })));
+          kit.button({ label: t('league.duel.accept'), cls: 'btn--sun', key: 'duel:yes', type: actFor('duelAccept'), args: ARGS.duelAccept() }),
+          kit.button({ label: t('league.duel.notThisWeek'), cls: 'btn--small btn--paper', key: 'duel:no', type: actFor('duelDecline'), args: ARGS.duelDecline() })));
     }
 
     function scoreboard(st, v) {
@@ -144,34 +141,34 @@ export const duelPanel = {
       const side = (pid, p, text, lead) => h(`div.lg-duel-side${lead ? '.lead' : ''}`, { style: { '--who': p?.color ?? '#C9A36A' } },
         lead ? h('span.lg-duel-crown', crownArt(34)) : null,
         p ? playerMark(pid, p, { size: 34 }) : null,
-        h('b.lg-duel-n', text), h('small', pid === v.me ? 'You' : p?.name ?? ''));
+        h('b.lg-duel-n', text), h('small', pid === v.me ? t('league.duel.you') : p?.name ?? ''));
       const timer = h('b');
-      if (v.phase === 'live') kit.timer(timer, { end: v.end, doneText: 'time!' });
-      return h('section.lg-duel-board', { 'aria-label': `${v.kind.name}: you ${v.mineText}, ${v.theirName} ${v.theirsText}` },
+      if (v.phase === 'live') kit.timer(timer, { end: v.end, doneText: t('league.duel.time') });
+      return h('section.lg-duel-board', { 'aria-label': t('league.duel.boardLabel', { duel: v.kind.name, mine: v.mineText, name: v.theirName, theirs: v.theirsText }) },
         h('div.lg-duel-kind', icon(v.kind.icon, { size: 40, alt: '' }), h('div', h('b', v.kind.name), h('small', v.kind.text))),
-        h('div.lg-duel-score', side(v.me, me, v.mineText, v.lead === 'me'), h('span.lg-duel-vs', 'vs'), side(v.them, them, v.theirsText, v.lead === 'them')),
+        h('div.lg-duel-score', side(v.me, me, v.mineText, v.lead === 'me'), h('span.lg-duel-vs', t('league.duel.vs')), side(v.them, them, v.theirsText, v.lead === 'them')),
         // (custom names: --a is a registered <angle> elsewhere, panels.css @property)
         h('div.lg-duel-tug', { 'aria-hidden': 'true', style: { '--lg-tug-a': me?.color ?? '#2BB3A3', '--lg-tug-b': them?.color ?? '#FF7A6B', '--p': String(v.mine / sum) } },
           h('i.a'), h('i.b'), h('span.lg-duel-knot')),
-        h('p.lg-duel-clock', svgIcon('sun', 18), v.phase === 'live' ? h('span', 'Ends in ', timer) : h('span', 'Time! The result comes in a moment.')),
-        h('p.wk-muted', 'Everything you make still goes to the shared barn and pays the farm. The duel only counts.'));
+        h('p.lg-duel-clock', svgIcon('sun', 18), v.phase === 'live' ? h('span', tParts('league.duel.endsIn', { timer })) : h('span', t('league.duel.timeUp'))),
+        h('p.wk-muted', t('league.duel.onlyCounts')));
     }
 
     function lastCard(st, v) {
-      return h('section.wk-card.lg-duel-last', h('h3.pn-h', h('span', 'The last duel')),
+      const crownKey = v.crownNames.length > 1 ? 'league.duel.crownBoth' : v.crown[0] === v.me ? 'league.duel.crownYou' : 'league.duel.crownThem';
+      return h('section.wk-card.lg-duel-last', h('h3.pn-h', h('span', t('league.duel.last'))),
         h('p', h('b', resultLine(v)), '.'),
         v.crown.length ? h('p.lg-duel-crownline', crownArt(26),
-          `${v.crownNames.join(' and ')} ${v.crownNames.length > 1 || v.crown[0] === v.me ? 'wear' : 'wears'} the crown until `,
-          h('b', whenText(v.last.end + (DUEL?.crown?.ms ?? 7 * DAY), st)), '.') : null);
+          ...tParts(crownKey, { names: v.crownNames.join(t('league.duel.and')), when: h('b', whenText(v.last.end + (DUEL?.crown?.ms ?? 7 * DAY), st)) })) : null);
     }
 
     function rulesCard() {
-      return h('section.wk-card.wk-rules', h('h3.pn-h', h('span', 'How a duel works')),
+      return h('section.wk-card.wk-rules', h('h3.pn-h', h('span', t('league.duel.rules.head'))),
         h('ul.wk-bullets',
-          h('li', 'Opt-in: one of you invites, the other says yes. It runs until the Fair closes on Sunday at 20:00.'),
-          h('li', 'Pumpkins count for whoever planted the plot, pies for whoever started the oven, orders for whoever filled them: helping your partner still helps them.'),
-          h('li', 'It only counts: every harvest, pie and order still belongs to the farm, as always. Coins, goods and XP never change.'),
-          h('li', `The winner wears the crown for a week (a tie crowns you both). You both get ${DUEL?.rewards?.hearts ?? 2} Hearts.`)));
+          h('li', t('league.duel.rules.1')),
+          h('li', t('league.duel.rules.2')),
+          h('li', t('league.duel.rules.3')),
+          h('li', t('league.duel.rules.4', { n: DUEL?.rewards?.hearts ?? 2 }))));
     }
 
     update(true);
@@ -183,7 +180,7 @@ export const duelPanel = {
 /** "Sun 12 Oct, 20:00" in the farm's zone. */
 function whenText(ms, state) {
   try {
-    return new Intl.DateTimeFormat('en-GB', { timeZone: state?.meta?.tz || 'UTC', weekday: 'short', day: 'numeric', month: 'short',
+    return new Intl.DateTimeFormat(lang() === 'bg' ? 'bg-BG' : 'en-GB', { timeZone: state?.meta?.tz || 'UTC', weekday: 'short', day: 'numeric', month: 'short',
       hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(ms);
   } catch { return ''; }
 }
@@ -191,38 +188,38 @@ function whenText(ms, state) {
 // ---- the result card ------------------------------------------------------------------------------------------
 
 export const duelResultPanel = {
-  title: 'The duel is over',
+  get title() { return t('league.duel.over'); },
   icon: 'ribbon_trophy',
   size: 'card',
   mount(body, ctx) {
     const st = ctx.store.state;
     const v = duelView(st, ctx.store.pid, ctx.now());
     const l = v.last;
-    if (!l) { fill(body, h('p.wk-muted', 'No duel has finished yet.')); return {}; }
+    if (!l) { fill(body, h('p.wk-muted', t('league.duel.noneYet'))); return {}; }
     const iWon = l.win === v.me;
     const winner = l.tie ? null : l.win;
     const wp = winner ? st.players[winner] : null;
     const sc = l.kind.scale ?? 1;
     const a = duelScoreText(l.mine, sc);
     const b = duelScoreText(l.theirs, sc);
-    const title = l.tie ? 'A dead heat!' : iWon ? 'You win the crown!' : `${v.theirName} wins the crown!`;
-    const lead = l.tie ? `${a} each in the ${l.kind.name}. Two crowns this week: you both wear one.`
-      : iWon ? `${a} to ${b} in the ${l.kind.name}. Wear it well for a week (and share the pie).`
-        : `${b} to ${a} in the ${l.kind.name}. A worthy rival: there is always a rematch.`;
+    const title = l.tie ? t('league.duel.card.tie') : iWon ? t('league.duel.card.won') : t('league.duel.card.lost', { name: v.theirName });
+    const lead = l.tie ? t('league.duel.card.tieLead', { a, duel: l.kind.name })
+      : iWon ? t('league.duel.card.wonLead', { a, b, duel: l.kind.name })
+        : t('league.duel.card.lostLead', { a: b, b: a, duel: l.kind.name });
     const rematch = canAct('duelInvite') && passes(probe(ctx.store, actFor('duelInvite'), ARGS.duelInvite(l.kind.id)));
     const first = l.scored && v.n === 1 && DUEL?.rewards?.firstDecor;
     fill(body, h(`div.lg-dres${l.tie ? '.tie' : iWon ? '.won' : '.lost'}`, { style: wp ? { '--who': wp.color } : null },
       h('div.lg-dres-art', crownArt(112), l.tie
         ? h('span.lg-dres-who.both', ...[v.me, v.them].filter((p) => st.players?.[p]).map((p) => playerMark(p, st.players[p], { size: 40 })))
         : wp ? h('span.lg-dres-who', playerMark(winner, wp, { size: 44 })) : null),
-      ctx.args?.catchUp ? h('p.wk-cere-away', 'While you were away, the duel ended') : null,
+      ctx.args?.catchUp ? h('p.wk-cere-away', t('league.duel.away')) : null,
       h('h2.lg-dres-title', title),
       h('p.lg-dres-lead', lead),
-      h('div.lg-dres-pay', h('span', 'You both get'), rewardChips({ hearts: DUEL?.rewards?.hearts ?? 2 }),
+      h('div.lg-dres-pay', h('span', t('league.duel.bothGet')), rewardChips({ hearts: DUEL?.rewards?.hearts ?? 2 }),
         first ? rewardChips({ decor: first }) : null),
       h('div.wk-cere-acts',
-        h('button.btn.btn--sun', { type: 'button', on: { click: () => ctx.close() } }, l.tie ? 'Well played' : iWon ? 'Hooray!' : 'Congratulations!'),
-        rematch ? h('button.btn.btn--paper.btn--small', { type: 'button', on: { click: () => { ctx.close(); ctx.ui.panels.open('duel', { kind: l.kind.id }); } } }, 'Rematch?') : null)));
+        h('button.btn.btn--sun', { type: 'button', on: { click: () => ctx.close() } }, l.tie ? t('league.duel.card.wellPlayed') : iWon ? t('weekly.cere.hooray') : t('league.duel.card.congrats')),
+        rematch ? h('button.btn.btn--paper.btn--small', { type: 'button', on: { click: () => { ctx.close(); ctx.ui.panels.open('duel', { kind: l.kind.id }); } } }, t('league.duel.card.rematch')) : null)));
     return {};
   },
 };
@@ -264,10 +261,10 @@ export function startDuel(ui, store) {
   if (typeof window !== 'undefined') window.addEventListener('resize', onResize);
   const offLayout = ui.layout?.on?.(() => setTimeout(place, 50));
   let sig = '';
-  let t = 0;
+  let tmr = 0;
   let live = false;
   const draw = () => {
-    t = 0;
+    tmr = 0;
     const st = store.state;
     if (!st || !store.pid || !chip) return;
     const v = duelChipView(st, store.pid, store.now());
@@ -279,18 +276,18 @@ export function startDuel(ui, store) {
     place();
     chip.classList.toggle('invite', v.mode === 'invite');
     if (v.mode === 'invite') {
-      chip.setAttribute('aria-label', `${v.from} challenges you to the ${v.kind.name}. Open the duel`);
-      chip.replaceChildren(icon(v.kind.icon, { size: 26, alt: '' }), h('span', h('b', v.from), ' challenges you!'));
+      chip.setAttribute('aria-label', t('league.duel.chip.inviteLabel', { name: v.from, duel: v.kind.name }));
+      chip.replaceChildren(icon(v.kind.icon, { size: 26, alt: '' }), h('span', ...tParts('league.duel.chip.invite', { name: h('b', v.from) })));
       return;
     }
     const me = st.players[v.me];
     const them = v.them ? st.players[v.them] : null;
-    chip.setAttribute('aria-label', `${v.kind.name}: you ${v.mine}, ${them?.name ?? 'your partner'} ${v.theirs}, ${leftWords(v.left)}. Open the duel`);
+    chip.setAttribute('aria-label', t('league.duel.chip.label', { duel: v.kind.name, mine: v.mine, name: them?.name ?? t('weekly.partner'), theirs: v.theirs, left: leftWords(v.left) }));
     chip.replaceChildren(icon(v.kind.icon, { size: 26, alt: '' }),
       h(`span.lg-chip-side${v.lead === 'me' ? '.lead' : ''}`, me ? playerMark(v.me, me, { size: 18 }) : null, h('b', v.mine)),
       h('span.lg-chip-dash', '–'),
       h(`span.lg-chip-side${v.lead === 'them' ? '.lead' : ''}`, h('b', v.theirs), them ? playerMark(v.them, them, { size: 18 }) : null),
-      h('small', v.left > 0 ? leftWords(v.left).replace(' left', '') : 'time!'));
+      h('small', v.left > 0 ? leftWords(v.left, { short: true }) : t('league.duel.time')));
   };
   // the crown on the winner's name card for a week (GDD §6.2): a small crown over the farmer's face in the HUD. The
   // HUD patches its cards in place and owns their classes, so the crown is the card's own child with a data flag.
@@ -308,13 +305,15 @@ export function startDuel(ui, store) {
       const on = Boolean(pid) && crowned.has(pid);
       let c = li.querySelector('.lg-name-crown');
       if (on && !c) {
-        c = h('span.lg-name-crown', { title: `${DUEL?.crown?.title ?? 'Duel Champion'}: won the Friendly Duel`, 'aria-hidden': 'true' }, crownArt(26));
+        c = h('span.lg-name-crown', { title: t('league.duel.crownTip', { title: ctext('DUEL', 'crown', 'title', DUEL?.crown?.title ?? t('league.duel.champion')) }), 'aria-hidden': 'true' }, crownArt(26));
         li.append(c);
       } else if (!on && c) c.remove();
       if (on) li.dataset.lgCrown = '1'; else delete li.dataset.lgCrown;
     }
   };
-  const kick = () => { if (!t) t = setTimeout(() => { draw(); drawCrowns(); }, 250); };
+  const kick = () => { if (!tmr) tmr = setTimeout(() => { draw(); drawCrowns(); }, 250); };
+  // a language switch re-words the chip and the crowns' tips at once
+  const offLang = onLang(() => { sig = ''; crownSig = ''; for (const c of document.querySelectorAll?.('.lg-name-crown') ?? []) c.remove(); kick(); });
 
   // the result card: once per finished duel and page; markSeen tells the rules, a local note covers a lost one
   const shown = new Set();
@@ -344,7 +343,7 @@ export function startDuel(ui, store) {
   kick();
   setTimeout(check, 0);
   return () => {
-    clearTimeout(t); clearInterval(iv); for (const f of offs) f(); chip?.remove();
+    clearTimeout(tmr); clearInterval(iv); for (const f of offs) f(); chip?.remove(); offLang();
     if (typeof document !== 'undefined') for (const c of document.querySelectorAll?.('.lg-name-crown') ?? []) c.remove();
     if (typeof window !== 'undefined') window.removeEventListener('resize', onResize);
     if (typeof offLayout === 'function') offLayout();

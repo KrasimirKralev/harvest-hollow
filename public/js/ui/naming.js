@@ -7,16 +7,30 @@ import { ACTIONS } from '../../../shared/rules/index.js';
 import { currentFarmStep } from '../../../shared/rules/actions/tutorial.js';
 import { h, kv } from './dom.js';
 import { grandmaPortrait, namingDue } from './tutorial.js';
+import { t } from '../i18n/index.js';
 
 export const NAME_MAX = 24;
-const FIRST = ['Sunny', 'Honeybee', 'Willow', 'Clover', 'Maple', 'Bluebell', 'Golden', 'Two Hearts', 'Buttercup',
-  'Hazel', 'Puddle', 'Apple Blossom', 'Little', 'Moonlit', 'Dandelion', 'Cosy', 'Bramble', 'Sweetpea'];
-const LAST = ['Hollow', 'Acres', 'Meadow', 'Farm', 'Fields', 'Patch', 'Orchard', 'Homestead', 'Valley', 'Corner', 'Hill', 'Nook'];
+/**
+ * The name-idea words of the language in effect (catalog 'social.naming.first' / '.last', '|'-separated). A first word
+ * may give its m/f/n/pl forms as 'Слънчев/Слънчева/Слънчево/Слънчеви' and a last word its gender as 'Ливада:f': the
+ * adjective then agrees with the noun (Bulgarian); English words have neither.
+ */
+const GENDERS = { m: 0, f: 1, n: 2, pl: 3 };
+function words() {
+  const first = t('social.naming.first').split('|').map((w) => w.split('/'));
+  const last = t('social.naming.last').split('|').map((w) => { const [word, g] = w.split(':'); return { word, g: GENDERS[g] ?? 0 }; });
+  return { first, last };
+}
 
 /** Three different name ideas (UI only: the randomness never reaches the rules). */
 export function suggestions(n = 3, rnd = Math.random) {
+  const { first, last } = words();
   const out = new Set();
-  while (out.size < n) out.add(`${FIRST[Math.floor(rnd() * FIRST.length)]} ${LAST[Math.floor(rnd() * LAST.length)]}`);
+  while (out.size < n) {
+    const a = first[Math.floor(rnd() * first.length)];
+    const b = last[Math.floor(rnd() * last.length)];
+    out.add(`${a[b.g] ?? a[0]} ${b.word}`);
+  }
   return [...out];
 }
 
@@ -31,7 +45,7 @@ export function createNaming(S) {
   let openedAuto = false;
 
   ui.panels.register('naming', {
-    title: 'Name your farm',
+    get title() { return t('social.naming.title'); },
     size: 'card',
     modal: true,
     mount(body, ctx) {
@@ -39,13 +53,13 @@ export function createNaming(S) {
       const named = Boolean(store.state && store.state.farm.coop && store.state.farm.coop.named);
       const carved = h('div.carved', named ? current : '');
       const input = h('input.field', {
-        type: 'text', maxlength: String(NAME_MAX), placeholder: 'Our farm is called…', 'aria-label': 'Farm name',
+        type: 'text', maxlength: String(NAME_MAX), placeholder: t('social.naming.placeholder'), 'aria-label': t('settings.farm.name'),
         value: named ? current : '', autocomplete: 'off', spellcheck: 'false',
       });
-      const go = h('button.btn', { type: 'button' }, 'Carve it!');
+      const go = h('button.btn', { type: 'button' }, t('social.naming.carve'));
       const paint = () => {
         const v = cleanName(input.value);
-        carved.textContent = v || 'Our farm';
+        carved.textContent = v || t('social.naming.ourFarm');
         carved.classList.toggle('empty', !v);
         go.disabled = !v || (named && v === current);
       };
@@ -53,28 +67,27 @@ export function createNaming(S) {
       const chips = h('div.chips');
       const fill = () => {
         chips.replaceChildren(...suggestions(3).map((s) => h('button.chip', { type: 'button', on: { click: () => { input.value = s; paint(); input.focus(); } } }, s)),
-          h('button.chip', { type: 'button', 'aria-label': 'More ideas', on: { click: fill } }, '↻ More'));
+          h('button.chip', { type: 'button', 'aria-label': t('social.naming.moreIdeas'), on: { click: fill } }, t('social.naming.more')));
       };
       fill();
       const submit = () => {
         const v = cleanName(input.value);
         if (!v) { input.focus(); return; }
-        if (!ACTIONS.nameFarm) { ui.toast('Naming the farm arrives with the next update.', { kind: 'info' }); return; }
+        if (!ACTIONS.nameFarm) { ui.toast(t('social.naming.soon'), { kind: 'info' }); return; }
         const r = S.controller.do('nameFarm', { name: v });
         if (r && r.ok) { kv.set(laterKey(), false); ctx.close(); }
       };
       go.addEventListener('click', submit);
       input.addEventListener('keydown', (e) => { if (e.key === 'Enter') submit(); });
       const partner = Object.keys(store.state?.players ?? {}).find((p) => p !== store.pid);
-      const together = partner ? ` with ${store.state.players[partner].name}` : '';
       body.append(h('div.dlg',
         h('div', { style: 'display:flex;gap:12px;align-items:center;text-align:left' }, grandmaPortrait(64),
           h('p.body', { style: 'margin:0' }, named
-            ? 'A new name? The old sign comes down and the new one goes up on the gate.'
-            : `Every good farm needs a name. Pick one${together}: I will carve it on the gate sign.`)),
+            ? t('social.naming.rename')
+            : partner ? t('social.naming.askWith', { name: store.state.players[partner].name }) : t('social.naming.ask'))),
         h('div.sign', carved), h('div', { style: 'height:22px' }),
         input, chips,
-        h('div.acts', h('button.btn.btn--paper', { type: 'button', on: { click: () => { kv.set(laterKey(), true); ctx.close(); } } }, 'Later'), go)));
+        h('div.acts', h('button.btn.btn--paper', { type: 'button', on: { click: () => { kv.set(laterKey(), true); ctx.close(); } } }, t('multi.invite.later')), go)));
       paint();
       setTimeout(() => input.focus({ preventScroll: true }), 60);
     },
@@ -95,12 +108,12 @@ export function createNaming(S) {
     if (!ev || ev.e !== 'named' || ev.what !== 'farm') return;
     if (by && by !== store.pid) {
       if (ui.panels.isOpen('naming')) ui.panels.close('naming');
-      const who = store.state?.players?.[by]?.name ?? 'Your partner';
-      ui.banner({ id: 'named', ribbon: 'Carved on the gate', message: `${who} named the farm "${ev.text}" ♥`, ttl: 7000,
-        actions: [{ label: 'Love it', kind: 'go', fn: () => {} }, { label: 'Suggest another', kind: 'paper', fn: () => ui.panels.open('naming') }] });
+      const who = store.state?.players?.[by]?.name ?? t('common.partner');
+      ui.banner({ id: 'named', ribbon: t('social.naming.carved'), message: t('social.naming.named', { name: who, farm: ev.text }), ttl: 7000,
+        actions: [{ label: t('social.naming.love'), kind: 'go', fn: () => {} }, { label: t('social.naming.other'), kind: 'paper', fn: () => ui.panels.open('naming') }] });
     }
   });
-  for (const t of ['tut', 'coop', 'name']) store.subscribe(t, () => setTimeout(maybeOpen, 600));
+  for (const topic of ['tut', 'coop', 'name']) store.subscribe(topic, () => setTimeout(maybeOpen, 600));
 
   return {
     open() { ui.panels.open('naming'); },

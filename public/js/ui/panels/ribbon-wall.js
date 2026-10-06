@@ -8,16 +8,22 @@
 import { RIBBON_WALL, RIBBON_REWARDS } from '../../../../shared/content/index.js';
 import { ribbonPoints } from '../../../../shared/rules/actions/ribbons.js';
 import { ribbonsView } from './goals-model.js';
-import { h, fmt, createKit, bar, pill, playerMark } from './kit.js';
+import { h, fmt, createKit, bar, pill, playerMark, phoneTitle } from './kit.js';
 import { rosette, s } from './art.js';
+import { t, has, ctext } from '../../i18n/index.js';
 
 const INK = '#3E2612';
-const TIER_WORD = ['', 'Bronze', 'Silver', 'Gold'];
+/** Bronze / Silver / Gold by tier (1..3), in the language in effect. */
+const TIER_WORD = new Proxy([], { get: (a, k) => (['1', '2', '3'].includes(k) ? t(`collect.wall.tier.${k}`) : k === '0' ? '' : a[k]) });
+/** The letter on a rosette: B / S / G (Бронз, Сребро, Злато: Б / С / З). */
+const tierLetter = (n) => (n >= 1 && n <= 3 ? t(`collect.wall.letter.${n}`) : '');
+/** A wall tier's name: the content's, through lane B's texts or this lane's catalog. */
+const tierName = (x) => ctext('RIBBON_WALL', x.unlock, 'name', has(`collect.wall.name.${x.unlock}`) ? t(`collect.wall.name.${x.unlock}`) : x.name);
 
 /** Where each earned ribbon hangs: the shared rows (farm + together), then each farmer's own. Pure. */
 export function wallView(state, pid) {
   const points = ribbonPoints(state);
-  const tiers = RIBBON_WALL.map((t, i) => ({ ...t, i, open: points >= t.points }));
+  const tiers = RIBBON_WALL.map((x, i) => ({ ...x, name: tierName(x), i, open: points >= x.points }));
   const next = tiers.find((t) => !t.open) ?? null;
   // the trail fills segment by segment (10, 25, 60, 120 sit at equal spacing): a point always moves the marker
   let track = 1;
@@ -28,7 +34,7 @@ export function wallView(state, pid) {
   const pids = Object.keys(state.players ?? {}).sort();
   const me = pids.includes(pid) ? pid : pids[0] ?? null;
   const mine = me ? ribbonsView(state, me) : [];
-  const frame = (r, owner = null) => ({ id: r.id, name: r.name, text: r.text, tier: r.tier, max: r.tiers.length,
+  const frame = (r, owner = null) => ({ id: r.id, name: ctext('ribbons', r.id, 'name', r.name), text: ctext('ribbons', r.id, 'text', r.text), tier: r.tier, max: r.tiers.length,
     scope: r.scope, secret: r.secret, owner, gold: r.tier >= r.tiers.length });
   const shared = mine.filter((r) => !r.hidden && r.tier > 0 && r.scope !== 'P').map((r) => frame(r))
     .sort((a, b) => b.tier - a.tier || (a.scope === b.scope ? 0 : a.scope === 'T' ? -1 : 1) || a.name.localeCompare(b.name));
@@ -40,7 +46,7 @@ export function wallView(state, pid) {
   // the closest tiers still to earn (shared ones and mine): what to aim for next
   const closest = mine.filter((r) => !r.hidden && r.next !== null && r.pct > 0 && r.value < r.next)
     .sort((a, b) => b.pct - a.pct || a.n - b.n).slice(0, 3)
-    .map((r) => ({ id: r.id, name: r.name, text: r.text, tier: r.tier + 1, value: r.value, need: r.next, pct: r.pct,
+    .map((r) => ({ id: r.id, name: ctext('ribbons', r.id, 'name', r.name), text: ctext('ribbons', r.id, 'text', r.text), tier: r.tier + 1, value: r.value, need: r.next, pct: r.pct,
       scope: r.scope, points: r.scope === 'P' ? 0 : RIBBON_REWARDS.F[r.tier]?.points ?? 0 }));
   const earnedTiers = mine.filter((r) => !r.hidden && r.scope !== 'P').reduce((n, r) => n + r.tier, 0);
   const possible = mine.filter((r) => !r.hidden && r.scope !== 'P').reduce((n, r) => n + r.tiers.length, 0);
@@ -168,24 +174,24 @@ function scarecrowArt() {
 // ---- the panel -----------------------------------------------------------------------------------------------------
 
 function frameEl(f, framed) {
-  const label = `${f.name}: ${TIER_WORD[f.tier]}${f.gold ? ' (every tier)' : ''}. ${f.text}`;
+  const label = t(f.gold ? 'collect.wall.frameGold' : 'collect.wall.frame', { name: f.name, tier: TIER_WORD[f.tier], text: f.text });
   return h(`figure.pc-frame.t${f.tier}.s${f.scope}${framed ? '.framed' : '.pinned'}${f.secret ? '.secret' : ''}`, {
     role: 'img', 'aria-label': label, title: label, dataset: { ribbon: f.id },
-  }, h('span.pc-frame-face', rosette(f.tier, 52, ['', 'B', 'S', 'G'][f.tier])),
-  h('figcaption', h('b', f.name), h('small', f.secret ? 'Secret ribbon' : TIER_WORD[f.tier])));
+  }, h('span.pc-frame-face', rosette(f.tier, 52, tierLetter(f.tier))),
+  h('figcaption', h('b', f.name), h('small', f.secret ? t('collect.wall.secret') : TIER_WORD[f.tier])));
 }
 
-function tierCard(t, v) {
-  const left = Math.max(0, t.points - v.points);
-  return h(`li.pc-tier${t.open ? '.open' : ''}${v.next === t ? '.next' : ''}`, { dataset: { tier: t.unlock } },
-    h('span.pc-tier-art', wallArt(t.unlock, 44)),
-    h('span.pc-tier-text', h('b', t.name),
-      h('small', t.open ? 'On the wall' : `${fmt(t.points)} points · ${fmt(left)} to go`)),
-    t.open ? h('span.pc-tier-check', { 'aria-label': 'unlocked' }, '✓') : null);
+function tierCard(x, v) {
+  const left = Math.max(0, x.points - v.points);
+  return h(`li.pc-tier${x.open ? '.open' : ''}${v.next === x ? '.next' : ''}`, { dataset: { tier: x.unlock } },
+    h('span.pc-tier-art', wallArt(x.unlock, 44)),
+    h('span.pc-tier-text', h('b', x.name),
+      h('small', x.open ? t('collect.wall.onWall') : t('collect.wall.pointsLeft', { p: x.points, left }))),
+    x.open ? h('span.pc-tier-check', { 'aria-label': t('collect.wall.unlocked') }, '✓') : null);
 }
 
 export const ribbonWallPanel = {
-  title: 'Ribbon Wall',
+  get title() { return phoneTitle('collect.wall.title', 'collect.wall.titleShort'); },
   icon: 'ribbon_trophy',
   size: 'full',
   topics: ['ribbons', 'stats', 'players'],
@@ -203,46 +209,44 @@ export const ribbonWallPanel = {
     function render() {
       const st = ctx.store.state;
       const v = view();
-      const trail = h('div.pc-trail', { role: 'progressbar', 'aria-label': 'Ribbon Points toward the next wall tier',
+      const trail = h('div.pc-trail', { role: 'progressbar', 'aria-label': t('collect.wall.trail'),
         'aria-valuemin': '0', 'aria-valuemax': String(v.tiers.at(-1)?.points ?? 0), 'aria-valuenow': String(v.points) },
       h('span.pc-trail-fill', { style: { '--p': String(v.track) } }),
-      ...v.tiers.map((t) => h(`span.pc-trail-stop${t.open ? '.open' : ''}`,
-        { style: { '--at': String((t.i + 1) / v.tiers.length) } },
-        h('b', fmt(t.points)))));
+      ...v.tiers.map((x) => h(`span.pc-trail-stop${x.open ? '.open' : ''}`,
+        { style: { '--at': String((x.i + 1) / v.tiers.length) } },
+        h('b', fmt(x.points)))));
       const head = h('header.pc-wall-head',
-        h('div.pc-plaque', h('span', 'Ribbon Points'), h('b', fmt(v.points)),
-          h('small', v.next ? `${fmt(v.toNext)} more for the ${v.next.name.toLowerCase()}` : 'Every wall tier is up!')),
-        h('div.pc-wall-ladder', trail, h('ol.pc-tiers', ...v.tiers.map((t) => tierCard(t, v)))));
+        h('div.pc-plaque', h('span', t('collect.wall.points')), h('b', fmt(v.points)),
+          h('small', v.next ? t('collect.wall.moreFor', { n: v.toNext, name: v.next.name.toLowerCase() }) : t('collect.wall.allUp'))),
+        h('div.pc-wall-ladder', trail, h('ol.pc-tiers', ...v.tiers.map((x) => tierCard(x, v)))));
       const wall = h(`div.pc-wall${v.framed ? '.framed' : ''}${v.open.bunting_fence ? '.bunting' : ''}`);
-      if (v.open.gate_arch) wall.append(archArt(st.farm.name || 'Our farm'));
-      wall.append(h('h3.pc-wall-row-title', 'Farm & together'),
+      if (v.open.gate_arch) wall.append(archArt(st.farm.name || t('collect.wall.ourFarm')));
+      wall.append(h('h3.pc-wall-row-title', t('collect.wall.shared')),
         v.shared.length ? h('div.pc-frames', ...v.shared.map((f) => frameEl(f, v.framed)))
-          : h('p.pc-wall-empty',
-            'The first farm ribbon goes here. Harvest, craft and fill orders together to earn one.'));
+          : h('p.pc-wall-empty', t('collect.wall.sharedEmpty')));
       for (const p of v.personal) {
         wall.append(h('h3.pc-wall-row-title.pc-who-row', { style: { '--who': p.color } },
           playerMark(p.pid, st.players[p.pid], { size: 20 }),
-          h('span', p.me ? `${p.name}'s ribbons (yours)` : `${p.name}'s ribbons`)),
+          h('span', p.me ? t('collect.wall.mine', { name: p.name }) : t('collect.wall.theirs', { name: p.name }))),
         p.frames.length ? h('div.pc-frames', ...p.frames.map((f) => frameEl(f, v.framed)))
-          : h('p.pc-wall-empty',
-            p.me ? 'Your own ribbons hang here: plantings, petting, names, gifts.' : `${p.name}'s own ribbons will hang here.`));
+          : h('p.pc-wall-empty', p.me ? t('collect.wall.mineEmpty') : t('collect.wall.theirsEmpty', { name: p.name })));
       }
       if (v.open.golden_scarecrow_wall) wall.append(scarecrowArt());
-      const next = v.closest.length ? h('section.pc-wall-next', h('h3.pn-h', h('span', 'Closest next')),
+      const next = v.closest.length ? h('section.pc-wall-next', h('h3.pn-h', h('span', t('collect.wall.closest'))),
         h('div.pc-next-list',
           ...v.closest.map((c) => h('div.pc-next', { dataset: { ribbon: c.id } },
-            rosette(c.tier, 40, ['', 'B', 'S', 'G'][c.tier]),
+            rosette(c.tier, 40, tierLetter(c.tier)),
           h('div.pc-next-main', h('b', `${c.name} · ${TIER_WORD[c.tier]}`), h('small', c.text),
             bar(c.pct, `${fmt(c.value)} / ${fmt(c.need)}`, 'pn-go')),
-          c.points ? pill(`+${c.points} pt${c.points > 1 ? 's' : ''}`, 'pn-warn') : pill('yours',
+          c.points ? pill(t('collect.wall.pts', { n: c.points }), 'pn-warn') : pill(t('collect.wall.yours'),
             'pn-owned'))))) : null;
       body.replaceChildren(head, wall, next,
         h('p.pn-hint.pc-wall-foot',
-          `Farm and together ribbons earn Ribbon Points: Bronze ${v.pointsPerTier[0]}, Silver ${v.pointsPerTier[1]}, Gold ${v.pointsPerTier[2]}. `,
-          `${fmt(v.earnedTiers)} of ${fmt(v.possible)} shared tiers earned so far. `,
+          t('collect.wall.foot1', { a: v.pointsPerTier[0], b: v.pointsPerTier[1], c: v.pointsPerTier[2] }),
+          t('collect.wall.foot2', { n: v.earnedTiers, total: v.possible }),
           ctx.ui.panels.has('journal') ? h('button.pn-chipbtn',
             { type: 'button', on: { click: () => ctx.open('journal', { tab: 'ribbons' }) } },
-              'Every ribbon in the Journal') : null));
+              t('collect.wall.journal')) : null));
       kit.refresh();
     }
     update(true);

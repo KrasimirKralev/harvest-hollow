@@ -391,3 +391,8 @@ body.motion-reduced .wk-rung.next, body.motion-reduced .wk-cere-medal, body.moti
 @keyframes wk-ring { from { outline-color: var(--sun-500); } to { outline-color: var(--sun-300); } }
 @media (prefers-reduced-motion: reduce) { .wk-focus { animation: none; } }
 body.motion-reduced .wk-focus { animation: none; }
+
+/* Bulgarian (i18n lane B): sentence case; Title Case On Every Word is English typography */
+:lang(bg) .wk-post-head small, :lang(bg) .wk-friend-text small { text-transform: none; }
+/* a long one-word Bulgarian name ("Ябълков сок") ran under its "0 / 4" on a phone: name and count stack there */
+@media (max-width: 600px) { html[lang="bg"] .wk-good-text { grid-template-columns: minmax(0, 1fr); } }

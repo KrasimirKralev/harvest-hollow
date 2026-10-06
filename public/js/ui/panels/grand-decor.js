@@ -13,7 +13,8 @@ import { levelOf, bigSpend, inTray } from './model.js';
 import { probe, passes } from './core.js';
 import { I } from './intents.js';
 import { startPlacement } from './placement.js';
-import { h, fmt, createKit, price, icon, svgIcon, ribbonTag, fill } from './kit.js';
+import { h, fmt, createKit, price, icon, svgIcon, ribbonTag, fill, tParts, phoneTitle } from './kit.js';
+import { t, ctext, name as cname } from '../../i18n/index.js';
 
 /** The ten pieces in level order (live or not: a later chapter's piece is shown as "coming"). */
 export const grandDefs = () => [...CONTENT.decor.values()].filter((d) => d.tier === 'grand').sort((a, b) => a.unlock - b.unlock || (a.id < b.id ? -1 : 1));
@@ -49,7 +50,7 @@ export function grandView(state, env = {}) {
     const cost = { coins: d.cost ?? 0, acorns: d.acorns ?? 0 };
     let code = bp.code;
     let hint = {};
-    if (!isOn) { code = 'LOCKED'; hint = { text: 'Comes with a later chapter' }; }
+    if (!isOn) { code = 'LOCKED'; hint = { text: t('home.grand.later') }; }
     else if (code === 'LOCKED') hint = { unlock: d.unlock };
     else if (tray > 0) { code = null; }
     else if (code === null && cost.coins > state.farm.wallet.coins) { code = 'NO_COINS'; hint = { coins: cost.coins - state.farm.wallet.coins }; }
@@ -63,7 +64,7 @@ export function grandView(state, env = {}) {
       after = { score, stars, newStars: Math.max(0, stars - b.stars), acorns: Math.max(0, stars - Math.max(b.stars, state.farm.beauty?.stars ?? 0)) * B.starAcorns,
         showcase: score > B.stars[B.stars.length - 1] ? Math.min(gain, score - B.stars[B.stars.length - 1]) : 0 };
     }
-    return { id: d.id, name: d.name, unlock: d.unlock, size: d.size, beauty: (d.beauty10 ?? 0) / 10, text: d.text, effect: d.effect,
+    return { id: d.id, name: cname(d.id), unlock: d.unlock, size: d.size, beauty: (d.beauty10 ?? 0) / 10, text: ctext('decor', d.id, 'desc', d.text), textEn: d.text, effect: d.effect,
       live: isOn, placed, tray, owned, code, hint, price: cost, big: tray === 0 && code === null && bigSpend(state, cost.coins, cost.acorns, env),
       hours: hoursOf(cost.coins, Math.max(level, 1)), gain, after, isNew: isOn && d.unlock === level };
   });
@@ -75,7 +76,7 @@ export function grandView(state, env = {}) {
 
 // ---- the panel --------------------------------------------------------------------------------------------------
 
-const SEAT = (e) => (e && e.seats ? 'A two-seat Golden Hour spot' : null);
+const SEAT = (e) => (e && e.seats ? t('home.grand.seat') : null);
 
 function wishBtn(ctx, p) {
   const st = ctx.store.state;
@@ -83,41 +84,41 @@ function wishBtn(ctx, p) {
   const it = I.wish(p.id);
   const wished = Object.values(st.farm.wishlist ?? {}).some((w) => w.def === p.id);
   if (!wished && !passes(probe(ctx.store, it.type, it.args))) return null;
-  return h('button.pn-wishbtn', { type: 'button', 'aria-pressed': String(wished), 'aria-label': `Wish for ${p.name}`,
-    title: wished ? 'On the Wishlist' : 'Save up for it on the Wishlist', dataset: { wish: p.id },
+  return h('button.pn-wishbtn', { type: 'button', 'aria-pressed': String(wished), 'aria-label': t('market.wish.aria', { item: p.name }),
+    title: wished ? t('market.wish.on') : t('market.wish.save'), dataset: { wish: p.id },
     on: { click: (e) => {
       e.stopPropagation();
       if (wished) { ctx.open('wishlist'); return; }
       const r = ctx.act(it.type, it.args);
-      if (r && r.ok) ctx.ui.toast(`${p.name} is on the Wishlist ♡`);
+      if (r && r.ok) ctx.ui.toast(t('market.wish.added', { item: p.name }));
     } } }, wished ? '♥' : '♡');
 }
 
 function previewLine(p, v) {
   if (!p.after || !v.beauty || p.code === 'LOCKED') return null;
   const a = p.after;
-  const bits = [h('span', `Farm Beauty ${fmt(v.beauty.score)} → `, h('b', fmt(a.score)))];
-  if (a.newStars > 0) bits.push(h('span.hg-star', `${'★'.repeat(a.stars)}${a.acorns ? ` +${a.acorns} Acorns` : ''}`));
-  else if (a.showcase > 0) bits.push(h('span.hg-star', `+${fmt(a.showcase)} Showcase`));
-  return h('p.hg-preview', { title: 'Paths next to it and decor sets add more' }, ...bits);
+  const bits = [h('span', tParts('home.grand.preview', { score: v.beauty.score, b: h('b', fmt(a.score)) }))];
+  if (a.newStars > 0) bits.push(h('span.hg-star', `${'★'.repeat(a.stars)}${a.acorns ? t('home.grand.plusAcorns', { n: a.acorns }) : ''}`));
+  else if (a.showcase > 0) bits.push(h('span.hg-star', t('home.grand.showcase', { n: a.showcase })));
+  return h('p.hg-preview', { title: t('home.grand.previewTip') }, ...bits);
 }
 
 function pieceCard(ctx, kit, p, v) {
   const locked = p.code === 'LOCKED';
   const art = h('div.hg-plinth', icon(p.id, { size: 112, alt: '' }),
-    locked ? h('span.pn-lock', svgIcon('lock', 18), p.live ? `Level ${p.unlock}` : 'Soon') : null,
-    !locked && p.isNew ? ribbonTag('New!', 'pn-new') : null,
-    p.owned ? ribbonTag(p.tray ? `${p.tray} in your tray` : p.placed > 1 ? `${p.placed} on the farm` : 'On the farm', 'pn-free-tag') : null,
+    locked ? h('span.pn-lock', svgIcon('lock', 18), p.live ? t('common.level', { n: p.unlock }) : t('home.grand.soon')) : null,
+    !locked && p.isNew ? ribbonTag(t('market.card.new'), 'pn-new') : null,
+    p.owned ? ribbonTag(p.tray ? t('market.card.trayN', { n: p.tray }) : p.placed > 1 ? t('home.grand.nOnFarm', { n: p.placed }) : t('market.card.onFarm'), 'pn-free-tag') : null,
     wishBtn(ctx, p));
   const facts = h('div.hg-facts',
-    h('span.hg-beauty', svgIcon('flower', 18), `+${fmt(p.beauty)} beauty`),
-    h('span', `${p.size[0]}×${p.size[1]} tiles`),
-    p.hours && !locked ? h('span', { title: 'At your level: about how long the two of you farm for it' }, `≈ ${p.hours} h of farming`) : null);
+    h('span.hg-beauty', svgIcon('flower', 18), t('market.facts.beauty', { b: fmt(p.beauty) })),
+    h('span', t('market.facts.tiles', { w: p.size[0], h: p.size[1] })),
+    p.hours && !locked ? h('span', { title: t('home.grand.hoursTip') }, t('home.grand.hours', { h: p.hours })) : null);
   const foot = h('div.pn-card-foot');
-  if (locked) foot.append(h('span.pn-later', p.live ? `Unlocks at level ${p.unlock}` : 'Comes with a later chapter'));
+  if (locked) foot.append(h('span.pn-later', p.live ? t('market.why.unlockAt', { n: p.unlock }) : t('home.grand.later')));
   else {
-    foot.append(p.tray ? h('span.pn-cost.pn-free', 'Free') : price(p.price, { big: p.big }),
-      kit.button({ label: p.tray ? 'Place' : 'Buy & place', glyph: 'hammer', cls: 'btn--sun', data: { place: p.id },
+    foot.append(p.tray ? h('span.pn-cost.pn-free', t('market.kit.free')) : price(p.price, { big: p.big }),
+      kit.button({ label: p.tray ? t('market.card.place') : t('home.grand.buyPlace'), glyph: 'hammer', cls: 'btn--sun', data: { place: p.id },
         gate: () => {
           const f = grandView(ctx.store.state, { now: ctx.now(), pid: ctx.store.pid }).pieces.find((x) => x.id === p.id);
           return f && f.code ? { code: f.code, hint: f.hint } : null;
@@ -125,7 +126,7 @@ function pieceCard(ctx, kit, p, v) {
         onClick: () => startPlacement(ctx, p.id) }));
   }
   // the content text says what a piece does; a seat that it does not mention gets its own words
-  const extra = [p.text, /seat/i.test(p.text || '') ? null : SEAT(p.effect)].filter(Boolean);
+  const extra = [p.text, /seat/i.test(p.textEn || p.text || '') ? null : SEAT(p.effect)].filter(Boolean);
   return h(`article.hg-card${locked ? '.locked' : ''}${p.owned ? '.owned' : ''}`, { role: 'listitem', dataset: { def: p.id } },
     art, h('h4.hg-name', p.name), facts,
     extra.length ? h('p.hg-text', extra.join('. ')) : null,
@@ -133,7 +134,7 @@ function pieceCard(ctx, kit, p, v) {
 }
 
 export const grandDecorPanel = {
-  title: 'Grand decor',
+  title: () => phoneTitle('home.grand.title', 'home.grand.titleShort'),
   icon: 'grand_windmill',
   size: 'full',
   topics: ['wallet', 'objects', 'xp', 'storage', 'wishlist', 'beauty'],
@@ -149,14 +150,14 @@ export const grandDecorPanel = {
     function render() {
       const v = grandView(ctx.store.state, env());
       const head = h('div.hg-head',
-        h('div.hg-head-text', h('h3', 'Showcase pieces for a farm you love'),
-          h('p', 'Ten grand pieces, one for every few levels from 20 to 40. Each adds a lot of Farm Beauty; the seats are Golden Hour spots for two.')),
-        v.beauty ? h('div.hg-meter', { title: 'Farm Beauty now' }, svgIcon('flower', 30),
+        h('div.hg-head-text', h('h3', t('home.grand.head')),
+          h('p', t('home.grand.intro'))),
+        v.beauty ? h('div.hg-meter', { title: t('home.grand.meterTip') }, svgIcon('flower', 30),
           h('div', h('b', fmt(v.beauty.score)), h('small', `${'★'.repeat(v.beauty.stars)}${'☆'.repeat(5 - v.beauty.stars)}`)),
-          ctx.ui.panels.has('beauty') ? h('button.pn-chipbtn', { type: 'button', on: { click: () => ctx.open('beauty', {}, { stack: true }) } }, 'Farm Beauty') : null) : null);
+          ctx.ui.panels.has('beauty') ? h('button.pn-chipbtn', { type: 'button', on: { click: () => ctx.open('beauty', {}, { stack: true }) } }, t('home.grand.beautyBtn')) : null) : null);
       fill(body, head,
-        v.live ? null : h('p.hg-soon', svgIcon('lock', 20), 'The Grand decor arrives with the next chapter of the valley.'),
-        h('div.hg-grid', { role: 'list', 'aria-label': 'Grand decor' }, ...v.pieces.map((p) => pieceCard(ctx, kit, p, v))));
+        v.live ? null : h('p.hg-soon', svgIcon('lock', 20), t('home.grand.arrives')),
+        h('div.hg-grid', { role: 'list', 'aria-label': t('home.grand.title') }, ...v.pieces.map((p) => pieceCard(ctx, kit, p, v))));
       kit.refresh();
       const want = ctx.args && ctx.args.focus;
       if (want && ctx.focusDone !== want) {
@@ -183,8 +184,8 @@ export function grandStrip(ctx) {
   const show = liveP.slice(Math.max(0, end - 3), end);
   return h('div.hg-strip', { dataset: { grand: 'strip' } },
     h('div.hg-strip-icons', ...show.map((p) => icon(p.id, { size: 44, alt: '' }))),
-    h('div.hg-strip-text', h('b', 'Grand decor'), h('small', `${fmt(v.open)} of 10 open · ${fmt(v.owned)} on the farm`)),
+    h('div.hg-strip-text', h('b', t('home.grand.title')), h('small', t('home.grand.strip', { open: v.open, owned: v.owned }))),
     h('button.btn.btn--sky.pn-sm', { type: 'button', dataset: { open: 'grandDecor' }, on: { click: () => ctx.open('grandDecor') } },
-      'The showroom'));
+      t('home.grand.showroom')));
 }
 

@@ -88,6 +88,32 @@ export const _seen = {
 };
 
 /**
+ * `_key {pid, what, by?, name?}` (multi-farm hosting only, server/farm-sessions.js): a farmer's way in changed.
+ *   what 'new'   `by` (another farmer of the farm) made a new key for `pid`: every old key of theirs stopped working
+ *                and a one-time rejoin link was made (the key hashes ride on the journal line, server-private)
+ *   what 'back'  `pid` came back with that link, maybe under a new `name` (whoever opens it takes the farmer over)
+ * One feed line each, for both farmers; the farmer's look, stats and progress never change.
+ */
+export const _key = {
+  schema: { pid: V.pid, what: V.oneOf('new', 'back'), by: V.opt(V.pid), name: V.opt(V.text(16)) },
+  check(state, a) {
+    if (!Object.hasOwn(state.players, a.pid)) return ERR.NOT_FOUND;
+    if (a.what === 'new' && (a.by === undefined || a.by === a.pid || !Object.hasOwn(state.players, a.by))) return ERR.BAD_ARGS;
+    if (a.name !== undefined && !cleanName(a.name)) return ERR.BAD_ARGS;
+    return null;
+  },
+  apply(tx, a, ctx) {
+    const by = a.what === 'new' ? a.by : a.pid;
+    if (a.what === 'back' && a.name !== undefined) {
+      const name = cleanName(a.name);
+      if (name !== tx.get(['players', a.pid, 'name'])) tx.set(['players', a.pid, 'name'], name);
+    }
+    feedAdd(tx, ctx, { k: 'key', what: a.what, pid: a.pid, by });
+    tx.emit({ e: 'key', what: a.what, pid: a.pid, by });
+  },
+};
+
+/**
  * True when `_rollover` has work: a new farm day, or (from the Almanac's level) a player or the Together task still
  * on an older day (a farm that reached the level without a level-up event, a save from an older build).
  */
@@ -241,7 +267,7 @@ export const _barge = {
   },
 };
 
-export const SYSTEM_ACTIONS = { _join, _seen, _rollover, _orders, _golden, _fair, _barge };
+export const SYSTEM_ACTIONS = { _join, _seen, _key, _rollover, _orders, _golden, _fair, _barge };
 
 /**
  * Time-driven system actions that are due at `now`, in a fixed order (deterministic). Each one's check() passes

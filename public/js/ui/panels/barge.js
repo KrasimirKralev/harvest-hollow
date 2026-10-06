@@ -13,7 +13,8 @@ import { systemLive, weekOf } from '../../../../shared/rules/coop.js';
 import { h, icon, svgIcon, fmt, playerMark, createKit, fill, price, hintable } from './kit.js';
 import { levelOf, available } from './core.js';
 import { chest, s as sv } from './art.js';
-import { focusOn, actionOf, banner, clockChip, speech, flagButton, lockedBody, splitBar, need, toTop } from './fair.js';
+import { focusOn, actionOf, banner, clockChip, speech, flagButton, lockedBody, splitBar, need, toTop, tParts } from './fair.js';
+import { t, fmtDec, Q, name as cname } from '../../i18n/index.js';
 
 const PER = BARGE.cratesPerRow;
 
@@ -65,7 +66,7 @@ export function bargeView(state, pid, now) {
         const have = available(state, c.item);
         const loaded = c.by !== null;
         crates.push({ i, row: r, item: c.item, qty: c.qty, by: c.by, at: c.at, flag: c.flag, loaded, have, ready: !loaded && have >= c.qty,
-          name: itemOf(c.item)?.name ?? c.item, ...BR.cratePay(state, c, now) });
+          name: itemOf(c.item) ? cname(c.item) : c.item, ...BR.cratePay(state, c, now) });
       }
       const done = Object.hasOwn(b.paid, String(r));
       // the k-th row completed this week takes the k-th share of the chest (the rules split it in whole Acorns)
@@ -85,7 +86,7 @@ export function bargeView(state, pid, now) {
   };
   const by = {};
   for (const c of all) if (c.loaded && c.by) by[c.by] = (by[c.by] ?? 0) + 1;
-  const next = !docked && b?.next ? b.next.crates.map((c) => ({ item: c.item, qty: c.qty, name: itemOf(c.item)?.name ?? c.item })) : [];
+  const next = !docked && b?.next ? b.next.crates.map((c) => ({ item: c.item, qty: c.qty, name: itemOf(c.item) ? cname(c.item) : c.item })) : [];
   return {
     live, open, unlock: BARGE.unlock, level, has: Boolean(b), docked, w: docked ? b.w : null, arrivesAt, leavesAt, tier, streak: b?.streak ?? 0,
     tiers: Array.from({ length: BARGE.chest.tiers }, (_, i) => ({ t: i + 1, ...chestOf(i + 1) })),
@@ -109,14 +110,14 @@ export function bargeBadge(state, pid, now) {
 }
 
 const REED = {
-  docked: 'She sits low in the water with room to spare. Load her up before Sunday eight bells, shipmates.',
-  done: 'Every hold full! We sail at eight bells on Sunday, with the tide.',
-  away: 'The jetty is empty: she is downriver. Monday at six bells she ties up again, steady as she goes.',
-  light: 'Nothing on the manifest this week, I\'m afraid. Make a few goods and I\'ll find room aboard, aye.',
+  get docked() { return t('weekly.barge.reed.docked'); },
+  get done() { return t('weekly.barge.reed.done'); },
+  get away() { return t('weekly.barge.reed.away'); },
+  get light() { return t('weekly.barge.reed.light'); },
 };
 
 export const bargePanel = {
-  title: 'River Barge',
+  get title() { return t('weekly.barge.title'); },
   icon: 'wooden_crate',
   size: 'full',
   topics: ['barge', 'inventory', 'overflow', 'xp', 'players', 'objects', 'expansions'],
@@ -137,22 +138,22 @@ export const bargePanel = {
       const now = ctx.now();
       const v = bargeView(st, ctx.store.pid, now);
       if (!v.open) {
-        fill(body, lockedBody('f', 'The River Barge', [
-          'Captain Reed docks every Monday at 06:00 and casts off on Sunday at 20:00.',
-          'He brings rows of crates to fill with goods your farm made lately.',
-          'Each crate pays at once; each full row pays extra and a share of the Captain\'s chest.',
+        fill(body, lockedBody('f', t('weekly.barge.lockedTitle'), [
+          t('weekly.barge.locked.1'),
+          t('weekly.barge.locked.2'),
+          t('weekly.barge.locked.3'),
         ], v.unlock, v.level, v.live));
         return;
       }
       const chip = v.docked
-        ? clockChip(kit, { label: 'Casts off Sunday 20:00 ·', at: v.leavesAt, doneText: 'casting off', glyph: 'crate' })
-        : clockChip(kit, { label: 'Docks Monday 06:00 ·', at: v.arrivesAt, doneText: 'docking now', glyph: 'crate', cls: 'closed' });
+        ? clockChip(kit, { label: t('weekly.barge.clock.leaves'), at: v.leavesAt, doneText: t('weekly.barge.clock.leavingNow'), glyph: 'crate' })
+        : clockChip(kit, { label: t('weekly.barge.clock.docks'), at: v.arrivesAt, doneText: t('weekly.barge.clock.dockingNow'), glyph: 'crate', cls: 'closed' });
       const line = !v.docked ? REED.away : !v.rows.length ? REED.light : v.allDone ? REED.done : REED.docked;
       fill(body,
         v.docked
-          ? banner('f', 'This week\'s manifest', v.total ? `${v.loaded} of ${v.total} crates loaded · each pays the moment it is aboard`
-            : 'Sailing light this week', { chip })
-          : banner('f', 'The barge is downriver', 'The jetty is empty until Monday morning', { chip }),
+          ? banner('f', t('weekly.barge.banner.docked'), v.total ? t('weekly.barge.banner.dockedSub', { n: v.loaded, total: v.total })
+            : t('weekly.barge.banner.light'), { chip })
+          : banner('f', t('weekly.barge.banner.away'), t('weekly.barge.banner.awaySub'), { chip }),
         h('div.wk-barge-top', speech('reed', line), ladder(v)),
         v.docked ? rowsEl(st, v) : awayEl(v),
         v.docked && v.rows.length ? payout(st, v) : null);
@@ -162,24 +163,23 @@ export const bargePanel = {
     }
 
     function ladder(v) {
-      const rungs = v.tiers.map((t) => h(`li.wk-rung-t${t.t === v.tier ? '.on' : ''}${t.t < v.tier ? '.past' : ''}`, {
-        title: `Tier ${t.t}: ${t.acorns} Acorns, ${t.compost} Compost${t.decor ? ' and a decor roll' : ''} in the Captain's chest` },
-      h('span.wk-rung-n', String(t.t)), chest(30, { gold: t.t >= 4, open: t.t === v.tier }),
-      h('small.wk-rung-pay', svgIcon('acorn', 14), String(t.acorns), icon('compost', { size: 16 }), String(t.compost))));
+      const rungs = v.tiers.map((t2) => h(`li.wk-rung-t${t2.t === v.tier ? '.on' : ''}${t2.t < v.tier ? '.past' : ''}`, {
+        title: t(t2.decor ? 'weekly.barge.tierTipDecor' : 'weekly.barge.tierTip', { tier: t2.t, acorns: t2.acorns, compost: t2.compost }) },
+      h('span.wk-rung-n', String(t2.t)), chest(30, { gold: t2.t >= 4, open: t2.t === v.tier }),
+      h('small.wk-rung-pay', svgIcon('acorn', 14), String(t2.acorns), icon('compost', { size: 16 }), String(t2.compost))));
       const up = Math.min(BARGE.chest.tiers, v.tier + 1);
-      const rule = v.docked && v.allDone ? `Every row loaded: next week's chest is tier ${up}.`
-        : v.tier >= BARGE.chest.tiers ? 'Top of the ladder. Load every row each week to stay here.'
-          : `Load every row ${v.docked ? 'this' : 'next'} week to climb to tier ${up}. A week without slips one rung.`;
-      return h('section.wk-ladder-barge', { 'aria-label': `The Captain's chest ladder: tier ${v.tier} of ${BARGE.chest.tiers}` },
-        h('div.wk-ladder-barge-head', h('b', `The Captain's chest · tier ${v.tier}`), h('small', rule)),
+      const rule = v.docked && v.allDone ? t('weekly.barge.rule.allDone', { n: up })
+        : v.tier >= BARGE.chest.tiers ? t('weekly.barge.rule.top')
+          : t(v.docked ? 'weekly.barge.rule.climbThis' : 'weekly.barge.rule.climbNext', { n: up });
+      return h('section.wk-ladder-barge', { 'aria-label': t('weekly.barge.ladderLabel', { n: v.tier, of: BARGE.chest.tiers }) },
+        h('div.wk-ladder-barge-head', h('b', t('weekly.barge.chestTier', { n: v.tier })), h('small', rule)),
         h('ol.wk-rungs', ...rungs));
     }
 
     function rowsEl(st, v) {
       if (!v.rows.length) {
-        return h('div.wk-empty', svgIcon('crate', 44), h('p', 'No crates on the manifest this week.'),
-          h('small', 'The Captain asks for goods the farm made in the last 14 days: one row of three crates for every two '
-            + 'hours you played the week before.'));
+        return h('div.wk-empty', svgIcon('crate', 44), h('p', t('weekly.barge.noCrates')),
+          h('small', t('weekly.barge.noCratesNote')));
       }
       return h('div.wk-rows', ...v.rows.map((r) => rowEl(st, v, r)));
     }
@@ -187,16 +187,16 @@ export const bargePanel = {
     function rowEl(st, v, r) {
       const loadedN = r.crates.filter((c) => c.loaded).length;
       const reward = r.done
-        ? h('div.wk-row-pay.paid', svgIcon('check', 26), h('b', 'Row paid!'), h('small', 'coins, Acorns and the chest share are in'))
+        ? h('div.wk-row-pay.paid', svgIcon('check', 26), h('b', t('weekly.barge.rowPaid')), h('small', t('weekly.barge.rowPaidNote')))
         : h('div.wk-row-pay',
-          h('b', 'A full row pays'),
+          h('b', t('weekly.barge.rowPays')),
           price({ coins: r.pay.coins, acorns: r.pay.acorns }),
-          h('span.wk-share', chest(24), r.pay.compost ? `+ ${r.pay.compost} Compost` : '+ a chest share',
-            r.pay.decorRoll ? h('small', 'and a decor roll') : null),
-          h('small', `Acorns include a third of the tier ${v.tier} chest`));
+          h('span.wk-share', chest(24), r.pay.compost ? t('weekly.barge.plusCompost', { q: Q('compost', r.pay.compost) }) : t('weekly.barge.plusShare'),
+            r.pay.decorRoll ? h('small', t('weekly.barge.andDecor')) : null),
+          h('small', t('weekly.barge.acornsThird', { n: v.tier })));
       return h(`section.wk-row${r.done ? '.done' : ''}`, {
-        dataset: { row: String(r.i) }, 'aria-label': `Row ${r.i + 1}: ${loadedN} of ${r.crates.length} crates loaded` },
-        h('div.wk-row-label', h('span', `Row ${r.i + 1}`), h('small', `${loadedN}/${r.crates.length}`)),
+        dataset: { row: String(r.i) }, 'aria-label': t('weekly.barge.rowLabel', { row: r.i + 1, n: loadedN, of: r.crates.length }) },
+        h('div.wk-row-label', h('span', t('weekly.barge.row', { n: r.i + 1 })), h('small', `${loadedN}/${r.crates.length}`)),
         h('div.wk-crates', ...r.crates.map((c) => crateEl(st, v, c))),
         reward);
     }
@@ -205,48 +205,46 @@ export const bargePanel = {
       if (c.loaded) {
         const p = c.by ? st.players?.[c.by] : null;
         return h('article.wk-crate.loaded', { dataset: { crate: String(c.i) } },
-          h('div.wk-crate-art', icon(c.item, { size: 48 }), h('span.wk-stamp', svgIcon('check', 14), 'Aboard')),
+          h('div.wk-crate-art', icon(c.item, { size: 48 }), h('span.wk-stamp', svgIcon('check', 14), t('weekly.barge.aboard'))),
           h('b', `${fmt(c.qty)} × ${c.name}`),
-          h('span.wk-crate-by', p ? playerMark(c.by, p) : null, p ? `by ${p.name}` : 'loaded'));
+          h('span.wk-crate-by', p ? playerMark(c.by, p) : null, p ? t('weekly.barge.by', { name: p.name }) : t('weekly.barge.loaded')));
       }
       const args = crateArgs(loadType(), v, c);
       const fargs = crateArgs(flagType(), v, c);
       return h(`article.wk-crate${c.ready ? '.ready' : ''}${c.flag ? '.flagged' : ''}`, { dataset: { crate: String(c.i) } },
         hintable(h('div.wk-crate-art', icon(c.item, { size: 48 }), h('span.wk-qty', `×${fmt(c.qty)}`)), c.item, { need: c.qty }),
         h('b', c.name),
-        c.ready ? h('span.wk-have', svgIcon('check', 14), `${fmt(Math.min(c.have, 99_999))} in the barn`)
-          : h('span.wk-have', { dataset: { short: 'true' } }, `${fmt(c.have)} of ${fmt(c.qty)} in the barn`),
-        h('div.wk-crate-pay', price({ coins: c.coins }), h('span.pn-xp', `+${fmt(c.xp)} XP`)),
-        kit.button({ label: 'Load', cls: `btn--small${c.ready ? ' btn--sun' : ' btn--paper'}`, key: `barge:${c.i}`, type: loadType(), args,
+        c.ready ? h('span.wk-have', svgIcon('check', 14), t('weekly.inBarn', { n: Math.min(c.have, 99_999) }))
+          : h('span.wk-have', { dataset: { short: 'true' } }, t('weekly.barge.haveOf', { have: c.have, need: c.qty })),
+        h('div.wk-crate-pay', price({ coins: c.coins }), h('span.pn-xp', t('weekly.xp', { n: c.xp }))),
+        kit.button({ label: t('weekly.barge.load'), cls: `btn--small${c.ready ? ' btn--sun' : ' btn--paper'}`, key: `barge:${c.i}`, type: loadType(), args,
           hint: need(c.item, c.qty - c.have), data: { load: String(c.i) } }),
         c.flag && c.flag !== ctx.store.pid && st.players?.[c.flag]
-          ? h('span.pn-help-bonus', `Load it for ${st.players[c.flag].name}: +${COOP.helpFlags.xpBonusBp / 100} % XP and a Heart each`) : null,
+          ? h('span.pn-help-bonus', t('weekly.barge.helpBonus', { name: st.players[c.flag].name, pct: fmtDec(COOP.helpFlags.xpBonusBp / 100, 1) })) : null,
         c.flag || v.flags < v.flagsMax ? flagButton(ctx, st, c.flag, { type: flagType(), args: fargs }) : null);
     }
 
     function payout(st, v) {
       const sum = v.left
-        ? h('p', h('b', 'Load the rest for'), price({ coins: v.pay.coins, acorns: v.pay.acorns }), h('span.pn-xp', `+${fmt(v.pay.xp)} XP`),
-          v.pay.compost ? h('span.wk-plus', icon('compost', { size: 22 }), `${fmt(v.pay.compost)} Compost`) : null)
-        : h('p', h('b', 'All aboard!'), ` Every crate is loaded. Next week's chest is tier ${Math.min(BARGE.chest.tiers, v.tier + 1)}.`);
+        ? h('p', h('b', t('weekly.barge.restFor')), price({ coins: v.pay.coins, acorns: v.pay.acorns }), h('span.pn-xp', t('weekly.xp', { n: v.pay.xp })),
+          v.pay.compost ? h('span.wk-plus', icon('compost', { size: 22 }), t('weekly.barge.compost', { q: Q('compost', v.pay.compost) })) : null)
+        : h('p', tParts('weekly.barge.allAboard', { b: h('b', t('weekly.barge.allAboardB')), n: Math.min(BARGE.chest.tiers, v.tier + 1) }));
       return h('section.wk-payout', svgIcon('coin', 28), sum,
-        splitBar(st, v.by, { format: (n) => `${fmt(n)} crate${n === 1 ? '' : 's'}`, label: 'Crates by farmer' }),
-        h('small.wk-muted', 'Unloaded crates simply sail with the barge on Sunday. Nothing is lost.'));
+        splitBar(st, v.by, { format: (n) => t('weekly.barge.crates', { n }), label: t('weekly.barge.byFarmer') }),
+        h('small.wk-muted', t('weekly.barge.sailNote')));
     }
 
     function awayEl(v) {
       const lg = v.log;
       const next = v.next.length
-        ? h('div.wk-next-goods', h('b', 'Next week\'s manifest'),
+        ? h('div.wk-next-goods', h('b', t('weekly.barge.nextManifest')),
           h('div.wk-next-row', ...v.next.map((c) => hintable(h('span.wk-next-item', icon(c.item, { size: 40 }), h('span', `${fmt(c.qty)} × ${c.name}`)), c.item, { need: c.qty }))),
-          h('small', 'Start making them now: the Captain takes them from Monday 06:00.'))
-        : h('p.wk-away-note', v.has && lg ? 'Nothing the farm made lately fits a crate yet. Make a few workshop goods, fruit or '
-          + 'slow animal goods this week and the Captain finds room.'
-          : 'Next week\'s goods are written down when the barge casts off.');
+          h('small', t('weekly.barge.startNow')))
+        : h('p.wk-away-note', v.has && lg ? t('weekly.barge.nothingFits')
+          : t('weekly.barge.writtenDown'));
       return h('div.wk-away', jettyArt(),
         h('div.wk-away-text',
-          lg ? h('p.wk-away-log', lg.rows ? `Last week ${lg.done} of ${lg.rows} row${lg.rows === 1 ? '' : 's'} sailed full. `
-            + `The Captain's chest is tier ${lg.t} now.` : 'Last week the barge sailed light.') : null,
+          lg ? h('p.wk-away-log', lg.rows ? t('weekly.barge.lastWeek', { done: lg.done, n: lg.rows, tier: lg.t }) : t('weekly.barge.lastLight')) : null,
           next));
     }
 
@@ -265,8 +263,8 @@ export function jettyArt() {
   const ink = '#3E2612';
   const L = (o) => ({ stroke: ink, 'stroke-width': 2, 'stroke-linejoin': 'round', 'stroke-linecap': 'round', ...o });
   const svg = sv('svg', { viewBox: '0 0 1000 160', class: 'wk-jetty', role: 'img',
-    'aria-label': 'The empty jetty; the barge is far downriver',
-    preserveAspectRatio: 'xMidYMax slice' });
+    'aria-label': t('weekly.barge.jettyLabel'),
+    preserveAspectRatio: 'xMidYMax slice' }); // i18n-ok: an SVG keyword
   const willow = (x, y, k) => sv('g', {},
     sv('rect', { x: x - 2, y: y - 4, width: 4, height: 16 * k, fill: '#7A4E2A' }),
     sv('path', { d: `M${x - 22 * k} ${y + 8 * k} q${2 * k} -${30 * k} ${22 * k} -${30 * k} q${20 * k} 0 ${22 * k} ${30 * k} `

@@ -82,7 +82,7 @@
 import { defOf } from '../../../shared/content/index.js';
 import { SLOT_COLORS } from '../../../shared/content/config.js';
 import { ERR, SOFT } from '../../../shared/net/protocol.js';
-import { h, icon, svgIcon, focusables, fmt as fmtNum, fmtDuration, playerVars, ensureStylesheet } from './dom.js';
+import { h, icon, svgIcon, focusables, fmt as fmtNum, fmtDuration, playerVars, ensureStylesheet, touchText, touchPlayer } from './dom.js';
 import { createHud, createTips, portraitFace, showPortrait, initialOf } from './hud.js';
 import { portraitSpec, lastPortrait } from '../render/portrait.js';
 import { createToolbar } from './toolbar.js';
@@ -95,58 +95,29 @@ import { createFeed } from './feed.js';
 import { createRecap } from './recap.js';
 import { createNaming } from './naming.js';
 import { createTutorial } from './tutorial.js';
+import { createIdeasUi } from './ideas.js';
+import { createStarNudge } from './star-nudge.js';
 import { createTracker } from './tracker.js';
 import { createSeeds } from './seeds.js';
 import { createLayout, LAYOUT_Q } from './layout.js';
 import { createItemHints } from './item-hint.js';
 import { createInviteUi } from './invite.js';
+import { farmManifestHref } from './farm-gate.js';
+import { langToggle } from './lang-toggle.js';
+import { createKeepUi } from './keep.js';
+import { createPrivacyUi } from './privacy.js';
 import { farm } from '../net/farm.js';
+import { t, tn, live, onLang, fmtDuration as fmtDur, name as nameOf, N } from '../i18n/index.js';
 
 export { h, icon, svgIcon, focusables, fmt, fmtShort, fmtDuration, plural, kv, playerVars, playerMark } from './dom.js';
+export { langToggle } from './lang-toggle.js';
 
 const $ = (id) => document.getElementById(id);
 
-/** Friendly text per error code (never a red flash: GDD §7.2 "Invalid action"). */
-export const ERR_TEXT = Object.freeze({
-  [ERR.BAD_ARGS]: "That didn't work. Try again?",
-  [ERR.UNKNOWN_ACTION]: "That doesn't work here yet.",
-  [ERR.RATE]: 'Easy there, farmer. One moment…',
-  [ERR.NOT_FOUND]: "That's gone.",
-  [ERR.EMPTY]: 'Nothing to harvest there.',
-  [ERR.OCCUPIED]: 'Something is already growing there.',
-  [ERR.NOT_READY]: 'Not ready yet.',
-  [ERR.NOT_HUNGRY]: "They're not hungry yet.",
-  [ERR.NO_COINS]: 'Not enough coins.',
-  [ERR.NO_ACORNS]: 'Not enough Acorns.',
-  [ERR.NO_ITEMS]: 'Not enough in the barn.',
-  [ERR.STORAGE_FULL]: 'The barn is full. Sell or use something first.',
-  [ERR.LOCKED]: 'Unlocks at a higher farm level.',
-  [ERR.BLOCKED]: "That spot isn't free.",
-  [ERR.OUT_OF_BOUNDS]: "That land isn't ours yet.",
-  [ERR.QUEUE_FULL]: 'Every slot is busy. Add a slot or wait a moment.',
-  [ERR.ALREADY_DONE]: 'Already done.',
-  [ERR.NOT_REFUNDABLE]: "That can't be undone any more.",
-  [ERR.COOLDOWN]: 'Not just yet. Try again in a little while.',
-  [ERR.SELF_ONLY]: 'That one is for your partner to do.',
-  [ERR.ID_TAKEN]: 'Hold on, catching up with the farm…',
-  [ERR.CAP]: 'Plot limit reached for this level.',
-  [ERR.NOT_JOINED]: 'Connecting to the farm…',
-  [ERR.INTERNAL]: 'Something went wrong. It was not applied.',
-  [ERR.OFFLINE]: 'Reconnecting to the farm… (input paused)',
-  [ERR.RESERVED]: 'Some of these are kept for later.',
-  [ERR.PINNED]: 'Your partner pinned this.',
-  [ERR.BIG_SPEND]: 'That is a big purchase.',
-  [ERR.PRICE]: 'The price just changed. Have another look.',
-  [ERR.TOO_FAR]: 'Walk over to the bench first.',
-  [ERR.PROTO]: 'The game was updated. Reloading…',
-  [ERR.BAD_TOKEN]: 'Please pick your farmer again.',
-  [ERR.SLOT_TAKEN]: 'That farmer is playing right now. Reclaim works while they are offline, or with the farm passphrase.',
-  [ERR.FULL]: 'The farm is full.',
-  [ERR.PASSPHRASE]: 'That passphrase is not right.',
-  [ERR.BAD_HELLO]: 'This page could not join the farm. Reload to try again.',
-  // QA2 UI-10 / RC-18: watering a crop too quick to need it (a literal key: the rules lane adds the code to ERR)
-  NOT_NEEDED: 'Quick crops don\'t need water.',
-});
+/** Friendly text per error code (never a red flash: GDD §7.2 "Invalid action"); the catalog keys are 'err.<CODE>'
+ *  (i18n/en/core.js), so ERR_TEXT[code] reads the language in effect. QA2 UI-10 / RC-18: NOT_NEEDED (watering a crop
+ *  too quick to need it) is a literal key: the rules lane adds the code to ERR. */
+export const ERR_TEXT = live(Object.fromEntries([...Object.keys(ERR), 'NOT_NEEDED'].map((c) => [c, `err.${c}`])));
 
 /**
  * Bookkeeping actions the ui sends on its own (a ceremony or tip marked seen, a guide step ticked): a refusal only means
@@ -161,7 +132,7 @@ export function quietRefusal(codeOrText, opts = {}) {
 /** Friendly sentence for an ERR code (or the text itself when it is not a code). */
 export function errText(code) {
   if (Object.hasOwn(ERR_TEXT, code)) return ERR_TEXT[code];
-  return Object.hasOwn(ERR, code) ? "That didn't work this time." : String(code);
+  return Object.hasOwn(ERR, code) ? t('err.fallback') : String(code);
 }
 
 // ---- panel registry (ui-shell owns the frame; ui-panels registers the content) ------------------------------
@@ -169,6 +140,8 @@ const panelEntries = new Map();      // name -> entry
 const openStack = [];                // open panel names, bottom .. top
 const panelEvents = { register: new Set(), open: new Set(), close: new Set(), badge: new Set() };
 let S = null;                        // { store, view, controller } after ui.init
+/** The panel close button's hover title: its key for a mouse, the word alone for a finger. */
+const closeTitle = () => touchText(t('common.closeEsc'), touchPlayer(S?.controller));
 let scrimEl = null;
 let layerEl = null;
 
@@ -191,13 +164,14 @@ function panelLayer() {
 
 const SIZES = new Set(['side', 'wide', 'full', 'card']);
 
+// spec.title / spec.tabs: a value, a getter (read here, so it follows the language) or a function of (args, state)
 function titleOf(e, args) {
-  const t = e.spec.title;
-  return typeof t === 'function' ? String(t(args || {}, S && S.store.state) ?? e.name) : String(t ?? e.name);
+  const ti = e.spec.title;
+  return typeof ti === 'function' ? String(ti(args || {}, S && S.store.state) ?? e.name) : String(ti ?? e.name);
 }
 function tabsOf(e, args) {
-  const t = e.spec.tabs;
-  return (typeof t === 'function' ? t(args || {}, S && S.store.state) : t) || [];
+  const tb = e.spec.tabs;
+  return (typeof tb === 'function' ? tb(args || {}, S && S.store.state) : tb) || [];
 }
 
 function buildFrame(e) {
@@ -206,7 +180,7 @@ function buildFrame(e) {
   e.titleText = h('span.hh-panel-title-text', { id: titleId });
   e.titleIcon = spec.icon ? icon(spec.icon, { size: 40, cls: 'hh-panel-title-icon' }) : null;
   e.closeBtn = h('button.btn.btn--stop.btn--round.hh-panel-close', {
-    type: 'button', 'aria-label': 'Close', title: 'Close (Esc)', on: { click: () => registry.close(name) },
+    type: 'button', 'aria-label': t('common.close'), title: closeTitle(), on: { click: () => registry.close(name) },
   }, svgIcon('close', 26));
   e.tabsEl = h('div.hh-tabs', { role: 'tablist', hidden: true });
   e.body = h('div.hh-panel-body.paper');
@@ -377,7 +351,7 @@ function mountPanel(e) {
     e.inst = e.spec.mount(e.body, ctx) || {};
   } catch (err) {
     console.error(`panel '${e.name}' mount() failed`, err);
-    e.body.replaceChildren(h('p.empty-note', 'This page could not be drawn. The farm is fine; try again in a moment.'));
+    e.body.replaceChildren(h('p.empty-note', t('shell.panel.broken')));
     e.inst = {};
   }
   const topics = e.spec.topics || [];
@@ -656,6 +630,12 @@ export const ui = {
     // multi-farm mode only (null otherwise): the invite card, the personal link, the nudge (before the HUD: its menu
     // and Settings link to it)
     ctx.invite = createInviteUi(ctx);
+    // multi-farm mode only (null otherwise): "Keep your farm safe", the Farmers' new keys (ui/keep.js)
+    ctx.keep = createKeepUi(ctx);
+    // "Suggest an idea" (every mode; a self-hosted farm's entry opens GitHub) and the GitHub star card (multi only)
+    ctx.ideas = createIdeasUi(ctx);
+    // Settings > Farm's Privacy section (every mode) and "Delete this farm now" (multi only): ui/privacy.js
+    ctx.privacy = createPrivacyUi(ctx);
     const hud = createHud(ctx);
     ctx.hud = hud;
     const tips = createTips(ctx);
@@ -673,6 +653,7 @@ export const ui = {
     const tracker = createTracker(ctx);
     const naming = createNaming(ctx);
     const recap = createRecap(ctx);
+    ctx.starNudge = createStarNudge(ctx);
     // "where to get it" bubbles on every needed item of every panel (live requests 2026-10-04); before the panels' keys:
     // the first Esc closes the bubble, not the panel under it
     const hints = createItemHints(ctx);
@@ -698,6 +679,9 @@ export const ui = {
     ui.panels.on('open', () => tips.tooltip(null, { force: true }));
 
     ctx.settings.apply();
+    // a language switch mid-game (Settings, i18n/core.js setLang): every open panel re-mounts in the new language and
+    // the shell redraws what a welcome redraws; modules that built text once re-label themselves on onLang
+    onLang(() => relocalize());
     if (store.state) { hud.refresh(); toolbar.render(); ctx.feed.render(); tracker.render(); ctx.tutorial.render(); recap.onWelcome(); naming.maybeOpen(); }
     for (const [pid, on] of pendingPeers) hud.setPeer(pid, on);
     if (pendingConn) hud.setConnection(pendingConn);
@@ -723,7 +707,7 @@ export const ui = {
   hideSlots() { $('slot-picker').hidden = true; },
   slotError(code) {
     // on the slot picker a RATE refusal means the passphrase lockout (server: 5 wrong ones, one minute)
-    $('slot-error').textContent = code === ERR.RATE ? 'Too many wrong passphrases. Wait a minute.' : errText(code);
+    $('slot-error').textContent = code === ERR.RATE ? t('shell.slot.lockout') : errText(code);
   },
 
   setPending(p) { if (mods) mods.hud.setPending(p); },
@@ -739,8 +723,8 @@ export const ui = {
     if (S.store.state && pid !== S.store.pid && was !== isOnline && was !== undefined) {
       const p = S.store.state.players[pid];
       if (p) {
-        mods.feed.push({ by: pid, actor: p.name, text: isOnline ? 'arrived on the farm 🌻' : 'left for now', glyph: isOnline ? 'heart' : null });
-        if (isOnline) mods.toasts.toast(`${p.name} arrived 🌻`, { kind: 'love', ms: 3500 });
+        mods.feed.push({ by: pid, actor: p.name, text: isOnline ? t('shell.peer.arrivedFeed') : t('shell.peer.leftFeed'), glyph: isOnline ? 'heart' : null });
+        if (isOnline) mods.toasts.toast(t('shell.peer.arrived', { name: p.name }), { kind: 'love', ms: 3500 });
       }
     }
   },
@@ -766,7 +750,7 @@ export const ui = {
   /** Photo mode (P): hide every HUD element; P or Esc brings it back. */
   photoMode(on) {
     ui.hideHud(on);
-    if (on && mods) mods.toasts.toast('Photo mode: press P or Esc to come back', { kind: 'info', ms: 2000 });
+    if (on && mods) mods.toasts.toast(t('shell.photo.mode'), { kind: 'info', ms: 2000 });
   },
   /**
    * A photo on a phone (mobile QA M-08): the picture itself, to press and hold and save (an http page's download is
@@ -777,10 +761,10 @@ export const ui = {
     document.getElementById('photo-sheet')?.remove();
     const url = URL.createObjectURL(blob);
     const close = () => { el.remove(); URL.revokeObjectURL(url); };
-    const el = h('div.photo-sheet#photo-sheet', { role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Your photo' },
-      h('img.photo-sheet-img', { src: url, alt: 'A photo of the farm' }),
-      h('p.photo-sheet-msg', 'Press and hold the picture to save or share it.'),
-      h('button.btn.btn--sky.photo-sheet-done', { type: 'button', on: { click: close } }, 'Done'));
+    const el = h('div.photo-sheet#photo-sheet', { role: 'dialog', 'aria-modal': 'true', 'aria-label': t('shell.photo.label') },
+      h('img.photo-sheet-img', { src: url, alt: t('shell.photo.alt') }),
+      h('p.photo-sheet-msg', t('shell.photo.save')),
+      h('button.btn.btn--sky.photo-sheet-done', { type: 'button', on: { click: close } }, t('common.done')));
     el.addEventListener('keydown', (e) => { if (e.key === 'Escape') close(); });
     document.body.append(el);
     el.querySelector('button')?.focus({ preventScroll: true });
@@ -801,6 +785,26 @@ export const ui = {
   /** Per-browser settings: get() / set(patch) / on(fn) (filled by init). */
   settings: null,
 };
+
+/** Re-draw the shell and the open panels in the language just chosen (see ui.init). */
+function relocalize() {
+  if (!mods) return;
+  for (const e of panelEntries.values()) {
+    if (e.closeBtn) { e.closeBtn.setAttribute('aria-label', t('common.close')); e.closeBtn.title = closeTitle(); }
+  }
+  for (const name of [...openStack]) {
+    const e = panelEntries.get(name);
+    if (!e || e.legacy || !e.open) continue;
+    try { renderTabs(e); mountPanel(e); } catch (err) { console.error(`panel '${name}' did not re-draw in the new language`, err); }
+  }
+  const st = S.store.state;
+  if (!st) return;
+  for (const [what, fn] of [['hud', () => mods.hud.refresh()], ['toolbar', () => mods.toolbar.render()], ['feed', () => mods.feed.render()],
+    ['tracker', () => mods.tracker.render()], ['tutorial', () => mods.tutorial.render()]]) {
+    try { fn(); } catch (err) { console.error(`${what} did not re-draw in the new language`, err); }
+  }
+  mods.tips.tooltip(null, { force: true });
+}
 
 /** World feedback the shell reacts to (partner heads-ups, hearts). The Level-up Bloom is a celebration (levelup.js). */
 function onFx(ev, by) {
@@ -823,14 +827,18 @@ function onFx(ev, by) {
       // the wish's owner hears about a release request at once, with the answer at hand (UI-10)
       if (ev.owner !== S.store.pid || !other) return;
       const w = st.farm.wishlist && st.farm.wishlist[ev.id];
-      const name = w ? `the ${defOf(w.def)?.name ?? CONTENT_NAME(w.def)}` : 'a wish';
+      const coins = w ? w.coins : 0;
       mods.toasts.banner({
-        id: `wish-ask-${ev.id}`, kind: 'wish', ribbon: 'A wish question',
-        message: `${other.name} would like to use the ${fmtNum(w ? w.coins : 0)} coins you saved for ${name}. With no answer it is released in ${fmtDuration(Math.max(0, (ev.until ?? 0) - S.store.now())).replace(/ 0\d?[ms]$/, '')}.`,
-        things: w ? [{ icon: w.def, name }] : [],
+        id: `wish-ask-${ev.id}`, kind: 'wish', ribbon: t('shell.wish.ribbon'),
+        // functions: a language switch while the card is up says it again (the time left as it is then)
+        message: () => {
+          const left = fmtDur(Math.max(0, (ev.until ?? 0) - S.store.now()), { cut: 'ms<10' });
+          return w ? tn('shell.wish.ask', coins, { name: other.name, thing: N(w.def), left }) : tn('shell.wish.askAny', coins, { name: other.name, left });
+        },
+        things: w ? [{ icon: w.def, name: () => nameOf(w.def) }] : [],
         actions: [
-          { label: 'Yes, go ahead', kind: 'go', fn: () => S.controller.do('wishAnswer', { id: ev.id, ok: true }) },
-          { label: 'Keep saving', kind: 'paper', fn: () => S.controller.do('wishAnswer', { id: ev.id, ok: false }) },
+          { label: t('shell.wish.yes'), kind: 'go', fn: () => S.controller.do('wishAnswer', { id: ev.id, ok: true }) },
+          { label: t('shell.wish.keep'), kind: 'paper', fn: () => S.controller.do('wishAnswer', { id: ev.id, ok: false }) },
         ],
         ttl: 60_000,
       });
@@ -843,12 +851,12 @@ function onFx(ev, by) {
       if (ev.pid === S.store.pid && ev.n > 0) {
         // with two of you, "someone" is always the partner: say who (QA wave 1 CL-04)
         const them = other ? other.name : partnerName();
-        const why = { thanks: `${them} said thanks`, team: 'Teamwork', tend: `${them} tended your crops`, highFive: 'High five!', keepsake: `A keepsake from ${them}` }[ev.why];
+        const why = ['thanks', 'team', 'tend', 'highFive', 'keepsake'].includes(ev.why) ? t(`shell.hearts.${ev.why}`, { name: them }) : '';
         mods.toasts.toast(`+${ev.n} ♥${why ? `  ${why}` : ''}`, { kind: 'love', ms: 2200 });
       }
       return;
     case 'highFiveWait':
-      if (other) mods.toasts.toast(`${other.name} holds up a hand for a high five ✋ (T)`, { kind: 'love', ms: 3000 });
+      if (other) mods.toasts.toast(t('shell.highFiveWait', { name: other.name }), { kind: 'love', ms: 3000 });
       return;
     default:
   }
@@ -858,9 +866,8 @@ function onFx(ev, by) {
 function partnerName() {
   const st = S && S.store.state;
   const pid = st ? Object.keys(st.players).find((p) => p !== S.store.pid) : null;
-  return pid ? st.players[pid].name : 'Your partner';
+  return pid ? st.players[pid].name : t('common.partner');
 }
-const CONTENT_NAME = (id) => String(id || '').replace(/_/g, ' ');
 
 /** "Join" on the partner's Duet invitation: press "Cook together" now and show the recipe in its building. */
 function joinDuet(ev) {
@@ -889,6 +896,7 @@ function paintWhenLoaded(layer) {
 }
 if (typeof document !== 'undefined' && typeof getComputedStyle === 'function') paintWhenLoaded(document.getElementById('boot'));
 let bootTimer = 0;
+let bootStatus = 'connecting';
 function hideBoot() { clearTimeout(bootTimer); const b = $('boot'); if (b) b.hidden = true; }
 // main.js reports a failed boot (no WebGL2) by appending a <p> to <body>: the title card steps aside for it
 if (typeof MutationObserver === 'function' && typeof document !== 'undefined') {
@@ -907,23 +915,47 @@ function bootLine(status) {
   if (status === 'mismatch') {
     b.hidden = false;
     $('slot-picker').hidden = true;
-    text.textContent = 'The farm server runs other game files. Restart it, then reload.';
-    line.append(h('button.btn.btn--sun.btn--small.reload', { type: 'button', on: { click: () => location.reload() } }, 'Reload'));
+    bootStatus = 'mismatch';
+    text.textContent = t('shell.boot.mismatch');
+    line.append(h('button.btn.btn--sun.btn--small.reload', { type: 'button', on: { click: () => location.reload() } }, t('common.reload')));
     return;
   }
   if (b.hidden) return;
-  if (status === 'open') { text.textContent = 'Opening the gate…'; return; }
-  text.textContent = status === 'reconnecting' ? 'The farm is not answering yet. Trying again…' : 'Waking up the farm…';
+  bootStatus = status;
+  if (status === 'open') { text.textContent = t('shell.boot.open'); return; }
+  text.textContent = status === 'reconnecting' ? t('shell.boot.retry') : t('shell.boot.waking');
   clearTimeout(bootTimer);
-  bootTimer = setTimeout(() => { if (!b.hidden) text.textContent = 'The farm server seems to be asleep. Is it running? Still trying…'; }, 15_000);
+  bootTimer = setTimeout(() => { if (!b.hidden) { bootStatus = 'asleep'; text.textContent = t('shell.boot.asleep'); } }, 15_000);
+}
+
+// the loading screen's line follows a language switch made on the loading screen itself (index.html's toggle)
+if (typeof document !== 'undefined') {
+  onLang((l) => {
+    // the home-screen app's description in the language. A farm's own manifest (multi mode, ui/farm-gate.js) keeps its
+    // start: iOS's data: copy carries the farmer's key and stays as it is, Android's keyless /f/<id>/manifest.webmanifest
+    // asks for the language
+    const mf = document.querySelector?.('link[rel="manifest"]');
+    const href = String(mf?.getAttribute('href') ?? '');
+    if (!mf || href.startsWith('data:')) return;
+    if (href.startsWith('/f/')) mf.setAttribute('href', farmManifestHref(href, l));
+    else mf.setAttribute('href', l === 'bg' ? '/manifest.bg.webmanifest' : '/manifest.webmanifest');
+  });
+  onLang(() => {
+    const b = $('boot');
+    if (!b || b.hidden) return;
+    const text = $('boot-text');
+    b.querySelector('.reload')?.replaceChildren(t('common.reload'));
+    if (text) text.textContent = t(bootStatus === 'mismatch' ? 'shell.boot.mismatch' : bootStatus === 'open' ? 'shell.boot.open' : bootStatus === 'reconnecting' ? 'shell.boot.retry'
+      : bootStatus === 'asleep' ? 'shell.boot.asleep' : 'shell.boot.waking');
+  });
 }
 
 // ---- slot picker (first screen: who is playing here; name + colour; passphrase; reclaim) -------------------
 // the six colours with the names a person says (the picker used to read "Colour #2BB3A3"; QA wave 1 UI-31)
-export const SWATCH_NAMES = Object.freeze({ '#2BB3A3': 'Teal', '#FF7A6B': 'Coral', '#FFC83D': 'Sunflower', '#4AA8E8': 'Sky',
-  '#9B6BD6': 'Plum', '#5DBB3F': 'Leaf' });
+export const SWATCH_NAMES = live({ '#2BB3A3': 'shell.swatch.teal', '#FF7A6B': 'shell.swatch.coral', '#FFC83D': 'shell.swatch.sunflower',
+  '#4AA8E8': 'shell.swatch.sky', '#9B6BD6': 'shell.swatch.plum', '#5DBB3F': 'shell.swatch.leaf' });
 const SWATCHES = Object.keys(SWATCH_NAMES);
-const swatchName = (c) => SWATCH_NAMES[String(c || '').toUpperCase()] ?? 'this colour';
+const swatchName = (c) => SWATCH_NAMES[String(c || '').toUpperCase()] ?? t('shell.swatch.this');
 
 /**
  * Colours a free slot may take: every swatch except those a claimed farmer already wears (QA wave 1 UI-05: both
@@ -954,14 +986,25 @@ function slotPortrait(face, s, color) {
 }
 
 /** The picker's line in multi-farm mode: a new farm's creator, an invited friend, or a farmer coming back. Pure. */
-export function multiSub(slots, { invited = false, creator = false } = {}) {
+export function multiSub(slots, { invited = false, creator = false, rejoin = false } = {}) {
+  if (rejoin) return t('keep.rejoin.sub', { name: slots.find((s) => s.claimed)?.name ?? '' });
   const host = slots.find((s) => s.claimed && s.name)?.name;
-  if (invited) return host ? `${host} invited you! Pick your name and colour to farm together.` : 'You are invited! Pick your name and colour to farm together.';
-  if (creator && slots.every((s) => !s.claimed)) return 'Your new farm is ready! Who is the first farmer?';
-  return 'Who is playing on this screen?';
+  if (invited) return host ? t('shell.slot.invitedBy', { host }) : t('shell.slot.invited');
+  if (creator && slots.every((s) => !s.claimed)) return t('shell.slot.newFarm');
+  return t('shell.slot.who');
 }
 
+let lastSlots = null;
+// a language switch while the picker is up (its own toggle, or the loading screen's a moment before) re-draws it
+if (typeof document !== 'undefined') {
+  onLang(() => { if (lastSlots && document.getElementById('slot-picker') && !$('slot-picker').hidden) showSlots(lastSlots.slots, lastSlots.onPick, lastSlots.opts); });
+}
 function showSlots(slots, onPick, opts = {}) {
+  // the language toggle re-draws the card: what was typed stays
+  const typed = new Map([...document.querySelectorAll('#slot-list .slot')].map((r) => [r.dataset.slot, r.querySelector('input:not(.pass)')?.value ?? '']));
+  lastSlots = { slots, onPick, opts };
+  const card = document.querySelector('#slot-picker .slot-paper');
+  if (card && !card.querySelector('.lang-pick')) card.prepend(langToggle());
   const list = $('slot-list');
   list.replaceChildren();
   $('slot-error').textContent = '';
@@ -971,8 +1014,8 @@ function showSlots(slots, onPick, opts = {}) {
   // final release V-15: two identical rows read as "both names needed"; each farmer takes ONE row on their own screen
   const bothFree = slots.length > 1 && slots.every((s) => !s.claimed);
   $('slot-sub').textContent = opts.multi ? multiSub(slots, opts)
-    : bothFree ? 'Pick one farmer for this screen. Your partner takes the other one on their own screen.'
-      : anyFree ? 'Who is playing on this screen?' : 'Welcome back! Who is playing on this screen?';
+    : bothFree ? t('shell.slot.pickOne')
+      : anyFree ? t('shell.slot.who') : t('shell.slot.welcomeBack');
   for (const s of slots) {
     const swatches = freeSwatches(slots, s.pid);
     let base = s.color || SLOT_COLORS[s.pid] || SWATCHES[0];
@@ -984,50 +1027,65 @@ function showSlots(slots, onPick, opts = {}) {
     for (const [k, v] of Object.entries(playerVars(base))) face.style.setProperty(k, v);
     slotPortrait(face, s, base);
     const row = h('div.slot', { dataset: { slot: s.pid } }, face);
-    if (s.claimed) {
-      row.append(h('span.taken', s.name || s.pid, h('small', s.online ? 'Playing right now' : 'Away')));
+    if (s.claimed && opts.multi && opts.rejoin) {
+      // a new-key link: this device becomes that farmer; whoever opens it may give the farmer a new name (a language
+      // switch re-draws the card: what was typed stays)
+      const input = h('input.field', { type: 'text', maxlength: '16', value: typed.has(s.pid) ? typed.get(s.pid) : (s.name || ''),
+        'aria-label': t('keep.rejoin.name'), autocomplete: 'nickname' });
+      const go = () => {
+        const name = input.value.trim() || s.name;
+        if (!name) { $('slot-error').textContent = t('shell.slot.needName'); input.focus(); return; }
+        $('slot-error').textContent = '';
+        onPick(s.pid, name, { color: s.color });
+      };
+      input.addEventListener('keydown', (e) => { if (e.key === 'Enter') go(); });
+      input.addEventListener('input', () => { face.querySelector('.ltr').textContent = initialOf(input.value); });
+      row.append(input, h('button.btn', { type: 'button', dataset: { rejoin: s.pid }, on: { click: go } }, t('keep.rejoin.go')));
+    } else if (s.claimed) {
+      row.append(h('span.taken', s.name || s.pid, h('small', s.online ? t('shell.slot.playing') : t('shell.slot.away'))));
       if (s.mine) {
-        row.append(h('button.btn.btn--small', { type: 'button', on: { click: () => onPick(s.pid, null) } }, 'Continue'));
+        row.append(h('button.btn.btn--small', { type: 'button', on: { click: () => onPick(s.pid, null) } }, t('shell.slot.continue')));
       } else if (opts.multi) {
         // a farmer of this farm on a new device opens their personal link (Settings > Farm on their old one)
-        row.append(h('small.slot-hint', 'Is this you on a new device? Open your personal farm link.'));
+        row.append(h('small.slot-hint', t('shell.slot.newDevice')));
       } else if (!s.online || needPass) {
         // a lost token: "this is me on a new device" (needs the passphrase when the server has one)
-        const pass = needPass ? h('input.field.pass', { type: 'password', placeholder: 'Farm passphrase', 'aria-label': 'Farm passphrase', autocomplete: 'current-password' }) : null;
+        const pass = needPass ? h('input.field.pass', { type: 'password', placeholder: t('shell.slot.pass'), 'aria-label': t('shell.slot.pass'), autocomplete: 'current-password' }) : null;
         const go = () => onPick(s.pid, s.name, { reclaim: true, pass: pass ? pass.value : undefined, color: s.color });
-        row.append(h('button.reclaim', { type: 'button', on: { click: () => { if (pass && !pass.value) { pass.hidden = false; pass.focus(); return; } go(); } } }, 'This is me on a new computer'));
+        row.append(h('button.reclaim', { type: 'button', on: { click: () => { if (pass && !pass.value) { pass.hidden = false; pass.focus(); return; } go(); } } }, t('shell.slot.reclaim')));
         if (pass) { pass.hidden = true; pass.addEventListener('keydown', (e) => { if (e.key === 'Enter') go(); }); row.append(pass); }
       }
     } else {
       const input = h('input.field', {
-        type: 'text', maxlength: '16', placeholder: 'Your name', 'aria-label': `Name for farmer ${s.pid.slice(1)}`, autocomplete: 'nickname',
+        type: 'text', maxlength: '16', placeholder: t('shell.slot.name'), 'aria-label': t('shell.slot.nameFor', { n: s.pid.slice(1) }), autocomplete: 'nickname',
       });
+      if (typed.get(s.pid)) { input.value = typed.get(s.pid); face.querySelector('.ltr').textContent = initialOf(input.value); }
       input.addEventListener('input', () => { face.querySelector('.ltr').textContent = initialOf(input.value); });
-      const pass = needPass ? h('input.field.pass', { type: 'password', placeholder: 'Farm passphrase', 'aria-label': 'Farm passphrase', autocomplete: 'current-password' }) : null;
-      const play = h('button.btn', { type: 'button' }, 'Play');
+      const pass = needPass ? h('input.field.pass', { type: 'password', placeholder: t('shell.slot.pass'), 'aria-label': t('shell.slot.pass'), autocomplete: 'current-password' }) : null;
+      const play = h('button.btn', { type: 'button' }, t('shell.slot.play'));
       const go = () => {
         const name = input.value.trim();
         // say it: an Enter on an empty name used to do nothing at all (UI-34)
-        if (!name) { $('slot-error').textContent = 'Type a name first.'; input.focus(); return; }
-        if (pass && !pass.value) { $('slot-error').textContent = 'Type the farm passphrase too.'; pass.focus(); return; }
+        if (!name) { $('slot-error').textContent = t('shell.slot.needName'); input.focus(); return; }
+        if (pass && !pass.value) { $('slot-error').textContent = t('shell.slot.needPass'); pass.focus(); return; }
         const clash = swatches.find((w) => w.color === String(color).toUpperCase() && w.takenBy);
-        if (clash) { $('slot-error').textContent = `${clash.takenBy} has ${clash.name}. Pick another colour.`; return; }
+        if (clash) { $('slot-error').textContent = t('shell.slot.colourTaken', { name: clash.takenBy, colour: clash.name }); return; }
         $('slot-error').textContent = '';
         onPick(s.pid, name, { color, pass: pass ? pass.value : undefined });
       };
       play.addEventListener('click', go);
       input.addEventListener('keydown', (e) => { if (e.key === 'Enter') go(); });
-      input.addEventListener('input', () => { if ($('slot-error').textContent === 'Type a name first.') $('slot-error').textContent = ''; });
-      const sw = h('div.swatches', { role: 'radiogroup', 'aria-label': 'Colour' });
+      input.addEventListener('input', () => { if ($('slot-error').textContent === t('shell.slot.needName')) $('slot-error').textContent = ''; });
+      const sw = h('div.swatches', { role: 'radiogroup', 'aria-label': t('shell.slot.colour') });
       const label = h('span.sw-name', swatchName(color));
       for (const w of swatches) {
         const c = w.color;
         // the partner's colour stays visible but taken: greyed, marked with their initial, and it says whose it is
         const b = h('button.swatch', { type: 'button', role: 'radio', 'aria-checked': String(c === String(color).toUpperCase()),
-          'aria-label': w.takenBy ? `${w.name}: ${w.takenBy} has it` : w.name, 'aria-disabled': w.takenBy ? 'true' : null,
-          title: w.takenBy ? `${w.takenBy} has ${w.name}` : w.name, style: { '--sw': c }, dataset: { colour: w.name },
+          'aria-label': w.takenBy ? t('shell.slot.swatchTakenLabel', { colour: w.name, name: w.takenBy }) : w.name, 'aria-disabled': w.takenBy ? 'true' : null,
+          title: w.takenBy ? t('shell.slot.swatchTaken', { colour: w.name, name: w.takenBy }) : w.name, style: { '--sw': c }, dataset: { colour: w.name },
           on: { click: () => {
-            if (w.takenBy) { $('slot-error').textContent = `${w.takenBy} has ${w.name}. Pick another colour.`; return; }
+            if (w.takenBy) { $('slot-error').textContent = t('shell.slot.colourTaken', { name: w.takenBy, colour: w.name }); return; }
             $('slot-error').textContent = '';
             color = c;
             label.textContent = w.name;

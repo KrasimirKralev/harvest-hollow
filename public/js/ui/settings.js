@@ -14,6 +14,7 @@
 // audio.js (it persists them in 'hh.audio'): the Sound section reads audio.volumes() and writes
 // audio.setVolume(channel, 0..1) / audio.setMuted(bool); `volume` here is only the fallback before audio exists.
 import { h, kv } from './dom.js';
+import { t, liveRows, live, lang, setLang, LANGS, LANG_NAMES, fmtPct } from '../i18n/index.js';
 
 const KEY = 'hh.settings';
 const prefersReduced = () => Boolean(globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches);
@@ -78,12 +79,13 @@ export function uiScaleOf(s, w, h) {
 }
 
 /** Every key the game answers to (GDD §7.1), for the Controls section. */
-export const KEYS = Object.freeze([
-  ['1 – 9', 'Tools and seed slots'], ['H', 'Hand'], ['B', 'Build mode'], ['R', 'Rotate the ghost'],
-  ['M', 'Market'], ['I', 'Barn'], ['O', 'Orders board'], ['J', 'Journal'], [',', 'Settings'],
-  ['Q / E', 'Turn the view'], ['W A S D', 'Pan the view'], ['Wheel', 'Zoom to the cursor'], ['Right-drag', 'Pan'],
-  ['Shift + click', 'Uproot a crop'], ['G', 'Ping at the cursor'], ['T', 'Emote wheel'], ['F', 'Go to your partner'],
-  ['Space', 'Centre on me'], ['P', 'Take a photo'], ['Esc', 'Close / cancel'], ['F3', 'Debug overlay'],
+// the key caps stay Latin in every language (glossary rule 9); only what they do is translated (liveRows: read at use)
+export const KEYS = liveRows([
+  ['1 – 9', 'settings.key.slots'], ['H', 'game.key.hand'], ['B', 'game.key.build'], ['R', 'settings.key.rotateGhost'],
+  ['M', 'game.key.market'], ['I', 'game.key.barn'], ['O', 'game.key.orders'], ['J', 'game.key.journal'], [',', 'game.key.settings'],
+  ['Q / E', 'settings.key.turn'], ['W A S D', 'settings.key.pan'], ['Wheel', 'settings.key.wheel'], ['Right-drag', 'settings.key.panShort'],
+  ['Shift + click', 'settings.key.uproot'], ['G', 'game.key.ping'], ['T', 'game.key.emotes'], ['F', 'settings.key.partner'],
+  ['Space', 'game.key.me'], ['P', 'game.key.photo'], ['Esc', 'settings.key.close'], ['F3', 'game.key.debug'],
 ]);
 
 /** Input options the controller owns (game/controller.js `options`): Settings only shows and flips them. */
@@ -91,20 +93,25 @@ const CONTROLLER_KEYS = new Set(['haptics', 'keepAwake']);
 
 /** What a finger does (mobile wave, the input lane's touch model), for the Controls tab on a phone or tablet. */
 export const TOUCH_GESTURES = Object.freeze([
-  ['Tap', 'Use the tool in hand'], ['Drag', 'Paint with a farming tool; with the Hand, move the view'],
-  ['Two fingers', 'Move the view; pinch to zoom; twist to turn'], ['Two fingers up / down', 'Tilt the view'],
-  ['Long press', 'What is this?'],
-  ['Double tap', 'Look closer'],
-]);
+  ['settings.touch.tap', 'settings.touch.tapDo'], ['settings.touch.drag', 'settings.touch.dragDo'],
+  ['settings.touch.two', 'settings.touch.twoDo'], ['settings.touch.tilt', 'settings.touch.tiltDo'],
+  ['settings.touch.long', 'settings.touch.longDo'],
+  ['settings.touch.double', 'settings.touch.doubleDo'],
+].map(([g, what]) => {
+  const row = [];
+  Object.defineProperty(row, 0, { get: () => t(g), enumerable: true });
+  Object.defineProperty(row, 1, { get: () => t(what), enumerable: true });
+  return Object.freeze(row);
+}));
 
 /** Labels the Controls list shows instead of the keymap's own (what the key really does). */
-const KEY_LABELS = Object.freeze({ photo: 'Take a photo' });
+const KEY_LABELS = live({ photo: 'game.key.photo' });
 
 /** Where each track plays (tracks.json `moods`), for the Credits tab. */
-export const MOOD_LABELS = Object.freeze({ title: 'Title screen', day: 'Day', evening: 'Evening and Golden Hour',
-  night: 'Night', rain: 'Rain', fair: 'County Fair' });
+export const MOOD_LABELS = live({ title: 'settings.mood.title', day: 'settings.mood.day', evening: 'settings.mood.evening',
+  night: 'settings.mood.night', rain: 'settings.mood.rain', fair: 'settings.mood.fair' });
 /** The plain-language licence names the Credits tab shows. */
-const LICENCE_NAMES = Object.freeze({ CC0: 'Public domain (CC0)' });
+const LICENCE_NAMES = live({ CC0: 'settings.licence.CC0' });
 
 /** "Day · Evening and Golden Hour" for a track's moods. Pure (tests). */
 export const moodText = (moods) => (Array.isArray(moods) ? moods : []).map((m) => MOOD_LABELS[m]).filter(Boolean).join(' · ');
@@ -128,14 +135,14 @@ export function createSettings(S) {
     const km = S.controller && S.controller.keys;
     if (!km || typeof km.list !== 'function') return KEYS;
     const rows = km.list().filter((r) => r.keys && r.keys.length && !/^pan(Down|Left|Right)$/.test(r.action))
-      .map((r) => [r.action === 'panUp' ? 'W A S D' : r.keys.join(' / '), r.action === 'panUp' ? 'Pan the view' : KEY_LABELS[r.action] ?? r.label]);
-    if (!km.list().some((r) => r.action === 'settings')) rows.push([',', 'Settings']);
-    return [...rows, ['Wheel', 'Zoom to the cursor'], ...dragKeys(), ['Shift + click', 'Uproot a crop']];
+      .map((r) => [r.action === 'panUp' ? 'W A S D' : r.keys.join(' / '), r.action === 'panUp' ? t('settings.key.pan') : KEY_LABELS[r.action] ?? r.label]);
+    if (!km.list().some((r) => r.action === 'settings')) rows.push([',', t('game.key.settings')]);
+    return [...rows, [t('settings.cap.wheel'), t('settings.key.wheel')], ...dragKeys(), [t('settings.cap.shiftClick'), t('settings.key.uproot')]];
   };
   /** What the right mouse button does in the chosen camera mode (wish H), for the Controls list. */
   const dragKeys = () => (rightDragOf() === 'rotate'
-    ? [['Right-drag', 'Turn (sideways) and tilt (up / down) the view'], ['Middle-drag / Shift + right-drag', 'Pan']]
-    : [['Right-drag', 'Pan']]);
+    ? [[t('settings.cap.rightDrag'), t('settings.key.turnTilt')], [t('settings.cap.middleDrag'), t('settings.key.panShort')]]
+    : [[t('settings.cap.rightDrag'), t('settings.key.panShort')]]);
   let cur = sanitize(kv.get(KEY));
   if (!kv.get(KEY) && prefersReduced()) cur.motion = 'reduced';
   const subs = new Set();
@@ -241,9 +248,10 @@ export function createSettings(S) {
     if (help) row.append(h('span.help', help));
     return row;
   }
-  function slider(label, get, set, { min = 0, max = 100, step = 5, unit = '%', extra = null, text = null } = {}) {
-    const id = `set-${label.replace(/\W+/g, '-').toLowerCase()}`;
-    const show = () => (text ? text() : `${get()}${unit}`);
+  function slider(label, get, set, { min = 0, max = 100, step = 5, extra = null, text = null, id: sid = null } = {}) {
+    // the id is from a stable name, never the (translated) label
+    const id = `set-${sid ?? label.replace(/\W+/g, '-').toLowerCase()}`;
+    const show = () => (text ? text() : fmtPct(get()));
     const out = h('output', { for: id }, show());
     const input = h('input', { type: 'range', id, min, max, step, value: get(),
       on: { input: (e) => { set(Number(e.target.value)); out.textContent = show(); } } });
@@ -255,14 +263,14 @@ export function createSettings(S) {
   function sizeSlider() {
     const W = () => globalThis.innerWidth || 1366;
     const H = () => globalThis.innerHeight || 768;
-    return slider('Interface size', () => scale(), (v) => api.set({ uiScale: v }), {
-      min: UI_SCALE_MIN, max: uiScaleMax(W(), H()), step: 5,
-      text: () => `${scale()}%${cur.uiScaleSet ? '' : ' (auto)'}`,
+    return slider(t('settings.size'), () => scale(), (v) => api.set({ uiScale: v }), {
+      id: 'interface-size', min: UI_SCALE_MIN, max: uiScaleMax(W(), H()), step: 5,
+      text: () => (cur.uiScaleSet ? fmtPct(scale()) : t('settings.sizeAuto', { pct: fmtPct(scale()) })),
       extra: ({ input, out, show }) => h('div.set-inline',
         h('button.btn.btn--paper.btn--small', { type: 'button', dataset: { size: 'auto' }, on: { click: () => {
           api.set({ uiScaleSet: false }); input.value = String(scale()); out.textContent = show();
-        } } }, 'Fit this screen'),
-        h('span.help', `Up to ${uiScaleMax(W(), H())} % fits this window; the size follows the window until you pick one.`)),
+        } } }, t('settings.fit')),
+        h('span.help', t('settings.sizeHelp', { n: uiScaleMax(W(), H()) }))),
     });
   }
   /** A switch. `live` keys are read from and written to their owner (sound: audio.js, edge scroll, vibration and the
@@ -282,116 +290,132 @@ export function createSettings(S) {
   function touchRows() {
     const dev = S.controller?.device;
     const opts = ctl()?.options || {};
-    const rows = [h('h3', 'Touch'), h('ul.keys.gestures', TOUCH_GESTURES.map(([k, what]) => h('li', h('kbd', k), what)))];
-    if (Object.hasOwn(opts, 'haptics')) rows.push(toggle('Vibration', 'haptics', 'A short buzz on a harvest and a level-up (Android; iPhones have none).'));
+    const rows = [h('h3', t('settings.touch')), h('ul.keys.gestures', TOUCH_GESTURES.map(([k, what]) => h('li', h('kbd', k), what)))];
+    if (Object.hasOwn(opts, 'haptics')) rows.push(toggle(t('settings.vibration'), 'haptics', t('settings.vibrationHelp')));
     if (Object.hasOwn(opts, 'keepAwake')) {
       const can = dev?.wakeLock?.available;
-      rows.push(toggle('Keep the screen on', 'keepAwake', can ? 'While you play; after three minutes without a touch the screen may sleep.'
-        : 'This browser cannot keep the screen on for a page on the home network.'));
+      rows.push(toggle(t('settings.awake'), 'keepAwake', can ? t('settings.awakeHelp') : t('settings.awakeNo')));
     }
     if (dev?.fullscreen?.available) {
-      rows.push(h('div.set-row', h('span.lbl', 'Full screen'), h('div',
+      rows.push(h('div.set-row', h('span.lbl', t('settings.fullscreen')), h('div',
         h('button.btn.btn--paper.btn--small', { type: 'button', on: { click: () => dev.fullscreen.toggle()?.catch?.(() => {}) } },
-          dev.fullscreen.active ? 'Leave full screen' : 'Play full screen'))));
+          dev.fullscreen.active ? t('settings.fullscreenLeave') : t('settings.fullscreenPlay')))));
     }
     return rows;
   }
 
   /** The Credits tab: every music track with its artist, where it plays and its licence (linked to its source page). */
   function creditRows() {
-    const status = h('p.help.credits-status', { role: 'status' }, 'Loading the music list…');
-    const list = h('ul.credits-list', { 'aria-label': 'Music tracks' });
+    const status = h('p.help.credits-status', { role: 'status' }, t('settings.credits.loading'));
+    const list = h('ul.credits-list', { 'aria-label': t('settings.credits.tracks') });
     const fill = (tracks) => {
       let now = null;
       try { now = audioOf()?.info?.().music?.track ?? null; } catch { now = null; }
       status.remove();
-      list.replaceChildren(...tracks.map((t) => h('li.credit', { dataset: { track: t.id }, class: t.id === now ? 'is-playing' : null },
-        h('span.credit-title', t.title),
-        h('span.credit-by', `by ${t.artist}`),
-        h('span.credit-meta', moodText(t.moods)),
+      list.replaceChildren(...tracks.map((tr) => h('li.credit', { dataset: { track: tr.id }, class: tr.id === now ? 'is-playing' : null },
+        h('span.credit-title', tr.title),
+        h('span.credit-by', t('settings.credits.by', { artist: tr.artist })),
+        h('span.credit-meta', moodText(tr.moods)),
         h('span.credit-meta',
-          h('a.credit-link', { href: t.url, target: '_blank', rel: 'noopener noreferrer' }, LICENCE_NAMES[t.licence] ?? t.licence),
-          t.id === now ? h('span.credit-now', 'Playing now') : null))));
+          h('a.credit-link', { href: tr.url, target: '_blank', rel: 'noopener noreferrer' }, LICENCE_NAMES[tr.licence] ?? tr.licence),
+          tr.id === now ? h('span.credit-now', t('settings.credits.now')) : null))));
     };
     loadMusicList().then(fill, (err) => {
       console.warn('settings: the music list did not load', err);
-      status.textContent = 'The music list could not be loaded just now. Open this tab again in a moment.';
+      status.textContent = t('settings.credits.failed');
     });
     return [
-      h('h3', 'Music'),
-      h('p.credits-lead', 'The music is real, composed acoustic and folk music, shared by its artists with everyone. Thank you!'),
+      h('h3', t('settings.credits.music')),
+      h('p.credits-lead', t('settings.credits.musicLead')),
       status,
       list,
-      h('h3', 'Sounds'),
-      h('p.credits-lead', 'The sound effects are synthesised for Harvest Hollow (no recordings), and the stand-in music that plays when a track cannot load is composed note by note in your browser.'),
+      h('h3', t('settings.credits.sounds')),
+      h('p.credits-lead', t('settings.credits.soundsLead')),
     ];
   }
 
+  /** Language (i18n): the two languages in their own words; a tap switches the whole game at once (ui/index.js relocalize). */
+  function langRow() {
+    const row = h('div.set-row.set-lang', h('span.lbl', { id: 'set-lang' }, t('lang.label')));
+    const group = h('div.seg', { role: 'group', 'aria-labelledby': 'set-lang' });
+    for (const l of LANGS) {
+      group.append(h('button', { type: 'button', lang: l, dataset: { v: l, lang: l }, 'aria-pressed': String(lang() === l),
+        on: { click: () => { setLang(l); } } }, LANG_NAMES[l]));
+    }
+    row.append(group, h('span.help', t('lang.help')));
+    return row;
+  }
+
   S.ui.panels.register('settings', {
-    title: 'Settings',
+    get title() { return t('settings.title'); },
     size: 'wide',
     hotkey: ',',
-    tabs: [{ id: 'look', label: 'Look & sound' }, { id: 'access', label: 'Comfort' }, { id: 'keys', label: 'Controls' }, { id: 'farm', label: 'Farm' },
-      { id: 'credits', label: 'Credits' }],
+    get tabs() {
+      return [{ id: 'look', label: t('settings.tab.look') }, { id: 'access', label: t('settings.tab.access') }, { id: 'keys', label: t('settings.tab.keys') },
+        { id: 'farm', label: t('settings.tab.farm') }, { id: 'credits', label: t('settings.tab.credits') }];
+    },
     mount(body, ctx) {
       const grid = h('div.settings');
       if (ctx.tab === 'look') {
         grid.append(
-          h('h3', 'Graphics'),
-          seg('Quality', 'quality', [['auto', 'Auto'], ['high', 'High'], ['medium', 'Medium'], ['low', 'Low'], ['eco', 'Eco']],
-            'Auto keeps the farm smooth on this computer. Eco saves battery: fewer frames while nothing moves.'),
-          seg('Day and night', 'dayCycle', [['cycle', 'Cycle'], ['day', 'Always day'], ['clock', 'Real clock']]),
-          h('h3', 'Sound'),
-          toggle('Mute everything', 'muted'),
-          slider('Master', () => volOf('master'), (v) => setVol('master', v)),
-          slider('Music', () => volOf('music'), (v) => setVol('music', v)),
-          slider('Effects', () => volOf('sfx'), (v) => setVol('sfx', v)),
-          slider('Birds and crickets', () => volOf('ambience'), (v) => setVol('ambience', v)),
-          slider('Buttons', () => volOf('ui'), (v) => setVol('ui', v)),
+          langRow(),
+          h('h3', t('settings.graphics')),
+          seg(t('settings.quality'), 'quality', [['auto', t('settings.q.auto')], ['high', t('settings.q.high')], ['medium', t('settings.q.medium')],
+            ['low', t('settings.q.low')], ['eco', t('settings.q.eco')]], t('settings.qualityHelp')),
+          seg(t('settings.day'), 'dayCycle', [['cycle', t('settings.day.cycle')], ['day', t('settings.day.always')], ['clock', t('settings.day.clock')]]),
+          h('h3', t('settings.sound')),
+          toggle(t('settings.mute'), 'muted'),
+          slider(t('settings.vol.master'), () => volOf('master'), (v) => setVol('master', v), { id: 'master' }),
+          slider(t('settings.vol.music'), () => volOf('music'), (v) => setVol('music', v), { id: 'music' }),
+          slider(t('settings.vol.sfx'), () => volOf('sfx'), (v) => setVol('sfx', v), { id: 'effects' }),
+          slider(t('settings.vol.ambience'), () => volOf('ambience'), (v) => setVol('ambience', v), { id: 'birds-and-crickets' }),
+          slider(t('settings.vol.ui'), () => volOf('ui'), (v) => setVol('ui', v), { id: 'buttons' }),
         );
       } else if (ctx.tab === 'access') {
         grid.append(
-          h('h3', 'Comfort'),
-          seg('Motion', 'motion', [['full', 'Full'], ['reduced', 'Reduced'], ['still', 'Still']],
-            'Reduced: no confetti bursts, gentler sway. Still: nothing moves unless you act.'),
+          h('h3', t('settings.tab.access')),
+          seg(t('settings.motion'), 'motion', [['full', t('settings.motion.full')], ['reduced', t('settings.motion.reduced')], ['still', t('settings.motion.still')]],
+            t('settings.motionHelp')),
           sizeSlider(),
-          toggle('Colour-blind friendly', 'cbSafe', 'Adds ✓ and ✕ marks to ingredients and ready orders, a dashed ring around a farmer who is away and a sign on the connection chip.'),
-          toggle('Sound captions', 'captions', 'Important sounds also appear in the activity feed.'),
-          toggle('Show key hints', 'keyHints', 'Little number badges on the tools.'),
+          toggle(t('settings.cb'), 'cbSafe', t('settings.cbHelp')),
+          toggle(t('settings.captions'), 'captions', t('settings.captionsHelp')),
+          toggle(t('settings.keyHints'), 'keyHints', t('settings.keyHintsHelp')),
         );
       } else if (ctx.tab === 'keys') {
         // a phone or tablet: the gestures and its own switches first (game/device.js, the input lane's options)
         if (touchFirst()) grid.append(...touchRows());
         const keys = h('ul.keys', keyList().map(([k, what]) => h('li', h('kbd', k), what)));
-        const drag = seg('Right-drag', 'rightDrag', [['pan', 'Pan'], ['rotate', 'Rotate camera']],
-          'Rotate camera: drag sideways to turn the farm, up and down to tilt from low to almost straight down. Middle-drag or Shift + right-drag still pans. Remembered on this device.',
-          rightDragOf);
+        const drag = seg(t('settings.cap.rightDrag'), 'rightDrag', [['pan', t('settings.key.panShort')], ['rotate', t('settings.rotateCam')]],
+          t('settings.rightDragHelp'), rightDragOf);
         // the key list says what the right button does now
         drag.addEventListener('click', () => keys.replaceChildren(...keyList().map(([k, what]) => h('li', h('kbd', k), what))));
         // a phone without a mouse has no right button and no screen edge to scroll at
         const mouse = !touchFirst() || Boolean(globalThis.matchMedia?.('(any-pointer: fine)').matches);
-        if (mouse) grid.append(h('h3', 'Mouse'), drag, toggle('Edge scrolling', 'edgeScroll', 'Pan when the mouse touches the screen edge.'));
-        grid.append(h('h3', 'Keys'), keys);
+        if (mouse) grid.append(h('h3', t('settings.mouse')), drag, toggle(t('settings.edge'), 'edgeScroll', t('settings.edgeHelp')));
+        grid.append(h('h3', t('settings.keys')), keys);
       } else if (ctx.tab === 'credits') {
         grid.append(...creditRows());
       } else {
         const st = S.store.state;
         grid.append(
-          h('h3', 'Our farm'),
-          h('div.set-row', h('span.lbl', 'Farm name'), h('div.set-inline',
+          h('h3', t('settings.farm.ours')),
+          h('div.set-row', h('span.lbl', t('settings.farm.name')), h('div.set-inline',
             h('strong.set-farm-name', st ? st.farm.name : ''),
-            h('button.btn.btn--sky.btn--small', { type: 'button', on: { click: () => { ctx.close(); S.ui.nameFarm(); } } }, 'Rename'))),
-          h('div.set-row', h('span.lbl', 'First-evening guide'), h('div',
-            h('button.btn.btn--paper.btn--small', { type: 'button', dataset: { guide: 'again' }, on: { click: () => { ctx.close(); S.tutorial?.restart(); } } }, 'Show the guide again')),
-          h('span.help', 'Grandma walks you through the first steps again. Nothing on the farm changes.')),
-          ...(S.ui.panels.has('avatar') ? [h('div.set-row', h('span.lbl', 'Your farmer'), h('div',
-            h('button.btn.btn--sky.btn--small', { type: 'button', dataset: { look: 'open' }, on: { click: () => { ctx.close(); S.ui.panels.open('avatar'); } } }, 'Change your look')),
-          h('span.help', 'Hair, clothes, skin tone and a hat. Saved with the farm: your partner sees it too.'))] : []),
+            h('button.btn.btn--sky.btn--small', { type: 'button', on: { click: () => { ctx.close(); S.ui.nameFarm(); } } }, t('settings.farm.rename')))),
+          h('div.set-row', h('span.lbl', t('settings.farm.guide')), h('div',
+            h('button.btn.btn--paper.btn--small', { type: 'button', dataset: { guide: 'again' }, on: { click: () => { ctx.close(); S.tutorial?.restart(); } } }, t('settings.farm.guideAgain'))),
+          h('span.help', t('settings.farm.guideHelp'))),
+          ...(S.ui.panels.has('avatar') ? [h('div.set-row', h('span.lbl', t('settings.farm.farmer')), h('div',
+            h('button.btn.btn--sky.btn--small', { type: 'button', dataset: { look: 'open' }, on: { click: () => { ctx.close(); S.ui.panels.open('avatar'); } } }, t('settings.farm.look'))),
+          h('span.help', t('settings.farm.lookHelp')))] : []),
           // multi-farm mode: invite, the personal link and the retention line instead of "Switch farmer" (ui/invite.js)
-          ...(S.invite ? S.invite.settingsRows(ctx) : [h('div.set-row', h('span.lbl', 'This screen'), h('div',
-            h('button.btn.btn--paper.btn--small', { type: 'button', on: { click: () => S.ui.switchFarmer?.() } }, 'Switch farmer')),
-          h('span.help', 'Pick the other farmer on this computer (two tabs can be both of you).'))]),
+          ...(S.invite ? S.invite.settingsRows(ctx) : [h('div.set-row', h('span.lbl', t('settings.farm.screen')), h('div',
+            h('button.btn.btn--paper.btn--small', { type: 'button', on: { click: () => S.ui.switchFarmer?.() } }, t('settings.farm.switch'))),
+          h('span.help', t('settings.farm.switchHelp')))]),
         );
+        if (S.ideas) grid.append(...S.ideas.settingsRows(ctx));
+        // the privacy note, and (multi-farm mode) "Delete this farm now": ui/privacy.js
+        if (S.privacy) grid.append(...S.privacy.settingsRows(ctx));
       }
       body.append(grid);
     },

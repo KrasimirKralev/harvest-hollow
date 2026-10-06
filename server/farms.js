@@ -4,7 +4,9 @@
 // (openFarm in server/index.js, the same wiring a single-farm server boots with).
 //
 //   farm-meta.json  { v, id, createdAt, lastSeenAt, members, tz, reserve: { slot, hash } | null,
-//                     invite: { hash, at, exp, by } | null }   (hashes only: a key never touches the disk)
+//                     invite: { hash, at, exp, by } | null, pastInvites: [hash],
+//                     rejoin: { [pid]: { hash, at, exp, by } }, pastRejoins: [hash], revoked: [{ hash, pid, at }] }
+//                   (hashes only: a key never touches the disk)
 //
 // Lifecycle:
 //   - load on demand (a socket for the farm, an invite request, a status call carrying a key); a farm that slept
@@ -12,7 +14,8 @@
 //   - unload (stop, final snapshot, journal closed) after idleMs with no socket; an LRU cap (maxLoaded) unloads the
 //     least recently used idle farm first when another one must load (a soft cap: farms with sockets stay)
 //   - retention: a farm no player has been connected to for ttlDays is deleted by the sweep (hourly); a farm with a
-//     socket open, loading, or leased by a socket handshake is never deleted
+//     socket open, loading, or leased by a socket handshake is never deleted. The same sweep runs `sweepers` (the
+//     ideas and privacy requests: a year at most, server/ideas.js)
 //
 // Farm ids are 12 base32 characters (60 bits) from crypto.randomInt and are not logged either: log lines carry
 // `farm=<first 8 hex of sha256(id)>`.
@@ -20,7 +23,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { openFarm, stopFarm, finishFarm } from './index.js';
-import { FarmSessions, sha256, newSecret, newInviteToken, parseHello } from './farm-sessions.js';
+import { FarmSessions, sha256, newSecret, newInviteToken, parseHello, REJOIN_TTL_MS, MF_ERR } from './farm-sessions.js';
 import { parseClientMessage } from '../shared/net/protocol.js';
 
 export const ID_RE = /^[a-z2-7]{12}$/;
@@ -28,6 +31,8 @@ const B32 = 'abcdefghijklmnopqrstuvwxyz234567';
 export const META = 'farm-meta.json';
 /** Invites expire after this long (or when the farm is full, or when a new one replaces them). */
 export const INVITE_TTL_MS = 7 * 86_400_000;
+/** A rejoin link (a farmer's new key) works this long, once (farm-sessions.js). */
+export { REJOIN_TTL_MS };
 /** A socket handshake holds its farm loaded this long before the connection exists. */
 const LEASE_MS = 15_000;
 /** While players are connected, lastSeenAt is written to disk at least this often (a crash keeps it recent). */
@@ -108,6 +113,10 @@ export class FarmRegistry {
     this.recs = new Map();
     this.timers = [];
     this.stats = { loads: 0, unloads: 0, created: 0, deleted: 0 };
+    /** more retention, run by every sweep after the farms: async (now) => summary (server/ideas.js: a year at most) */
+    this.sweepers = [];
+    /** what the sweepers did on the last sweep (the dev sweep route shows it) */
+    this.lastExpired = [];
   }
 
   /** Boot: index every farm directory (only its small meta file is read). */
@@ -323,13 +332,45 @@ export class FarmRegistry {
       if (rec.hh) await this.unload(rec);
       if (this.busy(rec) || this.recs.get(rec.id) !== rec) continue;       // somebody arrived meanwhile
       this.recs.delete(rec.id);
-      // exact path, checked: only ever a farm directory directly under farms/
-      if (path.dirname(rec.dir) === this.root && ID_RE.test(path.basename(rec.dir))) fs.rmSync(rec.dir, { recursive: true, force: true });
+      this.removeDir(rec);
       n++;
       this.stats.deleted++;
       this.log.info(`a farm nobody visited for ${this.mc.ttlDays} days was deleted`, { farm: farmTag(rec.id) });
     }
+    const expired = [];
+    for (const fn of this.sweepers) {
+      try { expired.push(await fn(now)); } catch (err) { this.log.error('retention sweep failed', redactArg(err)); }
+    }
+    this.lastExpired = expired;
     return n;
+  }
+
+  /** The farm's folder (snapshot, journals, backups, incidents, meta), removed: only ever a farm directory under farms/. */
+  removeDir(rec) {
+    if (path.dirname(rec.dir) === this.root && ID_RE.test(path.basename(rec.dir))) fs.rmSync(rec.dir, { recursive: true, force: true });
+  }
+
+  /**
+   * "Delete this farm now" (a farmer's own request, server/multi.js POST /api/f/:id/delete): from this moment the farm
+   * is unknown to every route and handshake; every open screen hears `deny DELETED` and its socket closes; the farm
+   * stops; its whole folder (backups included) is removed. `by`: the farmer who asked (logged, with the farm's tag), or
+   * null for the owner acting on a privacy request (DELETE /api/admin/farms/:id). Resolves false when the farm was
+   * already gone.
+   */
+  async remove(rec, { by = null } = {}) {
+    if (this.recs.get(rec.id) !== rec) return false;
+    this.recs.delete(rec.id);
+    if (rec.loading) await rec.loading.catch(() => {});
+    if (rec.unloading) await rec.unloading;
+    const hh = rec.hh;
+    if (hh) for (const c of [...hh.sessions.conns]) hh.sessions.denyPrivate(c, MF_ERR.DELETED);
+    // stopped like an unload (graces ended, the journal flushed and closed), so no write lands after the removal
+    await this.unload(rec);
+    this.removeDir(rec);
+    this.stats.deleted++;
+    if (by) this.log.info('a farm was deleted by one of its farmers', { farm: farmTag(rec.id), pid: by });
+    else this.log.info('a farm was deleted on a privacy request', { farm: farmTag(rec.id) });
+    return true;
   }
 
   /** A new invite for `pid` (replaces the old one) on a loaded farm. Durable before it is returned. */
@@ -340,6 +381,21 @@ export class FarmRegistry {
     rec.meta.invite = { hash: sha256(token), at, exp: at + INVITE_TTL_MS, by: pid };
     this.saveMeta(rec);
     return { token, expiresAt: rec.meta.invite.exp };
+  }
+
+  /**
+   * A new key for farmer `slot`, made by farmer `by`, on a loaded farm: { pid, token, expiresAt } (the token is the
+   * rejoin link's, 128 bits, kept here only as its hash), or { error } ('BAD', or an engine code). Durable before it
+   * is returned: the turned-off keys ride on the journal line, the rejoin hash on the meta file.
+   */
+  rekey(rec, by, slot) {
+    const token = newInviteToken();
+    const at = this.wall();
+    const exp = at + REJOIN_TTL_MS;
+    const err = rec.hh.sessions.rekey(by, slot, { hash: sha256(token), at, exp });
+    if (err) return { error: err };
+    this.saveMeta(rec);
+    return { pid: slot, token, expiresAt: exp };
   }
 
   start() {

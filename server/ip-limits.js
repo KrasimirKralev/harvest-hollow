@@ -1,8 +1,36 @@
 // Per-address limits for the multi-farm host (server/multi.js): the client address behind a trusted reverse proxy,
 // sliding-window counters (farm creation: 5 an hour and 20 a day per address by default), and open-socket counts.
+// Addresses live in memory only (these counters); a log line gets at most maskIp's network (public/privacy.html).
+import net from 'node:net';
 
 /** IPv4-mapped IPv6 addresses are the IPv4 address. */
 const norm = (ip) => (typeof ip === 'string' && ip.startsWith('::ffff:') ? ip.slice(7) : ip || '');
+
+/** The eight 16-bit groups of an IPv6 address (`::` expanded, a trailing dotted IPv4 folded in). */
+function hextets(a) {
+  let s = a;
+  const v4 = /(\d+)\.(\d+)\.(\d+)\.(\d+)$/.exec(s);
+  if (v4) {
+    const [p0, p1, p2, p3] = v4.slice(1).map(Number);
+    s = `${s.slice(0, v4.index)}${((p0 << 8) | p1).toString(16)}:${((p2 << 8) | p3).toString(16)}`;
+  }
+  const [left, right] = s.split('::');
+  const l = left ? left.split(':') : [];
+  if (right === undefined) return l.map((x) => parseInt(x, 16));
+  const r = right ? right.split(':') : [];
+  return [...l, ...Array(8 - l.length - r.length).fill('0'), ...r].map((x) => parseInt(x, 16));
+}
+
+/**
+ * A client address cut to its network, for an abuse warning in the multi-farm host's log: an IPv4 /24 as x.y.z.0, an
+ * IPv6 /48 as a:b:c::/48; 'unknown' for anything else. Never the full address. Pure.
+ */
+export function maskIp(ip) {
+  const a = norm(typeof ip === 'string' ? ip.split('%')[0] : '');
+  if (net.isIPv4(a)) return a.replace(/\.\d+$/, '.0');
+  if (net.isIPv6(a)) return `${hextets(a).slice(0, 3).map((x) => x.toString(16)).join(':')}::/48`;
+  return 'unknown';
+}
 
 /**
  * The client's address. With `trust` proxies in front (HH_TRUST_PROXY, Railway / Fly / Render add exactly one),

@@ -34,6 +34,7 @@ import { furnitureOf, defOf } from '../../../shared/content/index.js';
 import { ERR } from '../../../shared/net/protocol.js';
 import { interiorOpen, furnishCode, furnishPrice, fixedRow } from '../../../shared/rules/actions/interior.js';
 import { canRun as dryRun } from './targets.js';
+import { t, N, ctext, name as cname } from '../i18n/index.js';
 
 /** The room is open: Restoration 6 complete and the interior part of this build. */
 export function interiorOpenNow(state) {
@@ -180,7 +181,7 @@ export function createInterior({ store, view, avatar, audio = null, toast = () =
     const it = store.state?.farm?.interior?.items?.[id];
     const def = it ? furnitureOf(it.def) : null;
     if (!def) return false;
-    if (def.fixed && !fixedRow(id)?.movable) { toast(`${def.name} stays where it is.`, {}); return false; }
+    if (def.fixed && !fixedRow(id)?.movable) { toast(t('game.move.fixed', { thing: N(it.def, 'furniture') }), {}); return false; }
     held = { def: it.def, rot: it.rot ?? 0, id };
     spot = def.layer === 'wall' ? { wall: it.wall, at: it.at } : { x: it.x, z: it.z, rot: it.rot ?? 0 };
     check = verdict(spot);
@@ -214,9 +215,9 @@ export function createInterior({ store, view, avatar, audio = null, toast = () =
     switch (id) {
       case 'memory_wall': openPanel(PIECE_PANELS.memory_wall, { tab: 'memory' }); break;
       case 'grandma': openPanel(['grandma', 'farmhouse', 'journal'], { tab: 'grandma' }); break;
-      case 'duet_table': toast("Grandma's duet table: one more Farm Kitchen slot. Cook together at the Kitchen.", {}); break;
-      case 'fire': audio?.play('thanks', { gain: 0.4 }); toast('The fire crackles. Grandma would be pleased.', {}); break;
-      case 'window': toast('The fields, the barn and the two of you, through the old glass.', {}); break;
+      case 'duet_table': toast(t('game.room.duetTable'), {}); break;
+      case 'fire': audio?.play('thanks', { gain: 0.4 }); toast(t('game.room.fire'), {}); break;
+      case 'window': toast(t('game.room.window'), {}); break;
       default:
     }
   }
@@ -286,7 +287,12 @@ export function createInterior({ store, view, avatar, audio = null, toast = () =
       const def = it ? furnitureOf(it.def) : furnitureOf(p.def);
       if (tool === 'hammer') { move(p.id); return true; }
       if (def && PIECE_PANELS[def.id]) { openPanel(PIECE_PANELS[def.id], {}); return true; }
-      if (def) toast(def.text ? `${def.name}: ${def.text}` : def.name, {});
+      // the piece's name and words in the language in effect (they were the content's English)
+      if (def) {
+        // a function: the description is content text, so a language switch while it is up asks it again
+        toast(() => (def.text ? t('game.room.piece', { name: N(def.id, 'furniture'), text: ctext('furniture', def.id, 'desc', def.text) })
+          : cname(def.id, { family: 'furniture' })), {});
+      }
       return true;
     }
     return true;

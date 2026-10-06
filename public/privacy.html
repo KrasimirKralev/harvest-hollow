@@ -1,0 +1,401 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <!-- The hosted site's privacy note (multi mode: server/multi.js serves it at /privacy). Every sentence is checked
+       against the code (docs/agent-notes/mf-server.md "Privacy"). Both languages are in this file: without JavaScript
+       both show, one under the other; js/privacy.js shows ?lang=, else the language this device chose on the site
+       (localStorage 'hh.lang'), else the browser's (bg* -> Bulgarian, else English), switches on the toggle (and
+       remembers it) and sends the privacy request form. Static: no build stamp needed. -->
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#4C9A3E">
+  <meta name="color-scheme" content="light">
+  <meta name="description" content="What Harvest Hollow keeps about you, why, for how long, and how to ask for a copy or a deletion. In English and Bulgarian.">
+  <title>Privacy · Harvest Hollow</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/assets/pwa/apple-touch-icon.png">
+  <link rel="preload" href="/assets/fonts/fredoka-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="/assets/fonts/baloo2-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/css/style.css">
+  <link rel="stylesheet" href="/css/privacy.css">
+</head>
+<body class="pv-page">
+  <header class="pv-top">
+    <a class="pv-home" href="/"><img src="/assets/art/logo-wide.png" alt="Harvest Hollow" width="1400" height="336"></a>
+    <nav class="pv-lang" aria-label="Language · Език">
+      <a href="?lang=en" lang="en" hreflang="en" data-lang="en">English</a>
+      <a href="?lang=bg" lang="bg" hreflang="bg" data-lang="bg">Български</a>
+    </nav>
+  </header>
+
+  <main id="pv-main" class="pv-main">
+
+<!-- ================================================ ENGLISH ================================================ -->
+<article class="pv-doc paper" id="en" lang="en" data-lang="en" data-title="Privacy · Harvest Hollow" aria-labelledby="en-title">
+  <h1 class="pv-h1" id="en-title">Privacy at Harvest Hollow</h1>
+  <p class="pv-lead">Harvest Hollow is a free little farm game for two. It needs very little about you, keeps it only as long as it has to, never
+    sells it, and hands it to no one but the company that hosts the site. Here is all of it, in plain words.</p>
+  <p class="pv-updated">Last updated: <time datetime="2026-10-05">5 October 2026</time></p>
+
+  <section class="pv-short" aria-labelledby="en-short">
+    <h2 class="pv-h2" id="en-short">In short</h2>
+    <ul>
+      <li>No account, no e-mail, no tracking cookies, no analytics, no ads.</li>
+      <li>A farm nobody visits for 7 days is deleted, and you can delete yours yourself at any time.</li>
+      <li>Ideas and privacy requests are kept 12 months at most.</li>
+      <li>Your IP address is used only in the server's memory, to keep spam and abuse out.</li>
+      <li>The site is hosted by Railway, in the United States.</li>
+    </ul>
+  </section>
+
+  <section aria-labelledby="en-who">
+    <h2 class="pv-h2" id="en-who">Who runs it</h2>
+    <p>Harvest Hollow is a free hobby project by <strong>Rowena Kralev</strong>, who lives in Bulgaria. He decides what this site keeps
+      and why (in legal words, he is the controller of your data). There is no company behind it, no advertising and nothing to buy.</p>
+    <p>To reach him, use the <a href="#en-request">privacy request form</a> at the end of this page. You can also find him on GitHub at
+      <a href="https://github.com/KrasimirKralev" rel="noopener">github.com/KrasimirKralev</a>, where the game's code is open for anyone to
+      read. GitHub is public, so please write nothing private there.</p>
+  </section>
+
+  <section aria-labelledby="en-what">
+    <h2 class="pv-h2" id="en-what">What is kept, and why</h2>
+
+    <div class="pv-item">
+      <h3 class="pv-h3"><span aria-hidden="true">🌾</span> Your farm</h3>
+      <p><b>What:</b> the names you type (your farmer's, the farm's, your animals'), your farmer's colour and look, the notes you pin
+        for your partner, and the game itself: fields, animals, buildings, coins and progress. Also when each farmer joined and was last
+        there, and the time zone of the browser that started the farm, so the farm's midnight is your midnight.</p>
+      <p><b>Why:</b> so your farm is waiting when you come back, for both of you.</p>
+      <p><b>Keys:</b> the server never stores your personal farm link, invite links or new-key links. It keeps only a scrambled
+        fingerprint of each (a hash), enough to recognise them and useless to anyone who reads it, us included.</p>
+      <p><b>Where:</b> on the server, in the farm's own folder, with a few automatic backups from the last three days.</p>
+      <p><b>Chat:</b> chat lines pass through the server to reach your partner. While the farm is open, the server keeps the last 50 in
+        its memory for a farmer who arrives; they are never written to disk.</p>
+    </div>
+
+    <div class="pv-item">
+      <h3 class="pv-h3"><span aria-hidden="true">💡</span> The ideas box</h3>
+      <p><b>What:</b> what your idea is about, the idea itself, a name and a contact if you give them, the farm it came from if you sent
+        it from inside a farm, your language, and your browser's family, like “Safari on iOS” (no version, no device). Never your IP
+        address.</p>
+      <p><b>Why:</b> to read your idea, to know where a bug happened, and to reply if you asked us to. The contact is used only to reply
+        to you.</p>
+    </div>
+
+    <div class="pv-item">
+      <h3 class="pv-h3"><span aria-hidden="true">✉️</span> Privacy requests</h3>
+      <p><b>What:</b> what you ask for, your description, a contact if you give one, and your language. No IP address, no browser.</p>
+      <p><b>Why:</b> to do what you asked, and to keep a record that it was done.</p>
+    </div>
+
+    <div class="pv-item">
+      <h3 class="pv-h3"><span aria-hidden="true">📱</span> On your device</h3>
+      <p>Your browser's storage keeps this device's keys to its farms, your settings (language, sound, graphics, controls), the list of farms you
+        opened here, small reminders (which tips you have seen, where the camera was) and the pictures in your farm's Memory Book. The
+        pictures never leave your browser. A farm's key is sent only to this site, to let you into that farm.</p>
+      <p>There are <strong>no tracking cookies, no analytics and no ads</strong>, and nothing on these pages loads from another site.
+        To remove all of it from a device, clear this site's data in your browser.</p>
+    </div>
+  </section>
+
+  <section aria-labelledby="en-long">
+    <h2 class="pv-h2" id="en-long">How long</h2>
+    <dl class="pv-times">
+      <div><dt>Farms</dt><dd>A farm nobody visits for 7 days is deleted with all its files and backups. While you play, it stays. You can
+        also <a href="#en-delete">delete it yourself</a> at any time.</dd></div>
+      <div><dt>Ideas</dt><dd>12 months at most, then they are deleted automatically. Ask, and yours goes sooner.</dd></div>
+      <div><dt>Privacy requests</dt><dd>12 months, as a record that we answered, then they are deleted automatically.</dd></div>
+      <div><dt>Chat</dt><dd>Only in the server's memory, gone when the farm goes to sleep (about ten minutes after you both leave).</dd></div>
+      <div><dt>Server logs</dt><dd>Short lines like “a farm was created” or an error, so we can keep the game running. They name a farm
+        only by a short tag, never by its address, and carry no key and no full IP address; when something breaks, a line can include
+        the game action that failed. Railway, the host, keeps the logs for a limited time under its own rules.</dd></div>
+      <div><dt>Your device</dt><dd>Until you clear it, forget a farm on the start page, or delete the farm.</dd></div>
+    </dl>
+  </section>
+
+  <section aria-labelledby="en-ip">
+    <h2 class="pv-h2" id="en-ip">Your IP address</h2>
+    <p>Every visit comes with your internet address (IP address). Harvest Hollow uses it only in the server's memory, to keep spam and
+      abuse out: for example, at most 5 new farms an hour from one address, and limits on ideas, invites and connections. It is never
+      written into a farm, an idea or a request.</p>
+    <p>Our own log lines carry no full address. When a connection is closed for abuse, the line shows only the network part of the
+      address (like 203.0.113.0). Railway, the host, also records every request in its own logs: the time, the page, the IP address and
+      the browser's description.</p>
+  </section>
+
+  <section aria-labelledby="en-who-else">
+    <h2 class="pv-h2" id="en-who-else">Who else is involved</h2>
+    <p><strong>Railway</strong> (Railway Corporation, San Francisco) hosts this site on its servers in the <strong>United States</strong>.
+      Everything described here is stored there, so when you play, your data travels to the US.</p>
+    <p>No one else. No analytics, no ads, no fonts or scripts from other sites. Even the GitHub star count on the start page is fetched by
+      our server, at most once an hour, not by your browser. Links to GitHub or to the music's sources take you to those sites, which
+      have their own privacy rules.</p>
+  </section>
+
+  <section aria-labelledby="en-basis">
+    <h2 class="pv-h2" id="en-basis">Why we are allowed to</h2>
+    <p>We keep what the game needs because running it safely is our <strong>legitimate interest</strong>, and yours: your farm is saved,
+      two farmers can play together, and spam and abuse stay out (GDPR, Article 6(1)(f)). Nothing is used to profile you, and no
+      decision about you is made by a machine.</p>
+    <p>The contact field in the ideas box and in the request form is optional. If you fill it in, you <strong>consent</strong> to us using
+      it to reply to you (Article 6(1)(a)). You can take that back at any time with a privacy request; leave it empty and we simply
+      cannot reply.</p>
+  </section>
+
+  <section aria-labelledby="en-rights">
+    <h2 class="pv-h2" id="en-rights">Your rights</h2>
+    <ul>
+      <li><b>Access:</b> ask what we keep about you, and get a copy.</li>
+      <li><b>Deletion:</b> ask us to delete it (a farm you can also delete yourself).</li>
+      <li><b>Objection:</b> object to how we use it, and we stop unless we must keep it to keep the game safe.</li>
+      <li><b>Correction:</b> ask us to fix something that is wrong.</li>
+    </ul>
+    <p>Use the <a href="#en-request">request form</a> below; we answer within one month. There are no accounts, so we only know which farm
+      is yours if you tell us: its address (/f/…) helps. Never send your personal farm link with its #k= part: that is your key.</p>
+    <p>You can also complain to the Bulgarian data protection authority, the Commission for Personal Data Protection
+      (<span lang="bg">КЗЛД</span>, <a href="https://www.cpdp.bg/" rel="noopener">cpdp.bg</a>), or to the authority where you live.</p>
+  </section>
+
+  <section aria-labelledby="en-delete">
+    <h2 class="pv-h2" id="en-delete">Delete your farm yourself</h2>
+    <ol class="pv-steps">
+      <li>Open your farm and go to <b>Settings › Farm</b>.</li>
+      <li>Choose <b>Delete this farm now</b>.</li>
+      <li>Read what goes, then confirm. “Keep my farm” is always the safe way out.</li>
+    </ol>
+    <p>Any farmer of the farm can do it. Everything goes at once, for both farmers: the farm, both farmers and all progress, and every
+      backup. If your partner is playing, their screen says the farm was deleted, and this device forgets it. It cannot be undone.</p>
+    <p>Lost your way into a farm? A farm nobody visits for 7 days is deleted by itself. If your partner still plays there, or you want it
+      gone sooner, send a request below with the farm's address. To forget a farm only on one device, tap ✕ next to it on the start
+      page.</p>
+  </section>
+
+  <section class="pv-ask" aria-labelledby="en-request">
+    <h2 class="pv-h2" id="en-request">Ask us</h2>
+    <form class="pv-form" data-lang="en" novalidate>
+      <fieldset class="pv-kinds">
+        <legend class="pv-label">What would you like?</legend>
+        <label class="pv-kind"><input type="radio" name="kind" value="idea" required> <span>Delete my idea</span></label>
+        <label class="pv-kind"><input type="radio" name="kind" value="farm"> <span>Delete a farm I lost access to</span></label>
+        <label class="pv-kind"><input type="radio" name="kind" value="copy"> <span>A copy of my data</span></label>
+        <label class="pv-kind"><input type="radio" name="kind" value="other"> <span>Something else</span></label>
+        <p class="pv-err" data-err="kind" role="alert" hidden></p>
+      </fieldset>
+      <div class="pv-field">
+        <label class="pv-label" for="en-text">Tell us more</label>
+        <textarea class="pv-input pv-text" id="en-text" name="text" rows="5" maxlength="2000" required aria-describedby="en-text-hint"></textarea>
+        <p class="pv-hint" id="en-text-hint">Which idea or farm (the farm's address, never its #k= part), and anything that helps us find it.</p>
+        <p class="pv-err" data-err="text" role="alert" hidden></p>
+      </div>
+      <div class="pv-field">
+        <label class="pv-label" for="en-contact">How can we reach you? <span class="pv-opt">(optional)</span></label>
+        <input class="pv-input" id="en-contact" name="contact" type="text" maxlength="120" autocomplete="email" inputmode="email" aria-describedby="en-contact-hint">
+        <p class="pv-hint" id="en-contact-hint">An e-mail or a handle, only to answer this request. Without one we cannot reply.</p>
+        <p class="pv-err" data-err="contact" role="alert" hidden></p>
+      </div>
+      <div class="pv-trap" aria-hidden="true"><label for="en-website">Leave this field empty</label><input id="en-website" name="website" type="text" tabindex="-1" autocomplete="off"></div>
+      <div class="pv-acts"><button class="btn pv-send" type="submit">Send my request</button></div>
+      <p class="pv-status" role="status" aria-live="polite"></p>
+    </form>
+    <div class="pv-done" tabindex="-1" hidden>
+      <p class="pv-done-title">Thank you!</p>
+      <p>Your request has arrived. If you left a contact, you will hear back within one month.</p>
+    </div>
+    <noscript><p class="pv-hint">The form needs JavaScript. You can also reach Rowena on GitHub (see “Who runs it”).</p></noscript>
+  </section>
+
+  <p class="pv-note">We are not lawyers. We wrote this page to be true and complete for this small game, and we keep it in step with its
+    code, which anyone can read. If something here is unclear or wrong, tell us and we will fix it.</p>
+</article>
+
+<!-- ================================================ БЪЛГАРСКИ ================================================ -->
+<article class="pv-doc paper" id="bg" lang="bg" data-lang="bg" data-title="Поверителност · Harvest Hollow" aria-labelledby="bg-title">
+  <h1 class="pv-h1" id="bg-title">Поверителност в Harvest Hollow</h1>
+  <p class="pv-lead">Harvest Hollow е малка безплатна игра за ферма за двама. Иска съвсем малко за теб, пази го само докато е нужно,
+    никога не го продава и не го дава на никого освен на фирмата, която хоства сайта. Ето всичко, с прости думи.</p>
+  <p class="pv-updated">Последна промяна: <time datetime="2026-10-05">5 октомври 2026 г.</time></p>
+
+  <section class="pv-short" aria-labelledby="bg-short">
+    <h2 class="pv-h2" id="bg-short">Накратко</h2>
+    <ul>
+      <li>Без профил, без имейл, без проследяващи бисквитки, без статистики за посещенията, без реклами.</li>
+      <li>Ферма, която никой не е посещавал 7 дни, се изтрива, а своята можеш да изтриеш от играта по всяко време.</li>
+      <li>Идеите и запитванията за поверителност се пазят най-много 12 месеца.</li>
+      <li>IP адресът ти се ползва само в паметта на сървъра, за да спира спама и злоупотребите.</li>
+      <li>Сайтът се хоства от Railway, в Съединените щати.</li>
+    </ul>
+  </section>
+
+  <section aria-labelledby="bg-who">
+    <h2 class="pv-h2" id="bg-who">Кой стои зад играта</h2>
+    <p>Harvest Hollow е безплатен проект-хоби на <strong>Красимир Кралев</strong>, който живее в България. Той решава какво пази сайтът и
+      защо (на езика на закона: той е администраторът на данните ти). Зад играта няма фирма, няма реклами и няма нищо за купуване.</p>
+    <p>Най-лесно ще се свържеш с него чрез <a href="#bg-request">формуляра за запитвания</a> в края на страницата. Ще го намериш и в
+      GitHub: <a href="https://github.com/KrasimirKralev" rel="noopener">github.com/KrasimirKralev</a>, където кодът на играта е отворен
+      за всеки. GitHub е публичен, затова не пиши там нищо лично.</p>
+  </section>
+
+  <section aria-labelledby="bg-what">
+    <h2 class="pv-h2" id="bg-what">Какво пазим и защо</h2>
+
+    <div class="pv-item">
+      <h3 class="pv-h3"><span aria-hidden="true">🌾</span> Твоята ферма</h3>
+      <p><b>Какво:</b> имената, които въвеждаш (на фермера ти, на фермата, на животните), цвета и облика на фермера ти, бележките, които
+        закачаш за партньора си, и самата игра: ниви, животни, постройки, монети и напредък. Също кога всеки фермер се е присъединил и
+        кога е идвал за последно, и часовата зона на браузъра, който е създал фермата, за да настъпва полунощ във фермата по твоето време.</p>
+      <p><b>Защо:</b> за да те чака фермата, когато се върнеш, и двама ви.</p>
+      <p><b>Ключовете:</b> сървърът никога не записва личния ти линк към фермата, линковете за покана и линковете за нов ключ. Пази
+        само техен „отпечатък“ (хеш): стига, за да ги разпознае, и е безполезен за всеки, който го прочете, включително за нас.</p>
+      <p><b>Къде:</b> на сървъра, в отделна папка на фермата, с няколко автоматични резервни копия от последните три дни.</p>
+      <p><b>Чатът:</b> редовете от чата минават през сървъра, за да стигнат до партньора ти. Докато фермата е отворена, сървърът помни
+        последните 50 в паметта си за фермер, който влиза по-късно; никога не ги записва на диска.</p>
+    </div>
+
+    <div class="pv-item">
+      <h3 class="pv-h3"><span aria-hidden="true">💡</span> Кутията за идеи</h3>
+      <p><b>Какво:</b> за какво е идеята ти, самата идея, име и контакт, ако ги дадеш, фермата, от която е дошла, ако е пратена от
+        играта, езика ти и вида на браузъра, например „Safari on iOS“ (без версия и без устройство). Никога IP адреса ти.</p>
+      <p><b>Защо:</b> за да прочетем идеята, да знаем къде е станала някоя грешка и да ти отговорим, ако искаш. Контакта ползваме
+        само за да ти отговорим.</p>
+    </div>
+
+    <div class="pv-item">
+      <h3 class="pv-h3"><span aria-hidden="true">✉️</span> Запитванията за поверителност</h3>
+      <p><b>Какво:</b> какво искаш, описанието ти, контакт, ако дадеш такъв, и езика ти. Без IP адрес и без браузър.</p>
+      <p><b>Защо:</b> за да изпълним молбата ти и да имаме запис, че е изпълнена.</p>
+    </div>
+
+    <div class="pv-item">
+      <h3 class="pv-h3"><span aria-hidden="true">📱</span> На твоето устройство</h3>
+      <p>Хранилището на браузъра ти пази ключовете на това устройство към фермите му, настройките ти (език, звук, графика, управление),
+        списъка с фермите, отваряни на това устройство, дребни напомняния (кои съвети вече са показани, къде е била камерата) и снимките
+        в Книгата на спомените на фермата ти. Снимките никога не напускат браузъра ти. Ключът на една ферма се изпраща само до този
+        сайт, за да те пусне в нея.</p>
+      <p>Няма <strong>проследяващи бисквитки, статистики и реклами</strong>, и нищо на тези страници не се зарежда от друг сайт. За да
+        махнеш всичко това от едно устройство, изчисти данните на сайта в браузъра си.</p>
+    </div>
+  </section>
+
+  <section aria-labelledby="bg-long">
+    <h2 class="pv-h2" id="bg-long">Колко дълго</h2>
+    <dl class="pv-times">
+      <div><dt>Фермите</dt><dd>Ферма, която никой не е посещавал 7 дни, се изтрива с всичките си файлове и резервни копия. Докато играеш,
+        тя остава. Можеш и <a href="#bg-delete">да я изтриеш от играта</a> по всяко време.</dd></div>
+      <div><dt>Идеите</dt><dd>Най-много 12 месеца, после се изтриват сами. Поискай и твоята ще изчезне по-рано.</dd></div>
+      <div><dt>Запитванията за поверителност</dt><dd>12 месеца, като запис, че сме отговорили, после се изтриват сами.</dd></div>
+      <div><dt>Чатът</dt><dd>Само в паметта на сървъра; изчезва, когато фермата заспи (около десет минути, след като и двамата излезете).</dd></div>
+      <div><dt>Записите на сървъра</dt><dd>Кратки редове като „създадена е ферма“ или някоя грешка, за да поддържаме играта жива.
+        Наричат фермата само с кратък етикет, никога с адреса ѝ, и не съдържат ключове и пълни IP адреси; когато нещо се счупи, един ред
+        може да съдържа действието в играта, което не е минало. Railway, хостингът, пази записите ограничено време по своите правила.</dd></div>
+      <div><dt>Твоето устройство</dt><dd>Докато не го изчистиш, не забравиш фермата от началната страница или не изтриеш фермата.</dd></div>
+    </dl>
+  </section>
+
+  <section aria-labelledby="bg-ip">
+    <h2 class="pv-h2" id="bg-ip">IP адресът ти</h2>
+    <p>Всяко посещение идва с интернет адреса ти (IP адрес). Harvest Hollow го ползва само в паметта на сървъра, за да спира спама и
+      злоупотребите: например най-много 5 нови ферми на час от един адрес и граници за идеите, поканите и връзките. Никога не се
+      записва във ферма, идея или запитване.</p>
+    <p>Нашите собствени записи не съдържат пълен адрес. Когато някоя връзка бъде затворена заради злоупотреба, редът показва само
+      мрежовата част на адреса (например 203.0.113.0). Railway, хостингът, също записва всяка заявка в своите записи: часа, страницата,
+      IP адреса и описанието на браузъра.</p>
+  </section>
+
+  <section aria-labelledby="bg-who-else">
+    <h2 class="pv-h2" id="bg-who-else">Кой още участва</h2>
+    <p><strong>Railway</strong> (Railway Corporation, Сан Франциско) хоства сайта на своите сървъри в <strong>Съединените щати</strong>.
+      Всичко описано тук се пази там, така че докато играеш, данните ти пътуват до САЩ.</p>
+    <p>Никой друг. Без статистики, без реклами, без шрифтове или скриптове от други сайтове. Дори броят звезди от GitHub на началната
+      страница се взима от нашия сървър, най-много веднъж на час, а не от браузъра ти. Линковете към GitHub или към източниците на
+      музиката те водят към тези сайтове, които имат свои правила за поверителност.</p>
+  </section>
+
+  <section aria-labelledby="bg-basis">
+    <h2 class="pv-h2" id="bg-basis">На какво основание</h2>
+    <p>Пазим това, от което играта има нужда, защото да я поддържаме безопасна е наш <strong>законен интерес</strong>, а и твой:
+      фермата ти е запазена, двама фермери могат да играят заедно, а спамът и злоупотребите остават навън (ОРЗД, чл. 6, пар. 1, буква „е“).
+      Нищо не се ползва за профилиране и никакви решения за теб не се вземат автоматично.</p>
+    <p>Полето за контакт в кутията за идеи и във формуляра за запитвания не е задължително. Ако го попълниш, даваш <strong>съгласие</strong>
+      да го ползваме, за да ти отговорим (чл. 6, пар. 1, буква „а“). Можеш да оттеглиш съгласието си по всяко време със запитване; ако
+      оставиш полето празно, просто няма как да ти отговорим.</p>
+  </section>
+
+  <section aria-labelledby="bg-rights">
+    <h2 class="pv-h2" id="bg-rights">Твоите права</h2>
+    <ul>
+      <li><b>Достъп:</b> да попиташ какво пазим за теб и да получиш копие.</li>
+      <li><b>Изтриване:</b> да поискаш да го изтрием (фермата си можеш да изтриеш и от играта).</li>
+      <li><b>Възражение:</b> да възразиш срещу начина, по който го ползваме, и ние спираме, освен ако не е нужно, за да пазим играта.</li>
+      <li><b>Поправка:</b> да поискаш да оправим нещо, което не е вярно.</li>
+    </ul>
+    <p>Използвай <a href="#bg-request">формуляра за запитвания</a> по-долу; отговаряме до един месец. Профили няма, така че знаем коя
+      ферма е твоята само ако ни кажеш: адресът ѝ (/f/…) помага. Никога не изпращай личния си линк към фермата с частта #k=: това е
+      ключът ти.</p>
+    <p>Можеш да подадеш и жалба до Комисията за защита на личните данни (КЗЛД, <a href="https://www.cpdp.bg/" rel="noopener">cpdp.bg</a>)
+      или до органа по защита на данните там, където живееш.</p>
+  </section>
+
+  <section aria-labelledby="bg-delete">
+    <h2 class="pv-h2" id="bg-delete">Как да изтриеш фермата си</h2>
+    <ol class="pv-steps">
+      <li>Отвори фермата си и влез в <b>Настройки › Ферма</b> (Settings › Farm).</li>
+      <li>Избери <b>Изтрий фермата сега</b> (Delete this farm now).</li>
+      <li>Прочети какво изчезва и потвърди. „Запази фермата“ (Keep my farm) винаги е безопасният изход.</li>
+    </ol>
+    <p>Всеки фермер от фермата може да го направи. Всичко изчезва наведнъж и за двамата: фермата, двамата фермери с целия им напредък
+      и всички резервни копия. Ако партньорът ти играе в този момент, на екрана му пише, че фермата е изтрита, а това устройство я
+      забравя. Действието е необратимо.</p>
+    <p>Нямаш вече достъп до някоя ферма? Ферма, която никой не е посещавал 7 дни, се изтрива сама. Ако партньорът ти още играе там или
+      искаш да изчезне по-рано, прати запитване по-долу с адреса на фермата. За да забравиш ферма само на едно устройство, натисни ✕
+      до нея на началната страница.</p>
+  </section>
+
+  <section class="pv-ask" aria-labelledby="bg-request">
+    <h2 class="pv-h2" id="bg-request">Пиши ни</h2>
+    <form class="pv-form" data-lang="bg" novalidate>
+      <fieldset class="pv-kinds">
+        <legend class="pv-label">Какво искаш?</legend>
+        <label class="pv-kind"><input type="radio" name="kind" value="idea" required> <span>Изтрийте идеята ми</span></label>
+        <label class="pv-kind"><input type="radio" name="kind" value="farm"> <span>Изтрийте ферма, до която вече нямам достъп</span></label>
+        <label class="pv-kind"><input type="radio" name="kind" value="copy"> <span>Копие от данните ми</span></label>
+        <label class="pv-kind"><input type="radio" name="kind" value="other"> <span>Нещо друго</span></label>
+        <p class="pv-err" data-err="kind" role="alert" hidden></p>
+      </fieldset>
+      <div class="pv-field">
+        <label class="pv-label" for="bg-text">Разкажи ни повече</label>
+        <textarea class="pv-input pv-text" id="bg-text" name="text" rows="5" maxlength="2000" required aria-describedby="bg-text-hint"></textarea>
+        <p class="pv-hint" id="bg-text-hint">Коя идея или ферма (адресът на фермата, никога частта #k=) и всичко, което ще ни помогне да я намерим.</p>
+        <p class="pv-err" data-err="text" role="alert" hidden></p>
+      </div>
+      <div class="pv-field">
+        <label class="pv-label" for="bg-contact">Как да се свържем с теб? <span class="pv-opt">(по желание)</span></label>
+        <input class="pv-input" id="bg-contact" name="contact" type="text" maxlength="120" autocomplete="email" inputmode="email" aria-describedby="bg-contact-hint">
+        <p class="pv-hint" id="bg-contact-hint">Имейл или потребителско име, само за да отговорим на това запитване. Без контакт няма как да ти отговорим.</p>
+        <p class="pv-err" data-err="contact" role="alert" hidden></p>
+      </div>
+      <div class="pv-trap" aria-hidden="true"><label for="bg-website">Остави това поле празно</label><input id="bg-website" name="website" type="text" tabindex="-1" autocomplete="off"></div>
+      <div class="pv-acts"><button class="btn pv-send" type="submit">Изпрати запитването</button></div>
+      <p class="pv-status" role="status" aria-live="polite"></p>
+    </form>
+    <div class="pv-done" tabindex="-1" hidden>
+      <p class="pv-done-title">Благодарим!</p>
+      <p>Запитването ти пристигна. Ако има оставен контакт, ще ти отговорим до един месец.</p>
+    </div>
+    <noscript><p class="pv-hint">Формулярът иска JavaScript. Можеш да намериш Красимир и в GitHub (виж „Кой стои зад играта“).</p></noscript>
+  </section>
+
+  <p class="pv-note">Не сме юристи. Написахме тази страница така, че да е вярна и пълна за тази малка игра, и я държим в крак с кода ѝ,
+    който всеки може да прочете. Ако нещо не е ясно или не е вярно, пиши ни и ще го оправим.</p>
+</article>
+
+  </main>
+
+  <footer class="pv-foot">
+    <nav class="pv-links" aria-label="Harvest Hollow">
+      <a href="/" data-pv="home"><span lang="en">Start page</span><span class="pv-sep" aria-hidden="true"> · </span><span lang="bg">Начална страница</span></a>
+      <a href="https://github.com/KrasimirKralev/harvest-hollow" rel="noopener">Harvest Hollow on GitHub</a>
+    </nav>
+  </footer>
+  <script type="module" src="/js/privacy.js"></script>
+</body>
+</html>

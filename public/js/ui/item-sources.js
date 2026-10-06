@@ -21,24 +21,37 @@ import {
   CONTENT, live, itemOf, cropOf, buildingOf, homeOf, classMembers, pluralOf, levelFromXp, isLive, GROWTH, feedOf,
 } from '../../../shared/content/index.js';
 import { placedOf, inTray, priceOf, durationText, inputsOf, feedSkips, skipText, SKIP_FIX } from './panels/model.js';
+import { t as tr, tn as trn, live as liveKeys, fmtNum, N, nameEntry, qty as qtyOf, name as cname } from '../i18n/index.js';
+import { prep } from './goal-text.js';
 
-const NUM = new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 });
-const fmt = (n) => NUM.format(Math.trunc(Number(n) || 0));
+/** A catalog sentence with the Bulgarian prepositions fixed ("със захар", "във фермата"). */
+const t = (key, params) => prep(tr(key, params));
+const tn = (key, n, params) => prep(trn(key, n, params));
+
+const fmt = (n) => fmtNum(n);
 const own = (o, k) => (o && Object.hasOwn(o, k) ? o[k] : 0);
 
-/** Ingredient classes in words (the Feed Mill's inputs). */
-export const CLASS_WORDS = Object.freeze({ grain: 'any grain', root: 'any root crop', produce: 'any crop or fruit',
-  veg: 'any vegetable', fruit: 'any fruit', flower: 'any flower', fibre: 'any fibre', cane: 'any cane' });
+const CLASSES = ['grain', 'root', 'produce', 'veg', 'fruit', 'flower', 'fibre', 'cane'];
+/** Ingredient classes in words (the Feed Mill's inputs), in the language in effect. */
+export const CLASS_WORDS = liveKeys(Object.fromEntries(CLASSES.map((c) => [c, `goals.src.cls.${c}`])));
+/** "3 of any grain" (a recipe's class input). */
+const classIn = (cls, n) => (CLASSES.includes(cls) ? t(`goals.src.in.${cls}`, { n }) : t('goals.src.in.any', { n, cls }));
 
 /** The class as a noun for the bubble's count line ("0 / 3 grain usable for feed"). */
-const CLASS_NOUN = Object.freeze({ grain: 'grain', root: 'root crops', produce: 'crops or fruit' });
+const CLASS_NOUN = liveKeys({ grain: 'goals.src.noun.grain', root: 'goals.src.noun.root', produce: 'goals.src.noun.produce' });
 
 const levelOf = (state) => levelFromXp(state?.farm?.xp ?? 0);
 const nameOf = (id) => itemOf(id)?.name ?? String(id).replace(/_/g, ' ');
-/** "2 Planks", "1 Egg", "3 Carrots" */
-const qty = (n, id) => `${fmt(n)} ${pluralOf(nameOf(id), n)}`;
-/** "a Sawmill", "an Apple Tree" */
-const article = (name) => `${/^[aeiou]/i.test(name) ? 'an' : 'a'} ${name}`;
+/** "2 Planks", "1 Egg", "3 Carrots" / "2 дъски" */
+const qty = (n, id) => (itemOf(id) ? qtyOf(id, n, { family: 'items' }) : `${fmt(n)} ${pluralOf(nameOf(id), n)}`);
+/** "a"/"an" before an English name (English-only grammar). */
+const an = (en) => (/^[aeiou]/i.test(String(en)) ? 'an' : 'a');
+/** A content name for a sentence: the Bulgarian ref when the names table has one, else the English the code holds. */
+const nm = (id, en, family) => (nameEntry(id, family) ? N(id, family) : en);
+/** The same as a label. */
+const label = (id, en, family) => (nameEntry(id, family) ? cname(id, { family }) : en);
+/** An item's name as a label. */
+const itemLabel = (id) => (itemOf(id) ? label(id, nameOf(id), 'items') : nameOf(id));
 
 /** Placed objects of a def on this farm (none without a state). */
 const placed = (state, defId) => (state ? placedOf(state, defId) : []);
@@ -46,23 +59,22 @@ const tray = (state, defId) => (state ? inTray(state, defId) : 0);
 /** Price words of the next copy: "6,000 coins", "free". */
 function priceWords(state, defId) {
   const p = state ? priceOf(state, defId) : { coins: CONTENT.buildings.get(defId)?.cost ?? 0, acorns: 0 };
-  if (p.acorns > 0) return `${fmt(p.acorns)} Acorns`;
-  return p.coins > 0 ? `${fmt(p.coins)} coins` : 'free';
+  if (p.acorns > 0) return t('goals.src.acorns', { n: p.acorns });
+  return p.coins > 0 ? t('goals.src.coins', { n: p.coins }) : t('goals.src.free');
 }
 
 /**
  * How a def that is not on the farm yet is had: from the build tray, else from a Market tab (with the unlock level
  * while it is locked, else its price). -> { state, note, show }
  */
-function acquire(state, def, tab, tabLabel, verb = 'Build', name = def.name) {
+function acquire(state, def, tab, verb = 'build', name = def.name) {
   const level = levelOf(state);
   const unlock = def.unlock ?? 1;
   const show = { panel: 'market', args: { tab, focus: def.id } };
-  if (tray(state, def.id) > 0) {
-    return { state: 'build', note: `Place ${article(name)} from your build tray (it is free)`, show };
-  }
-  if (level < unlock) return { state: 'locked', note: `${verb} ${article(name)} (Market → ${tabLabel}, level ${unlock})`, show };
-  return { state: 'build', note: `${verb} ${article(name)} (Market → ${tabLabel}, ${priceWords(state, def.id)})`, show };
+  const x = { _a: an(name), x: nm(def.id, name), tab: t(`goals.src.tab.${tab}`) };
+  if (tray(state, def.id) > 0) return { state: 'build', note: t('goals.src.fromTray', x), show };
+  if (level < unlock) return { state: 'locked', note: t(`goals.src.${verb}.locked`, { ...x, n: unlock }), show };
+  return { state: 'build', note: t(`goals.src.${verb}.price`, { ...x, price: priceWords(state, def.id) }), show };
 }
 
 // ---- the producers -------------------------------------------------------------------------------------------------
@@ -73,20 +85,20 @@ function crafted(state, r, kind) {
   if (!b || !isLive(b)) return null;
   const level = levelOf(state);
   const ins = kind === 'feed'
-    ? r.classes.map(({ cls, qty: n }) => `${fmt(n)} of ${CLASS_WORDS[cls] ?? `any ${cls}`}`)
+    ? r.classes.map(({ cls, qty: n }) => classIn(cls, n))
     : Object.entries(r.inputs).map(([id, n]) => qty(n, id));
-  const duet = r.duet ? ' · cook it together (or alone, twice as long)' : '';
-  const text = `${ins.join(' + ')} → ${r.out > 1 ? qty(r.out, r.id) : nameOf(r.id)} · ${durationText(r.ms)}${duet}`;
+  const made = `${ins.join(' + ')} → ${r.out > 1 ? qty(r.out, r.id) : itemLabel(r.id)} · ${durationText(r.ms)}`;
+  const text = r.duet ? t('goals.src.duet', { made }) : made;
   const mine = placed(state, b.id);
-  const src = { key: `${kind}:${r.id}`, kind, icon: b.id, title: b.name, text };
+  const src = { key: `${kind}:${r.id}`, kind, icon: b.id, title: label(b.id, b.name), text };
   if (mine.length) {
     const show = { panel: 'building', args: { id: mine[0], focus: r.id } };
-    if (level < r.unlock) return { ...src, state: 'locked', note: `The recipe opens at level ${r.unlock}`, show };
-    return { ...src, state: 'ready', note: mine.length > 1 ? `You have ${mine.length}` : `You have ${article(b.name)}`, show };
+    if (level < r.unlock) return { ...src, state: 'locked', note: t('goals.src.recipeAt', { n: r.unlock }), show };
+    return { ...src, state: 'ready', note: mine.length > 1 ? t('goals.src.haveN', { n: mine.length }) : t('goals.src.haveOne', { _a: an(b.name), x: nm(b.id, b.name) }), show };
   }
-  const a = acquire(state, b, 'buildings', 'Buildings');
+  const a = acquire(state, b, 'buildings');
   // a building the farm can buy but whose recipe waits for a later level: say both
-  if (a.state !== 'locked' && level < r.unlock) a.note += `; the recipe opens at level ${r.unlock}`;
+  if (a.state !== 'locked' && level < r.unlock) a.note = t('goals.src.andRecipe', { note: a.note, n: r.unlock });
   return { ...src, ...a };
 }
 
@@ -102,14 +114,12 @@ function grown(state, c, now) {
       if (Number.isFinite(now) && crop.readyAt <= now) ripe++; else growing++;
     }
   }
-  const text = `Plant it on a plot (${fmt(c.seed)} coins a seed): ${qty(c.yield, c.id)} per plot in ${durationText(c.growMs)}`;
-  const src = { key: `crop:${c.id}`, kind: 'crop', icon: c.id, title: `Grow ${c.name}`, text,
+  const text = t('goals.src.grow.text', { c: c.seed, q: qty(c.yield, c.id), d: durationText(c.growMs) });
+  const src = { key: `crop:${c.id}`, kind: 'crop', icon: c.id, title: t('goals.src.grow.title', { x: nm(c.id, c.name, 'crops') }), text,
     show: { panel: 'market', args: { tab: 'seeds', focus: c.id } } };
-  if (level < c.unlock) return { ...src, state: 'locked', note: `Seeds unlock at level ${c.unlock} (Market → Seeds)` };
-  const plots = (n) => `${fmt(n)} plot${n === 1 ? '' : 's'}`;
-  const note = ripe && growing ? `${plots(growing)} growing, ${fmt(ripe)} ready to harvest`
-    : ripe ? `${plots(ripe)} ready to harvest` : growing ? `${plots(growing)} growing now`
-      : 'Pick it in the seed picker on an empty plot, or Market → Seeds';
+  if (level < c.unlock) return { ...src, state: 'locked', note: t('goals.src.grow.locked', { n: c.unlock }) };
+  const note = ripe && growing ? tn('goals.src.grow.both', growing, { r: ripe })
+    : ripe ? tn('goals.src.grow.ripe', ripe) : growing ? tn('goals.src.grow.growing', growing) : t('goals.src.grow.pick');
   return { ...src, state: 'ready', note };
 }
 
@@ -120,62 +130,69 @@ function treeWord(t) {
 }
 
 /** A tree's harvest (fruit with the Basket, Wood with the Axe). */
-function picked(state, t) {
-  const axe = t.tool === 'axe';
-  const trees = pluralOf(treeWord(t), 2);
-  const title = axe ? `Chop ${trees} with the Axe` : `Pick ${pluralOf(nameOf(t.product), 2)} from ${trees}`;
-  const text = `${axe ? '' : 'With the Basket: '}${qty(t.yield, t.product)} every ${durationText(t.cycleMs)} once grown`;
-  const src = { key: `tree:${t.id}`, kind: 'tree', icon: t.id, title, text };
-  const mine = placed(state, t.id);
+function picked(state, tr) {
+  const tree = tr;
+  const axe = tree.tool === 'axe';
+  const trees = { _trees: pluralOf(treeWord(tree), 2), t: nm(tree.id, treeWord(tree), 'trees') };
+  const title = axe ? t('goals.src.tree.chop', trees)
+    : t('goals.src.tree.pick', { ...trees, _fruit: pluralOf(nameOf(tree.product), 2), f: nm(tree.product, nameOf(tree.product), 'items') });
+  const text = t(axe ? 'goals.src.tree.textAxe' : 'goals.src.tree.text', { q: qty(tree.yield, tree.product), d: durationText(tree.cycleMs) });
+  const src = { key: `tree:${tree.id}`, kind: 'tree', icon: tree.id, title, text };
+  const mine = placed(state, tree.id);
   if (mine.length) {
-    return { ...src, state: 'ready', note: `You have ${fmt(mine.length)}`, show: { panel: 'tree', args: { id: mine[0] } } };
+    return { ...src, state: 'ready', note: t('goals.src.haveN', { n: mine.length }), show: { panel: 'tree', args: { id: mine[0] } } };
   }
-  return { ...src, ...acquire(state, t, 'trees', 'Trees', 'Buy', treeWord(t)) };
+  return { ...src, ...acquire(state, tree, 'trees', 'buy', treeWord(tree)) };
 }
 
 /** Animals in their home: their product, fed with their feed (bees forage on their own). */
 function laid(state, a, premium = false) {
   const home = homeOf(a.homes[0]);
-  const many = a.feed === null && home ? pluralOf(home.name, 2) : pluralOf(a.name, 2);
-  const title = premium ? `A lucky find from ${many}` : `Collect from ${many}`;
+  const hive = a.feed === null && home;
+  const who = hive ? { _many: pluralOf(home.name, 2), x: nm(home.id, home.name, 'homes') } : { _many: pluralOf(a.name, 2), x: nm(a.id, a.name, 'animals') };
+  const title = t(premium ? 'goals.src.animal.lucky' : 'goals.src.animal.collect', who);
   const bp = GROWTH.prizedAnimal?.premiumBp ?? a.premiumBp ?? 1000;
   const odds = bp > 0 ? Math.max(1, Math.round(10_000 / bp)) : 10;
-  const one = a.feed === null && home ? home.name : a.name;
+  const one = hive ? home.name : a.name;
+  const every = { q: qty(a.out, a.product), d: durationText(a.cycleMs) };
   const text = premium
-    ? `A blue-ribbon ${one.toLowerCase()} (${fmt(a.prizedAt)} collections) brings ${article(nameOf(a.premium))} about 1 time in ${fmt(odds)}`
-    : a.feed === null
-      ? `The bees forage flowers and fruit trees nearby: ${qty(a.out, a.product)} every ${durationText(a.cycleMs)}`
-      : `Feed them ${nameOf(a.feed)}: ${qty(a.out, a.product)} every ${durationText(a.cycleMs)}`;
+    ? t('goals.src.animal.prized', { x: who.x, _one: one.toLowerCase(), c: a.prizedAt, _a: an(nameOf(a.premium)), _p: nameOf(a.premium),
+      p: nm(a.premium, nameOf(a.premium), 'items'), n: odds })
+    : a.feed === null ? t('goals.src.animal.bees', every)
+      : t('goals.src.animal.feed', { ...every, feed: nm(a.feed, nameOf(a.feed), 'items') });
   const src = { key: `${premium ? 'premium' : 'animal'}:${a.id}`, kind: premium ? 'premium' : 'animal',
     icon: a.feed === null && home ? home.id : a.id, title, text };
   const homes = home ? placed(state, home.id) : [];
   const mine = placed(state, a.id);
   if (mine.length && homes.length) {
     const prized = mine.filter((id) => (state.farm.objects[id].cycle ?? 0) >= a.prizedAt).length;
-    const note = !premium ? `${fmt(mine.length)} on the farm`
-      : prized ? `${fmt(prized)} of yours ${prized === 1 ? 'is' : 'are'} blue-ribbon` : 'None of yours is blue-ribbon yet';
+    const note = !premium ? t('goals.src.onFarm', { n: mine.length })
+      : prized ? tn('goals.src.animal.prizedN', prized) : t('goals.src.animal.prizedNone');
     return { ...src, state: premium && !prized ? 'info' : 'ready', note, show: { panel: 'animals', args: { id: homes[0] } } };
   }
   // the bees come with their hive (no animal to buy): the hive is what is had
-  if (a.feed === null && home) return { ...src, ...acquire(state, home, 'animals', 'Animals') };
+  if (a.feed === null && home) return { ...src, ...acquire(state, home, 'animals') };
+  const them = { _x: pluralOf(a.name, 2), x: nm(a.id, a.name, 'animals') };
   if (home && !homes.length && levelOf(state) >= (home.unlock ?? 1)) {
-    const h = acquire(state, home, 'animals', 'Animals');
-    return { ...src, ...h, note: `${h.note}, then buy ${pluralOf(a.name, 2)}` };
+    const h = acquire(state, home, 'animals');
+    return { ...src, ...h, note: t('goals.src.thenBuy', { note: h.note, ...them }) };
   }
   const level = levelOf(state);
   const show = { panel: 'market', args: { tab: 'animals', focus: a.id } };
-  if (level < a.unlock) return { ...src, state: 'locked', note: `Buy ${pluralOf(a.name, 2)} (Market → Animals, level ${a.unlock})`, show };
-  return { ...src, state: 'build', note: `Buy ${pluralOf(a.name, 2)} (Market → Animals)`, show };
+  if (level < a.unlock) return { ...src, state: 'locked', note: t('goals.src.buyAnimals.locked', { ...them, n: a.unlock }), show };
+  return { ...src, state: 'build', note: t('goals.src.buyAnimals', them), show };
 }
 
 /** A building that fills on its own (the Compost Bin: points from animal collections). */
 function collected(state, b) {
   const c = b.collector;
-  const src = { key: `collector:${b.id}`, kind: 'collector', icon: b.id, title: b.name,
-    text: `${qty(c.out, c.item)} for every ${fmt(c.every)} animal collections` };
+  const src = { key: `collector:${b.id}`, kind: 'collector', icon: b.id, title: label(b.id, b.name),
+    text: t('goals.src.collector', { q: qty(c.out, c.item), n: c.every }) };
   const mine = placed(state, b.id);
-  if (mine.length) return { ...src, state: 'ready', note: `You have ${article(b.name)}`, show: { panel: 'building', args: { id: mine[0] } } };
-  return { ...src, ...acquire(state, b, 'buildings', 'Buildings') };
+  if (mine.length) {
+    return { ...src, state: 'ready', note: t('goals.src.haveOne', { _a: an(b.name), x: nm(b.id, b.name) }), show: { panel: 'building', args: { id: mine[0] } } };
+  }
+  return { ...src, ...acquire(state, b, 'buildings') };
 }
 
 /** Debris that pays the item when cleared (Wood from stumps and fallen logs). */
@@ -186,13 +203,14 @@ function debrisSource(state, item) {
   const woods = kinds.map((d) => d.wood);
   const lo = Math.min(...woods);
   const hi = Math.max(...woods);
-  const names = kinds.map((d) => pluralOf(d.name, 2).toLowerCase());
+  const names = kinds.map((d) => (nameEntry(d.id) ? cname(d.id, { form: 'pl' }) : pluralOf(d.name, 2).toLowerCase()));
   let left = 0;
   if (state) for (const d of kinds) left += placedOf(state, d.id).length;
+  const all = names.length > 1 ? t('goals.src.and', { list: names.slice(0, -1).join(', '), last: names.at(-1) }) : names[0];
   return {
-    key: 'debris:wood', kind: 'debris', icon: kinds[0].id, title: `Chop ${names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names.at(-1)}` : names[0]} with the Axe`,
-    text: `${lo === hi ? fmt(lo) : `${fmt(lo)}-${fmt(hi)}`} Wood each, cleared for good`,
-    state: 'info', note: left ? `${fmt(left)} on the farm now` : 'None left: new land brings more', show: null,
+    key: 'debris:wood', kind: 'debris', icon: kinds[0].id, title: t('goals.src.debris.title', { list: all }),
+    text: lo === hi ? tn('goals.src.debris.text', lo) : t('goals.src.debris.range', { lo, hi }),
+    state: 'info', note: left ? t('goals.src.debris.left', { n: left }) : t('goals.src.debris.none'), show: null,
   };
 }
 
@@ -202,10 +220,10 @@ function storeSource(state, it) {
   const f = CONTENT.feeds.get(it.id);
   const n = f?.out ?? 1;
   const show = { panel: 'market', args: { tab: 'tools', focus: it.id } };
-  const src = { key: `store:${it.id}`, kind: 'store', icon: 'market_stand', title: 'General Store',
-    text: `${qty(n, it.id)} for ${fmt(it.storePrice * n)} coins: an emergency buy, the Feed Mill makes it far cheaper`, show };
-  if (levelOf(state) < (it.unlock ?? 1)) return { ...src, state: 'locked', note: `Level ${it.unlock} (Market → Tools)` };
-  return { ...src, state: 'ready', note: 'Market → Tools' };
+  const src = { key: `store:${it.id}`, kind: 'store', icon: 'market_stand', title: t('goals.src.store.title'),
+    text: t('goals.src.store.text', { q: qty(n, it.id), n: it.storePrice * n }), show };
+  if (levelOf(state) < (it.unlock ?? 1)) return { ...src, state: 'locked', note: t('goals.src.store.locked', { n: it.unlock }) };
+  return { ...src, state: 'ready', note: t('goals.src.store.where') };
 }
 
 // ---- the list ------------------------------------------------------------------------------------------------------
@@ -251,13 +269,13 @@ export function itemHint(itemId, state, { need, cls, recipe, now } = {}) {
   if (!it) return null;
   const have = state ? own(state.farm.inventory, itemId) + own(state.farm.overflow, itemId) : 0;
   const n = Number.isSafeInteger(need) && need > 0 ? need : null;
-  const out = { id: itemId, name: it.name, have, need: n, short: n === null ? 0 : Math.max(0, n - have),
+  const out = { id: itemId, name: itemLabel(itemId), have, need: n, short: n === null ? 0 : Math.max(0, n - have),
     sources: itemSources(itemId, state, { now }) };
   if (cls) {
     const ids = classMembers(cls);
     if (ids.length) {
-      out.cls = { cls, words: CLASS_WORDS[cls] ?? `any ${cls}`,
-        members: ids.map((id) => ({ id, name: nameOf(id), have: state ? own(state.farm.inventory, id) + own(state.farm.overflow, id) : 0 })) };
+      out.cls = { cls, words: CLASS_WORDS[cls] ?? t('goals.src.cls.any', { cls }),
+        members: ids.map((id) => ({ id, name: itemLabel(id), have: state ? own(state.farm.inventory, id) + own(state.farm.overflow, id) : 0 })) };
       const feed = state && recipe ? feedClass(state, recipe, cls) : null;
       if (feed) {
         Object.assign(out.cls, feed);
@@ -289,14 +307,15 @@ export function feedClass(state, recipeId, cls) {
   for (const m of x.walk) {
     const use = x.members.find((u) => u.id === m.item)?.n ?? 0;
     const skip = x.skipped.find((s) => s.id === m.item) ?? null;
-    if (m.have <= 0) { none.push(nameOf(m.item)); continue; }
+    if (m.have <= 0) { none.push(itemLabel(m.item)); continue; }
     if (!skip && use <= 0) continue;
     let fix = null;
     if (skip?.why === 'noFeed') fix = SKIP_FIX.noFeed;
     else if (skip?.why === 'kept' && short) fix = SKIP_FIX.kept;
-    else if (skip?.why === 'valuable' && skips?.confirmable) fix = { kind: 'ask', label: 'Make asks first' };
-    rows.push({ id: m.item, name: nameOf(m.item), n: m.have, use, why: skip?.why ?? null, keep: m.keep,
-      text: skip ? skipText(skip) : `${nameOf(m.item)} ${fmt(m.have)}${use < m.have ? ` · ${fmt(use)} usable` : ''}`, fix });
+    else if (skip?.why === 'valuable' && skips?.confirmable) fix = { kind: 'ask', label: t('goals.src.askFirst') };
+    const nmItem = itemLabel(m.item);
+    rows.push({ id: m.item, name: nmItem, n: m.have, use, why: skip?.why ?? null, keep: m.keep,
+      text: skip ? skipText(skip) : use < m.have ? t('goals.src.row.usable', { x: nmItem, n: m.have, use }) : t('goals.src.row', { x: nmItem, n: m.have }), fix });
   }
   return { usable: x.have, rows, none, blocked: Boolean(skips?.blocked) };
 }
@@ -305,8 +324,8 @@ export function feedClass(state, recipeId, cls) {
 export function haveLine(m) {
   if (!m) return '';
   // a Feed Mill class chip counts the class, not the pictured member: "0 / 3 grain usable for feed"
-  const where = m.usable ? `${m.usable} usable for feed` : 'in the barn';
-  if (m.need === null) return `${fmt(m.have)} ${where}`;
-  return m.short > 0 ? `${fmt(m.have)} / ${fmt(m.need)} ${where} · need ${fmt(m.short)} more`
-    : `${fmt(m.have)} / ${fmt(m.need)} ${where} · enough`;
+  const k = m.usable ? 'usable' : 'barn';
+  const p = { have: m.have, need: m.need, short: m.short, what: m.usable || '' };
+  if (m.need === null) return t(`goals.src.have.${k}`, p);
+  return t(m.short > 0 ? `goals.src.have.${k}.short` : `goals.src.have.${k}.enough`, p);
 }

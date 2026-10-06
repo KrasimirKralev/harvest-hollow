@@ -3,6 +3,7 @@
 // ribbon rosettes, chests, the land map. Everything is built with createElementNS from data (content), never
 // from strings that came from players.
 import { CONTENT, isLive } from '../../../../shared/content/index.js';
+import { t, lang, fmtNum, name as cname } from '../../i18n/index.js';
 
 const NS = 'http://www.w3.org/2000/svg';
 let clipSeq = 0;
@@ -30,7 +31,7 @@ const MAP = { x0: 8, z0: 8, size: 48 };
  * parcels clickable. Owned land is lush, the next parcel shows a "For sale" sign, later ones are wild meadow.
  */
 export function landMap(state, cards, { selected = null, onPick = null } = {}) {
-  const svg = root(`${MAP.x0 - 2} ${MAP.z0 - 3} ${MAP.size + 4} ${MAP.size + 8}`, { label: 'Map of the farm and the land for sale', cls: 'pn-map' });
+  const svg = root(`${MAP.x0 - 2} ${MAP.z0 - 3} ${MAP.size + 4} ${MAP.size + 8}`, { label: t('farm.art.mapLabel'), cls: 'pn-map' });
   const defs = s('defs', {},
     s('pattern', { id: 'pn-mow', width: 4, height: 4, patternUnits: 'userSpaceOnUse', patternTransform: 'rotate(35)' },
       s('rect', { width: 4, height: 4, fill: '#7CC243' }), s('rect', { width: 2, height: 4, fill: '#86CB4B' })),
@@ -59,6 +60,7 @@ export function landMap(state, cards, { selected = null, onPick = null } = {}) {
     const mine = owned.has(e.id);
     const forSale = card && card.isNext && !mine;
     const liveOne = isLive(e);
+    const name = cname(e.id, { family: 'expansions' });
     for (const [x, z, w, d] of e.rects) {
       const fill = mine ? 'url(#pn-mow)' : forSale ? 'url(#pn-sale)' : 'url(#pn-wild)';
       const r = s('rect', { x: x + 0.15, y: z + 0.15, width: w - 0.3, height: d - 0.3, rx: 1.1, fill,
@@ -69,7 +71,7 @@ export function landMap(state, cards, { selected = null, onPick = null } = {}) {
       if (onPick && card && liveOne) {
         r.setAttribute('tabindex', '0');
         r.setAttribute('role', 'button');
-        r.setAttribute('aria-label', `${e.name}${mine ? ', ours' : forSale ? ', for sale' : `, level ${e.unlock}`}`);
+        r.setAttribute('aria-label', mine ? t('farm.art.parcelOurs', { name }) : forSale ? t('farm.art.parcelSale', { name }) : t('farm.art.parcelLevel', { name, n: e.unlock }));
         r.addEventListener('click', () => onPick(e.id));
         r.addEventListener('keydown', (ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); onPick(e.id); } });
       }
@@ -84,22 +86,23 @@ export function landMap(state, cards, { selected = null, onPick = null } = {}) {
       for (let i = 0; i < 4; i++) for (let j = 0; j < 4; j++) {
         plots.append(s('rect', { x: x + 11 + i * 1.3, y: z + 5 + j * 1.3, width: 1.05, height: 1.05, rx: 0.2, fill: '#7A4A2A' }));
       }
-      labels.append(plots, s('text', { x: cx, y: z + d - 1.6, class: 'pn-map-label home' }, 'Homestead'));
+      labels.append(plots, s('text', { x: cx, y: z + d - 1.6, class: 'pn-map-label home' }, t('farm.map.homestead')));
     } else if (forSale) {
       labels.append(signpost(cx, cz - 0.4), s('text', { x: cx, y: cz + 3.4, class: 'pn-map-label sale' }, short(card.price.coins)));
     } else if (mine) {
-      const words = e.name.split(' ');
-      const lines = w < 12 && words.length > 1 ? words : [e.name];
+      const words = name.split(' ');
+      const lines = w < 12 && words.length > 1 ? words : [name];
       lines.forEach((ln, i) => labels.append(s('text', { x: cx, y: cz + 0.8 + (i - (lines.length - 1) / 2) * 2.2, class: 'pn-map-label mine' }, ln)));
     } else if (liveOne) {
-      labels.append(s('text', { x: cx, y: cz + 0.9, class: 'pn-map-label lvl' }, `Lv ${e.unlock}`));
+      labels.append(s('text', { x: cx, y: cz + 0.9, class: 'pn-map-label lvl' }, t('farm.art.lvl', { n: e.unlock })));
     }
   }
   svg.append(layer, labels);
   return svg;
 }
 
-const short = (n) => (n >= 10_000 ? `${Math.round(n / 1000)}k` : n.toLocaleString('en-US'));
+// Bulgarian: the full grouped number ("12 300" is no wider than "12.3k"; "12 хил." would be)
+const short = (n) => (lang() !== 'en' ? fmtNum(n) : n >= 10_000 ? `${Math.round(n / 1000)}k` : n.toLocaleString('en-US'));
 
 function farmhouse(x, z) {
   return s('g', { transform: `translate(${x} ${z})` },
@@ -130,7 +133,7 @@ export function portrait(npc, size = 72) {
   img.src = `/assets/art/npc/${file}.webp`;
   img.width = size;
   img.height = size;
-  img.alt = npc.name;
+  img.alt = cname(npc.id);
   img.decoding = 'async';
   img.draggable = false;
   img.addEventListener('error', () => img.replaceWith(svgPortrait(npc, size)), { once: true });
@@ -140,7 +143,7 @@ export function portrait(npc, size = 72) {
 /** The drawn SVG portrait; styles come from content PORTRAIT_STYLES (closed sets). */
 export function svgPortrait(npc, size = 72) {
   const p = npc?.portrait ?? { skin: '#F2D3B8', hair: '#8C6A3E', hairStyle: 'short', outfit: '#7E9C6B', accent: '#E9B44C' };
-  const svg = root('0 0 64 64', { w: size, h: size, label: npc ? npc.name : 'A neighbour', cls: 'pn-portrait' });
+  const svg = root('0 0 64 64', { w: size, h: size, label: npc ? cname(npc.id) : t('farm.art.neighbour'), cls: 'pn-portrait' });
   svg.append(
     s('circle', { cx: 32, cy: 32, r: 30, fill: '#CFE8FF' }),
     s('path', { d: 'M2 40 q15 -6 30 -2 t30 2 v24 h-60 z', fill: '#BFE09A' }),
@@ -311,7 +314,7 @@ export function letterScene(artId, iconUrlOf, { w = 320, h = 150 } = {}) {
   const sky = SKIES[sc.sky ?? 'day'];
   const id = `pn-sky-${++clipSeq}`;
   const svg = root(`0 0 ${w} ${h}`, { cls: 'pn-scene' });
-  svg.setAttribute('preserveAspectRatio', 'xMidYMid slice');
+  svg.setAttribute('preserveAspectRatio', 'xMidYMid slice'); // i18n-ok: an SVG attribute value
   svg.append(
     s('defs', {}, s('linearGradient', { id, x1: 0, y1: 0, x2: 0, y2: 1 },
       s('stop', { offset: '0', 'stop-color': sky[0] }), s('stop', { offset: '.6', 'stop-color': sky[1] }), s('stop', { offset: '1', 'stop-color': sky[2] }))),
@@ -331,7 +334,7 @@ export function letterScene(artId, iconUrlOf, { w = 320, h = 150 } = {}) {
   }
   for (const [ic, x, y, size] of sc.icons) {
     svg.append(s('ellipse', { cx: x + size / 2, cy: y + size * 0.93, rx: size * 0.34, ry: size * 0.07, fill: 'rgba(42,106,28,.35)' }));
-    const img = s('image', { x, y, width: size, height: size, preserveAspectRatio: 'xMidYMid meet' });
+    const img = s('image', { x, y, width: size, height: size, preserveAspectRatio: 'xMidYMid meet' }); // i18n-ok: an SVG attribute value
     img.setAttribute('href', iconUrlOf(ic, size > 64 ? 128 : 64));
     svg.append(img);
   }

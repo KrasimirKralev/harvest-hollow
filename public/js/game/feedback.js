@@ -28,6 +28,7 @@ import { acornsToday } from '../../../shared/rules/economy.js';
 import { SOFT, ERR } from '../../../shared/net/protocol.js';
 import { goldenHourBp, comboActive } from '../../../shared/rules/coop.js';
 import { EMOTE_VIEW } from './controller.js';
+import { t, tn, list, N } from '../i18n/index.js';
 
 const LADDER = new Set(['planted', 'harvested', 'picked', 'collected', 'crafted']);
 const PRODUCTIVE = new Set(['harvested', 'picked', 'collected', 'crafted', 'fed', 'chopped', 'cleared']);
@@ -49,7 +50,6 @@ export const STEP_SOUND = Object.freeze({ feed: [['water', { gain: 0.5 }], ['hop
 const COLLECT_SOUND = Object.freeze({ pig: [['dig', { gain: 0.8 }]], duck: [['splash', { gain: 0.6 }]], bee: [] });
 /** A recipe starting in one of the M1b buildings (GDD §8.5 Buildings); every other building bubbles ('craft'). */
 export const BUILDING_SOUND = Object.freeze({ sewing: 'sew', pie_oven: 'oven', chandlery: 'fizz', packing: 'tape' });
-const fmt = (n) => Number(n).toLocaleString('en-US');
 /** Decor that is a bird bath (render-life's birds land on it; wave 4, wish 10): a splash and a chirp now and then. */
 const BIRDBATH = /bird_?bath/;
 
@@ -277,11 +277,10 @@ export function villageBuilt(state, now) {
 export function bigSpendLine(events, state, by, now) {
   const big = events.find((ev) => ev && ev.e === 'bigSpend');
   if (!big) return null;
-  const who = Object.hasOwn(state.players, by) ? state.players[by].name : 'Your partner';
+  const who = Object.hasOwn(state.players, by) ? state.players[by].name : t('common.partner');
   const coins = Number.isSafeInteger(big.coins) ? big.coins : 0;
   const acorns = Number.isSafeInteger(big.acorns) ? big.acorns : 0;
-  const price = [coins ? `${fmt(coins)} coins` : null, acorns ? `${fmt(acorns)} Acorn${acorns === 1 ? '' : 's'}` : null]
-    .filter(Boolean).join(' and ');
+  const price = priceText(coins, acorns);
   const what = typeof big.what === 'string' ? big.what : null;
   const def = what ? defOf(what) : null;
   const known = Boolean(def || (what && (itemOf(what) || CONTENT.tools.get(what))) || what === 'golden_seeds');
@@ -292,23 +291,27 @@ export function bigSpendLine(events, state, by, now) {
   if (has('relicBought')) return null;
   // the day's Acorn rule (X7a): a small spend that tips the spender over 10 Acorns today says so
   const today = acorns ? acornsToday(state, by, now) : 0;
-  const daily = acorns > 0 && acorns < SAFETY.bigSpend.acorns && today >= acorns ? ` (${fmt(today)} Acorns today)` : '';
+  const daily = acorns > 0 && acorns < SAFETY.bigSpend.acorns && today >= acorns ? tn('game.spend.daily', today) : '';
   if (has('hurried')) {
     const h = events.find((ev) => ev && ev.e === 'hurried');
-    return { text: `${who} is spending ${price} on a Hurry${daily}`, icon: 'hurry',
+    return { text: t('game.spend.hurry', { who, price, daily }), icon: 'hurry',
       hurry: { who, coins, acorns, plot: h.kind === 'plot' || h.def === 'plot' } };
   }
   let text;
-  if (has('slotUpgraded')) text = `${who} is buying a new slot for the ${def ? def.name : 'building'} — ${price}`;
-  else if (has('homeUpgraded')) text = `${who} is upgrading the ${def ? def.name : 'animal home'} — ${price}`;
-  else if (has('barnUpgraded')) text = `${who} is upgrading the Barn — ${price}`;
-  else if (has('expanded')) text = `${who} is buying new land${CONTENT.expansions?.get(what)?.name ? `: ${CONTENT.expansions.get(what).name}` : ''} — ${price}`;
-  else {
+  if (has('slotUpgraded')) text = def ? t('game.spend.slot', { who, thing: N(def.id), price }) : t('game.spend.slotAny', { who, price });
+  else if (has('homeUpgraded')) text = def ? t('game.spend.home', { who, thing: N(def.id), price }) : t('game.spend.homeAny', { who, price });
+  else if (has('barnUpgraded')) text = t('game.spend.barn', { who, price });
+  else if (has('expanded')) {
+    text = CONTENT.expansions?.get(what)?.name ? t('game.spend.landNamed', { who, land: N(what, 'expansions'), price }) : t('game.spend.land', { who, price });
+  } else {
     const tool = what ? CONTENT.tools.get(what) : null;
     const item = what && !def && !tool ? itemOf(what) : null;
-    const name = def ? def.name : tool ? tool.name : what === 'golden_seeds' ? 'Golden Seeds' : item ? item.name : null;
-    const thing = !name ? 'something big' : def || tool ? `${article(name)} ${name}` : name;
-    text = `${who} is buying ${thing} — ${price}${daily}`;
+    const name = def ? def.name : tool ? tool.name : item ? item.name : null;
+    if (what === 'golden_seeds') text = t('game.spend.goldenSeeds', { who, price, daily });
+    else if (!name) text = t('game.spend.big', { who, price, daily });
+    // English says "a Bakery" / "an Apple Tree" ({_a}); Bulgarian has no article
+    else if (def || tool) text = t('game.spend.thingA', { who, _a: article(name), thing: N(what), price, daily });
+    else text = t('game.spend.thing', { who, thing: N(what), price, daily });
   }
   return { text, icon };
 }
@@ -320,9 +323,12 @@ export function bigSpendLine(events, state, by, now) {
  */
 export function hurryBurstLine(b) {
   if (b.n <= 1) return b.first;
-  const price = [b.coins ? `${fmt(b.coins)} coins` : null, b.acorns ? `${fmt(b.acorns)} Acorn${b.acorns === 1 ? '' : 's'}` : null]
-    .filter(Boolean).join(' and ');
-  return `${b.who} is spending ${price} to finish ${fmt(b.n)} ${b.plot ? 'crops' : 'things'} early`;
+  return tn(b.plot ? 'game.spend.burstCrops' : 'game.spend.burstThings', b.n, { who: b.who, price: priceText(b.coins, b.acorns) });
+}
+
+/** "2,600 coins and 12 Acorns" / "2600 монети и 12 жълъда" (a heads-up's price). */
+function priceText(coins, acorns) {
+  return list([coins ? tn('game.spend.coins', coins) : null, acorns ? tn('game.spend.acorns', acorns) : null]);
 }
 
 /** How long a burst of the partner's Hurries is gathered into one heads-up. */
@@ -335,7 +341,7 @@ export function createFeedback({ store, controller, view, audio, ui }) {
   const race = { timer: null, by: null, code: null, n: 0, ids: [] };
   let lastGolden = false;
 
-  const name = (pid) => (store.state && Object.hasOwn(store.state.players, pid) ? store.state.players[pid].name : 'Your partner');
+  const name = (pid) => (store.state && Object.hasOwn(store.state.players, pid) ? store.state.players[pid].name : t('common.partner'));
   const isMe = (by) => by === store.pid;
 
   /** Tile centre of an event's object (an animal: its home), or null. */
@@ -451,7 +457,7 @@ export function createFeedback({ store, controller, view, audio, ui }) {
   store.on('fx', ({ ev, local }) => {
     if (local || !ev || ev.e !== 'slotGranted' || performance.now() - slotToastAt < 2000) return;
     slotToastAt = performance.now();
-    ui.toast('Grandma\'s duet table: the Farm Kitchen has one more slot', { kind: 'info', icon: 'kitchen', ms: 6000 });
+    ui.toast(t('game.duetSlot'), { kind: 'info', icon: 'kitchen', ms: 6000 });
   });
 
   // ---- "Mia moved your Bird Bath": my placed or pinned things, remembered so a stored one can still be named --------
@@ -475,13 +481,14 @@ export function createFeedback({ store, controller, view, audio, ui }) {
     const m = mine.get(ev.id);
     if (ev.e === 'stored') mine.delete(ev.id);
     if (!m) return;
-    const what = defOf(ev.def ?? m.def)?.name ?? 'thing';
-    const yours = m.pin === store.pid ? `your pinned ${what}` : `your ${what}`;
-    if (ev.e === 'stored') { ui.toast(`${name(by)} put ${yours} away. It waits in the build tray (B).`, { kind: 'info', icon: ev.def ?? m.def, ms: 6000 }); return; }
+    const d = defOf(ev.def ?? m.def);
+    const thing = d ? N(d.id) : t('game.moved.thing');
+    const pin = m.pin === store.pid ? 'Pinned' : '';
+    if (ev.e === 'stored') { ui.toast(t(`game.moved.stored${pin}`, { name: name(by), thing }), { kind: 'info', icon: ev.def ?? m.def, ms: 6000 }); return; }
     const back = typeof controller.moveBack === 'function' && (controller.canMoveBack?.(ev.id) ?? true);
     if (back && typeof ui.notice === 'function') {
-      ui.notice(`${name(by)} moved ${yours}.`, { action: { label: 'Move it back', fn: () => controller.moveBack(ev.id) }, ms: 15000 });
-    } else ui.toast(`${name(by)} moved ${yours}.`, { kind: 'info', icon: ev.def ?? m.def, ms: 5000 });
+      ui.notice(t(`game.moved.moved${pin}`, { name: name(by), thing }), { action: { label: t('game.moved.back'), fn: () => controller.moveBack(ev.id) }, ms: 15000 });
+    } else ui.toast(t(`game.moved.moved${pin}`, { name: name(by), thing }), { kind: 'info', icon: ev.def ?? m.def, ms: 5000 });
   }
 
   store.on('celebrate', ({ ev }) => {
@@ -544,7 +551,7 @@ export function createFeedback({ store, controller, view, audio, ui }) {
     race.timer = null; race.n = 0; race.ids = []; race.by = null; race.code = null;
     if (!r.n) return;
     if (r.n === 1) ui.toast(r.code, { by: r.by });
-    else ui.toast(`${name(r.by)} got to ${r.n} of these first ♥`, { by: r.by, count: r.n });
+    else ui.toast(tn('game.raceMany', r.n, { name: name(r.by) }), { by: r.by, count: r.n });
   }
 
   store.on('reject', (r) => {
@@ -631,7 +638,7 @@ export function createFeedback({ store, controller, view, audio, ui }) {
     if (typeof view.waterNear === 'function') water = Math.max(water, Number(view.waterNear()) || 0);
     audio.setScene({ golden, rain: rainLevel(st), wet: Number.isFinite(st?.wet) ? st.wet : 0, birdbath, animals: [...species],
       createdAt: store.state.meta?.createdAt, water, village: villageBuilt(store.state, store.now()) });
-    if (golden && !lastGolden) ui.toast('Golden Hour! Everything you start now grows 10 % faster.', {});
+    if (golden && !lastGolden) ui.toast(t('game.golden.start'), {});
     lastGolden = golden;
   }
   const sceneTimer = setInterval(scene, 2000);

@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { DEFAULT_TZ } from '../shared/rules/state.js';
 import { PLAYER_SLOTS } from '../shared/content/config.js';
 import { isTimeZone } from '../shared/rules/calendar.js';
+import { STARS_URL } from './stars.js';
 
 export const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -97,9 +98,24 @@ export function multiConfig(env = process.env) {
     createPerHour: posInt(env, 'HH_CREATE_PER_HOUR', 5),     // new farms per client address
     createPerDay: posInt(env, 'HH_CREATE_PER_DAY', 20),
     wsPerIp: posInt(env, 'HH_WS_PER_IP', 16),                // open sockets per client address, all farms together
+    rekeyPerHour: posInt(env, 'HH_REKEY_PER_HOUR', 10),      // new keys for a farmer (POST /api/f/:id/rekey) per address
+    rekeyPerFarmDay: posInt(env, 'HH_REKEY_PER_FARM_DAY', 10), // ... and per farm a day
+    deletePerHour: posInt(env, 'HH_DELETE_PER_HOUR', 10),    // "Delete this farm now" per address (POST /api/f/:id/delete)
     // reverse proxies in front of the server whose X-Forwarded-For entry is trusted (0 = use the socket address)
     trustProxy: posInt(env, 'HH_TRUST_PROXY', 1, { min: 0 }),
     backupHours: posInt(env, 'HH_BACKUP_HOURS', 3),          // per farm: newest backup of each of the last N hours
     backupDays: posInt(env, 'HH_BACKUP_DAYS', 3),            // ... and of each of the last N days
+    // where the server asks for the landing page's GitHub star count (server/stars.js; 'off' = never ask)
+    starsUrl: starsUrl(env.HH_STARS_URL),
   };
+}
+
+/** HH_STARS_URL: unset -> the GitHub API's repo URL; 'off' -> null; else an http(s) URL (a test's stand-in). */
+function starsUrl(raw) {
+  if (raw === undefined || raw === '') return STARS_URL;
+  if (raw === 'off') return null;
+  let u = null;
+  try { u = new URL(raw); } catch { u = null; }
+  if (!u || !/^https?:$/.test(u.protocol)) throw new ConfigError(`HH_STARS_URL=${raw} must be an http(s) URL or off`);
+  return u.href;
 }

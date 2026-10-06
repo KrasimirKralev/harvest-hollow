@@ -73,11 +73,11 @@
 .lg-row.z-up:not(.us) { background: rgba(155, 224, 106, .2); }
 .lg-row.z-down:not(.us) { background: rgba(255, 155, 143, .18); }
 .lg-row.z-up + .lg-row:not(.z-up) { margin-top: 12px; }
-.lg-row.z-up + .lg-row:not(.z-up)::before { content: 'promotion line'; position: absolute; left: 10px; right: 10px; top: -9px; height: 0;
+.lg-row.z-up + .lg-row:not(.z-up)::before { content: attr(data-up-line); position: absolute; left: 10px; right: 10px; top: -9px; height: 0;
   border-top: 2px dashed var(--go-700); font: 700 .6875rem/1 var(--font-ui); color: var(--go-900); text-align: right; text-transform: uppercase;
   letter-spacing: .06em; padding-top: 0; line-height: 0; }
 .lg-row:not(.z-down) + .lg-row.z-down { margin-top: 12px; }
-.lg-row:not(.z-down) + .lg-row.z-down::before { content: 'drop line'; position: absolute; left: 10px; right: 10px; top: -9px; height: 0;
+.lg-row:not(.z-down) + .lg-row.z-down::before { content: attr(data-down-line); position: absolute; left: 10px; right: 10px; top: -9px; height: 0;
   border-top: 2px dashed var(--stop-500); font: 700 .6875rem/1 var(--font-ui); color: var(--stop-700); text-align: right; text-transform: uppercase;
   letter-spacing: .06em; line-height: 0; }
 .lg-rank { font: 800 1.15rem/1 var(--font-display); color: var(--ink-700); text-align: center; font-variant-numeric: tabular-nums; }
@@ -108,7 +108,7 @@
   font: 700 .9rem/1.1 var(--font-ui); color: var(--ink-700); }
 .lg-step small { display: inline-flex; align-items: center; gap: 4px; font: 600 .78rem/1 var(--font-ui); color: var(--ink-500); }
 .lg-step.on { background: linear-gradient(90deg, rgba(255, 229, 138, .8), rgba(255, 229, 138, .25)); box-shadow: inset 0 0 0 2px var(--sun-700); color: var(--ink-900); }
-.lg-step.on span::after { content: ' · you'; font-weight: 600; color: var(--sun-ink); }
+.lg-step.on span::after { content: attr(data-you); font-weight: 600; color: var(--sun-ink); }
 .lg-step.locked { opacity: .62; }
 
 .lg-plat { background: linear-gradient(180deg, #F3F6FA, #E3E8F1); box-shadow: inset 0 0 0 2px #B8C3D3, var(--pn-shadow); }
@@ -510,3 +510,5 @@ body.motion-reduced .lg-dres-who, body.motion-reduced .lg-duel-crown, body.motio
 .lg-refund { display: flex; justify-content: flex-end; margin: 4px 0 0; padding: 0 10px; }
 .lg-refund .pn-act { align-items: flex-end; }
 .lg-refund .btn { font-size: .875rem; }
+/* Bulgarian reward words run longer ("5 жълъда и трофей за цял сезон"): a third line on the Ribbon Track cards */
+html[lang="bg"] .lg-tier-what { -webkit-line-clamp: 3; min-height: 3.6em; }

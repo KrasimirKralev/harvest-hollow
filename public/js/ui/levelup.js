@@ -14,7 +14,11 @@ import { nextSystemCard } from '../../../shared/rules/actions/social.js';
 import { legacyRewardAt } from '../../../shared/rules/actions/legacy.js';
 import { BOOSTS } from '../../../shared/content/index.js';
 import { h, icon, svgIcon, fmt, fmtDuration, touchPlayer, touchText } from './dom.js';
-import { unlockName, unlockIcon } from './hud.js';
+import { unlockName, unlockIcon, titleWord } from './hud.js';
+import { t, tn, N, name as cname, ctext, list, retell } from '../i18n/index.js';
+
+/** A word that can be said again after a language switch: its catalog line (i18n retell), else the text as given. */
+const told = (v) => retell(v) ?? (() => v);
 
 const SHOWN_FAMILIES = ['crops', 'trees', 'animals', 'homes', 'buildings', 'recipes', 'feeds', 'tools', 'decor', 'expansions', 'barn'];
 
@@ -145,14 +149,14 @@ export function createLevelup(S) {
 
   function showLevelUp(ev) {
     const level = ev.level;
-    const node = h('div.lvl', { role: 'status', 'aria-label': `Farm level ${level}!` },
+    const node = h('div.lvl', { role: 'status', 'aria-label': t('moments.lvl.label', { level }) },
       h('div.rays'), starSvg(), h('div.big-num.outlined', String(level)),
-      h('div.word.wood.outlined', 'Level up!'),
+      h('div.word.wood.outlined', t('moments.lvl.word')),
       h('div.sub', [
-        `Farm level ${level}`,
-        ev.coins ? ` · +${fmt(ev.coins)} coins` : '',
-        ev.acorns ? ` · +${fmt(ev.acorns)} acorns` : '',
-        ev.goldenSeeds ? ` · +${fmt(ev.goldenSeeds)} Golden Seeds` : '',
+        t('moments.lvl.farm', { level }),
+        ev.coins ? tn('moments.lvl.coins', ev.coins) : '',
+        ev.acorns ? tn('moments.lvl.acorns', ev.acorns) : '',
+        ev.goldenSeeds ? tn('moments.lvl.seeds', ev.goldenSeeds) : '',
       ].join('')));
     layer.append(node);
     for (let i = 0; i < 4; i++) confettiPulse(i * 250);
@@ -184,36 +188,38 @@ export function createLevelup(S) {
     const things = [...all.flatMap((u) => u.things), ...gift];
     const systems = all.flatMap((u) => u.systems);
     // a level with no new thing (M1a from level 13) pays a Legacy gift instead (RC-14): the banner says so
-    const title = ls.length > 1 ? `New since level ${ls.at(-1)}` : gift.length && things.length === gift.length
-      ? `Level ${ls[0]} gift` : `New at level ${ls[0]}`;
+    const title = ls.length > 1 ? t('moments.tour.since', { level: ls.at(-1) }) : gift.length && things.length === gift.length
+      ? t('moments.tour.gift', { level: ls[0] }) : t('moments.tour.newAt', { level: ls[0] });
     // M2 Legacy levels (L41+) pay from the GDD §4.6 pool; a level with no unlock before that is RC-14's Legacy gift
     const message = gift.length && things.length === gift.length
-      ? (legacyRewardAt(ls[0]) ? `Legacy level ${ls[0] - 40}: every level from here pays a reward.`
-        : 'Evening One is complete. More of the valley opens soon.') : '';
+      ? (legacyRewardAt(ls[0]) ? t('moments.tour.legacy', { n: ls[0] - 40 })
+        : t('moments.tour.eveningOne')) : '';
     unlockBanner(ls[0], { things, systems, title, message });
   }
 
   /** The Legacy gift of a level-up with no live unlock (`levelUp.legacy`, RC-14) as banner things. */
   function legacyThings(ev) {
     const out = [];
-    if (ev.acornsGift) out.push({ icon: 'acorns', name: `${fmt(ev.acornsGift)} Acorns` });
-    if (ev.goldenSeeds) out.push({ icon: 'golden_seeds', name: `A Golden Seed Packet (${fmt(ev.goldenSeeds)} seeds)` });
-    if (ev.legacyHearts) out.push({ icon: 'hearts', name: `${fmt(ev.legacyHearts)} Hearts each` });
-    for (const d of ev.legacyDecor ?? []) out.push({ icon: d, name: defOf(d)?.name ?? d });
+    if (ev.acornsGift) out.push({ icon: 'acorns', name: tn('moments.gift.acorns', ev.acornsGift) });
+    if (ev.goldenSeeds) out.push({ icon: 'golden_seeds', name: tn('moments.gift.seeds', ev.goldenSeeds) });
+    if (ev.legacyHearts) out.push({ icon: 'hearts', name: tn('moments.gift.hearts', ev.legacyHearts) });
+    for (const d of ev.legacyDecor ?? []) out.push({ icon: d, name: defOf(d) ? cname(d) : d });
     return out;
   }
 
   function unlockBanner(level, merged = null) {
     const { things, systems } = merged || unlocksFor(level);
     if (!things.length && !systems.length) { markLevelSeen(level); return; }
-    const first = [...things, ...systems].map((t) => ({ t, target: showMeTarget(t, store.state) })).find((x) => x.target && ui.panels.has(x.target.panel));
-    const actions = first ? [{ label: 'Show me', kind: 'sky', fn: () => ui.panels.open(first.target.panel, first.target.args) }] : [];
-    const sysLine = systems.filter((s) => isLive(CONTENT.features.get(s.id))).map((s) => s.name);
+    const first = [...things, ...systems].map((u) => ({ u, target: showMeTarget(u, store.state) })).find((x) => x.target && ui.panels.has(x.target.panel));
+    const actions = first ? [{ label: t('moments.showMe'), kind: 'sky', fn: () => ui.panels.open(first.target.panel, first.target.args) }] : [];
+    const sysLive = systems.filter((s) => isLive(CONTENT.features.get(s.id)));
+    // the words are functions where they are put together here: a language switch while the card is up re-says them
+    const named = (u) => (u.family && u.id ? () => unlockName(u) : u.name);
     ui.banner({
       id: `level-${level}`,
-      ribbon: merged ? merged.title : `New at level ${level}`,
-      message: sysLine.length ? `Also new: ${sysLine.join(', ')}.` : merged?.message || '',
-      things: things.slice(0, 8).map((t) => ({ icon: t.icon, name: t.name })),
+      ribbon: merged ? merged.title : () => t('moments.tour.newAt', { level }),
+      message: sysLive.length ? () => t('moments.tour.alsoNew', { list: sysLive.map((u) => unlockName(u)).join(', ') }) : merged?.message || '',
+      things: things.slice(0, 8).map((u) => ({ icon: u.icon, name: named(u) })),
       actions,
       ttl: 12000,
       onClose: () => markLevelSeen(level),
@@ -225,11 +231,14 @@ export function createLevelup(S) {
   let quietUntil = 0;
   // a phone has no Shift and no G key: the cards that name one read differently to a touch player (card.touchText in
   // shared/content/features.js when the content grows it; these stand in until then)
-  const TOUCH_CARD_TEXT = {
-    uproot: 'Long-press a growing crop and tap Pull it up. Inside 10 minutes the seed is refunded in full.',
-    pings: 'Menu > Ping, then tap a spot to point it out to your partner; Emotes sit next to it. Notes pinned to a tile wait for them.',
+  const TOUCH_CARD_TEXT = { uproot: 'moments.touch.uproot', pings: 'moments.touch.pings' };
+  // the card's words are content (features[].card: lane C translates them; ctext falls back to English)
+  const cardText = (id, card) => {
+    const text = ctext('features', id, 'card.text', card.text);
+    if (!touchPlayer(S.controller)) return text;
+    const touch = card.touchText ? ctext('features', id, 'card.touchText', card.touchText) : TOUCH_CARD_TEXT[id] ? t(TOUCH_CARD_TEXT[id]) : null;
+    return touch ?? touchText(text, true);
   };
-  const cardText = (id, card) => (touchPlayer(S.controller) ? card.touchText ?? TOUCH_CARD_TEXT[id] ?? touchText(card.text, true) : card.text);
   function maybeSystemCard() {
     const st = store.state;
     // the first evening has one teaching voice: Grandma's coach; system cards wait until it is done or hidden
@@ -240,9 +249,9 @@ export function createLevelup(S) {
     if (!f || !f.card) return;
     cardShown = id;
     ui.banner({
-      id: `card-${id}`, kind: 'card', ribbon: f.card.title, message: cardText(id, f.card), ttl: 25000,
-      things: [], actions: [{ label: 'Got it', kind: 'go', fn: () => {} },
-        ...(FEATURE_PANELS[id] && ui.panels.has(FEATURE_PANELS[id].panel) ? [{ label: 'Show me', kind: 'sky', fn: () => ui.panels.open(FEATURE_PANELS[id].panel, FEATURE_PANELS[id].args) }] : [])],
+      id: `card-${id}`, kind: 'card', ribbon: () => ctext('features', id, 'card.title', f.card.title), message: () => cardText(id, f.card), ttl: 25000,
+      things: [], actions: [{ label: t('moments.gotIt'), kind: 'go', fn: () => {} },
+        ...(FEATURE_PANELS[id] && ui.panels.has(FEATURE_PANELS[id].panel) ? [{ label: t('moments.showMe'), kind: 'sky', fn: () => ui.panels.open(FEATURE_PANELS[id].panel, FEATURE_PANELS[id].args) }] : [])],
       onClose: () => {
         cardShown = null;
         quietUntil = performance.now() + 60_000;
@@ -286,8 +295,10 @@ export function createLevelup(S) {
   function rosette(title, text, tier, ms = 5000, { kind = 'honour', name = title } = {}) {
     const host = document.getElementById('banners');
     const now = performance.now();
+    // its words as functions: a language switch while the card is up says them again (i18n retell)
+    const item = { kind, tier, name: told(name), title: told(title), text: told(text) };
     if (last && last.el.isConnected && !last.leaving && now - last.at < 1500) {
-      last.items.push({ kind, name, title, text, tier });
+      last.items.push(item);
       last.at = now;
       paintRosette(last);
       clearTimeout(last.timer);
@@ -295,7 +306,8 @@ export function createLevelup(S) {
       return;
     }
     const el = h('div.rosette', { role: 'status' });
-    const cur = { el, at: now, items: [{ kind, name, title, text, tier }], timer: 0, leaving: false };
+    const cur = { el, at: now, items: [item], timer: 0, leaving: false };
+    el._relabel = () => paintRosette(cur);
     paintRosette(cur);
     host.prepend(el);
     last = cur;
@@ -311,12 +323,12 @@ export function createLevelup(S) {
     const its = r.items;
     const top = its.reduce((a, b) => (b.tier > a.tier ? b : a), its[0]);
     if (its.length === 1) {
-      r.el.replaceChildren(medal(top.tier), h('div', h('b', top.title), h('span', top.text)));
+      r.el.replaceChildren(medal(top.tier), h('div', h('b', top.title()), h('span', top.text())));
       return;
     }
     const kinds = new Set(its.map((x) => x.kind));
-    const what = kinds.size > 1 ? 'honours' : { rank: 'ranks', ribbon: 'ribbons', mastery: 'mastery stars' }[[...kinds][0]] ?? 'honours';
-    r.el.replaceChildren(medal(top.tier), h('div', h('b', `${its.length} new ${what}!`), h('span', its.map((x) => x.name).join(', '))));
+    const what = kinds.size > 1 ? 'honours' : { rank: 'ranks', ribbon: 'ribbons', mastery: 'mastery' }[[...kinds][0]] ?? 'honours';
+    r.el.replaceChildren(medal(top.tier), h('div', h('b', tn(`moments.rosette.${what}`, its.length)), h('span', [...new Set(its.map((x) => x.name()))].join(', '))));   // two tiers of one ribbon: its name once
   }
 
   function play(ev) {
@@ -326,7 +338,10 @@ export function createLevelup(S) {
     switch (ev.e) {
       case 'levelUp':
         if (ev.scope === 'player') {
-          if (ev.pid === me && ev.title) rosette(`You are now a ${ev.title}!`, `Personal level ${ev.level}`, 2, 4500, { kind: 'rank', name: ev.title });
+          if (ev.pid === me && ev.title) {
+            const title = titleWord(ev.title);
+            rosette(t('moments.rank.now', { title }), t('moments.rank.level', { level: ev.level }), 2, 4500, { kind: 'rank', name: title });
+          }
           return 0;
         }
         return showLevelUp(ev);
@@ -335,43 +350,47 @@ export function createLevelup(S) {
         const mine = !ev.pids || ev.pids.includes(me) || ev.scope !== 'P';
         if (!mine) return 0;
         const together = ev.scope === 'T' || ev.scope === 'F';
-        const metal = ['Bronze', 'Silver', 'Gold'][Math.max(0, Math.min(2, (ev.tier || 1) - 1))];
-        rosette(r ? r.name : 'A new ribbon!', `${metal} ribbon · ${together ? 'unlocked together!' : 'all yours'}`, ev.tier || 1, 5000, { kind: 'ribbon', name: r ? r.name : 'a ribbon' });
+        const metal = ['bronze', 'silver', 'gold'][Math.max(0, Math.min(2, (ev.tier || 1) - 1))];
+        const rname = r ? cname(ev.id, { family: 'ribbons' }) : null;
+        rosette(rname ?? t('moments.ribbon.new'), t(together ? `moments.ribbon.${metal}Together` : `moments.ribbon.${metal}Mine`), ev.tier || 1, 5000,
+          { kind: 'ribbon', name: rname ?? t('moments.ribbon.a') });
         return 0;
       }
       case 'questDone': {
         const q = CONTENT.quests.get(ev.id);
         ui.banner({
-          id: `quest-${ev.id}`, ribbon: 'Quest complete!', kind: 'quest',
-          message: q ? `${q.title}${q.done ? `: ${q.done}` : ''}` : 'A letter from Grandma.',
-          things: [ev.coins ? { icon: 'coins', name: `${fmt(ev.coins)} coins` } : null, ev.xp ? { icon: 'xp', name: `${fmt(ev.xp)} XP` } : null].filter(Boolean),
-          actions: ui.panels.has('journal') ? [{ label: 'Read it', kind: 'sky', fn: () => ui.panels.open('journal', { tab: 'story', focus: ev.id }) }] : [],
+          id: `quest-${ev.id}`, ribbon: t('moments.quest.done'), kind: 'quest',
+          // the quest's words are content (story.js: lane C translates them through ctext)
+          message: () => (q ? (q.done ? t('moments.quest.line', { title: ctext('quests', ev.id, 'title', q.title), done: ctext('quests', ev.id, 'done', q.done) })
+            : ctext('quests', ev.id, 'title', q.title)) : t('moments.quest.letter')),
+          things: [ev.coins ? { icon: 'coins', name: tn('moments.quest.coins', ev.coins) } : null, ev.xp ? { icon: 'xp', name: t('common.xp', { n: ev.xp }) } : null].filter(Boolean),
+          actions: ui.panels.has('journal') ? [{ label: t('moments.quest.read'), kind: 'sky', fn: () => ui.panels.open('journal', { tab: 'story', focus: ev.id }) }] : [],
           ttl: 8000,
         });
         return 0;
       }
       case 'duet':
-        ui.banner({ id: `duet-${ev.recipe || ''}`, ribbon: 'Cooked together ♥', kind: 'duet',
-          message: 'Both hands on the same recipe: it cooks at full speed with extra XP and a heart each.',
-          things: ev.recipe ? [{ icon: ev.recipe, name: CONTENT.recipes.get(ev.recipe)?.name ?? ev.recipe }] : [], ttl: 7000 });
+        ui.banner({ id: `duet-${ev.recipe || ''}`, ribbon: t('moments.duet.title'), kind: 'duet',
+          message: t('moments.duet.text'),
+          things: ev.recipe ? [{ icon: ev.recipe, name: () => (CONTENT.recipes.get(ev.recipe) ? cname(ev.recipe, { family: 'recipes' }) : ev.recipe) }] : [], ttl: 7000 });
         return 0;
       case 'together': {
         if (ev.kind === 'goldenHour') {
-          ui.banner({ id: 'golden', kind: 'golden', ribbon: 'Golden Hour ✨',
-            message: `Everything you start in the next ${fmtDuration((ev.until ?? 0) - store.now()).replace(/ 0\d?s$/, '')} grows 10 % faster. A heart each, and a page for the Memory Book.`,
+          ui.banner({ id: 'golden', kind: 'golden', ribbon: t('moments.golden.title'),
+            message: () => t('moments.golden.text', { d: fmtDuration((ev.until ?? 0) - store.now(), { cut: 's<10' }) }),
             things: [], ttl: 10000 });
           S.hud?.renderBuffs();
           return 0;
         }
         if (ev.kind === 'highFive') {
-          ui.toast('High five! ✋ +10 % personal XP for 10 minutes', { kind: 'love', ms: 4000 });
+          ui.toast(t('moments.highFive'), { kind: 'love', ms: 4000 });
           S.hud?.renderBuffs();
           return 0;
         }
-        const text = ev.kind === 'combo' ? `Together combo ×${ev.at ?? ''}`.trim()
-          : ev.kind === 'challenge' ? 'Couple Challenge complete!'
-            : ev.kind === 'task' ? 'Together task done!' : 'Together!';
-        ui.toast(`${text} ♥`, { kind: 'love', ms: 3200 });
+        const text = () => (ev.kind === 'combo' ? t('moments.together.combo', { n: ev.at ?? '' }).trim()
+          : ev.kind === 'challenge' ? t('moments.together.challenge')
+            : ev.kind === 'task' ? t('moments.together.task') : t('moments.together.any'));
+        ui.toast(() => `${text()} ♥`, { kind: 'love', ms: 3200 });
         return 0;
       }
       case 'bloomed':
@@ -380,8 +399,10 @@ export function createLevelup(S) {
         try { view.fx.play(ev); } catch { /* fx lane may not know this event yet */ }
         return 0;
       case 'mastery': {
-        const d = CONTENT.crops.get(ev.id) || CONTENT.recipes.get(ev.id) || CONTENT.animals.get(ev.id) || CONTENT.trees.get(ev.id);
-        rosette(`${d ? d.name : ev.id} mastery ${'★'.repeat(Math.max(1, Math.min(3, ev.star | 0)))}`, 'The farm got better at it: bigger yields from now on', ev.star || 1, 5000, { kind: 'mastery', name: `${d ? d.name : ev.id} ★${Math.max(1, Math.min(3, ev.star | 0))}` });
+        const fam = ['crops', 'recipes', 'animals', 'trees'].find((f) => CONTENT[f].get(ev.id));
+        const nm = fam ? cname(ev.id, { family: fam }) : ev.id;
+        const stars = Math.max(1, Math.min(3, ev.star | 0));
+        rosette(t('moments.mastery.title', { name: nm, stars: '★'.repeat(stars) }), t('moments.mastery.text'), ev.star || 1, 5000, { kind: 'mastery', name: `${nm} ★${stars}` });
         return 0;
       }
       default:

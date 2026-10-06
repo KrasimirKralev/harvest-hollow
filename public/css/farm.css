@@ -19,6 +19,9 @@ a.btn { text-decoration: none; }
   background: var(--paper-50); box-shadow: inset 0 0 0 2px var(--paper-edge); text-decoration: none; overflow-wrap: anywhere; }
 .gate-farm:hover, .gate-farm:focus-visible { background: #FFF6CC; }
 .gate-key { text-align: left; margin-top: 6px; }
+/* the privacy note, quiet at the foot of every gate card (ui/farm-gate.js) */
+.gate-privacy { margin: 10px 0 0; text-align: center; font: 600 .875rem/1.3 var(--font-ui); }
+.gate-privacy a { color: var(--sky-900); text-decoration: underline; display: inline-block; min-height: 24px; padding: 2px 6px; }
 .gate-key summary { cursor: pointer; font: 700 .9375rem/1.3 var(--font-ui); color: var(--sky-900); text-decoration: underline; min-height: 32px;
   display: flex; align-items: center; justify-content: center; }
 .gate-help { margin: 8px 0 6px; font: 600 .9375rem/1.3 var(--font-ui); color: var(--ink-700); }
@@ -47,3 +50,58 @@ a.btn { text-decoration: none; }
 .set-personal .link-box { margin: 4px 0; }
 .set-personal .link-acts { justify-content: flex-start; }
 .set-retention { display: block; }
+
+/* ---- keep your key (ui/keep.js, ui/link-open.js, ui/qr-scan.js) ------------------------------------------------------ */
+/* the quiet "not saved yet" dot: Settings, the menus that lead to it, the Farm tab, the Settings row */
+html[data-keep="unsaved"] :is(#hud-more, .m-tile[data-tile="settings"], #panel-settings-tab-farm) { position: relative; }
+html[data-keep="unsaved"] :is(#hud-more, .m-tile[data-tile="settings"], #panel-settings-tab-farm, #m-menu-btn)::after {
+  content: ''; position: absolute; top: 3px; right: 3px; width: 10px; height: 10px; border-radius: 50%;
+  background: var(--sun-500, #FFC83D); box-shadow: 0 0 0 2px #fff, 0 1px 2px rgba(62, 38, 18, .35); pointer-events: none; }
+html[data-keep="unsaved"] #m-menu-btn::after { right: auto; left: 4px; }
+/* in the More menu the dot sits by the word, clear of the key cap */
+html[data-keep="unsaved"] #hud-settings .lbl::after { content: ''; display: inline-block; width: 9px; height: 9px; margin-left: 6px;
+  vertical-align: middle; border-radius: 50%; background: var(--sun-500, #FFC83D); box-shadow: 0 0 0 2px #fff, 0 1px 2px rgba(62, 38, 18, .35); }
+.keep-dot { display: inline-block; width: 10px; height: 10px; margin-left: 6px; border-radius: 50%; vertical-align: middle;
+  background: var(--sun-500, #FFC83D); box-shadow: 0 0 0 2px #fff, 0 1px 2px rgba(62, 38, 18, .35); }
+.keep-state { font: 700 .9375rem/1.3 var(--font-ui); color: var(--ink-700); }
+.set-keep .set-inline { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+
+/* the card */
+.keep .keep-why { margin: 0; font: 700 .9375rem/1.35 var(--font-ui); color: var(--ink-700); }
+.keep .link-field { margin-top: 2px; }
+.keep-qr { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.keep-qr svg.qr { width: min(220px, 62vw); height: auto; border-radius: 8px; box-shadow: 0 0 0 3px var(--paper-edge, #E6C99A); background: #fff; }
+.keep-qr-help { margin: 0; max-width: 34ch; font: 600 .875rem/1.35 var(--font-ui); color: var(--ink-500); }
+.newkey .link-box { margin-top: 2px; }
+
+/* Settings > Farm > Farmers */
+.set-farmer .farmer-name { font-weight: 800; color: var(--pct, var(--ink-900)); }
+.farmer-info { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
+.farmer-when { font: 700 .9375rem/1.3 var(--font-ui); color: var(--ink-700); }
+.farmer-wait { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font: 600 .875rem/1.3 var(--font-ui); color: var(--go-900, #2E6B1F); }
+.invite-rekey { width: 100%; display: flex; flex-direction: column; align-items: center; gap: 8px; }
+
+/* the way back in, on the gates and the landing page */
+.gate-back { text-align: left; margin: 4px 0 12px; padding: 10px 12px; border-radius: var(--r-s, 10px);
+  background: var(--paper-50, #FFF9EA); box-shadow: inset 0 0 0 2px var(--paper-edge, #E6C99A); }
+.gate-back-title { margin: 0 0 4px; font: 800 1.0625rem/1.2 var(--font-display); color: var(--ink-900); }
+.gate-ask { margin: 0 0 8px; font: 600 .9375rem/1.35 var(--font-ui); color: var(--ink-700); }
+.gate-back .gate-help { display: block; margin: 6px 0 6px; }
+.gate-scan { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+.gate-scan .btn { flex: 1 1 auto; }
+/* the link field takes the room, Open stays its own size (also on a phone) */
+.gate-back .gate-row { flex-wrap: nowrap; }
+.gate-back .gate-row .btn { flex: 0 0 auto; }
+.gate-back .modal-error:empty { display: none; }
+.gate-key .gate-back { padding: 0; background: none; box-shadow: none; }
+
+/* the camera view */
+.qr-scan { position: fixed; inset: 0; z-index: 400; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 14px; padding: 16px; background: rgba(20, 14, 8, .92); }
+.qr-scan video { width: min(92vw, 520px); max-height: 62vh; border-radius: 14px; object-fit: cover; background: #000; }
+.qr-scan-frame { position: absolute; width: min(56vw, 300px); aspect-ratio: 1; border: 3px solid rgba(255, 255, 255, .85); border-radius: 18px;
+  pointer-events: none; top: 50%; left: 50%; transform: translate(-50%, -62%); }
+.qr-scan-help { margin: 0; max-width: 32ch; text-align: center; font: 700 1rem/1.35 var(--font-ui); color: #fff; }
+/* the landing page has no in-game .field style: the same rounded field */
+.ld .gate-back .gate-link { min-height: 44px; padding: 8px 12px; border: 2px solid var(--paper-edge, #E6C99A); border-radius: 14px;
+  background: #fff; font: 600 1rem/1.2 var(--font-ui); color: var(--ink-900); }

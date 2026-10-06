@@ -9,8 +9,12 @@
 // Multi-farm hosted mode (a page at /f/<farmId>, net/farm.js; wire details docs/agent-notes/mf-client.md): the same
 // identity, its keys namespaced per farm; the way in for a device without a farmer's token is the creator's secret
 // (the landing page stored it), a personal link's '#k=<secret>' (read, stored, wiped from the address bar) or an
-// invite's '?join=<token>'. A farm that says no (deny PRIVATE / INVITE / FULL) shows the farm gate (ui/farm-gate.js)
-// and the socket stops knocking. Single mode (any other path) sends exactly the frames it always did.
+// invite's '?join=<token>', or a farmer's new key '?rejoin=<token>' (another farmer made it: it is tried first, and seats
+// this device as that farmer). A farm that says no (deny PRIVATE / INVITE / FULL) shows the farm gate
+// (ui/farm-gate.js) and the socket stops knocking. A key the farm turned off (deny REKEYED, a farmer given a new key) or
+// a spent new-key link (deny REJOIN) is forgotten and the next way in is tried; with none left the gate says what
+// happened. A home-screen app without any key (its storage is apart from the browser's) gets the "open your farm in this
+// app" gate. Single mode (any other path) sends exactly the frames it always did.
 //
 // Server messages go through a per-animation-frame INBOX (GDD App. F "coalesce deltas per animation frame"):
 // everything that arrived since the last frame is handled in arrival order, and each run of d/rej/ack becomes
@@ -26,7 +30,7 @@ import { createPeerTools } from './net/peers.js';
 import { createController } from './game/controller.js';
 import { createAvatar } from './game/avatar.js';
 import { createFeedback } from './game/feedback.js';
-import { createMemory } from './game/memory.js';
+import { createMemory, forgetPictures } from './game/memory.js';
 import { createRest } from './game/rest.js';
 import { route } from './game/path.js';
 import { spawnAt } from '../../shared/rules/grid.js';
@@ -42,8 +46,10 @@ import { makeCid } from '../../shared/net/ids.js';
 import { MSG, ERR, PROTOCOL_VERSION, CAPS } from '../../shared/net/protocol.js';
 import { CONTENT_HASH, furnitureOf } from '../../shared/content/index.js';
 import { RULES_VERSION } from '../../shared/rules/version.js';
-import { farm, session, readLaunch, cleanUrl, rememberFarm, forgetFarm, farmLabel, validSecret, ttlDays } from './net/farm.js';
+import { farm, session, readLaunch, cleanUrl, rememberFarm, forgetFarm, farmLabel, validSecret, ttlDays, isStandalone } from './net/farm.js';
 import { showFarmGate, installFarmManifest } from './ui/farm-gate.js';
+import { ready as i18nReady, t, N } from './i18n/index.js';
+import { FARM_DELETED_EVENT } from './ui/privacy.js';
 
 // a farm's own keys are namespaced per farm in multi mode (farm.key); unchanged in single mode
 const storage = {
@@ -54,14 +60,16 @@ const storage = {
 const params = new URLSearchParams(location.search);
 // multi mode: the personal link's key leaves the address bar at once (it is the farmer's key; a screenshot or a
 // shared tab must not carry it), and is kept for this farm until a welcome confirms it
-const launch = farm.multi ? readLaunch(location) : { key: null, join: null };
+const launch = farm.multi ? readLaunch(location) : { key: null, join: null, rejoin: null };
 if (farm.multi && /[#&]k=/.test(location.hash)) {
   try { history.replaceState(history.state, '', cleanUrl(location)); } catch { /* an odd browser: the key stays visible */ }
 }
 if (launch.key) storage.set(localStorage, 'hh.key', launch.key);
-/** ident.used when the hello carried the device's way in (creator secret / personal link) or an invite, not a slot's token. */
+/** ident.used when the hello carried the device's way in (creator secret / personal link), an invite or a farmer's new key
+ *  (rejoin), not a slot's token. */
 const KEY = '*key';
 const JOIN = '*join';
+const REJOIN = '*rejoin';
 const ident = {
   tokens: storage.get(localStorage, 'hh.tokens') || {},
   slot: params.get('slot') || storage.get(sessionStorage, 'hh.slot'),
@@ -71,9 +79,13 @@ const ident = {
   key: farm.multi ? launch.key ?? validSecret(storage.get(localStorage, 'hh.key')) : null,
   linkKey: Boolean(launch.key),     // a link opened just now: it says who I am, before any token this device keeps
   join: launch.join,
+  rejoin: launch.rejoin,            // a farmer's new key, opened just now (multi mode)
   sentKey: false,
   sentJoin: false,
+  sentRejoin: false,
   inviteFailed: false,              // the server refused the invite (used, expired, replaced): the gate says so
+  rekeyed: false,                   // a key of this device was turned off by a new key (deny REKEYED)
+  rejoinFailed: false,              // the new-key link was used, ran out or was replaced (deny REJOIN)
 };
 const saveTokens = () => storage.set(localStorage, 'hh.tokens', ident.tokens);
 let gated = false;
@@ -109,19 +121,23 @@ function hello(claim) {
   const mine = Object.keys(ident.tokens);
   // multi mode: what lets this device in when no farmer's token of its own answers ({} in single mode). Every key
   // rides in hello.token, an invite too (server/farm-sessions.js); the server remembers it for the claim that follows
-  const way = ident.key ? { token: ident.key } : ident.join ? { token: ident.join } : {};
-  if (claim) { msg.claim = claim; Object.assign(msg, way); if (way.token) ident.used = ident.key ? KEY : JOIN; }
+  // a farmer's new key first: it is what this page was opened for
+  const way = ident.rejoin ? { token: ident.rejoin } : ident.key ? { token: ident.key } : ident.join ? { token: ident.join } : {};
+  const usedOf = (t) => (t === ident.rejoin ? REJOIN : t === ident.key ? KEY : JOIN);
+  if (claim) { msg.claim = claim; Object.assign(msg, way); if (way.token) ident.used = usedOf(way.token); }
+  else if (ident.rejoin) { msg.token = ident.rejoin; ident.used = REJOIN; }
   else if (ident.key && ident.linkKey) { msg.token = ident.key; ident.used = KEY; }
   else if (ident.slot && ident.tokens[ident.slot]) { msg.token = ident.tokens[ident.slot]; ident.used = ident.slot; }
   else if (!ident.slot && mine.length === 1) { msg.token = ident.tokens[mine[0]]; ident.used = mine[0]; }
   else if (ident.slot && ident.name) {
     msg.claim = { slot: ident.slot, name: ident.name };
     Object.assign(msg, way);
-    if (way.token) ident.used = ident.key ? KEY : JOIN;
+    if (way.token) ident.used = usedOf(way.token);
   }
-  else if (way.token) { msg.token = way.token; ident.used = ident.key ? KEY : JOIN; }
+  else if (way.token) { msg.token = way.token; ident.used = usedOf(way.token); }
   ident.sentKey = Boolean(ident.key) && msg.token === ident.key;
   ident.sentJoin = Boolean(ident.join) && msg.token === ident.join;
+  ident.sentRejoin = Boolean(ident.rejoin) && msg.token === ident.rejoin;
   socket.raw(msg);
 }
 
@@ -129,16 +145,24 @@ function hello(claim) {
  * The farm said no (multi mode): stop knocking and show the gate. The server's private answer is deny PASSPHRASE (no
  * passphrase exists in multi mode) or PRIVATE; an invite it refused shows as "this invite no longer works".
  */
-const GATE_CODES = new Set(['PRIVATE', 'INVITE', ERR.PASSPHRASE, ERR.FULL]);
+const GATE_CODES = new Set(['PRIVATE', 'INVITE', ERR.PASSPHRASE, ERR.FULL, 'DELETED']);
 function gate(code) {
   if (gated) return;
   gated = true;
   socket?.stop();
   ui.hideSlots();
   const invite = code === 'INVITE' || ident.inviteFailed || (ident.sentJoin && code === ERR.PASSPHRASE);
-  const kind = code === 'GONE' ? 'gone' : code === ERR.FULL ? 'full' : invite ? 'invite' : 'private';
-  // a farm this device played that the server no longer has was deleted (7 days without a visit): its keys are useless
-  if (kind === 'gone') forgetFarm(localStorage, farm.id);
+  // what this device lost, most specific first: a spent new-key link, a key turned off, a used-up invite
+  const kind = code === 'DELETED' ? 'deleted' : code === 'GONE' ? 'gone' : code === ERR.FULL ? 'full'
+    : code === 'REJOIN' || ident.rejoinFailed ? 'rejoin'
+      : code === 'REKEYED' || ident.rekeyed ? 'rekeyed'
+        : invite ? 'invite' : code === 'HOME' ? 'home' : 'private';
+  // a farm this device played that the server no longer has was deleted (7 days without a visit, or a farmer deleted
+  // it: Settings > Farm): its keys are useless, and its Memory Book pictures go with it where this page knows the farm
+  if (kind === 'gone' || kind === 'deleted') forgetFarm(localStorage, farm.id);
+  if (kind === 'deleted' && Number.isSafeInteger(store.state?.meta?.farmSeed)) {
+    forgetPictures(store.state.meta.farmSeed).catch(() => { /* storage blocked: nothing kept to forget */ });
+  }
   showFarmGate(kind, { farmId: farm.id });
 }
 
@@ -148,9 +172,10 @@ function gate(code) {
  * colour picked on the card).
  */
 function pickSlot(slots, pass) {
-  // multi mode: the picker says whose screen this is (a new farm's creator, an invited friend) and hides the
-  // passphrase and "this is me on a new device" (the personal link replaces them)
-  const opts = farm.multi ? { multi: true, invited: Boolean(ident.join && !ident.key), creator: Boolean(ident.key) } : {};
+  // multi mode: the picker says whose screen this is (a new farm's creator, an invited friend, a farmer with a new key)
+  // and hides the passphrase and "this is me on a new device" (the personal link replaces them)
+  const opts = farm.multi ? { multi: true, rejoin: Boolean(ident.rejoin), invited: Boolean(ident.join && !ident.key && !ident.rejoin),
+    creator: Boolean(ident.key && !ident.rejoin) } : {};
   // a new farm's creator is farmer 1 (the brief): one row, not a choice between two empty ones
   if (opts.creator && slots.every((s) => !s.claimed) && slots.some((s) => s.pid === 'p1')) slots = slots.filter((s) => s.pid === 'p1');
   ui.showSlots(slots.map((s) => ({ ...s, mine: Boolean(ident.tokens[s.pid]), pass })), (slot, name, extra = {}) => {
@@ -254,7 +279,7 @@ function onWelcome(w) {
     if (!p.online) view.avatars?.ride?.(p.pid, false);
   }
   if (Array.isArray(w.chat) && typeof ui.chatHistory === 'function') ui.chatHistory(w.chat);
-  document.title = `Harvest Hollow · ${store.state.players[w.pid]?.name ?? ''}`;
+  document.title = `Harvest Hollow · ${store.state.players[w.pid]?.name ?? ''}`; // i18n-ok: the brand stays
   if (settle) settle();
 }
 
@@ -266,9 +291,17 @@ function onWelcome(w) {
 function welcomeFarm(w) {
   if (ident.key && (ident.sentKey || ident.linkKey)) { ident.key = null; storage.del(localStorage, 'hh.key'); }
   ident.linkKey = false;
+  // in again: a key turned off earlier is history (the gate's memory of it goes)
+  storage.del(localStorage, 'hh.rekeyed');
+  ident.rekeyed = false;
+  if (ident.rejoin) {
+    // the new key is spent: it leaves the address bar (the welcome's token is this farmer's key from now on)
+    ident.rejoin = null;
+    try { history.replaceState(history.state, '', cleanUrl(location, { rejoin: true })); } catch { /* the link stays visible */ }
+  }
   if (ident.join) {
     // my own farm opened from the invite I made: the invite stays for the friend it was meant for
-    if (!ident.sentJoin) setTimeout(() => ui.notice("You are already a farmer here, so that invite link is still waiting for your friend."), 1500);
+    if (!ident.sentJoin) setTimeout(() => ui.notice(t('multi.inviteOwn')), 1500);
     ident.join = null;
     try { history.replaceState(history.state, '', cleanUrl(location, { join: true })); } catch { /* the link stays visible */ }
   }
@@ -300,23 +333,24 @@ function wireM2() {
   window.__hh.modeChip = chip;
   controller.pairing.on('pair', (p) => {
     if (!p.active) { chip.hide('pair'); return; }
-    chip.show('pair', { text: p.text, icon: 'heart', tone: 'love', action: { label: 'Cancel', fn: () => controller.pairing.cancel() } });
+    chip.show('pair', { text: p.text, icon: 'heart', tone: 'love', action: { label: t('common.cancel'), fn: () => controller.pairing.cancel() } });
   });
   controller.interior.on('change', (r) => {
     if (!r.inside && !r.going) { chip.hide('room'); return; }
     if (r.held) {
       const def = furnitureOf(r.held.def);
-      const name = def ? def.name : r.held.def.replace(/_/g, ' ');
-      const turn = def && def.layer !== 'wall' ? (controller.input === 'touch' ? '' : ' · R turns it') : '';
-      chip.show('room', { text: `${r.held.id ? 'Move' : 'Place'} the ${name}${r.valid || !r.spot ? '' : ': not there'}${turn}`, icon: 'chair', tone: 'home',
-        action: { label: 'Cancel', fn: () => controller.interior.cancel() } });
+      const item = def ? N(def.id, 'furniture') : r.held.def.replace(/_/g, ' ');
+      const turn = def && def.layer !== 'wall' ? (controller.input === 'touch' ? '' : t('game.room.turn')) : '';
+      const what = `game.room.${r.held.id ? 'move' : 'place'}${r.valid || !r.spot ? '' : 'Bad'}`;
+      chip.show('room', { text: `${t(what, { item })}${turn}`, icon: 'chair', tone: 'home',
+        action: { label: t('common.cancel'), fn: () => controller.interior.cancel() } });
       return;
     }
     // inside: the room panel's catalog (ui-home `farmhouse`, tab 'room') is one tap away
     const furnish = !r.going && ui.panels?.has?.('farmhouse')
-      ? { label: 'Furnish', fn: () => ui.panels.open('farmhouse', { tab: 'room' }) } : null;
-    chip.show('room', { text: r.going ? 'Off to the farmhouse…' : "Grandma's Farmhouse", icon: 'house', tone: 'home', extra: furnish,
-      action: { label: 'Leave', fn: () => controller.interior.leave('chip') } });
+      ? { label: t('game.room.furnish'), fn: () => ui.panels.open('farmhouse', { tab: 'room' }) } : null;
+    chip.show('room', { text: r.going ? t('game.room.going') : t('game.room.inside'), icon: 'house', tone: 'home', extra: furnish,
+      action: { label: t('game.room.leave'), fn: () => controller.interior.leave('chip') } });
   });
   controller.interior.on('change', () => syncPresent());
   // the first-use tips of the world's M2 systems (content TUTORIAL.firstUse 'fishing', 'interior'), through the ui's
@@ -380,10 +414,20 @@ function handle(m) {
     case MSG.WELCOME: return onWelcome(m);
     case MSG.SLOTS: return pickSlot(m.slots, Boolean(m.pass));
     case MSG.DENY:
-      if (m.code === ERR.BAD_TOKEN) {
+      if (m.code === ERR.BAD_TOKEN || m.code === 'REKEYED' || m.code === 'REJOIN') {
+        // multi mode: a farmer of this farm got a new key (REKEYED: this key is off for good) or the new-key link is
+        // spent (REJOIN). Signed out while playing: the gate. Otherwise this key is forgotten like an unknown one, and
+        // the device tries its next way in (a home-screen app's start URL may carry an old key): the gate says what
+        // happened when nothing is left
+        if (m.code === 'REKEYED') { ident.rekeyed = true; storage.set(localStorage, 'hh.rekeyed', Date.now()); }
+        if (m.code === 'REJOIN') ident.rejoinFailed = true;
+        const playing = started && m.code !== ERR.BAD_TOKEN;
+        if (playing && ident.slot && ident.tokens[ident.slot]) { delete ident.tokens[ident.slot]; saveTokens(); }
         if (ident.used === KEY) { ident.key = null; ident.linkKey = false; storage.del(localStorage, 'hh.key'); ident.used = null; }
         else if (ident.used === JOIN) { ident.join = null; ident.inviteFailed = true; ident.used = null; }
+        else if (ident.used === REJOIN) { ident.rejoin = null; ident.used = null; }
         else if (ident.used) { delete ident.tokens[ident.used]; saveTokens(); ident.used = null; }
+        if (playing) return gate(m.code);
         return hello();
       }
       if (m.code === ERR.PROTO) { ui.toast(m.code); setTimeout(() => location.reload(), 1500); return undefined; }
@@ -481,7 +525,14 @@ function startAudioSoon() {
 async function boot() {
   // multi mode, nothing that could let this device in (no token, no key, no invite): the server can only say "private",
   // so say it now, without loading the world (a phone would fetch the whole farm's art for nothing)
-  if (farm.multi && !ident.key && !ident.join && !Object.keys(ident.tokens).length) { gate('PRIVATE'); return; }
+  // a device whose key was turned off says so; a home-screen app (its storage is apart from the browser's) is shown how
+  // to open the farm in it
+  if (farm.multi && !ident.key && !ident.join && !ident.rejoin && !Object.keys(ident.tokens).length) {
+    ident.rekeyed = Boolean(storage.get(localStorage, 'hh.rekeyed'));
+    await i18nReady();
+    gate(isStandalone() ? 'HOME' : 'PRIVATE');
+    return;
+  }
   const canvas = document.getElementById('world');
   // nobody touching the page for a while: the endless CSS pulses pause (CL-03, a resting laptop)
   window.__hh.rest = createRest();
@@ -495,11 +546,12 @@ async function boot() {
   // ?quality=low|medium|high|eco|auto (tests, a slow partner PC); otherwise the view's default / remembered tier
   const q = ['low', 'medium', 'high', 'eco', 'auto'].includes(params.get('quality')) ? params.get('quality') : 'auto';
   // eco is the low tier plus capped frame rates: the renderer's MSAA is chosen at init, so init low, then eco (UI-16)
-  await view.init(canvas, { quality: q === 'eco' ? 'low' : q, now: serverNow, overlay: document.getElementById('overlay') });
+  // the player's language is in before anything says a word (i18n: Bulgarian loads only when chosen, in parallel)
+  await Promise.all([view.init(canvas, { quality: q === 'eco' ? 'low' : q, now: serverNow, overlay: document.getElementById('overlay') }), i18nReady()]);
   if (q === 'eco') view.setQuality('eco');
   store.on('change', (ch) => view.sync(ch.ids, ch.topics));
   store.on('fx', ({ ev, by, local }) => view.fx.play(ev, undefined, feedback ? feedback.fxMeta(by, local) : { by, local }));
-  store.on('lost', () => ui.notice('Some of your last actions may not have been saved. The farm shows what was.'));
+  store.on('lost', () => ui.notice(t('game.lost')));
   // Watchdog (review-m0 H3): a resync that gets no welcome within 5 s reconnects; the reconnect's hello is
   // always answered with a welcome. The store also repeats its request every RESYNC_RETRY_MS.
   let resyncT = null;
@@ -528,6 +580,8 @@ async function boot() {
   // its socket open, so the partner saw me "playing right now" and the farm never went to sleep. Close it there; the
   // reconnect (its timer frozen with the page) says hello again if the page is brought back.
   if (farm.multi) addEventListener('pagehide', (e) => { if (e.persisted && !gated) socket.drop(); });
+  // "Delete this farm now" on this screen (ui/privacy.js): the same gate the server's deny DELETED shows the partner
+  if (farm.multi) addEventListener(FARM_DELETED_EVENT, () => gate('DELETED'));
 }
 
 /**
@@ -608,14 +662,15 @@ window.addEventListener('keydown', (e) => {
     const hh = store.health();
     const l = controller ? controller.latency() : { n: 0 };
     const a = audio.info();
+    // i18n-ok below: the F3 debug overlay is for developers and stays English
     debugEl.textContent = [
-      `fps ${st.fps}  calls ${st.calls}  tris ${st.triangles}`,
-      `tier ${st.tier ?? '-'}${st.tierMode === 'auto' ? ' (auto)' : ''}  band ${st.band ?? '-'}  shadows ${st.shadowRenders ?? '-'}  ${st.phase ?? ''} ${st.weather ?? ''} ${st.season ?? ''}`,
-      `rtt ${c.rtt ?? '-'} ms  jitter ${c.jitter ?? '-'}  clock ${c.quality}  offset ${c.offset ?? '-'}`,
-      `pending ${hh.pending}${hh.oldestMs ? ` (oldest ${hh.oldestMs} ms)` : ''}  v ${hh.v}  ${hh.online ? 'online' : `offline ${hh.offlineMs} ms`}${hh.resyncing ? '  RESYNC' : ''}  cid ${cid}`,
-      `input->frame ${l.n ? `${l.last} ms (avg ${l.avg}, p95 ${l.p95}, n ${l.n})` : '-'}`,
-      `long tasks (10 s) ${longObs ? `${long.length}${long.length ? `, max ${Math.round(Math.max(...long.map((x) => x[1])))} ms` : ''}` : 'n/a'}  rest ${window.__hh.rest?.resting ? 'resting' : 'awake'}`,
-      `audio ${a.state} ${a.loaded} sounds  music ${a.music?.playing ? `${a.music.variant} bar ${a.music.bar}` : 'resting'}  ${a.scene.phase}`,
+      `fps ${st.fps}  calls ${st.calls}  tris ${st.triangles}`, // i18n-ok
+      `tier ${st.tier ?? '-'}${st.tierMode === 'auto' ? ' (auto)' : ''}  band ${st.band ?? '-'}  shadows ${st.shadowRenders ?? '-'}  ${st.phase ?? ''} ${st.weather ?? ''} ${st.season ?? ''}`, // i18n-ok
+      `rtt ${c.rtt ?? '-'} ms  jitter ${c.jitter ?? '-'}  clock ${c.quality}  offset ${c.offset ?? '-'}`, // i18n-ok
+      `pending ${hh.pending}${hh.oldestMs ? ` (oldest ${hh.oldestMs} ms)` : ''}  v ${hh.v}  ${hh.online ? 'online' : `offline ${hh.offlineMs} ms`}${hh.resyncing ? '  RESYNC' : ''}  cid ${cid}`, // i18n-ok
+      `input->frame ${l.n ? `${l.last} ms (avg ${l.avg}, p95 ${l.p95}, n ${l.n})` : '-'}`, // i18n-ok
+      `long tasks (10 s) ${longObs ? `${long.length}${long.length ? `, max ${Math.round(Math.max(...long.map((x) => x[1])))} ms` : ''}` : 'n/a'}  rest ${window.__hh.rest?.resting ? 'resting' : 'awake'}`, // i18n-ok
+      `audio ${a.state} ${a.loaded} sounds  music ${a.music?.playing ? `${a.music.variant} bar ${a.music.bar}` : 'resting'}  ${a.scene.phase}`, // i18n-ok
     ].join('\n');
     setTimeout(tick, 500);
   };
@@ -626,6 +681,6 @@ boot().catch((err) => {
   console.error('boot failed', err);
   const p = document.createElement('p');
   p.style.cssText = 'position:fixed;top:40%;width:100%;text-align:center;font:600 18px system-ui';
-  p.textContent = 'Harvest Hollow could not start (WebGL2 needed). Check the console.';
+  p.textContent = t('shell.boot.failed');
   document.body.append(p);
 });

@@ -92,9 +92,9 @@ test('the ui kv helper writes a farm\'s tips under the farm and the device setti
 
 test('launch links: #k= is the personal key, ?join= the invite; both are validated; the address is cleaned', () => {
   const loc = (search, hash) => ({ pathname: `/f/${ID}`, search, hash });
-  assert.deepEqual(F.readLaunch(loc('', `#k=${SECRET}`)), { key: SECRET, join: null });
-  assert.deepEqual(F.readLaunch(loc('?join=0123456789abcdef0123456789abcdef', '')), { key: null, join: '0123456789abcdef0123456789abcdef' });
-  assert.deepEqual(F.readLaunch(loc('?join=short', '#k=<script>')), { key: null, join: null });
+  assert.deepEqual(F.readLaunch(loc('', `#k=${SECRET}`)), { key: SECRET, join: null, rejoin: null });
+  assert.deepEqual(F.readLaunch(loc('?join=0123456789abcdef0123456789abcdef', '')), { key: null, join: '0123456789abcdef0123456789abcdef', rejoin: null });
+  assert.deepEqual(F.readLaunch(loc('?join=short', '#k=<script>')), { key: null, join: null, rejoin: null });
   assert.equal(F.cleanUrl(loc('?quality=low&join=x', `#k=${SECRET}`)), `/f/${ID}?quality=low&join=x`);
   assert.equal(F.cleanUrl(loc('?quality=low&join=x', `#k=${SECRET}`), { join: true }), `/f/${ID}?quality=low`);
   assert.equal(F.personalLink(ORIGIN, ID, SECRET), `${ORIGIN}/f/${ID}#k=${SECRET}`);
@@ -168,10 +168,10 @@ test('make an invite: the secret goes in the Authorization header and the body, 
 });
 
 test('a pasted farm link: the full personal link, an invite link, or just the #k= part for this farm', () => {
-  assert.deepEqual(G.parseFarmLink(`${ORIGIN}/f/${ID}#k=${SECRET}`, { origin: ORIGIN }), { id: ID, key: SECRET, join: null });
+  assert.deepEqual(G.parseFarmLink(`${ORIGIN}/f/${ID}#k=${SECRET}`, { origin: ORIGIN }), { id: ID, key: SECRET, join: null, rejoin: null });
   assert.deepEqual(G.parseFarmLink(`  ${ORIGIN}/f/${ID}?join=0123456789abcdef0123456789abcdef `, { origin: ORIGIN }),
-    { id: ID, key: null, join: '0123456789abcdef0123456789abcdef' });
-  assert.deepEqual(G.parseFarmLink(`#k=${SECRET}`, { origin: ORIGIN, farmId: ID }), { id: ID, key: SECRET, join: null });
+    { id: ID, key: null, join: '0123456789abcdef0123456789abcdef', rejoin: null });
+  assert.deepEqual(G.parseFarmLink(`#k=${SECRET}`, { origin: ORIGIN, farmId: ID }), { id: ID, key: SECRET, join: null, rejoin: null });
   for (const bad of ['', 'hello', `${ORIGIN}/f/${ID}`, `javascript:alert(1)//f/${ID}#k=${SECRET}`, `${ORIGIN}/#k=${SECRET}`]) {
     assert.equal(G.parseFarmLink(bad, { origin: ORIGIN, farmId: null }), null, bad);
   }

@@ -8,6 +8,7 @@
 import { h, icon, svgIcon, fmt, createKit, fill, price, chip } from './kit.js';
 import { actFor } from './w4-rules.js';
 import { upgradeList, upgradeInfo, bonusLines } from './w4-model.js';
+import { t, t as tr } from '../../i18n/index.js';
 
 const GLYPH_FALLBACK = 'star';
 
@@ -23,7 +24,7 @@ export function upgradesView(state, args = {}, picked = null) {
 
 /** ★★☆ pips for a tier of max (owned tiers gold). */
 function pips(n, max) {
-  const el = h('span.up-pips', { role: 'img', 'aria-label': `${n} of ${max} upgrades` });
+  const el = h('span.up-pips', { role: 'img', 'aria-label': t('farm.upg.pips', { n, max }) });
   for (let i = 0; i < max; i++) el.append(h(`span.up-pip${i < n ? '.on' : ''}`, { 'aria-hidden': 'true' }, '★'));
   return el;
 }
@@ -48,23 +49,21 @@ export const upgradesPanel = {
       const st = ctx.store.state;
       const v = upgradesView(st, ctx.args, picked);
       if (!v.cur) {
-        fill(body, h('div.pn-empty', svgIcon('hammer', 44), h('p', 'Nothing on the farm takes an upgrade yet.')));
+        fill(body, h('div.pn-empty', svgIcon('hammer', 44), h('p', t('farm.upg.none'))));
         return;
       }
       picked = v.cur.id;
       fill(body,
         v.list.length > 1 ? strip(v) : null,
         hero(v.cur),
-        h('ol.up-ladder', { 'aria-label': `${v.cur.name} upgrades` }, ...v.cur.tiers.map((t) => tierCard(v.cur, t))),
-        h('p.up-foot', v.cur.perObject
-          ? 'Every bench has its own upgrades: a Golden Hour started on it lasts longer.'
-          : `The bonus is the farm's: one ${v.cur.defName} counts, for both of you.`));
+        h('ol.up-ladder', { 'aria-label': t('farm.upg.ladder', { name: v.cur.name }) }, ...v.cur.tiers.map((x) => tierCard(v.cur, x))),
+        h('p.up-foot', v.cur.perObject ? t('farm.upg.bench') : t('farm.upg.farmBonus', { name: v.cur.defName })));
       kit.refresh();
       fresh = null;
     }
 
     function strip(v) {
-      return h('div.up-strip', { role: 'tablist', 'aria-label': 'What to upgrade' }, ...v.list.map((x) => h('button.up-tab', {
+      return h('div.up-strip', { role: 'tablist', 'aria-label': t('farm.upg.what') }, ...v.list.map((x) => h('button.up-tab', {
         type: 'button', role: 'tab', 'aria-selected': String(x.id === v.cur.id), dataset: { key: `up:${x.id}` },
         on: { click: () => { picked = x.id; update(true); } },
       }, icon(x.def, { size: 36, alt: '' }), h('span.up-tab-name', x.defName), pips(x.tier, x.max))));
@@ -72,13 +71,13 @@ export const upgradesPanel = {
 
     function hero(c) {
       const now = c.now;
-      return h('section.up-hero', { 'aria-label': `${c.defName}, ${c.tier} of ${c.max} upgrades` },
+      return h('section.up-hero', { 'aria-label': t('farm.upg.hero', { name: c.defName, n: c.tier, max: c.max }) },
         h('div.up-stage', icon(c.def, { size: 112, alt: '' }), c.tier ? h('span.up-stage-tier', `★${c.tier}`) : null),
         h('div.up-hero-text',
           h('h3', c.defName),
-          h('div.up-hero-line', pips(c.tier, c.max), h('b', now ? now.name : 'Not upgraded yet')),
-          now ? bonusList(bonusLines(now.bonus), '.now') : h('p.up-hint', 'Each upgrade gives it a new look and the farm a small, lasting bonus.'),
-          c.next ? null : h('p.up-done', svgIcon('check', 18), 'Every upgrade is done. Beautiful!')));
+          h('div.up-hero-line', pips(c.tier, c.max), h('b', now ? now.name : t('farm.upg.notYet'))),
+          now ? bonusList(bonusLines(now.bonus), '.now') : h('p.up-hint', t('farm.upg.hint')),
+          c.next ? null : h('p.up-done', svgIcon('check', 18), t('farm.upg.allDone'))));
     }
 
     function tierCard(c, t) {
@@ -87,17 +86,17 @@ export const upgradesPanel = {
       const acorns = ctx.store.state.farm.wallet.acorns;
       const missing = t.items.filter((x) => x.have < x.n).map((x) => ({ item: x.item, n: x.n - x.have }));
       const btn = t.next ? kit.button({
-        label: `Upgrade · ${fmt(t.coins)}`, glyph: 'hammer', cls: 'btn--sun up-buy', key: `up:buy:${c.id}:${t.n}`,
+        label: tr('farm.upg.btn', { n: t.coins }), glyph: 'hammer', cls: 'btn--sun up-buy', key: `up:buy:${c.id}:${t.n}`,
         type: actFor('upgrade'), args: { id: c.id },
         hint: { coins: Math.max(0, t.coins - coins), acorns: Math.max(0, t.acorns - acorns), missing, unlock: t.unlock,
-          texts: { ALREADY_DONE: 'Every upgrade is done', NOT_FOUND: 'It is not on the farm any more' } },
+          texts: { ALREADY_DONE: tr('farm.upg.allDoneShort'), NOT_FOUND: tr('farm.upg.gone') } },
         after: (r) => { if (r?.ok) fresh = `${c.id}:${t.n}`; },
       }) : null;
       return h(`li.up-tier.${state}${fresh === `${c.id}:${t.n}` ? '.pop' : ''}`, { dataset: { tier: String(t.n) } },
         h('span.up-badge', { 'aria-hidden': 'true' }, t.owned ? svgIcon('check', 20) : String(t.n)),
         h('div.up-tier-main',
-          h('div.up-tier-head', h('b', t.name), state === 'owned' ? h('span.up-tag.ok', 'Done')
-            : !t.open ? h('span.up-tag.lock', svgIcon('lock', 14), `Level ${t.unlock}`) : null),
+          h('div.up-tier-head', h('b', t.name), state === 'owned' ? h('span.up-tag.ok', tr('farm.upg.done'))
+            : !t.open ? h('span.up-tag.lock', svgIcon('lock', 14), tr('common.level', { n: t.unlock })) : null),
           t.text ? h('p.up-text', t.text) : null,
           bonusList(t.lines)),
         t.owned ? null : h('div.up-cost',

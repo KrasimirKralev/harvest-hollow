@@ -13,13 +13,14 @@ import { CONTENT, MASTERWORK, FARM_BEAUTY, defOf, isLive, decorOf } from '../../
 import * as beautyA from '../../../../shared/rules/actions/beauty.js';
 import { levelOf } from './model.js';
 import { startPlacement } from './placement.js';
-import { h, fmt, createKit, pill, icon, svgIcon, price } from './kit.js';
+import { h, fmt, createKit, pill, icon, svgIcon, price, phoneTitle } from './kit.js';
 import { s } from './art.js';
+import { t, lang, list, name as cname } from '../../i18n/index.js';
 
 const own = (o, k) => (o && Object.hasOwn(o, k) ? o[k] : undefined);
-const COSMETIC = Object.freeze({ butterflies: 'Butterflies dance around it',
-  bunting: 'Festive bunting strings itself up',
-  lanterns: 'Lanterns glow at dusk', gulls: 'Gulls call over it', music: 'A music box tinkles' });
+const COSMETIC_IDS = ['butterflies', 'bunting', 'lanterns', 'gulls', 'music'];
+const cosmeticText = (id) => t(COSMETIC_IDS.includes(id) ? `collect.sets.cosmetic.${id}` : 'collect.sets.cosmetic.other');
+const setName = (st) => cname(st.id, { family: 'decorSets' });
 
 /** The live sets a decor def belongs to (shop tag, tooltips). */
 export function setOfDecor(defId) {
@@ -28,16 +29,16 @@ export function setOfDecor(defId) {
 
 /** How a piece the farm does not own can be had. */
 function source(def, level) {
-  if (!def) return { kind: 'none', text: 'Not in this chapter' };
-  if (!isLive(def)) return { kind: 'later', text: 'Arrives in a later chapter' };
-  if ((def.unlock ?? 1) > level) return { kind: 'locked', text: `Unlocks at level ${def.unlock}` };
-  if (def.shop && def.acorns > 0) return { kind: 'acorns', text: `${def.acorns} Acorns`, acorns: def.acorns };
-  if (def.shop) return { kind: 'coins', text: `${fmt(def.cost)} coins`, coins: def.cost };
+  if (!def) return { kind: 'none', text: t('collect.sets.src.none') };
+  if (!isLive(def)) return { kind: 'later', text: t('collect.sets.src.later') };
+  if ((def.unlock ?? 1) > level) return { kind: 'locked', text: t('market.why.unlockAt', { n: def.unlock }) };
+  if (def.shop && def.acorns > 0) return { kind: 'acorns', text: t('collect.album.acorns', { n: def.acorns }), acorns: def.acorns };
+  if (def.shop) return { kind: 'coins', text: t('market.land.coins', { n: def.cost }), coins: def.cost };
   const src = String(def.source ?? '');
-  if (src.startsWith('daily:28:')) return { kind: 'reward', text: `The Daily Gift's day 28 in ${src.split(':')[2]}` };
-  if (src.startsWith('quest:')) return { kind: 'reward', text: 'A letter reward' };
-  if (src === 'challenge') return { kind: 'reward', text: 'A Couple Challenge prize' };
-  return { kind: 'reward', text: 'Earned in play' };
+  if (src.startsWith('daily:28:')) return { kind: 'reward', text: t('collect.sets.src.daily', { m: src.split(':')[2] }) };
+  if (src.startsWith('quest:')) return { kind: 'reward', text: t('collect.sets.src.quest') }; // i18n-ok: an id prefix
+  if (src === 'challenge') return { kind: 'reward', text: t('collect.sets.src.challenge') };
+  return { kind: 'reward', text: t('collect.sets.src.play') };
 }
 
 /** Every live set: pieces (placed / in the tray / to get), its complete group(s), the mini plan's points. Pure. */
@@ -52,7 +53,7 @@ export function setsView(state, now = Infinity, { sets = [...CONTENT.decorSets.v
     const pieces = st.pieces.map((d) => {
       const def = decorOf(d) ?? defOf(d);
       const placed = ids.filter((id) => objs[id].def === d && Number.isSafeInteger(objs[id].x));
-      return { def: d, name: def?.name ?? d, placed: placed.length, tray: own(state.farm.storage, d) ?? 0,
+      return { def: d, name: def ? cname(d) : d, placed: placed.length, tray: own(state.farm.storage, d) ?? 0,
         inGroup: placed.find((id) => grouped.has(id)) ?? null, source: source(def, level),
           beauty: (def?.beauty10 ?? 0) / 10,
         at: placed.map((id) => [objs[id].x, objs[id].z, grouped.has(id)]) };
@@ -73,13 +74,13 @@ export function setsView(state, now = Infinity, { sets = [...CONTENT.decorSets.v
         - Math.max(Math.abs(b[0] - first.x), Math.abs(b[1] - first.z)))[0] : p.at[0];
       p.dot = p.at.find((a) => a[2]) ?? near ?? null;
     }
-    return { id: st.id, name: st.name, unlock: st.unlock, radius: st.radius, cosmetic: st.cosmetic,
-      cosmeticText: COSMETIC[st.cosmetic] ?? 'A little extra magic',
+    return { id: st.id, name: setName(st), unlock: st.unlock, radius: st.radius, cosmetic: st.cosmetic,
+      cosmeticText: cosmeticText(st.cosmetic),
       pieces, have, total: pieces.length, complete, groups: mine.length, status, open,
       bonusPct: FARM_BEAUTY.setBp / 100, firstAt: own(state.farm.beauty?.sets, st.id) ?? null,
       anchor: first ? [first.x, first.z] : null };
   });
-  const later = [...CONTENT.decorSets.values()].filter((st) => !sets.includes(st)).map((st) => st.name);
+  const later = [...CONTENT.decorSets.values()].filter((st) => !sets.includes(st)).map((st) => setName(st));
   return { sets: rows, later, unlock: rows.length ? Math.min(...rows.map((x) => x.unlock)) : 18,
     open: rows.some((x) => x.open) };
 }
@@ -100,8 +101,8 @@ export function masterworkView(state) {
       ? { level: mw + 1, coins: p.code ? def.cost * MASTERWORK.priceMul[mw] : p.coins,
         beauty: (def.beauty10 * MASTERWORK.beautyBp[mw]) / 100_000, code: p.code ?? null }
       : null;
-    rows.push({ id, def: def.id, name: def.name, mw, beauty, next, x: o.x, z: o.z,
-      sets: setOfDecor(def.id).map((x) => x.name) });
+    rows.push({ id, def: def.id, name: cname(def.id), mw, beauty, next, x: o.x, z: o.z,
+      sets: setOfDecor(def.id).map((x) => setName(x)) });
   }
   rows.sort((a, b) => b.beauty - a.beauty || a.name.localeCompare(b.name) || a.id.localeCompare(b.id));
   return { rows, open: level >= MASTERWORK.unlock && isLive(MASTERWORK), unlock: MASTERWORK.unlock,
@@ -109,7 +110,8 @@ export function masterworkView(state) {
     beautyMul: MASTERWORK.beautyBp.map((b) => b / 10_000) };
 }
 
-const MW_NAMES = ['Plain', 'Masterwork', 'Grand Masterwork'];
+/** Masterwork levels 0..2 in words, read in the language in effect. */
+const MW_NAMES = new Proxy([], { get: (a, k) => (['0', '1', '2'].includes(k) ? t(`collect.sets.mw.${k}`) : a[k]) });
 
 // ---- the mini plan of a set -----------------------------------------------------------------------------------------
 
@@ -118,15 +120,15 @@ function plan(set) {
   const pts = set.pieces.map((p, i) => (p.dot ? { x: p.dot[0], z: p.dot[1], i, inGroup: p.dot[2] } : null))
     .filter(Boolean);
   const svg = s('svg', { viewBox: '0 0 120 120', width: 120, height: 120, class: 'pc-plan', role: 'img',
-    'aria-label': pts.length ? `Where the ${set.name} pieces stand` : `No ${set.name} pieces placed yet` });
+    'aria-label': pts.length ? t('collect.sets.planAria', { set: set.name }) : t('collect.sets.planEmptyAria', { set: set.name }) });
   svg.append(s('rect',
     { x: 1, y: 1, width: 118, height: 118, rx: 10, fill: '#CFE8A8', stroke: '#8A5224', 'stroke-width': 2 }));
   for (let k = 1; k < 6; k++) svg.append(s('path',
     { d: `M${k * 20} 4 V116 M4 ${k * 20} H116`, stroke: 'rgba(90,140,50,.25)', 'stroke-width': 1 }));
   if (!pts.length) {
-    const t = s('text', { x: 60, y: 64, 'text-anchor': 'middle', class: 'pc-plan-empty' });
-    t.textContent = 'nothing placed';
-    svg.append(t);
+    const txt = s('text', { x: 60, y: 64, 'text-anchor': 'middle', class: 'pc-plan-empty' });
+    txt.textContent = t('collect.sets.planEmpty');
+    svg.append(txt);
     return svg;
   }
   const cx = set.anchor ? set.anchor[0] : pts[0].x;
@@ -151,10 +153,10 @@ function plan(set) {
 function pieceRow(ctx, kit, set, p, i) {
   const colours = ['#E8556E', '#4AA8E8', '#FFC83D', '#9B6BD6', '#5DBB3F', '#F28A1E'];
   let act = null;
-  if (p.tray > 0) act = kit.button({ label: 'Place', glyph: 'hammer', cls: 'pn-xs btn--sky',
+  if (p.tray > 0) act = kit.button({ label: t('market.card.place'), glyph: 'hammer', cls: 'pn-xs btn--sky',
     onClick: () => startPlacement(ctx, p.def), data: { place: p.def } });
   else if (!p.placed && (p.source.kind === 'coins' || p.source.kind === 'acorns')) {
-    act = kit.button({ label: 'Buy', glyph: 'hammer', cls: 'pn-xs', data: { place: p.def },
+    act = kit.button({ label: t('market.card.buy'), glyph: 'hammer', cls: 'pn-xs', data: { place: p.def },
       gate: () => {
         const st = ctx.store.state;
         if (p.source.coins > st.farm.wallet.coins) return { code: 'NO_COINS',
@@ -165,14 +167,15 @@ function pieceRow(ctx, kit, set, p, i) {
       },
       onClick: () => startPlacement(ctx, p.def) });
   }
-  const state = p.placed ? (p.inGroup ? 'In the set' : `Placed${p.placed > 1 ? ` ×${p.placed}` : ''}`) : p.tray ? 'In your tray' : p.source.text;
+  const state = p.placed ? (p.inGroup ? t('collect.sets.inSet') : p.placed > 1 ? t('collect.sets.placedN', { n: p.placed }) : t('collect.sets.placed'))
+    : p.tray ? t('market.card.tray') : p.source.text;
   const buyable = !p.placed && !p.tray && (p.source.kind === 'coins' || p.source.kind === 'acorns');
   return h(`li.pc-piece${p.placed ? '.have' : ''}${p.inGroup ? '.grouped' : ''}`, { dataset: { def: p.def } },
     h('span.pc-piece-dot', { style: { '--c': colours[i % colours.length] }, 'aria-hidden': 'true' }),
     icon(p.def, { size: 44, alt: '' }),
     h('span.pc-piece-main', h('b', p.name), h('small', state)),
     h('span.pc-piece-act',
-      p.placed ? h('span.pc-piece-tick', { 'aria-label': 'on the farm' }, '✓') : null,
+      p.placed ? h('span.pc-piece-tick', { 'aria-label': t('collect.sets.onFarm') }, '✓') : null,
       buyable ? price({ coins: p.source.coins ?? 0, acorns: p.source.acorns ?? 0 }) : null,
       p.placed ? null : act));
 }
@@ -190,25 +193,24 @@ function placeSetButton(ctx, set) {
   if (!can) return null;
   return h('div.pc-set-acts', h('button.btn.btn--sky.pn-sm', { type: 'button', dataset: { placeset: set.id },
     on: { click: () => { ctx.close(); c.placeSet(set.id); } } }, svgIcon('hammer', 22),
-      missing.length === set.pieces.length ? 'Place this set' : 'Place the rest'),
-  h('small', `One piece after the other, each close to the ones already out.`));
+      missing.length === set.pieces.length ? t('collect.sets.placeSet') : t('collect.sets.placeRest')),
+  h('small', t('collect.sets.oneByOne')));
 }
 
 function setCard(ctx, kit, set) {
+  const p = { pct: set.bonusPct, total: set.total, r: set.radius, have: set.have, magic: set.cosmeticText.toLowerCase() };
   const status = {
-    complete: [`Complete: +${set.bonusPct} % on its ${set.total} pieces`, 'pn-owned'],
-    spread: [`All ${set.total} placed: move them within ${set.radius} tiles of each other`, 'pn-warn'],
-    started: [`${set.have} of ${set.total} on the farm`, ''],
-    new: ['Not started', ''],
+    complete: [t('collect.sets.st.complete', p), 'pn-owned'],
+    spread: [t('collect.sets.st.spread', p), 'pn-warn'],
+    started: [t('collect.sets.st.started', p), ''],
+    new: [t('collect.sets.st.new'), ''],
   }[set.status];
   return h(`article.pc-set.${set.status}${set.open ? '' : '.locked'}`, { dataset: { set: set.id } },
     h('header.pc-set-head', h('div', h('h4', set.name), h('small', set.cosmeticText)), pill(status[0], status[1])),
-    h('div.pc-set-body', h('figure.pc-plan-box', plan(set), h('figcaption', `dashed: ${set.radius}-tile reach`)),
-      h('ul.pc-pieces', ...set.pieces.map((p, i) => pieceRow(ctx, kit, set, p, i)))),
+    h('div.pc-set-body', h('figure.pc-plan-box', plan(set), h('figcaption', t('collect.sets.reach', { r: set.radius }))),
+      h('ul.pc-pieces', ...set.pieces.map((x, i) => pieceRow(ctx, kit, set, x, i)))),
     placeSetButton(ctx, set),
-    h('p.pc-set-foot',
-      set.complete ? `Its ${set.total} pieces count ${set.bonusPct} % more beauty, and ${set.cosmeticText.toLowerCase()}.`
-      : `Place one of each within ${set.radius} tiles of the first piece: +${set.bonusPct} % beauty on all ${set.total}, and ${set.cosmeticText.toLowerCase()}.`));
+    h('p.pc-set-foot', set.complete ? t('collect.sets.footDone', p) : t('collect.sets.foot', p)));
 }
 
 /** Masterwork rows grouped by decor kind (most beautiful kind first; upgraded copies first inside a kind). Pure. */
@@ -235,16 +237,16 @@ function mwCopy(ctx, kit, r, k, focus, single = false) {
   const view = ctx.view;
   return h(`li.pc-mw-copy${r.mw ? `.mw${r.mw}` : ''}${focus ? '.pn-focus-ring' : ''}`, { dataset: { id: r.id } },
     h('span.pc-mw-k', single ? '' : `#${k + 1}`), stars,
-    h('span.pc-mw-now', h('small', MW_NAMES[r.mw]), h('b', `beauty ${fmt(r.beauty * 10) / 10}`)),
+    h('span.pc-mw-now', h('small', MW_NAMES[r.mw]), h('b', t('collect.sets.beauty', { b: fmt(r.beauty * 10) / 10 }))),
     r.next ? h('span.pc-mw-next',
-      h('small', `${MW_NAMES[r.next.level]}: `, h('b', `beauty ${fmt(r.next.beauty * 10) / 10}`)),
+      h('small', `${MW_NAMES[r.next.level]}: `, h('b', t('collect.sets.beauty', { b: fmt(r.next.beauty * 10) / 10 }))),
         price({ coins: r.next.coins }))
-      : h('span.pc-mw-next', pill('Fully upgraded', 'pn-owned')),
+      : h('span.pc-mw-next', pill(t('collect.sets.full'), 'pn-owned')),
     view && typeof view.focus === 'function'
       ? h('button.pn-chipbtn.pc-mw-where',
-        { type: 'button', title: 'Show it on the farm',
-          on: { click: () => { ctx.ui.panels.closeAll(); view.focus(r.x + 0.5, r.z + 0.5); } } }, 'Where?') : null,
-    r.next ? kit.button({ label: 'Upgrade', glyph: 'hammer', cls: 'pn-xs btn--sun', type: 'masterwork',
+        { type: 'button', title: t('collect.sets.showOnFarm'),
+          on: { click: () => { ctx.ui.panels.closeAll(); view.focus(r.x + 0.5, r.z + 0.5); } } }, t('collect.sets.where')) : null,
+    r.next ? kit.button({ label: t('market.barn.upgradeBtn'), glyph: 'hammer', cls: 'pn-xs btn--sun', type: 'masterwork',
       args: { id: r.id, max: r.next.coins }, data: { masterwork: r.id },
       hint: () => ({ coins: Math.max(0, r.next.coins - ctx.store.state.farm.wallet.coins),
         unlock: MASTERWORK.unlock }) }) : null);
@@ -256,19 +258,19 @@ function mwGroup(ctx, kit, g, ui) {
   return h(`article.pc-mwg${g.copies.some((c) => c.mw === 2) ? '.gold' : ''}`, { dataset: { def: g.def } },
     h('header.pc-mwg-head', h('span.pc-mw-art', icon(g.def, { size: 52, alt: '' })),
       h('div', h('h4', g.name),
-        h('small', `${g.copies.length} on the farm${g.sets.length ? ` · ${g.sets.join(', ')} set` : ''}`))),
+        h('small', g.sets.length ? t('collect.sets.copiesSets', { n: g.copies.length, sets: g.sets.join(', ') }) : t('collect.sets.copies', { n: g.copies.length })))),
     h('ul.pc-mw-copies', ...shown.map((r, k) => mwCopy(ctx, kit, r, k, ui.focus === r.id, g.copies.length === 1))),
     g.copies.length > SHOWN ? h('button.pn-chipbtn.pc-mw-more',
       { type: 'button', 'aria-expanded': String(open), dataset: { key: `mwmore-${g.def}` },
       on: { click: () => { if (open) ui.open.delete(g.def); else ui.open.add(g.def); ui.redraw(); } } },
-    open ? 'Show fewer' : `Show all ${g.copies.length}`) : null);
+    open ? t('collect.sets.fewer') : t('collect.sets.all', { n: g.copies.length })) : null);
 }
 
-export const DECOR_TABS = Object.freeze([{ id: 'sets', label: 'Decor sets', icon: 'rose_arch' },
-  { id: 'masterwork', label: 'Masterwork', icon: 'fountain' }]);
+export const DECOR_TABS = Object.freeze([{ id: 'sets', get label() { return t('collect.sets.tab.sets'); }, icon: 'rose_arch' },
+  { id: 'masterwork', get label() { return t('collect.sets.tab.mw'); }, icon: 'fountain' }]);
 
 export const decorSetsPanel = {
-  title: 'Decor sets & Masterwork',
+  get title() { return phoneTitle('collect.sets.title', 'collect.sets.titleShort'); },
   icon: 'rose_arch',
   size: 'full',
   tabs: () => DECOR_TABS,
@@ -296,19 +298,18 @@ export const decorSetsPanel = {
         const v = setsView(st, ctx.now());
         body.replaceChildren(
           h('p.pn-intro',
-            v.open ? `Themed sets: put one of each piece within ${v.sets[0]?.radius ?? 6} tiles of each other and the whole set gets +${FARM_BEAUTY.setBp / 100} % beauty and a little magic of its own.`
-            : `Decor sets open at level ${v.unlock}. The pieces you already have count the moment they do.`),
+            v.open ? t('collect.sets.intro', { r: v.sets[0]?.radius ?? 6, pct: FARM_BEAUTY.setBp / 100 })
+            : t('collect.sets.opensAt', { n: v.unlock })),
           h('div.pc-sets', ...v.sets.map((set) => setCard(ctx, kit, set))),
-          v.later.length ? h('p.pn-hint', `Later chapters bring ${v.later.join(' and ')}.`) : null);
+          v.later.length ? h('p.pn-hint', t('collect.sets.later', { list: lang() === 'en' ? v.later.join(' and ') : list(v.later) })) : '');   // '' not null: replaceChildren prints a null
       } else {
         const v = masterworkView(st);
         body.replaceChildren(
           h('p.pn-intro',
-            v.open ? `Every coin decor can be upgraded twice: Masterwork for ${v.mul[0]}× its price (×${v.beautyMul[0]} beauty), then Grand Masterwork for ${v.mul[1]}× (×${v.beautyMul[1]}). Stone instead of wood, gilded trim.`
-            : `Masterwork opens at level ${v.unlock}.`),
+            v.open ? t('collect.sets.mwIntro', { a: v.mul[0], b: v.beautyMul[0], c: v.mul[1], d: v.beautyMul[1] })
+            : t('collect.sets.mwOpensAt', { n: v.unlock })),
           v.rows.length ? h('div.pc-mws', ...mwGroups(v.rows).map((g) => mwGroup(ctx, kit, g, ui)))
-            : h('div.pn-empty', svgIcon('flower', 44),
-              h('p', 'No coin decor on the farm yet. Place some from the Market, then come back to upgrade it.')));
+            : h('div.pn-empty', svgIcon('flower', 44), h('p', t('collect.sets.mwNone'))));
       }
       kit.refresh();
       if (focus) {
@@ -331,7 +332,7 @@ export const decorSetsPanel = {
 export function shopTags(defId, level) {
   const tags = setOfDecor(defId).filter((st) => level >= st.unlock)
     .map((st) => h('span.pc-settag',
-      { title: `Part of the ${st.name} set: one of each within ${st.radius} tiles = +${FARM_BEAUTY.setBp / 100} % beauty` }, `✿ ${st.name}`));
+      { title: t('collect.sets.tagTip', { set: setName(st), r: st.radius, pct: FARM_BEAUTY.setBp / 100 }) }, `✿ ${setName(st)}`));
   return tags.length ? h('div.pc-shoptags', ...tags) : null;
 }
 
@@ -340,5 +341,5 @@ export function shopSetsLink(ctx, level) {
   const sets = [...CONTENT.decorSets.values()].filter(isLive);
   if (!sets.length || level < Math.min(...sets.map((x) => x.unlock))) return null;
   return h('button.pn-chipbtn.pc-shoplink', { type: 'button', on: { click: () => ctx.open('decorsets') } },
-    '✿ Decor sets & Masterwork');
+    `✿ ${t('collect.sets.title')}`);
 }

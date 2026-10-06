@@ -34,6 +34,7 @@ import { isReady } from '../../../shared/rules/time.js';
 import { occupantsOf } from '../../../shared/rules/grid.js';
 import { ERR } from '../../../shared/net/protocol.js';
 import { NURSERY, FISHING } from '../../../shared/content/index.js';
+import * as i18n from '../i18n/index.js';
 
 /** A fishing dock decor (content FISHING.spots.decor; its effect says 'fishing'). */
 const isDock = (def) => Boolean(def && (def.id === FISHING?.spots?.decor || def.effect?.cosmetic === 'fishing'));
@@ -348,15 +349,12 @@ export function resolveBatch(store, verb, targets, opts = {}) {
 export function seatText(state, id, pid) {
   const t = describe(state, id, 0, pid);
   if (!t || t.kind !== 'decor' || t.seats < 2) return null;
-  const nameOf = (p) => (Object.hasOwn(state.players, p) ? state.players[p].name : 'Your partner');
-  if (t.mySeat) {
-    return t.seatedOthers.length ? 'Sitting together: Golden Hour is on its way. Click to stand up'
-      : 'You are sitting here. Click to stand up';
-  }
-  if (t.seatedOthers.length >= t.seats) return 'Every seat is taken';
+  const nameOf = (p) => (Object.hasOwn(state.players, p) ? state.players[p].name : i18n.t('common.partner'));
+  if (t.mySeat) return i18n.t(t.seatedOthers.length ? 'game.seat.together' : 'game.seat.mine');
+  if (t.seatedOthers.length >= t.seats) return i18n.t('game.seat.full');
   // no pronoun: either farmer can be the one waiting
-  if (t.seatedOthers.length) return `${nameOf(t.seatedOthers[0])} is waiting on the bench. Sit together`;
-  return 'Sit here together for Golden Hour';
+  if (t.seatedOthers.length) return i18n.t('game.seat.waiting', { name: nameOf(t.seatedOthers[0]) });
+  return i18n.t('game.seat.free');
 }
 
 /**
@@ -366,11 +364,10 @@ export function seatText(state, id, pid) {
 export function giantText(state, id, now) {
   const t = describe(state, id, now);
   if (!t || t.kind !== 'plot' || !t.giant) return null;
-  const name = cropOf(t.crop)?.name ?? 'crop';
-  if (!t.ready) return `A Giant ${name} is growing here`;
+  const crop = cropOf(t.crop) ? i18n.N(t.crop) : i18n.t('game.giant.crop');
+  if (!t.ready) return i18n.t('game.giant.growing', { crop });
   const hp = t.hp ?? null;
-  const left = hp !== null ? ` · ${hp} left` : '';
-  return `A Giant ${name}! Chop it (Axe, Sickle or Hand)${left}: quicker together, 15 a chop right after your partner's`;
+  return hp !== null ? i18n.t('game.giant.chopLeft', { crop, hp }) : i18n.t('game.giant.chop', { crop });
 }
 
 /**
@@ -380,10 +377,10 @@ export function giantText(state, id, now) {
 export function rideText(state, id, pid, { now = 0, riding = false, riders = 0 } = {}) {
   const t = describe(state, id, now, pid);
   if (!t || t.kind !== 'animal' || !RIDEABLE.has(t.def.id)) return null;
-  if (riding) return 'You are riding. V gets you off';
-  if (t.baby) return 'Too young to ride yet';
-  if (riders >= adultHorses(state, now)) return 'Every horse has a rider';
-  return 'Click to ride (V): you trot at 1.8 times walking speed';
+  if (riding) return i18n.t('game.ride.riding');
+  if (t.baby) return i18n.t('game.ride.tooYoung');
+  if (riders >= adultHorses(state, now)) return i18n.t('game.ride.allTaken');
+  return i18n.t('game.ride.click');
 }
 
 /** The Fishing Dock line of the world tooltip for viewer `pid` (GDD §6.2 #21), or null when `id` is no dock. */
@@ -393,14 +390,14 @@ export function dockText(state, id, pid, now) {
   const fish = (q) => state.players?.[q]?.fish ?? null;
   const mine = fish(pid);
   const rest = FISHING?.cooldownMs ?? 3_600_000;
-  if (mine?.cast && !mine.cast.done && mine.cast.spot === id) return 'Your line is in the water here';
+  if (mine?.cast && !mine.cast.done && mine.cast.spot === id) return i18n.t('game.dock.inWater');
   if (mine && Number.isFinite(mine.at) && mine.at > 0 && now < mine.at + rest) {
-    return `Your rod rests: next cast in ${Math.max(1, Math.ceil((mine.at + rest - now) / 60_000))} min`;
+    return i18n.t('game.dock.rest', { n: Math.max(1, Math.ceil((mine.at + rest - now) / 60_000)) });
   }
   const win = FISHING?.together?.windowMs ?? 20_000;
   const other = Object.keys(state.players ?? {}).sort().find((q) => q !== pid && fish(q)?.cast?.spot === id && now - fish(q).cast.at <= win);
-  if (other) return `${state.players[other].name} is fishing: cast now to fish together`;
-  return 'Click to sit on the dock and cast: one calm cast an hour each';
+  if (other) return i18n.t('game.dock.together', { name: state.players[other].name });
+  return i18n.t('game.dock.click');
 }
 
 /** Adult horses of the farm now (the riders' mounts). */

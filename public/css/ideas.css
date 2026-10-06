@@ -1,0 +1,66 @@
+/* The ideas form (js/front/ideas.js): on the landing page's parchment card and in the game's "Suggest an idea" card.
+   On top of css/style.css (tokens, .btn). Inputs are 16 px and up (iOS zooms into anything smaller), every control is
+   at least 44 px tall, the category chips are real radio buttons (arrow keys move between them). */
+.idea-box { text-align: left; }
+.idea-form { display: grid; gap: 16px; }
+.idea-form[hidden] { display: none; }
+.idea-cats { min-width: 0; margin: 0; padding: 0; border: 0; }
+.idea-label { display: block; margin: 0 0 6px; padding: 0; font: 800 1.0625rem/1.25 var(--font-display); color: var(--ink-900); }
+.idea-opt { font: 600 .875rem/1 var(--font-ui); color: var(--ink-500); }
+.idea-cat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.idea-cat { position: relative; display: block; cursor: pointer; }
+.idea-cat input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
+.idea-cat-face { display: flex; align-items: center; gap: 8px; min-height: 54px; height: 100%; padding: 8px 10px; border-radius: 12px;
+  font: 700 .9375rem/1.2 var(--font-ui); color: var(--ink-900); background: var(--paper-50);
+  box-shadow: inset 0 0 0 2px var(--paper-edge), 0 3px 0 var(--paper-edge); transition: background var(--t-micro), box-shadow var(--t-micro); }
+.idea-cat-emo { flex: none; font-size: 1.375rem; line-height: 1; }
+.idea-cat:hover .idea-cat-face { background: #FFF8DA; }
+.idea-cat input:checked + .idea-cat-face { background: #E4F5D0; box-shadow: inset 0 0 0 3px var(--go-700), 0 3px 0 var(--go-900); }
+.idea-cat input:focus-visible + .idea-cat-face { outline: 3px solid var(--sky-900); outline-offset: 2px; }
+.idea-cats[aria-invalid="true"] .idea-cat-face { box-shadow: inset 0 0 0 2px var(--stop-700), 0 3px 0 var(--stop-900); }
+.idea-field { min-width: 0; }
+.idea-input { display: block; width: 100%; min-height: 48px; padding: 11px 12px; border: 0; border-radius: 12px;
+  font: 600 1rem/1.4 var(--font-ui); color: var(--ink-900); background: #FFFDF6;
+  box-shadow: inset 0 0 0 2px var(--paper-edge), inset 0 2px 5px rgba(90, 50, 21, .12); }
+.idea-input::placeholder { color: #7A5A3A; opacity: 1; }
+.idea-input:focus { outline: 3px solid var(--sky-700); outline-offset: 1px; }
+.idea-input[aria-invalid="true"] { box-shadow: inset 0 0 0 2px var(--stop-700), inset 0 2px 5px rgba(90, 50, 21, .12); }
+.idea-text { min-height: 128px; resize: vertical; }
+.idea-meta { display: flex; align-items: flex-start; gap: 10px; margin-top: 4px; }
+.idea-count { margin-left: auto; font: 700 .8125rem/1.4 var(--font-ui); color: var(--ink-500); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.idea-count.near { color: var(--sun-ink); }
+.idea-err { margin: 6px 0 0; font: 700 .875rem/1.35 var(--font-ui); color: var(--stop-900); }
+.idea-meta .idea-err { margin: 0; }
+.idea-two { display: grid; gap: 16px; }
+.idea-hint { margin: 5px 0 0; font: 600 .8125rem/1.35 var(--font-ui); color: var(--ink-500); }
+.idea-privacy-link { color: var(--sky-900); text-decoration: underline; text-underline-offset: 2px; white-space: nowrap; }
+.idea-privacy-link:hover { color: var(--ink-900); }
+/* the honeypot: off-screen, out of the tab order and the accessibility tree */
+.idea-trap { position: absolute; left: -10000px; top: auto; width: 1px; height: 1px; overflow: hidden; }
+.idea-privacy { margin: -4px 0 0; font: 600 .8125rem/1.4 var(--font-ui); color: var(--ink-500); text-align: center; }
+.idea-acts { display: flex; justify-content: center; }
+.idea-send { min-width: min(260px, 100%); min-height: 54px; font-size: 1.25rem; }
+.idea-status { margin: -4px 0 0; text-align: center; font: 700 .9375rem/1.4 var(--font-ui); color: var(--ink-700); }
+.idea-status:empty { display: none; }
+.idea-status.bad { padding: 8px 12px; border-radius: var(--r-s); color: var(--stop-900); background: #FFE7E2; box-shadow: inset 0 0 0 2px var(--stop-300); }
+.idea-alt { margin: 0; text-align: center; font: 700 .9375rem/1.4 var(--font-ui); }
+.idea-alt a { color: var(--sky-900); text-underline-offset: 3px; }
+.idea-alt a:hover { color: var(--ink-900); }
+.idea-done { padding: 18px 8px 8px; text-align: center; outline: none; }
+.idea-done[hidden] { display: none; }
+.idea-done-title { margin: 0 0 6px; font: 800 1.75rem/1.15 var(--font-display); color: var(--go-900); }
+.idea-done-text { margin: 0 0 16px; font: 600 1rem/1.45 var(--font-ui); color: var(--ink-700); }
+@media (min-width: 560px) { .idea-two { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 359px) { .idea-cat-grid { grid-template-columns: 1fr; } }
+@media (prefers-reduced-motion: reduce) { .idea-cat-face { transition: none; } }
+
+/* ---- in the game (ui/ideas.js, ui/star-nudge.js) ------------------------------------------------------------------- */
+.ideas-card { max-width: 560px; margin: 0 auto; padding: 4px 2px 6px; }
+.ideas-lead { margin: 0 0 16px; text-align: center; text-wrap: balance; font: 600 1rem/1.45 var(--font-ui); color: var(--ink-700); }
+/* the GitHub star card: a sunny ribbon (like a balloon crate's), "Star it" on a row of its own above the two quiet answers */
+.unlock-banner[data-kind="star"] .ribbon { --o: #8A5A0E; background: linear-gradient(180deg, #FFE793, #F5C542 50%, #DD9A1E);
+  box-shadow: 0 0 0 3px #8A5A0E, 0 4px 0 3px rgba(0, 0, 0, .2); }
+.unlock-banner[data-kind="star"] .msg { font-size: 1rem; text-wrap: balance; }
+.unlock-banner[data-kind="star"] .acts { flex-wrap: wrap; gap: 8px; }
+.unlock-banner[data-kind="star"] .acts .btn--sun { flex: 1 0 100%; min-height: 44px; font-size: 1.0625rem; }
+.unlock-banner[data-kind="star"] .acts .btn--paper { flex: 1 1 0; min-height: 40px; white-space: normal; line-height: 1.15; }

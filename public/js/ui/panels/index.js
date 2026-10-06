@@ -28,6 +28,7 @@ import installW4 from './w4.js';
 import installW4b from './w4b.js';
 import { PETS } from '../../../../shared/content/index.js';
 import { ensureStylesheet } from '../dom.js';
+import { t } from '../../i18n/index.js';
 
 const CSS_HREF = '/css/panels.css';
 
@@ -57,7 +58,8 @@ export default function install(ui, deps = {}) {
   const store = deps.store || ui.store || null;
   // pets (M1b, L10): adopt, treat and pet; a mini dock button once pets are open on this farm
   off.push(ui.panels.register('pets', withDock(petsPanel, PETS,
-    { label: 'Pets', icon: 'dog_house', order: 9, mini: true, hint: 'Your dog or cat: adopt, a treat, a pat' },
+    // getters: the dock reads them when it draws, so they follow the language
+    { get label() { return t('toolbar.dock.pets'); }, icon: 'dog_house', order: 9, mini: true, get hint() { return t('toolbar.dock.petsHint'); } },
     store || globalThis.__hh?.store || null)));
   // ui-collect (wave 2): the album, the Restoration Ledger, Farm Beauty, decor sets + Masterwork, the Ribbon Wall, the
   // M1b animal sections and their banners (collections.js is the lane's hub)

@@ -36,3 +36,17 @@ test('single mode: no invite UI, and the slot picker keeps its words', async () 
     'Rowan invited you! Pick your name and colour to farm together.');
   assert.equal(multiSub([{ pid: 'p1', claimed: false }], { creator: true }), 'Your new farm is ready! Who is the first farmer?');
 });
+
+test('single mode: Settings > Farm links the repo\'s PRIVACY.md (this server keeps the farm itself) and offers no "Delete this farm"', async () => {
+  const { createPrivacyUi } = await import('../public/js/ui/privacy.js');
+  const { PRIVACY_MD_URL } = await import('../public/js/front/links.js');
+  const p = createPrivacyUi({ store: { state: null }, ui: { confirm: async () => true } });
+  assert.equal(p.multi, false);
+  const box = document.createElement('div');
+  box.append(...p.settingsRows({ close() {} }));
+  const link = box.querySelector('a[data-privacy="open"]');
+  assert.equal(link.getAttribute('href'), PRIVACY_MD_URL);
+  assert.match(PRIVACY_MD_URL, /^https:\/\/github\.com\/KrasimirKralev\/harvest-hollow\/blob\/main\/PRIVACY\.md$/);
+  assert.equal(box.querySelector('[data-farm-delete="open"]'), null);
+  assert.equal(await p.deleteFlow(), false, 'nothing to delete on a self-hosted farm');
+});

@@ -58,6 +58,16 @@ farmer (§6 co-op, still two players per farm); a **personal farm link** opens t
 (it replaces the passphrase there); a farm nobody visits for 7 days is deleted, which Settings and the landing page
 say. The rules, the economy and E(L) are untouched: every farm is exactly the farm this document designs, and the LAN
 game (`HH_MODE=single`, the default) is unchanged.
+**2026-10-05, Bulgarian as a second language** (owner: "translate the game to Bulgarian as a second language, and the
+loading screen to choose the language"; `docs/agent-briefs/i18n-bg.md`): every word a player reads (HUD, panels,
+toasts, the feed and Journal, letters, Grandma Hazel's guides, ribbons, the album, the Goal Tracker, content names and
+descriptions, the landing / invite / private-farm pages, the rules' errors) exists in English and Bulgarian. The
+language is picked on the loading screen (and the farmer picker, the landing page and Settings), remembered per device,
+and is per player: the two farmers may read different languages at the same time. English stays the source and the
+default; numbers, dates and durations follow the language. Bulgarian wording follows the glossary
+(`docs/agent-briefs/i18n-glossary-bg.md`) and its owner decisions: no gendered words about a player (titles are neutral
+noun phrases), the County Fair is **Големият панаир**, the River Barge **Шлепът**, XP is **опит** everywhere. The
+rules, the economy and the save are untouched.
 
 Harvest Hollow is a FarmVille-2-style co-op farm for two people (up to four) who share one farm and play it together in
 real time on their home LAN. This document is the single source of truth for mechanics, numbers, UX, art and

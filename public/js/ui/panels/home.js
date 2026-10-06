@@ -23,6 +23,7 @@ import { farmhousePanel, farmhouseBadge } from './farmhouse.js';
 import { nurseryPanel, nurseryBadge, nurseryIsOpen, babyNoun } from './nursery.js';
 import { breedingPanel, breedingBadge, breedingIsOpen, coatName } from './breeding.js';
 import { fishingPanel, fishingBadge, fishingView } from './fishing.js';
+import { t, has, lang, ctext } from '../../i18n/index.js';
 
 const CSS_HREF = '/css/panels-home.css';
 
@@ -48,11 +49,14 @@ export function homeDocks(state, now) {
   };
 }
 
+// labels and hints are getters: the dock reads them when it draws, so they follow the language
+const dock = (name, icon, order) => ({ get label() { return t(`home.dock.${name}`); }, icon, order, mini: true,
+  get hint() { return t(`home.dock.${name}Hint`); } });
 const DOCKS = {
-  farmhouse: { label: 'House', icon: 'farmhouse', order: 10, mini: true, hint: 'The farmhouse: your room, the last restorations, Grandma' },
-  nursery: { label: 'Nursery', icon: 'baby_bottle', order: 11, mini: true, hint: 'The Nursery: a care card for every baby' },
-  breeding: { label: 'Breeding', icon: 'baby_bottle', order: 11, mini: true, hint: 'The Breeding Barn and the Nursery' },
-  fishing: { label: 'Fishing', icon: 'pond_dock', order: 12, mini: true, hint: 'The Fishing Dock: one calm cast an hour each' },
+  farmhouse: dock('farmhouse', 'farmhouse', 10),
+  nursery: dock('nursery', 'baby_bottle', 11),
+  breeding: dock('breeding', 'baby_bottle', 11),
+  fishing: dock('fishing', 'pond_dock', 12),
 };
 
 /** A panel spec whose dock button exists only while `homeDocks()[name]` says so (read on every dock render). */
@@ -121,7 +125,7 @@ function startHomeBadges(ui, store) {
 
 // ---- banners: the moments of the home systems the other farmer should not miss -------------------------------------
 
-const who = (state, pid, me) => (pid === me ? 'You' : state?.players?.[pid]?.name ?? 'Your partner');
+const who = (state, pid, me) => (pid === me ? t('common.you') : state?.players?.[pid]?.name ?? t('common.partner'));
 
 /**
  * The banner of an ui-home event, or null (pure, tested): the partner's new baby, a record fish someone else landed,
@@ -134,29 +138,32 @@ export function homeBannerOf(state, ev, me) {
     case 'bred': {
       if (ev.by === me) return null;
       const noun = babyNoun(ev.species);
-      const coat = ev.golden ? 'golden' : coatName(ev.coat).toLowerCase();
-      return { id: `bred-${ev.id}`, kind: 'quest', ribbon: 'A new baby!', ttl: 9000,
-        message: `${who(state, ev.by, me)} brought home ${ev.name ? `${ev.name}, ` : ''}a ${coat} ${noun}.`,
-        panel: ['nursery', { id: ev.id }], label: 'Its Nursery card' };
+      const coat = ev.golden ? 'golden' : lang() === 'en' ? coatName(ev.coat).toLowerCase() : coatName(ev.coat); // i18n-ok: the English word
+      const adjKey = `home.breed.coatN.${ev.golden ? 'golden' : ev.coat}`;
+      const p = { who: who(state, ev.by, me), name: ev.name, coat, adj: has(adjKey) ? t(adjKey) : coat, noun };
+      return { id: `bred-${ev.id}`, kind: 'quest', ribbon: t('home.banner.baby'), ttl: 9000,
+        message: ev.name ? t('home.banner.bredNamed', p) : t('home.banner.bred', p),
+        panel: ['nursery', { id: ev.id }], label: t('home.banner.babyCard') };
     }
     case 'fishCaught': {
       if (ev.by === me || !ev.record || ev.joke) return null;
       const f = FISHING?.fish?.find((x) => x.id === ev.fish);
-      return { id: `fish-${ev.fish}-${ev.cm}`, kind: 'quest', ribbon: 'A new record!', ttl: 8000,
-        message: `${who(state, ev.by, me)} landed a ${ev.cm} cm ${f?.name ?? 'fish'}: the biggest the dock has seen.`,
-        panel: ['fishing', {}], label: 'The trophy board' };
+      return { id: `fish-${ev.fish}-${ev.cm}`, kind: 'quest', ribbon: t('home.banner.record'), ttl: 8000,
+        message: t('home.banner.recordText', { who: who(state, ev.by, me), cm: ev.cm,
+          fish: f ? ctext('FISHING', `fish.${f.id}`, 'name', f.name) : t('home.banner.fish') }),
+        panel: ['fishing', {}], label: t('home.fish.board') };
     }
     case 'grandmaArrived':
-      return { id: 'grandma-arrived', kind: 'golden', ribbon: 'Grandma is home!', ttl: 14000,
-        message: 'Grandma Hazel has come to stay for three days. Find her on the farm and say hello.',
-        panel: ['farmhouse', { tab: 'grandma' }], label: 'Where is she?' };
+      return { id: 'grandma-arrived', kind: 'golden', ribbon: t('home.banner.grandma'), ttl: 14000,
+        message: t('home.banner.grandmaText'),
+        panel: ['farmhouse', { tab: 'grandma' }], label: t('home.banner.whereIsShe') };
     case 'grandmaLeft':
-      return { id: 'grandma-left', kind: 'golden', ribbon: 'Grandma went home', ttl: 14000,
-        message: 'She left a letter and something for the parlour wall.', panel: ['farmhouse', { tab: 'grandma' }], label: 'Her letter' };
+      return { id: 'grandma-left', kind: 'golden', ribbon: t('home.banner.grandmaLeft'), ttl: 14000,
+        message: t('home.banner.grandmaLeftText'), panel: ['farmhouse', { tab: 'grandma' }], label: t('home.banner.herLetter') };
     case 'interiorOpened':
-      return { id: 'interior-opened', kind: 'golden', ribbon: 'The farmhouse is yours', ttl: 12000,
-        message: 'Grandma\'s Farmhouse is restored: the parlour is ready to furnish, together.', panel: ['farmhouse', { tab: 'room' }],
-        label: 'Go inside' };
+      return { id: 'interior-opened', kind: 'golden', ribbon: t('home.banner.houseYours'), ttl: 12000,
+        message: t('home.banner.houseText'), panel: ['farmhouse', { tab: 'room' }],
+        label: t('home.banner.goInside') };
     default:
       return null;
   }
@@ -167,8 +174,11 @@ function homeBanners(ui, store) {
     let b = null;
     try { b = homeBannerOf(store.state, ev, store.pid); } catch (err) { console.error('ui-home banner failed', err); }
     if (!b) return;
-    ui.banner({ id: b.id, kind: b.kind, ribbon: b.ribbon, message: b.message, things: [], ttl: b.ttl,
-      actions: [{ label: b.label, kind: 'sky', fn: () => ui.panels.open(b.panel[0], b.panel[1]) }] });
+    // functions: a language switch while the card is up says it again (from the same event and farm)
+    const st = store.state;
+    const again = () => { try { return homeBannerOf(st, ev, store.pid) ?? b; } catch { return b; } };
+    ui.banner({ id: b.id, kind: b.kind, ribbon: () => again().ribbon, message: () => again().message, things: [], ttl: b.ttl,
+      actions: [{ label: () => again().label, kind: 'sky', fn: () => ui.panels.open(b.panel[0], b.panel[1]) }] });
   });
   return () => off?.();
 }

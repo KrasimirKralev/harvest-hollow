@@ -41,15 +41,17 @@
   </script>
 </head>
 <body>
-  <canvas id="world" aria-label="The farm. Click a plot to plant or harvest; Q and E rotate the view."></canvas>
+  <canvas id="world" aria-label="The farm. Click a plot to plant or harvest; Q and E rotate the view." data-i18n-attr="aria-label:shell.html.canvas"></canvas>
   <div id="overlay" aria-hidden="true"></div>
   <div id="pointers" aria-hidden="true"></div>
 
   <!-- HUD skeleton (GDD §7.3, visual-ux-juice §5.5). ui/*.js fills it; ids and data-attributes are the ui lane's
-       contract with tests and tools (e2e: #hud-players li[data-pid].online, #hud-barn-pill, .toast). -->
+       contract with tests and tools (e2e: #hud-players li[data-pid].online, #hud-barn-pill, .toast). The words are the
+       English source; [data-i18n] / [data-i18n-attr] re-label them in the player's language (i18n/core.js applyStatic,
+       catalog area 'shell'). -->
   <div id="hud" hidden>
-    <header class="hud-tl" aria-label="Farm">
-      <section class="level-card" id="hud-level-card" aria-label="Farm level">
+    <header class="hud-tl" aria-label="Farm" data-i18n-attr="aria-label:shell.html.farm">
+      <section class="level-card" id="hud-level-card" aria-label="Farm level" data-i18n-attr="aria-label:shell.html.levelCard">
         <button class="level-star" id="hud-level-star" type="button" aria-describedby="hud-xp-text">
           <svg class="star-svg" viewBox="0 0 64 64" aria-hidden="true">
             <path d="M32 3l8.6 17.4 19.2 2.8-13.9 13.5 3.3 19.1L32 46.8 14.8 55.8l3.3-19.1L4.2 23.2l19.2-2.8z" fill="#2B78B5" stroke="#1C5283" stroke-width="3" stroke-linejoin="round"/>
@@ -57,58 +59,58 @@
             <path d="M32 11l-5.6 11.4L14 24.2" fill="none" stroke="#fff" stroke-opacity=".55" stroke-width="3" stroke-linecap="round"/>
           </svg>
           <span class="level-num outlined" id="hud-level">1</span>
-          <span class="sr-only">Farm level <span id="hud-level-text">1</span></span>
+          <span class="sr-only"><span data-i18n="shell.html.levelSr">Farm level</span> <span id="hud-level-text">1</span></span>
         </button>
         <div class="level-body">
           <div class="farm-name outlined" id="hud-farm-name">Harvest Hollow</div>
-          <div class="xp" role="progressbar" aria-label="Farm XP" aria-valuemin="0" id="hud-xp-bar">
+          <div class="xp" role="progressbar" aria-label="Farm XP" data-i18n-attr="aria-label:shell.html.xpBar" aria-valuemin="0" id="hud-xp-bar">
             <div class="fill" id="hud-xp-fill"></div>
             <span class="xp-text" id="hud-xp-text">0 / 25 XP</span>
           </div>
         </div>
       </section>
-      <ul class="players" id="hud-players" aria-label="Farmers"></ul>
+      <ul class="players" id="hud-players" aria-label="Farmers" data-i18n-attr="aria-label:shell.html.farmers"></ul>
     </header>
 
-    <aside class="tracker" id="tracker" aria-label="Goals"></aside>
+    <aside class="tracker" id="tracker" aria-label="Goals" data-i18n-attr="aria-label:shell.html.goals"></aside>
 
-    <section class="hud-tr" aria-label="Treasury">
-      <button class="pill pill-coins" id="hud-coins-pill" type="button" data-tip="Farm treasury (shared). Open the Market">
+    <section class="hud-tr" aria-label="Treasury" data-i18n-attr="aria-label:shell.html.treasury">
+      <button class="pill pill-coins" id="hud-coins-pill" type="button" data-tip="Farm treasury (shared). Open the Market" data-i18n-attr="data-tip:shell.html.coinsTip">
         <img class="icon" src="/assets/icons/coins.png" alt="" width="50" height="50" draggable="false">
-        <span class="num" id="hud-coins">0</span><span class="sr-only"> coins</span>
+        <span class="num" id="hud-coins">0</span><span class="sr-only" data-i18n="shell.html.coinsSr"> coins</span>
         <span class="more" aria-hidden="true">+</span>
       </button>
-      <button class="pill pill-acorns" id="hud-acorns-pill" type="button" data-tip="Acorns (shared). Rare treats for special things">
+      <button class="pill pill-acorns" id="hud-acorns-pill" type="button" data-tip="Acorns (shared). Rare treats for special things" data-i18n-attr="data-tip:shell.html.acornsTip">
         <img class="icon" src="/assets/icons/acorns.png" alt="" width="50" height="50" draggable="false">
-        <span class="num" id="hud-acorns">0</span><span class="sr-only"> acorns</span>
+        <span class="num" id="hud-acorns">0</span><span class="sr-only" data-i18n="shell.html.acornsSr"> acorns</span>
       </button>
-      <button class="pill pill-hearts" id="hud-hearts-pill" type="button" data-tip="Your hearts (personal): earned by playing together">
+      <button class="pill pill-hearts" id="hud-hearts-pill" type="button" data-tip="Your hearts (personal): earned by playing together" data-i18n-attr="data-tip:shell.html.heartsTip">
         <img class="icon" src="/assets/icons/hearts.png" alt="" width="50" height="50" draggable="false">
-        <span class="num" id="hud-hearts">0</span><span class="sr-only"> hearts</span>
+        <span class="num" id="hud-hearts">0</span><span class="sr-only" data-i18n="shell.html.heartsSr"> hearts</span>
       </button>
-      <button class="pill pill-barn" id="hud-barn-pill" type="button" data-tip="The Barn (I)">
+      <button class="pill pill-barn" id="hud-barn-pill" type="button" data-tip="The Barn (I)" data-i18n-attr="data-tip:shell.html.barnTip">
         <img class="icon" src="/assets/icons/barn.png" alt="" width="50" height="50" draggable="false">
-        <span class="num"><span id="hud-barn">0</span><span class="cap" id="hud-barn-cap"></span></span><span class="sr-only"> items in the barn</span>
+        <span class="num"><span id="hud-barn">0</span><span class="cap" id="hud-barn-cap"></span></span><span class="sr-only" data-i18n="shell.html.barnSr"> items in the barn</span>
         <span class="more" aria-hidden="true">+</span>
       </button>
     </section>
 
-    <nav class="hud-right" id="hud-right" aria-label="View"></nav>
+    <nav class="hud-right" id="hud-right" aria-label="View" data-i18n-attr="aria-label:shell.html.view"></nav>
 
-    <section class="hud-bl" aria-label="Together">
-      <ol class="feed" id="feed" aria-label="Activity" aria-live="polite"></ol>
+    <section class="hud-bl" aria-label="Together" data-i18n-attr="aria-label:shell.html.together">
+      <ol class="feed" id="feed" aria-label="Activity" data-i18n-attr="aria-label:shell.html.activity" aria-live="polite"></ol>
       <div class="social" id="social"></div>
     </section>
 
     <div class="tray-wrap" id="tray-wrap">
       <div class="coach-slot" id="coach-slot"></div>
-      <div class="seed-tray paper" id="seed-tray" role="listbox" aria-label="Seeds" hidden></div>
-      <div class="seed-tray build-tray paper" id="build-tray" role="menu" aria-label="Build" hidden></div>
+      <div class="seed-tray paper" id="seed-tray" role="listbox" aria-label="Seeds" data-i18n-attr="aria-label:shell.html.seeds" hidden></div>
+      <div class="seed-tray build-tray paper" id="build-tray" role="menu" aria-label="Build" data-i18n-attr="aria-label:shell.html.build" hidden></div>
       <div class="stroke-chip" id="stroke-chip" role="status" hidden></div>
-      <nav class="toolbar wood" id="toolbar" aria-label="Tools"></nav>
+      <nav class="toolbar wood" id="toolbar" aria-label="Tools" data-i18n-attr="aria-label:shell.html.tools"></nav>
     </div>
 
-    <nav class="dock wood" id="dock" aria-label="Farm menus"></nav>
+    <nav class="dock wood" id="dock" aria-label="Farm menus" data-i18n-attr="aria-label:shell.html.menus"></nav>
 
     <div class="conn" id="conn" role="status" aria-live="polite"></div>
     <div class="toasts" id="toasts" role="status" aria-live="polite"></div>
@@ -135,8 +137,43 @@
       <h1 class="boot-title"><picture><source srcset="/assets/art/logo.webp" type="image/webp">
         <img class="boot-logo" src="/assets/art/logo.png" alt="Harvest Hollow" width="1200" height="538"></picture></h1>
       <p class="boot-line" id="boot-line"><span class="spin" aria-hidden="true"></span><span id="boot-text">Waking up the farm…</span></p>
+      <!-- the language toggle (i18n): works before any module has loaded (the inline script below), remembered per device -->
+      <div class="lang-pick" role="group" aria-label="English / Български"><button type="button" class="lang-opt" data-lang="en" lang="en">English</button><span class="lang-dot" aria-hidden="true">·</span><button type="button" class="lang-opt" data-lang="bg" lang="bg">Български</button></div>
     </div>
   </section>
+  <!-- i18n boot (lane A): the language before main.js loads: the remembered choice, else the browser's (bg* -> Bulgarian).
+       It sets <html lang>, the boot line and the toggle; a tap stores the choice and tells i18n/core.js (event hh:pick-lang),
+       which switches the whole page once it is loaded. Keep the logic in step with i18n/core.js detectLang. -->
+  <script>
+    (function () {
+      var T = { en: 'Waking up the farm\u2026', bg: '\u0424\u0435\u0440\u043c\u0430\u0442\u0430 \u0441\u0435 \u0441\u044a\u0431\u0443\u0436\u0434\u0430\u2026' };
+      var L = '';
+      try { L = localStorage.getItem('hh.lang') || ''; } catch (e) { L = ''; }
+      if (L !== 'en' && L !== 'bg') {
+        var n = (navigator.languages && navigator.languages[0]) || navigator.language || '';
+        L = /^bg\b/i.test(n) ? 'bg' : 'en';
+      }
+      var opts = document.querySelectorAll('#boot .lang-opt');
+      function paint(l, text) {
+        document.documentElement.lang = l;
+        var t = document.getElementById('boot-text');
+        if (t && text) t.textContent = T[l];
+        for (var i = 0; i < opts.length; i++) opts[i].setAttribute('aria-pressed', String(opts[i].getAttribute('data-lang') === l));
+      }
+      paint(L, true);
+      // the home-screen app's description in the chosen language (the name stays "Harvest Hollow")
+      var mf = document.querySelector('link[rel="manifest"]');
+      if (mf && L === 'bg') mf.setAttribute('href', '/manifest.bg.webmanifest');
+      for (var i = 0; i < opts.length; i++) {
+        opts[i].addEventListener('click', function (e) {
+          var l = e.currentTarget.getAttribute('data-lang');
+          try { localStorage.setItem('hh.lang', l); } catch (err) { /* private window: this page only */ }
+          paint(l, !window.__hhLangLive);
+          window.dispatchEvent(new CustomEvent('hh:pick-lang', { detail: { lang: l } }));
+        });
+      }
+    })();
+  </script>
 
   <section class="modal-layer" id="slot-picker" role="dialog" aria-modal="true" aria-labelledby="slot-title" hidden>
     <!-- the same chimney smoke over the same painting (shell.css "welcome smoke") -->
@@ -149,14 +186,14 @@
       <h1 class="slot-title" id="slot-title"><picture><source srcset="/assets/art/logo-wide.webp" type="image/webp">
         <img class="slot-logo" src="/assets/art/logo-wide.png" alt="Harvest Hollow" width="1400" height="336"></picture></h1>
       <div class="slot-paper paper">
-        <p class="slot-sub" id="slot-sub">Who is playing on this screen?</p>
+        <p class="slot-sub" id="slot-sub" data-i18n="shell.slot.who">Who is playing on this screen?</p>
         <div class="slots" id="slot-list"></div>
         <p class="modal-error" id="slot-error" role="alert"></p>
       </div>
     </div>
   </section>
 
-  <noscript>Harvest Hollow needs JavaScript and WebGL2.</noscript>
+  <noscript>Harvest Hollow needs JavaScript and WebGL2. · Harvest Hollow има нужда от JavaScript и WebGL2.</noscript>
   <script type="module" src="/js/main.js"></script>
 </body>
 </html>

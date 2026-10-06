@@ -16,6 +16,8 @@
 //                plays on ('ok') instead of locking the couple out over a hash of files
 // A side that does not know its build hash (an older server, a page whose status fetch failed) skips that check.
 
+import { tn } from '../i18n/index.js';
+
 /**
  * @param {{ contentHash: string, buildHash?: string }} w   the welcome
  * @param {string | { content: string, build?: string | null }} local   this page's CONTENT_HASH (and build hash)
@@ -84,11 +86,8 @@ export function noteUnsaved(memo, u) {
 export function unsavedText(u) {
   const lost = u && Number.isFinite(u.lost) ? u.lost : 0;
   const unsure = u && Number.isFinite(u.unsure) ? u.unsure : 0;
-  if (lost > 0) {
-    const one = lost === 1;
-    return `${one ? 'One thing' : `${lost} things`} you did during the update ${one ? "wasn't" : "weren't"} saved. Please do ${one ? 'it' : 'them'} again.`;
-  }
-  if (unsure > 0) return `${unsure === 1 ? 'One thing' : `${unsure} things`} you did during the update may not have been saved. Please check the farm.`;
+  if (lost > 0) return tn('game.unsaved.lost', lost);
+  if (unsure > 0) return tn('game.unsaved.unsure', unsure);
   return null;
 }
 

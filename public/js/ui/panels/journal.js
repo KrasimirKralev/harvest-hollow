@@ -14,28 +14,28 @@ import { portrait, letterScene, rosette } from './art.js';
 import { iconUrl } from '../../render/icons.js';
 import { I } from './intents.js';
 import { CHAIN_FOCUS, chainArt } from '../chains.js';
+import { m1bFeedText, thankable, farmLine } from '../feed.js';
 import { albumTab } from './collections.js';
 import { albumUnlocked, liveSets } from '../../../../shared/rules/actions/album.js';
+import { t, tn, ctext, N, Q, nameEntry } from '../../i18n/index.js';
+
+/** A townsfolk name (a letter's giver) in the language in effect. */
+const npcName = (g) => (g ? (nameEntry(g.id, 'npcs') ? t('goals.tr.name', { x: N(g.id, 'npcs') }) : g.name) : null);
 
 const lazy = (f) => ({ type: () => f().type, args: () => f().args });
 
+/** The Journal's tabs; each label reads the language at access time (a getter: never spread these). */
 export const JOURNAL_TABS = Object.freeze([
-  { id: 'story', label: 'Letters', icon: 'mailbox' },
-  { id: 'week', label: 'This week', icon: 'cozy_winter_gift' },
-  { id: 'ribbons', label: 'Ribbons', icon: 'show_ribbon' },
-  { id: 'album', label: 'Album', icon: 'recipe_cards_display' },
-  { id: 'mastery', label: 'Mastery', icon: 'mastery_sign' },
-  { id: 'stats', label: 'Together', icon: 'hearts' },
-  { id: 'ledger', label: 'Ledger', icon: 'coins' },
-  { id: 'activity', label: 'Activity', icon: 'order_board' },
-]);
+  ['story', 'mailbox'], ['week', 'cozy_winter_gift'], ['ribbons', 'show_ribbon'], ['album', 'recipe_cards_display'],
+  ['mastery', 'mastery_sign'], ['stats', 'hearts'], ['ledger', 'coins'], ['activity', 'order_board'],
+].map(([id, ic]) => Object.freeze({ id, get label() { return t(`goals.j.tab.${id}`); }, icon: ic })));
 
 export const journalPanel = {
-  title: 'Journal',
+  get title() { return t('goals.j.title'); },
   icon: 'mailbox',
   size: 'full',
   hotkey: 'j',
-  dock: { label: 'Journal', icon: 'journal', order: 5, hint: 'Letters, ribbons and your week (J)' },
+  dock: { get label() { return t('goals.j.title'); }, icon: 'journal', order: 5, get hint() { return t('goals.j.dockHint'); } },
   // the Album tab shows from the collections level when a set plays in this build (ui-collect)
   tabs: (args, state) => JOURNAL_TABS.filter((t) => t.id !== 'album' || (liveSets().length > 0 && (!state || albumUnlocked(state)))),
   topics: ['quests', 'ribbons', 'daily', 'challenge', 'mastery', 'stats', 'ledger', 'feed', 'players', 'xp', 'inventory', 'wallet', 'album'],
@@ -101,14 +101,14 @@ function letterCard(ctx, kit, q, { compact = false } = {}) {
     t.done ? null : bar(t.have / Math.max(1, t.need), null, 'pn-thin pn-go'))));
   const extras = rewardPhrases(q.rewards);
   const foot = h('footer.pn-letter-foot',
-    h('div.pn-letter-pay', price({ coins: q.coins }), h('span.pn-xp', `+${fmt(q.xp)} XP`), ...extras.map((e) => pill(e))),
-    q.deliver && !q.finished ? kit.button({ label: 'Hand it in', glyph: 'check', cls: 'btn--sun pn-sm', ...lazy(() => I.deliverQuest(q.id)),
+    h('div.pn-letter-pay', price({ coins: q.coins }), h('span.pn-xp', t('goals.j.xp', { n: q.xp })), ...extras.map((e) => pill(e))),
+    q.deliver && !q.finished ? kit.button({ label: t('goals.j.handIn'), glyph: 'check', cls: 'btn--sun pn-sm', ...lazy(() => I.deliverQuest(q.id)),
       data: { deliver: q.id }, hint: () => ({ missing: q.tasks.filter((t) => t.verb === 'deliver' && !t.done).map((t) => ({ item: t.ref, n: t.need - t.have })) }) }) : null);
   const paper = h('div.pn-letter-paper',
     h('h4.pn-letter-title', q.title),
     L ? h('p.pn-letter-greet', L.greeting) : null,
     ...(compact ? [] : (L?.body ?? []).map((p) => h('p.pn-letter-body', p))),
-    L ? h('p.pn-letter-sign', `— ${L.signoff}`) : null,
+    L ? h('p.pn-letter-sign', t('goals.j.signoff', { s: L.signoff })) : null,
     q.finished ? h('p.pn-letter-done', svgIcon('check', 18), q.doneText) : tasks,
     q.finished ? null : foot);
   return h(`article.pn-letter${q.ready ? '.ready' : ''}${q.finished ? '.finished' : ''}`, { dataset: { quest: q.id } }, scene, paper);
@@ -120,10 +120,10 @@ function beatCard(ctx, kit, b) {
   const seen = beatSeen(st, ctx.store.pid, b.id);
   return h(`article.pn-letter.pn-beat${seen ? '' : '.unread'}`, { dataset: { beat: b.id } },
     h('div.pn-letter-scene', letterScene(b.art, iconUrl), b.from ? h('div.pn-letter-face', portrait(b.from, 64)) : null,
-      seen ? null : h('span.pn-letter-chain.pn-new-beat', 'New story')),
+      seen ? null : h('span.pn-letter-chain.pn-new-beat', t('goals.j.newStory'))),
     h('div.pn-letter-paper', h('h4.pn-letter-title', b.title), h('p.pn-letter-body.pn-beat-text', b.text),
-      seen ? h('p.pn-letter-done', svgIcon('heart', 18), 'Read · kept in the Journal')
-        : kit.button({ label: 'Read it together', glyph: 'heart', cls: 'pn-sm btn--stop', ...lazy(() => I.markSeen('beat', b.id)), data: { beat: b.id } })));
+      seen ? h('p.pn-letter-done', svgIcon('heart', 18), t('goals.j.beatRead'))
+        : kit.button({ label: t('goals.j.beatReadIt'), glyph: 'heart', cls: 'pn-sm btn--stop', ...lazy(() => I.markSeen('beat', b.id)), data: { beat: b.id } })));
 }
 
 function storyTab(body, ctx, kit) {
@@ -138,16 +138,22 @@ function storyTab(body, ctx, kit) {
   const up = kit.memo(wrap, sig, () => {
     const v = storyView(ctx.store.state, ctx.now());
     wrap.replaceChildren();
-    if (!v.active.length) wrap.append(empty(v.nextUp ? `No letters right now. ${v.nextUp.giver?.name ?? 'Someone'} writes again at level ${v.nextUp.level}.` : 'Every letter is answered. More come with the next levels.', 'note'));
+    if (!v.active.length) {
+      const who = npcName(v.nextUp?.giver);
+      wrap.append(empty(!v.nextUp ? t('goals.j.allAnswered') : who ? t('goals.j.noLetters', { who, n: v.nextUp.level })
+        : t('goals.j.noLetters.someone', { n: v.nextUp.level }), 'note'));
+    }
     wrap.append(h('div.pn-letters', ...v.active.map((q) => letterCard(ctx, kit, q))));
     if (v.nextUp && v.active.length) {
-      wrap.append(h('p.pn-next-letter', svgIcon('note', 22), `Next: “${v.nextUp.title}” from ${v.nextUp.giver?.name ?? 'a friend'} at level ${v.nextUp.level}.`));
+      const who = npcName(v.nextUp.giver);
+      wrap.append(h('p.pn-next-letter', svgIcon('note', 22), who ? t('goals.j.next', { title: v.nextUp.title, who, n: v.nextUp.level })
+        : t('goals.j.next.friend', { title: v.nextUp.title, n: v.nextUp.level })));
     }
     if (v.beats.length) {
-      wrap.append(h('h3.pn-h', h('span', 'Stories to keep')), h('div.pn-letters', ...v.beats.map((b) => beatCard(ctx, kit, b))));
+      wrap.append(h('h3.pn-h', h('span', t('goals.j.beats'))), h('div.pn-letters', ...v.beats.map((b) => beatCard(ctx, kit, b))));
     }
     if (v.done.length) {
-      wrap.append(h('h3.pn-h', h('span', 'Answered letters')), h('div.pn-envelopes', ...v.done.map((q) => h('button.pn-envelope', {
+      wrap.append(h('h3.pn-h', h('span', t('goals.j.answered'))), h('div.pn-envelopes', ...v.done.map((q) => h('button.pn-envelope', {
         type: 'button', 'aria-expanded': String(open === q.id), dataset: { key: `env-${q.id}` },
         on: { click: () => { open = open === q.id ? null : q.id; up(); } },
       }, q.giver ? portrait(q.giver, 34) : null, h('span', q.title)))));
@@ -169,9 +175,10 @@ function weekTab(body, ctx, kit) {
   const up = kit.memo(wrap, sig, () => {
     const st = ctx.store.state;
     const now = ctx.now();
-    wrap.replaceChildren(chainStrip('f', 'This week on the farm', { sub: 'A gift a day, the weekly streak, the Almanac and your challenge' }),
-      sideLetters(ctx, kit, 'week', 'Letters about the Barge and the Fair'),
-      giftBox(ctx, kit, giftView(st, now)), weeksBox(weeksView(st), levelOf(st)), almanacBox(ctx, kit, almanacView(st, ctx.store.pid)), challengeBox(ctx, challengeView(st)));
+    // replaceChildren() prints a null as the text "null": the boxes that have nothing to show return null
+    wrap.replaceChildren(...[chainStrip('f', t('goals.j.week.title'), { sub: t('goals.j.week.sub') }),
+      sideLetters(ctx, kit, 'week', t('goals.j.week.letters')),
+      giftBox(ctx, kit, giftView(st, now)), weeksBox(weeksView(st), levelOf(st)), almanacBox(ctx, kit, almanacView(st, ctx.store.pid)), challengeBox(ctx, challengeView(st))].filter(Boolean));
     kit.refresh();
   });
   up(true);
@@ -190,48 +197,48 @@ function box(title, ...children) { return h('section.pn-box', h('h3.pn-h', h('sp
 
 function giftBox(ctx, kit, g) {
   if (!g) return null;
-  if (!g.open) return box('Daily Gift', h('p.pn-locked-note', svgIcon('lock', 20), `A gift a day from level ${g.unlock}. Missing a day only pauses the calendar.`));
+  if (!g.open) return box(t('goals.j.gift.title'), h('p.pn-locked-note', svgIcon('lock', 20), t('goals.j.gift.locked', { n: g.unlock })));
   const grid = h('div.pn-cal', ...g.days.map((d) => h(`div.pn-cal-day${d.done ? '.done' : ''}${d.today ? '.today' : ''}${d.acorns ? '.big' : ''}`,
-    { title: `Day ${d.day}` }, h('small', d.day),
+    { title: t('goals.j.gift.day', { n: d.day }) }, h('small', d.day),
     d.acorns ? icon('acorns', { size: 26 }) : d.decor ? icon('picnic_table', { size: 26 }) : d.compost ? icon('compost', { size: 26 }) : icon('coins', { size: 24 }),
-    d.done ? h('span.pn-stamp', { 'aria-label': 'claimed' }, '✓') : null)));
+    d.done ? h('span.pn-stamp', { 'aria-label': t('goals.j.gift.claimedAria') }, '✓') : null)));
   const r = g.reward;
   const parts = [];
   if (r) {
-    if (r.coins) parts.push(`${fmt(r.coins)} coins`);
-    if (r.acorns) parts.push(`${r.acorns} Acorns`);
-    for (const [it, n] of Object.entries(r.items ?? {})) parts.push(`${n} ${itemOf(it)?.name ?? it}`);
-    if (r.decor) parts.push('a decor gift');
+    if (r.coins) parts.push(t('goals.j.gift.coins', { n: r.coins }));
+    if (r.acorns) parts.push(t('goals.j.gift.acorns', { n: r.acorns }));
+    for (const [it, n] of Object.entries(r.items ?? {})) parts.push(t('goals.j.gift.item', { n, _name: itemOf(it)?.name ?? it, q: itemOf(it) ? Q(it, n, 'items') : `${n} ${it}` }));
+    if (r.decor) parts.push(t('goals.j.gift.decor'));
   }
-  return box('Daily Gift', grid, h('div.pn-gift-foot',
-    h('p', g.claimed ? 'Today\'s gift is open. See you tomorrow!' : `Day ${g.next}: ${parts.join(' + ') || 'a gift'}.`),
-    g.claimed ? pill('Claimed', 'pn-owned') : kit.button({ label: 'Open today\'s gift', glyph: 'star', cls: 'btn--sun', ...lazy(() => I.claimGift()), data: { gift: 'claim' } })));
+  return box(t('goals.j.gift.title'), grid, h('div.pn-gift-foot',
+    h('p', g.claimed ? t('goals.j.gift.open') : t('goals.j.gift.next', { n: g.next, what: parts.join(' + ') || t('goals.j.gift.aGift') })),
+    g.claimed ? pill(t('goals.j.gift.claimed'), 'pn-owned') : kit.button({ label: t('goals.j.gift.claim'), glyph: 'star', cls: 'btn--sun', ...lazy(() => I.claimGift()), data: { gift: 'claim' } })));
 }
 
 function weeksBox(w, level) {
   if (!w) return null;
-  if (level < w.unlock) return box('Farm Weeks', h('p.pn-locked-note', svgIcon('lock', 20), `The weekly streak starts at level ${w.unlock}.`));
+  if (level < w.unlock) return box(t('goals.j.weeks.title'), h('p.pn-locked-note', svgIcon('lock', 20), t('goals.j.weeks.locked', { n: w.unlock })));
   const dots = h('div.pn-weekdays', ...Array.from({ length: w.minDays }, (_, i) => h(`span.pn-weekday${i < w.days ? '.on' : ''}`)));
-  return box('Farm Weeks',
-    h('div.pn-streak', h('b.pn-streak-n', fmt(w.streak)), h('div', h('b', w.streak === 1 ? 'week in a row' : 'weeks in a row'),
-      h('span', `Best ${fmt(w.best)} · ${w.skips ? `${w.skips} skip week${w.skips > 1 ? 's' : ''} saved` : 'no skip weeks saved yet'}`))),
-    h('div.pn-week-now', h('span', 'This week:'), dots, h('small', w.days >= w.minDays ? 'counted!' : `play on ${w.minDays} days to count it`)),
-    w.next ? h('p.pn-hint', `At ${w.next} weeks the farm-gate signpost gets an upgrade.`) : null);
+  return box(t('goals.j.weeks.title'),
+    h('div.pn-streak', h('b.pn-streak-n', fmt(w.streak)), h('div', h('b', tn('goals.j.weeks.inRow', w.streak)),
+      h('span', w.skips ? tn('goals.j.weeks.best.skips', w.skips, { best: w.best }) : t('goals.j.weeks.best', { best: w.best })))),
+    h('div.pn-week-now', h('span', t('goals.j.weeks.now')), dots, h('small', w.days >= w.minDays ? t('goals.j.weeks.counted') : t('goals.j.weeks.playOn', { n: w.minDays }))),
+    w.next ? h('p.pn-hint', t('goals.j.weeks.next', { n: w.next })) : null);
 }
 
 function almanacBox(ctx, kit, a) {
-  if (!a.open) return box('Daily Almanac', h('p.pn-locked-note', svgIcon('lock', 20), `Four little tasks each day, plus one together, from level ${a.unlock}.`));
+  if (!a.open) return box(t('goals.j.alm.title'), h('p.pn-locked-note', svgIcon('lock', 20), t('goals.j.alm.locked', { n: a.unlock })));
   const st = ctx.store.state;
   // one task at a time (QA2 RC-12): the live one is highlighted, the others say they come next
   const list = h('ul.pn-almanac', ...a.tasks.map((t) => h(`li.pn-alm${t.n >= t.qty ? '.done' : t.live ? '.live' : '.waiting'}`,
     h('span.pn-task-box', t.n >= t.qty ? '✓' : ''),
-    taskLine({ line: t.line, verb: t.verb, ref: t.ref, done: t.n >= t.qty }), h('span.pn-task-n', t.n >= t.qty || t.live ? `${fmt(Math.min(t.n, t.qty))}/${fmt(t.qty)}` : 'next'),
-    t.n >= t.qty ? null : kit.button({ label: '↻', cls: 'pn-xs pn-ghost', title: 'Swap for another task (one free a day)', ...lazy(() => I.rerollTask(t.slot)),
-      data: { reroll: String(t.slot) }, hint: { done: 'Already swapped today' } }))));
+    taskLine({ line: t.line, verb: t.verb, ref: t.ref, done: t.n >= t.qty }), h('span.pn-task-n', t.n >= t.qty || t.live ? `${fmt(Math.min(t.n, t.qty))}/${fmt(t.qty)}` : tr('goals.j.alm.next')),
+    t.n >= t.qty ? null : kit.button({ label: '↻', cls: 'pn-xs pn-ghost', title: tr('goals.j.alm.swap'), ...lazy(() => I.rerollTask(t.slot)),
+      data: { reroll: String(t.slot) }, hint: { done: tr('goals.j.alm.swapped') } }))));
   const tg = a.together;
-  const tgBox = tg ? h('div.pn-together', h('b', svgIcon('heart', 20), 'Together: ', tg.text),
-    splitBar(st, tg.by, tg.qty, tg.n), h('small', tg.done ? 'Done! Hearts for both of you.' : `${fmt(tg.n)}/${fmt(tg.qty)} · ${tg.hearts} Hearts each and Compost when done`)) : null;
-  return box('Daily Almanac', h('p.pn-hint', `One task at a time: finish the highlighted one and the next opens. The first ${a.paidMax} each day pay coins and XP (${fmt(a.paid)}/${a.paidMax} today).`), list, tgBox);
+  const tgBox = tg ? h('div.pn-together', h('b', svgIcon('heart', 20), t('goals.j.alm.together', { text: tg.text })),
+    splitBar(st, tg.by, tg.qty, tg.n), h('small', tg.done ? t('goals.j.alm.togetherDone') : t('goals.j.alm.togetherLeft', { have: tg.n, need: tg.qty, n: tg.hearts }))) : null;
+  return box(t('goals.j.alm.title'), h('p.pn-hint', t('goals.j.alm.hint', { max: a.paidMax, paid: a.paid })), list, tgBox);
 }
 
 /** A shared progress bar with each player's part in their colour (never colour alone: names in the title). */
@@ -249,13 +256,13 @@ function splitBar(st, by, total, n) {
 }
 
 function challengeBox(ctx, c) {
-  if (!c.open) return box('Couple Challenge', chainStrip('g', 'Once a week, together'), h('p.pn-locked-note', svgIcon('lock', 20), `A goal for the two of you each week, starting the first Monday after level ${c.unlock}.`));
-  if (!c.cur) return box('Couple Challenge', h('p.pn-hint', 'The first challenge starts on Monday.'));
+  if (!c.open) return box(t('goals.j.ch.title'), chainStrip('g', t('goals.j.ch.strip')), h('p.pn-locked-note', svgIcon('lock', 20), t('goals.j.ch.locked', { n: c.unlock })));
+  if (!c.cur) return box(t('goals.j.ch.title'), h('p.pn-hint', t('goals.j.ch.monday')));
   const st = ctx.store.state;
   const legend = h('div.pn-legend', ...Object.keys(st.players).sort().map((p) => h('span', who(st, p, { me: ctx.store.pid }), ` ${fmt(c.cur.by[p] ?? 0)}`)));
-  return box('Couple Challenge', chainStrip('g', c.cur.text),
+  return box(t('goals.j.ch.title'), chainStrip('g', c.cur.text),
     splitBar(st, c.cur.by, c.cur.target, c.cur.n), legend,
-    h('p.pn-hint', c.cur.finished ? 'Done this week! Well played, you two.' : `Reward: ${COUPLE_CHALLENGE.reward.acorns} Acorns, a decor piece and ${COUPLE_CHALLENGE.reward.hearts} Hearts each.`));
+    h('p.pn-hint', c.cur.finished ? t('goals.j.ch.done') : t('goals.j.ch.reward', { a: COUPLE_CHALLENGE.reward.acorns, n: COUPLE_CHALLENGE.reward.hearts })));
 }
 
 // ---- ribbons -----------------------------------------------------------------------------------------------------
@@ -273,35 +280,43 @@ function ribbonsTab(body, ctx, kit) {
     const earned = rows.filter((r) => !r.hidden && r.tier > 0).length;
     wrap.replaceChildren(
       h('div.pn-ribhead',
-        h('div.pn-ribstat', h('b', fmt(earned)), h('span', 'ribbons earned')),
-        h('div.pn-ribstat', h('b', fmt(wall.points)), h('span', 'Ribbon Points')),
-        h('div.pn-ribwall', ...wall.tiers.map((t) => h(`span.pn-wall${t.open ? '.open' : ''}`, { title: `${t.points} points: ${t.name}` }, t.open ? '✓ ' : '', t.name)),
-          ctx.ui.panels.has('ribbonwall') ? h('button.pn-chipbtn', { type: 'button', on: { click: () => ctx.open('ribbonwall') } }, 'See the Ribbon Wall') : null),
-        titles.options.length ? h('label.pn-titlepick', 'Your title: ', h('select.pn-input', {
+        h('div.pn-ribstat', h('b', fmt(earned)), h('span', tr('goals.j.rib.earned'))),
+        h('div.pn-ribstat', h('b', fmt(wall.points)), h('span', tr('goals.j.rib.points'))),
+        h('div.pn-ribwall', ...wall.tiers.map((w) => {
+          const name = ctext('RIBBON_WALL', w.unlock, 'name', w.name);
+          return h(`span.pn-wall${w.open ? '.open' : ''}`, { title: tr('goals.j.rib.wallTier', { n: w.points, name }) }, w.open ? '✓ ' : '', name);
+        }),
+        ctx.ui.panels.has('ribbonwall') ? h('button.pn-chipbtn', { type: 'button', on: { click: () => ctx.open('ribbonwall') } }, tr('goals.j.rib.seeWall')) : null),
+        titles.options.length ? h('label.pn-titlepick', tr('goals.j.rib.titleLabel'), h('select.pn-input', {
           on: { change: (e) => { const it = I.titlePick(e.target.value || undefined); ctx.act(it.type, it.args); } } },
         h('option', { value: '', selected: titles.worn === null }, titles.levelTitle),
-        ...titles.options.map((o) => h('option', { value: o.id, selected: titles.worn === o.id }, o.title)))) : h('span.pn-hint', `Your title: ${titles.levelTitle}`)),
-      h('div.pn-filters', ...[['all', 'All'], ['F', 'Farm'], ['P', 'Yours'], ['T', 'Together']].map(([id, label]) => h('button.pn-chipbtn', {
-        type: 'button', 'aria-pressed': String(filter === id), dataset: { key: `rf-${id}` }, on: { click: () => { filter = id; up(); } } }, label))),
+        ...titles.options.map((o) => h('option', { value: o.id, selected: titles.worn === o.id }, o.title)))) : h('span.pn-hint', tr('goals.j.rib.title', { title: titles.levelTitle }))),
+      h('div.pn-filters', ...['all', 'F', 'P', 'T'].map((id) => h('button.pn-chipbtn', {
+        type: 'button', 'aria-pressed': String(filter === id), dataset: { key: `rf-${id}` }, on: { click: () => { filter = id; up(); } } },
+      tr(id === 'all' ? 'goals.j.rib.all' : `goals.j.scope.${id}`)))),
       h('div.pn-ribbons', ...rows.filter((r) => filter === 'all' || r.scope === filter).map((r) => ribbonCard(st, r, ctx))));
   });
   up(true);
   return () => up();
 }
 
-const TIER_NAMES = ['Not yet', 'Bronze', 'Silver', 'Gold'];
+/** A ribbon tier's name: 0 Not yet, 1 Bronze, 2 Silver, 3 Gold. */
+const tierName = (k) => (k >= 0 && k <= 3 ? t(`goals.j.rib.tier.${k}`) : '');
+/** t() under a name that a local `t` (a tier, a task) never shadows. */
+const tr = (key, params) => t(key, params);
 
 function ribbonCard(st, r, ctx) {
-  if (r.hidden) return h('article.pn-rib.secret', rosette(0, 56, '?'), h('h4', 'A secret ribbon'), h('p', 'Revealed when you earn it.'));
-  const reward = r.reward ? [r.reward.acorns ? `${r.reward.acorns} Acorn${r.reward.acorns > 1 ? 's' : ''}` : null, r.reward.hearts ? `${r.reward.hearts} Hearts` : null, r.reward.decor ? 'a decor piece' : null, r.reward.title ? 'a title' : null].filter(Boolean).join(', ') : '';
+  if (r.hidden) return h('article.pn-rib.secret', rosette(0, 56, '?'), h('h4', t('goals.j.rib.secret')), h('p', t('goals.j.rib.secretSub')));
+  const reward = r.reward ? [r.reward.acorns ? tn('goals.j.reward.acorns', r.reward.acorns) : null, r.reward.hearts ? t('goals.j.rib.hearts', { n: r.reward.hearts }) : null,
+    r.reward.decor ? t('goals.j.rib.decor') : null, r.reward.title ? t('goals.j.rib.aTitle') : null].filter(Boolean).join(', ') : '';
   return h(`article.pn-rib.t${r.tier}`, { dataset: { ribbon: r.id } },
-    rosette(r.tier, 60, r.tier ? ['', 'B', 'S', 'G'][r.tier] : ''),
+    rosette(r.tier, 60, r.tier ? t(`collect.wall.letter.${r.tier}`) : ''),
     h('div.pn-rib-main',
       h('div.pn-rib-top', h('h4', r.name), pill(r.scopeLabel, r.scope === 'T' ? 'pn-warn' : r.scope === 'P' ? 'pn-owned' : '')),
       h('p', r.text),
       r.next !== null ? [bar(r.pct, `${fmt(r.value)} / ${fmt(r.next)}`, r.tier >= 2 ? '' : 'pn-go'),
-        h('small', `${TIER_NAMES[r.tier + 1] ?? ''} next${reward ? ` · ${reward}` : ''}`)]
-        : h('small.pn-rib-done', 'Every tier earned!'),
+        h('small', reward ? t('goals.j.rib.nextReward', { tier: tierName(r.tier + 1), reward }) : t('goals.j.rib.next', { tier: tierName(r.tier + 1) }))]
+        : h('small.pn-rib-done', t('goals.j.rib.allTiers')),
       r.together ? h('div.pn-legend', ...r.together.map((x) => h('span', who(st, x.pid, { me: ctx.store.pid }), ` ${fmt(x.n)}`))) : null));
 }
 
@@ -312,13 +327,11 @@ function masteryTab(body, ctx, kit) {
   body.append(wrap);
   const up = kit.memo(wrap, () => masteryBook(ctx.store.state), () => {
     const b = masteryBook(ctx.store.state);
-    wrap.replaceChildren(h('p.pn-intro', b.open
-      ? 'Make the same thing often and it earns stars: ★1 sells for 5 % more, ★2 is 10 % faster, ★3 brings bonus units. Both of you count.'
-      : `Mastery stars start at level ${b.unlock}. Everything you grow, raise and craft already counts toward them.`));
+    wrap.replaceChildren(h('p.pn-intro', b.open ? t('goals.j.mastery.intro') : t('goals.j.mastery.locked', { n: b.unlock })));
     for (const f of b.families) {
       if (!f.rows.length) continue;
       wrap.append(h('section.pn-section', h('h3.pn-h', h('span', f.label)), h('div.pn-mastery', ...f.rows.map((r) => h(`div.pn-mast-tile${r.stars >= 3 ? '.top' : ''}`,
-        { title: r.next ? `${fmt(r.count)} ${r.unit} · ★${r.stars + 1} at ${fmt(r.next)}` : `${fmt(r.count)} ${r.unit} · all stars` },
+        { title: r.next ? t(`goals.j.mastery.${r.unit}.next`, { n: r.count, star: r.stars + 1, at: r.next }) : t(`goals.j.mastery.${r.unit}.all`, { n: r.count }) },
         icon(r.id, { size: 44 }), h('b', r.name), stars(r.stars), bar(r.pct, null, 'pn-thin'), h('small', r.next ? `${fmt(r.count)}/${fmt(r.next)}` : `${fmt(r.count)} ★`))))));
     }
   });
@@ -335,16 +348,16 @@ function statsTab(body, ctx, kit) {
     const st = ctx.store.state;
     const v = statsView(st);
     wrap.replaceChildren(
-      chainStrip('h', v.players.map((p) => p.name).join(' & ') || 'The two of you', { sub: 'Everything the two of you did on this farm' }),
-      sideLetters(ctx, kit, 'together', 'Letters for the two of you'),
+      chainStrip('h', (v.players.length === 2 ? t('goals.j.stats.pair', { a: v.players[0].name, b: v.players[1].name }) : v.players.map((p) => p.name).join(' & ')) || t('goals.j.stats.twoOfYou'), { sub: t('goals.j.stats.sub') }),
+      sideLetters(ctx, kit, 'together', t('goals.j.stats.letters')) ?? '', // a null child would print "null"
       h('div.pn-cards2', ...v.players.map((p) => h('div.pn-person', { style: { '--who': p.color }, dataset: { slot: p.pid ?? '' } },
         h('span.pn-person-dot', p.name.slice(0, 1).toUpperCase()),
-        h('div', h('b', p.name), h('span', p.title), h('small', `Personal level ${p.level} · ${fmt(p.hearts)} Hearts`))))),
-      h('h3.pn-h', h('span', 'Together we…')),
+        h('div', h('b', p.name), h('span', p.title), h('small', t('goals.j.stats.person', { level: p.level, n: p.hearts })))))),
+      h('h3.pn-h', h('span', t('goals.j.stats.we'))),
       h('div.pn-statrows', ...v.rows.map((r) => h('div.pn-statrow', icon(r.icon, { size: 36 }),
         h('b.pn-stat-n', fmt(r.n)), h('span', r.label),
         r.by && r.by.some((x) => x.n > 0) ? splitBar(st, Object.fromEntries(r.by.map((x) => [x.pid, x.n])), Math.max(1, r.by.reduce((s, x) => s + x.n, 0)), 0) : null))),
-      h('p.pn-hint', 'Farm level, coins and the Barn are shared; personal levels are just for fun and never shown on the portraits.'));
+      h('p.pn-hint', t('goals.j.stats.hint')));
     kit.refresh();
   });
   up(true);
@@ -364,12 +377,13 @@ function ledgerTab(body, ctx, kit) {
     const inn = week.filter((r) => r.coins > 0).reduce((s, r) => s + r.coins, 0);
     const out = week.filter((r) => r.coins < 0).reduce((s, r) => s - r.coins, 0);
     wrap.replaceChildren(
-      h('div.pn-ledger-sum', h('div', h('span', 'Together this week we earned'), h('b.pn-in', `+${fmt(inn)}`)),
-        h('div', h('span', 'and put to work'), h('b.pn-out', `−${fmt(out)}`)), h('div', h('span', 'Treasury now'), h('b', fmt(st.farm.wallet.coins)))),
-      rows.length ? h('table.pn-ledger', h('thead', h('tr', h('th', 'When'), h('th', 'Who'), h('th', 'What'), h('th.num', 'Coins'))),
+      h('div.pn-ledger-sum', h('div', h('span', t('goals.j.ledger.earned')), h('b.pn-in', `+${fmt(inn)}`)),
+        h('div', h('span', t('goals.j.ledger.spent')), h('b.pn-out', `−${fmt(out)}`)), h('div', h('span', t('goals.j.ledger.now')), h('b', fmt(st.farm.wallet.coins)))),
+      rows.length ? h('table.pn-ledger', h('thead', h('tr', h('th', t('goals.j.ledger.when')), h('th', t('goals.j.ledger.who')), h('th', t('goals.j.ledger.what')),
+        h('th.num', t('goals.j.ledger.coins')))),
         h('tbody', ...rows.map((r) => h('tr', h('td', ago(ctx.now() - r.at)), h('td', who(st, r.by, { me: ctx.store.pid })), h('td', r.text, r.count > 1 ? h('span.pn-times', ` ×${fmt(r.count)}`) : null),
           h(`td.num${r.coins >= 0 ? '.pn-in' : '.pn-out'}`, `${r.coins >= 0 ? '+' : '−'}${fmt(Math.abs(r.coins))}`)))))
-        : empty('No coins have moved yet.', 'coin'));
+        : empty(t('goals.j.ledger.empty'), 'coin'));
   });
   up(true);
   return () => up();
@@ -385,7 +399,7 @@ function activityTab(body, ctx, kit) {
     const rows = feedView(st, 60);
     // Owner request 2026-10-04: one button thanks every partner line not thanked yet (same per-line action, so the
     // rules' daily Heart cap still applies).
-    const unthanked = rows.filter(({ row }) => row.by !== ctx.store.pid && row.by !== 'sys' && st.players[row.by] && !row.ty);
+    const unthanked = rows.filter(({ row }) => thankable(row, st, ctx.store.pid));
     // every line is thanked, but only the daily cap of them pays Hearts: say how many are still to give (PT-05)
     const day = dayOf(st, ctx.now());
     const max = COOP.thanks?.maxReceivedPerDay ?? Infinity;
@@ -393,18 +407,22 @@ function activityTab(body, ctx, kit) {
       .reduce((n, q) => n + Math.max(0, Math.min(unthanked.filter(({ row }) => row.by === q).length * (COOP.thanks?.hearts ?? 1),
         max - capUsed(st, q, 'thanksIn', day))), 0);
     const thankAll = unthanked.length ? h('div.pn-thankall', { style: { display: 'flex', justifyContent: 'flex-end', margin: '0 0 10px' } },
-      h('button.pn-thanks', { type: 'button', title: `Thank every one of these (${unthanked.length}); ${heartsLeft ? `${heartsLeft} Heart${heartsLeft === 1 ? '' : 's'} still to give today` : 'no Hearts left to give today'}`,
-        on: { click: () => { for (const { i } of unthanked) { const it = I.thank(i); ctx.act(it.type, it.args); } } } },
-      `♥ Thank all (${unthanked.length})${Number.isFinite(max) ? ` · +${heartsLeft} ♥` : ''}`)) : null;
+      h('button.pn-thanks', { type: 'button', title: heartsLeft ? tn('goals.j.act.allTitle', heartsLeft, { all: unthanked.length })
+        : t('goals.j.act.allTitleNone', { all: unthanked.length }),
+      on: { click: () => { for (const { i } of unthanked) { const it = I.thank(i); ctx.act(it.type, it.args); } } } },
+      Number.isFinite(max) ? t('goals.j.act.allHearts', { all: unthanked.length, n: heartsLeft }) : t('goals.j.act.all', { all: unthanked.length }))) : null;
     wrap.replaceChildren(...(thankAll ? [thankAll] : []), rows.length ? h('ul.pn-activity', ...rows.map(({ i, row }) => {
       const mine = row.by === ctx.store.pid;
       const thanked = Boolean(row.ty);
       return h('li.pn-feedrow', { style: { '--who': st.players[row.by]?.color ?? '#B9A27A' } },
-        h('span.pn-feed-bar'), h('div', h('span', who(st, row.by, { me: ctx.store.pid }), ' ', feedText(row)), h('small', ago(ctx.now() - row.at))),
-        mine || row.by === 'sys' || !st.players[row.by] ? null
-          : h('button.pn-thanks', { type: 'button', disabled: thanked, 'aria-pressed': String(thanked), title: thanked ? 'Thanked' : `Thank ${st.players[row.by].name} (+1 Heart for them)`,
-            on: { click: () => { const it = I.thank(i); ctx.act(it.type, it.args); } } }, thanked ? '♥ Thanked' : '♥ Thanks'));
-    })) : empty('Nothing has happened yet. Go make some memories!', 'heart'));
+        // a farm-level line ("Големият панаир: …") is its own subject: no "The farm" in front of it
+        h('span.pn-feed-bar'), h('div', h('span', ...(m1bFeedText(row)?.sys ? [] : [who(st, row.by, { me: ctx.store.pid }), ' ']), feedText(row)), h('small', ago(ctx.now() - row.at))),
+        // a farm-level line names nobody: no thanks for it (the HUD feed agrees: feed.js thankable)
+        mine || row.by === 'sys' || !st.players[row.by] || farmLine(row) ? null
+          : h('button.pn-thanks', { type: 'button', disabled: thanked, 'aria-pressed': String(thanked),
+            title: thanked ? t('goals.j.act.thanked') : t('goals.j.act.thankOne', { name: st.players[row.by].name }),
+            on: { click: () => { const it = I.thank(i); ctx.act(it.type, it.args); } } }, thanked ? t('goals.j.act.thankedBtn') : t('feed.thank.btn')));
+    })) : empty(t('goals.j.act.empty'), 'heart'));
   });
   up(true);
   return () => up();

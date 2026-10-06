@@ -453,8 +453,8 @@ test('retention: the sweep deletes farms nobody visited for 7 days; visited and 
     s.reg.rec(fresh.id).leaseUntil = 0;
     assert.equal(await s.reg.sweep(Date.now() + 8 * DAY), 2, 'unloaded first, then deleted');
     assert.equal(s.reg.count, 0);
-    // the dev route runs the same sweep
-    assert.deepEqual((await post(s.base, '/api/dev/sweep', { body: {} })).body, { ok: true, deleted: 0 });
+    // the dev route runs the same sweep (with the ideas' and privacy requests' year: server/ideas.js)
+    assert.deepEqual((await post(s.base, '/api/dev/sweep', { body: {} })).body, { ok: true, deleted: 0, expired: [{ ideas: 0, requests: 0 }] });
   } finally {
     await s.close();
   }

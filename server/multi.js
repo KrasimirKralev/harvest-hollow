@@ -3,17 +3,36 @@
 // demand). Single mode (the default) never loads this file.
 //
 // Pages:  GET /                      public/landing.html (start a farm, this device's farms)
+//         GET /privacy               public/privacy.html (what is kept and why, EN and BG; the privacy request form)
 //         GET /f/:id[/]              the game page, exactly as a single-farm server serves / (holds no farm data)
+//         GET /f/:id/manifest.webmanifest   the farm's home-screen manifest WITHOUT any key (start_url /f/<id>): what an
+//                                    Android home-screen app needs (it shares the browser's storage). A device that keeps
+//                                    a home-screen app's storage apart (iOS) gets a client-built one with the key in the
+//                                    start URL's fragment instead (public/js/ui/farm-gate.js installFarmManifest)
 // API:    GET  /api/status            global health: farm counts, no ids
+//         GET  /api/stars             { stars: n | null }: the GitHub star count, fetched by this server (server/stars.js)
 //         POST /api/farms             -> 201 { id, secret } | 429 { error: 'RATE', retryAfter } | 503 { error: 'FULL' }
-//         GET  /api/f/:id/status      -> { ok, id, buildHash, ttlDays, slots, full, invite?, member?, pid? } | 404
+//         GET  /api/f/:id/status      -> { ok, id, buildHash, ttlDays, slots, full, invite?, member?, pid?, waiting? } | 404
+//                                     (waiting, members only: { [pid]: { at, exp, by } } seats whose new key is unused)
 //         POST /api/f/:id/invite      Authorization: Bearer <secret> (or JSON { secret }) -> 201 { token, expiresAt }
 //                                     | 401/403 { error: 'AUTH' } | 404 | 409 { error: 'FULL' } | 429 { error: 'RATE' }
+//         POST /api/f/:id/rekey       Authorization: Bearer <member secret>, JSON { pid } (another farmer of the farm)
+//                                     -> 201 { pid, token, expiresAt }: that farmer's old keys stop working, the token is
+//                                     a one-time rejoin link /f/<id>?rejoin=<token> (7 days) | 401/403 { error: 'AUTH' }
+//                                     (also a rejoin or invite token: they mint nothing) | 400 { error: 'BAD_REQUEST' }
+//                                     | 404 | 429 { error: 'RATE' } (per address an hour, per farm a day)
+//         POST /api/f/:id/delete      Authorization: Bearer <member secret> -> { ok }: the farm is deleted at once (its
+//                                     folder, backups included); every open screen hears deny DELETED | 401/403 AUTH
+//                                     | 404 | 429 { error: 'RATE' } (HH_DELETE_PER_HOUR per address)
 //         /api/f/:id/dev/...          HH_DEV=1 + loopback only: warp, drop, save, unload; POST /api/dev/sweep
+//         POST /api/ideas, /api/admin/ideas[/:id]   players' ideas and their admin list (server/ideas.js)
+//         POST /api/privacy, /api/admin/privacy[/:id]   privacy requests from /privacy and their admin list (ideas.js)
 // Socket: /ws?farm=<id>              unknown farm 404, too many sockets or handshakes from one address 429 (at the upgrade)
 //
-// Keys never travel in a URL the server sees except the invite's own ?join= (it is in the link anyway); the
-// personal link's #k= is a fragment. No request logging; no key, hash or farm id in any log line.
+// Keys never travel in a URL the server sees except the single-use ?join= and ?rejoin= tokens (they are in the
+// link anyway; the client wipes them from the address bar once used); the personal link's #k= is a fragment. No
+// request logging; no key, hash or farm id in any log line, and no full client address (an abuse warning names the
+// /24 or /48 network only: ip-limits.js maskIp).
 import http from 'node:http';
 import express from 'express';
 import { WebSocketServer } from 'ws';
@@ -23,12 +42,17 @@ import { StaticFiles } from './static.js';
 import { mountAssets, devRouter, isLoopback } from './http.js';
 import { handleMessage } from './router.js';
 import { FarmRegistry, ID_RE, redactArg, redactLog } from './farms.js';
-import { WindowLimiter, Counter, clientIp } from './ip-limits.js';
+import { WindowLimiter, Counter, clientIp, maskIp } from './ip-limits.js';
 import { multiConfig } from './config.js';
+import { mountIdeas } from './ideas.js';
+import { StarCount } from './stars.js';
 import { isTimeZone } from '../shared/rules/calendar.js';
 import { LIMITS, PROTOCOL_VERSION } from '../shared/net/protocol.js';
 import { CONTENT_HASH } from '../shared/content/index.js';
 import { RULES_VERSION } from '../shared/rules/index.js';
+import { PLAYER_SLOTS } from '../shared/content/config.js';
+import fs from 'node:fs';
+import path from 'node:path';
 
 const NO_STORE = 'no-store';
 const KEY_RE = /^[A-Za-z0-9_-]{16,256}$/;
@@ -101,7 +125,12 @@ export function createMultiApp(hh) {
   const create = new WindowLimiter([[60 * 60_000, mc.createPerHour], [24 * 60 * 60_000, mc.createPerDay]]);
   const invites = new WindowLimiter([[60 * 60_000, 30]]);
   const lookups = new WindowLimiter([[60_000, 120]]);     // /api/f/:id/* per address: no id scanning
-  hh.limiters = [create, invites, lookups];
+  // new keys: per address (a guessed key is 256 bits, but nobody needs many) and per farm (two partners re-keying
+  // each other all day is a quarrel, not a lost phone)
+  const rekeys = new WindowLimiter([[60 * 60_000, mc.rekeyPerHour ?? 10]]);
+  const rekeysFarm = new WindowLimiter([[24 * 60 * 60_000, mc.rekeyPerFarmDay ?? 10]]);
+  const deletes = new WindowLimiter([[60 * 60_000, mc.deletePerHour ?? 10]]);
+  hh.limiters = [create, invites, lookups, rekeys, rekeysFarm, deletes];
   hh.lookups = lookups;                                   // the socket handshake counts too (server: verifyClient)
 
   const game = (req, res, next) => {
@@ -119,10 +148,45 @@ export function createMultiApp(hh) {
     return res.type('html').send(FALLBACK_LANDING);
   });
   app.get('/index.html', (_req, res) => res.redirect(302, '/'));
+  // the privacy note (public/privacy.html: English and Bulgarian, the privacy request form): multi mode only, since a
+  // self-hosted server keeps its data itself (the repo's PRIVACY.md says so)
+  app.get(['/privacy', '/privacy/'], (req, res, next) => {
+    let page = null;
+    try { page = hh.static.indexHtml('privacy.html'); } catch (err) { log.error('privacy.html could not be rendered', err); }
+    return page ? hh.static.sendPage(req, res, page) : next();
+  });
   app.get(['/f/:id', '/f/:id/'], (req, res, next) => (ID_RE.test(req.params.id) ? game(req, res, next) : res.status(404).type('text').send('Not found')));
+  // any well-formed id gets one (no existence leak), and never a key: see the header
+  // ?lang=bg: the Bulgarian description (public/manifest.bg.webmanifest), the device's language (ui/farm-gate.js)
+  const baseManifests = new Map();
+  app.get('/f/:id/manifest.webmanifest', (req, res) => {
+    if (!ID_RE.test(req.params.id)) return res.status(404).type('text').send('Not found');
+    const file = req.query.lang === 'bg' ? 'manifest.bg.webmanifest' : 'manifest.webmanifest';
+    let baseManifest = baseManifests.get(file);
+    try {
+      baseManifest ??= JSON.parse(fs.readFileSync(path.join(cfg.root, 'public', file), 'utf8'));
+      baseManifests.set(file, baseManifest);
+    } catch (err) {
+      log.error(`${file} could not be read`, redactArg(err));
+      return res.status(404).type('text').send('Not found');
+    }
+    const at = `/f/${req.params.id}`;
+    res.set('Cache-Control', 'public, max-age=3600');
+    res.set('X-Robots-Tag', 'noindex');
+    return res.type('application/manifest+json').send(JSON.stringify({ ...baseManifest, id: at, start_url: at, scope: '/' }));
+  });
   mountAssets(app, hh.static, cfg.root);
 
   app.get('/api/status', (_req, res) => res.set('Cache-Control', NO_STORE).json(multiStatus(hh)));
+
+  // the landing page's GitHub star count, asked by this server at most once an hour (no visitor's browser talks to
+  // GitHub): { stars: n } or { stars: null } (the page then shows no number). cfg.stars (tests): { url, fetcher, wall }
+  const stars = new StarCount({ url: mc.starsUrl, log, ...(cfg.stars || {}) });
+  hh.stars = stars;
+  app.get('/api/stars', async (_req, res) => {
+    res.set('Cache-Control', 'public, max-age=900');
+    return res.json({ stars: await stars.get() });
+  });
 
   app.post('/api/farms', sameOrigin, express.json({ limit: '1kb' }), async (req, res) => {
     res.set('Cache-Control', NO_STORE);
@@ -144,6 +208,9 @@ export function createMultiApp(hh) {
       return res.status(500).json({ error: 'INTERNAL' });
     }
   });
+
+  // players' ideas (POST /api/ideas) and their admin list (/api/admin/ideas, only with HH_ADMIN_TOKEN): server/ideas.js
+  mountIdeas(app, hh, { sameOrigin });
 
   const farmApi = express.Router({ mergeParams: true });
   farmApi.use((req, res, next) => {
@@ -172,6 +239,7 @@ export function createMultiApp(hh) {
       out.member = Boolean(g && g.kind === 'member');
       if (out.member) out.pid = g.pid;
       if (g && g.kind === 'creator') out.creator = true;
+      if (out.member) out.waiting = s.waiting();
     }
     return res.json(out);
   });
@@ -195,6 +263,58 @@ export function createMultiApp(hh) {
     }
   });
 
+  farmApi.post('/rekey', sameOrigin, express.json({ limit: '1kb' }), async (req, res) => {
+    const key = keyOf(req);
+    if (!key) return res.status(401).json({ error: 'AUTH' });
+    const ip = ipOf(req);
+    const r = rekeys.take(ip);
+    if (!r.ok) return res.set('Retry-After', String(Math.ceil(r.retryAfterMs / 1000))).status(429).json({ error: 'RATE' });
+    let rec;
+    try { rec = await reg.acquire(req.params.id); } catch { return res.status(503).json({ ok: false, error: 'UNAVAILABLE' }); }
+    if (!rec) return res.status(404).json({ ok: false, error: 'NOT_FOUND' });
+    const s = rec.hh.sessions;
+    const g = s.grantOf(key);
+    if (!g || g.kind !== 'member') return res.status(403).json({ error: 'AUTH' });
+    const pid = req.body && typeof req.body.pid === 'string' ? req.body.pid : null;
+    if (!pid || !PLAYER_SLOTS.includes(pid) || pid === g.pid || !Object.hasOwn(s.state.players, pid)) {
+      return res.status(400).json({ error: 'BAD_REQUEST' });
+    }
+    const f = rekeysFarm.take(req.params.id);
+    if (!f.ok) return res.set('Retry-After', String(Math.ceil(f.retryAfterMs / 1000))).status(429).json({ error: 'RATE' });
+    try {
+      const made = reg.rekey(rec, g.pid, pid);
+      if (made.error === 'BAD') return res.status(400).json({ error: 'BAD_REQUEST' });
+      if (made.error) return res.status(500).json({ error: 'INTERNAL' });
+      return res.status(201).json(made);
+    } catch (err) {
+      log.error('making a new key failed', redactArg(err));
+      return res.status(500).json({ error: 'INTERNAL' });
+    }
+  });
+
+  // "Delete this farm now" (Settings > Farm): any farmer of the farm; everything goes at once, for both farmers
+  farmApi.post('/delete', sameOrigin, express.json({ limit: '1kb' }), async (req, res) => {
+    const key = keyOf(req);
+    if (!key) return res.status(401).json({ error: 'AUTH' });
+    const r = deletes.take(ipOf(req));
+    if (!r.ok) {
+      const s = Math.ceil(r.retryAfterMs / 1000);
+      return res.set('Retry-After', String(s)).status(429).json({ error: 'RATE', retryAfter: s });
+    }
+    let rec;
+    try { rec = await reg.acquire(req.params.id); } catch { return res.status(503).json({ ok: false, error: 'UNAVAILABLE' }); }
+    if (!rec) return res.status(404).json({ ok: false, error: 'NOT_FOUND' });
+    const g = rec.hh.sessions.grantOf(key);
+    if (!g || g.kind !== 'member') return res.status(403).json({ error: 'AUTH' });
+    try {
+      if (!(await reg.remove(rec, { by: g.pid }))) return res.status(404).json({ ok: false, error: 'NOT_FOUND' });
+      return res.json({ ok: true });
+    } catch (err) {
+      log.error('deleting a farm failed', redactArg(err));
+      return res.status(500).json({ error: 'INTERNAL' });
+    }
+  });
+
   if (cfg.dev) {
     const farmOf = async (req) => (await reg.acquire(req.params.id).catch(() => null))?.hh ?? null;
     const extra = express.Router({ mergeParams: true });
@@ -212,7 +332,8 @@ export function createMultiApp(hh) {
     app.post('/api/dev/sweep', (req, res, next) => (isLoopback(req.socket.remoteAddress) ? next() : res.status(403).json({ error: 'loopback only' })),
       express.json({ limit: '1kb' }), async (req, res) => {
         const now = Number(req.body && req.body.now);
-        res.json({ ok: true, deleted: await reg.sweep(Number.isSafeInteger(now) ? now : undefined) });
+        const deleted = await reg.sweep(Number.isSafeInteger(now) ? now : undefined);
+        res.json({ ok: true, deleted, expired: reg.lastExpired });
       });
   }
   app.use('/api/f/:id', farmApi);
@@ -279,7 +400,9 @@ export async function startMultiServer(cfg) {
     const rec = req.hhFarm;
     const fh = rec && rec.hh;
     if (!fh) { ws.close(1013, 'farm unavailable'); return; }   // unloaded in between (should not happen: leased)
-    const conn = fh.sessions.open(ws, req.hhIp);
+    // a farm's connection holds only the address's network (maskIp): it is used for nothing but the abuse warning's
+    // log line (server/router.js); the full address stays in the per-address counters above, in memory
+    const conn = fh.sessions.open(ws, maskIp(req.hhIp));
     if (!conn) return;
     ws.on('pong', () => { conn.missed = 0; });
     ws.on('message', (raw) => handleMessage(fh, conn, raw));

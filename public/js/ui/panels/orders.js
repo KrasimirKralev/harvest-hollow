@@ -3,27 +3,28 @@
 // help" flags in the players' colours, deliver and skip; empty slots count down to their refill with an instant
 // refill (free once a day); Mabel's weekly meter with its three chests. Orders never expire.
 import { npcOf, ORDERS, COOP, orderSlotsAt } from '../../../../shared/content/index.js';
-import { h, icon, svgIcon, fmt, createKit, chip, empty, price, fill, playerMark } from './kit.js';
+import { h, icon, svgIcon, fmt, createKit, chip, empty, price, fill, playerMark, phoneTitle } from './kit.js';
 import { levelOf } from './model.js';
 import { portrait, chest } from './art.js';
 import { I } from './intents.js';
 import { boardSlots, shortfall, rushPrice, have } from './goals-model.js';
+import { t, lang, ctext, ordinal as ordinalOf, name as cname } from '../../i18n/index.js';
 
 const lazy = (f) => ({ type: () => f().type, args: () => f().args });
 const BP = 10_000;
 
 export const ordersPanel = {
-  title: 'Mabel\'s Orders',
+  get title() { return phoneTitle('market.orders.title', 'market.orders.titleShort'); },
   icon: 'order_board',
   size: 'full',
   hotkey: 'o',
-  dock: { label: 'Orders', icon: 'orders', order: 4, hint: 'Mabel\'s order board (O)' },
-  locked: (state) => (levelOf(state) < ORDERS.unlock ? `Mabel opens her board at level ${ORDERS.unlock}` : null),
+  dock: { get label() { return t('market.orders.dock'); }, icon: 'orders', order: 4, get hint() { return t('market.orders.dockHint'); } },
+  locked: (state) => (levelOf(state) < ORDERS.unlock ? t('market.orders.locked', { n: ORDERS.unlock }) : null),
   topics: ['orders', 'inventory', 'wallet', 'xp', 'players'],
   mount(body, ctx) {
     const kit = createKit(ctx);
     const head = h('div.pn-ordhead');
-    const grid = h('div.pn-board', { role: 'list', 'aria-label': 'Orders' });
+    const grid = h('div.pn-board', { role: 'list', 'aria-label': t('market.orders.dock') });
     body.append(head, grid);
     const sig = () => {
       const st = ctx.store.state;
@@ -39,18 +40,18 @@ export const ordersPanel = {
       const level = levelOf(st);
       if (level < ORDERS.unlock) {
         grid.append(h('div.pn-order.pn-order-later.pn-board-closed', svgIcon('lock', 36),
-          h('p', `Mabel opens her board at level ${ORDERS.unlock} with ${orderSlotsAt(ORDERS.unlock)} orders.`),
-          h('small', 'Until then the stand buys everything you grow. Orders pay half again as much.')));
+          h('p', t('market.orders.closed', { n: ORDERS.unlock, k: orderSlotsAt(ORDERS.unlock) })),
+          h('small', t('market.orders.untilThen'))));
         kit.refresh();
         return;
       }
       const slots = boardSlots(st);
-      if (!slots.length) grid.append(empty('Mabel is writing the first orders. Back in a moment!', 'orders'));
+      if (!slots.length) grid.append(empty(t('market.orders.writing'), 'orders'));
       slots.forEach((s, n) => grid.append(s.order ? orderCard(st, s, n) : waitingCard(st, s, n)));
       const next = ORDERS.slots.find(([L]) => L > level);
       if (next && next[1] > orderSlotsAt(level)) {
         grid.append(h('div.pn-order.pn-order-later', { role: 'listitem' }, svgIcon('lock', 32),
-          h('p', `Mabel pins a ${ordinal(next[1])} order at level ${next[0]}.`)));
+          h('p', t('market.orders.nextSlot', { ord: lang() === 'en' ? ordinal(next[1]) : ordinalOf(next[1], 'f').replace('-', '\u2011'), n: next[0] }))));
       }
       kit.refresh();
       kit.tick();
@@ -62,13 +63,14 @@ export const ordersPanel = {
       const golden = slots.some((x) => x.order && x.order.golden);
       const ready = slots.some((x) => x.order && shortfall(st, x.order).length === 0);
       // Mabel's line follows the board: a golden order, something ready to hand in, or her everyday chatter
-      const line = golden ? mabel.lines[2] : ready ? mabel.lines[0] : mabel.lines[(st.farm.orders?.n ?? 0) % 2 === 0 ? 1 : 0];
+      const lines = ctext('npcs', 'mabel', 'lines', mabel.lines);
+      const line = golden ? lines[2] : ready ? lines[0] : lines[(st.farm.orders?.n ?? 0) % 2 === 0 ? 1 : 0];
       const rush = rushPrice(st, ctx.now());
       fill(head,
         h('div.pn-mabel', portrait(mabel, 72),
-          h('div.pn-speech', h('b', 'Mabel'), h('p', `“${line}”`),
-            h('small', levelOf(st) < ORDERS.unlock ? 'Orders will pay half again what the stand does, and they never expire.'
-              : `Orders pay half again what the stand does and never expire. ${rush === 0 ? 'One instant refill is free today.' : `Instant refills cost ${ORDERS.refillAcorns} Acorn now.`}`))),
+          h('div.pn-speech', h('b', cname('mabel')), h('p', t('market.orders.quote', { line })),
+            h('small', levelOf(st) < ORDERS.unlock ? t('market.orders.noteLater')
+              : rush === 0 ? t('market.orders.noteFree') : t('market.orders.noteCost', { n: ORDERS.refillAcorns })))),
         meter(st));
     }
 
@@ -82,10 +84,10 @@ export const ordersPanel = {
         const at = (m.e * c.atBp) / BP;
         const open = m.c > i;
         return h(`span.pn-meter-chest${open ? '.open' : ''}`, { style: { left: `${(c.atBp / top) * 100}%` },
-          title: `${fmt(Math.ceil(at))} worth of orders: ${fmt(Math.floor((m.e * c.coinsBp) / BP))} coins + ${c.acorns} Acorn${c.acorns > 1 ? 's' : ''}` },
+          title: t('market.orders.chest', { at: Math.ceil(at), coins: Math.floor((m.e * c.coinsBp) / BP), n: c.acorns }) },
         chest(40, { open, gold: i === chests.length - 1 }));
       });
-      return h('div.pn-meter', h('div.pn-meter-title', h('b', 'Mabel\'s week'), h('span', `${fmt(m.v)} of ${fmt(Math.ceil((m.e * top) / BP))} coins in orders`)),
+      return h('div.pn-meter', h('div.pn-meter-title', h('b', t('market.orders.week')), h('span', t('market.orders.weekOf', { v: m.v, top: Math.ceil((m.e * top) / BP) }))),
         h('div.pn-meter-track', h('span.pn-meter-fill', { style: { '--p': String(pct) } }), ...marks));
     }
 
@@ -100,38 +102,38 @@ export const ordersPanel = {
       const me = ctx.store.pid;
       const helped = flagBy && flagBy !== me;
       const xp = helped ? o.xp + Math.floor((o.xp * COOP.helpFlags.xpBonusBp) / BP) : o.xp;
-      return h(`article.pn-order${o.golden ? '.golden' : ''}${ready ? '.ready' : ''}`, { role: 'listitem', dataset: { slot: String(s.i) },
+      return h(`article.pn-order${o.golden ? '.golden' : ''}${ready ? '.ready' : ''}`, { role: 'listitem', dataset: { slot: String(s.i), readyLabel: t('market.orders.readyTag') },
         style: { '--tilt': `${[-1.2, 0.8, -0.4, 1.1, -0.9, 0.5, -0.6, 1, -1][n % 9]}deg` } },
       h('span.pn-pin', { 'aria-hidden': 'true' }),
       h('header.pn-order-head',
-        giver ? h('div.pn-giver', portrait(giver, 40), h('div', h('b', giver.name), h('small', o.golden.duet ? 'Golden order · a duet good' : 'Golden order')))
-          : h('div.pn-giver', h('div', h('b', o.simple ? 'Quick order' : 'Mabel\'s order'), h('small', o.simple ? 'A small order: a quarter of the usual credit for goals' : 'deliver it all at once'))),
-        kit.confirmButton({ label: '×', cls: 'pn-xs pn-ghost pn-skip', confirm: 'Skip?', ...lazy(() => I.discardOrder(s.i, o.n)), title: 'Skip this order: a new one comes in 15 minutes', data: { discard: String(s.i) } })),
+        giver ? h('div.pn-giver', portrait(giver, 40), h('div', h('b', cname(o.golden.giver)), h('small', o.golden.duet ? t('market.orders.goldenDuet') : t('market.orders.golden'))))
+          : h('div.pn-giver', h('div', h('b', o.simple ? t('market.orders.quick') : t('market.orders.mabels')), h('small', o.simple ? t('market.orders.quickSub') : t('market.orders.allAtOnce')))),
+        kit.confirmButton({ label: '×', cls: 'pn-xs pn-ghost pn-skip', confirm: t('market.orders.skip'), ...lazy(() => I.discardOrder(s.i, o.n)), title: t('market.orders.skipTip'), data: { discard: String(s.i) } })),
       items,
-      h('div.pn-order-pay', price({ coins: o.coins, acorns: o.golden ? o.golden.acorns : 0 }), h('span.pn-xp', `+${fmt(xp)} XP`),
-        helped ? h('span.pn-help-bonus', `+10 % XP and a Heart each for helping`) : null),
+      h('div.pn-order-pay', price({ coins: o.coins, acorns: o.golden ? o.golden.acorns : 0 }), h('span.pn-xp', t('market.orders.xp', { n: xp })),
+        helped ? h('span.pn-help-bonus', t('market.orders.helpBonus')) : null),
       h('div.pn-order-coop',
         h('button.pn-tag-btn', { type: 'button', 'aria-pressed': String(Boolean(pinBy)), disabled: Boolean(pinBy && pinBy !== me),
-          style: pinBy ? { '--who': st.players[pinBy].color } : null, title: pinBy && pinBy !== me ? `${st.players[pinBy].name} is on it` : 'Tell your partner you are doing this one',
+          style: pinBy ? { '--who': st.players[pinBy].color } : null, title: pinBy && pinBy !== me ? t('market.orders.onIt', { name: st.players[pinBy].name }) : t('market.orders.pinTip'),
           on: { click: () => { const it = I.pinOrder(s.i, o.n); ctx.act(it.type, it.args); } } },
-        pinBy ? playerMark(pinBy, st.players[pinBy]) : svgIcon('ping', 18), pinBy ? (pinBy === me ? 'I\'m on it' : `${st.players[pinBy].name} is on it`) : 'I\'m on it'),
+        pinBy ? playerMark(pinBy, st.players[pinBy]) : svgIcon('ping', 18), pinBy ? (pinBy === me ? t('market.orders.imOnIt') : t('market.orders.onIt', { name: st.players[pinBy].name })) : t('market.orders.imOnIt')),
         h('button.pn-tag-btn.pn-flag', { type: 'button', 'aria-pressed': String(Boolean(flagBy)), disabled: Boolean(flagBy && flagBy !== me),
-          style: flagBy ? { '--who': st.players[flagBy].color } : null, title: 'Ask for help: when the other farmer fills it you both get a Heart',
+          style: flagBy ? { '--who': st.players[flagBy].color } : null, title: t('market.orders.flagTip'),
           on: { click: () => { const it = I.flagOrder(s.i, o.n); ctx.act(it.type, it.args); } } },
-        flagBy ? playerMark(flagBy, st.players[flagBy]) : '⚑', flagBy ? (flagBy === me ? 'Help asked' : `${st.players[flagBy].name} needs help`) : 'Need help')),
-      kit.button({ label: 'Deliver', glyph: 'check', cls: `${ready ? 'btn--sun ' : ''}pn-deliver`, ...lazy(() => I.fillOrder(s.i, o.n)), data: { fill: String(s.i) },
+        flagBy ? playerMark(flagBy, st.players[flagBy]) : '⚑', flagBy ? (flagBy === me ? t('market.orders.helpAsked') : t('market.orders.needsHelp', { name: st.players[flagBy].name })) : t('market.orders.needHelp'))),
+      kit.button({ label: t('market.orders.deliver'), glyph: 'check', cls: `${ready ? 'btn--sun ' : ''}pn-deliver`, ...lazy(() => I.fillOrder(s.i, o.n)), data: { fill: String(s.i) },
         hint: () => ({ missing: shortfall(ctx.store.state, o) }) }));
     }
 
     function waitingCard(st, s, n) {
-      const t = h('b.pn-timer');
-      kit.timer(t, { end: s.availableAt, doneText: 'any second now', done: () => setTimeout(() => update(true), 600) });
+      const tm = h('b.pn-timer');
+      kit.timer(tm, { end: s.availableAt, doneText: t('market.orders.anySecond'), done: () => setTimeout(() => update(true), 600) });
       const cost = rushPrice(st, ctx.now());
       return h('article.pn-order.pn-order-wait', { role: 'listitem', dataset: { slot: String(s.i) }, style: { '--tilt': `${[0.6, -0.8, 1][n % 3]}deg` } },
         h('span.pn-pin', { 'aria-hidden': 'true' }),
         icon('order_board', { size: 64 }),
-        h('p', 'A new order is on its way'), t,
-        kit.button({ label: cost ? `Now (${cost} Acorn)` : 'Now (free today)', cls: 'pn-xs btn--sky', ...lazy(() => I.rushOrder(s.i)), data: { rush: String(s.i) },
+        h('p', t('market.orders.onTheWay')), tm,
+        kit.button({ label: cost ? t('market.orders.now', { n: cost }) : t('market.orders.nowFree'), cls: 'pn-xs btn--sky', ...lazy(() => I.rushOrder(s.i)), data: { rush: String(s.i) },
           gate: () => (cost > ctx.store.state.farm.wallet.acorns ? { code: 'NO_ITEMS', hint: { acorns: cost - ctx.store.state.farm.wallet.acorns } } : null) }));
     }
 
@@ -140,6 +142,7 @@ export const ordersPanel = {
   },
 };
 
+/** English only ("a fifth order"); Bulgarian takes i18n's ordinal ("5-та поръчка"). */
 function ordinal(n) {
   return ['zeroth', 'first', 'second', 'third', 'fourth', 'fifth', 'sixth', 'seventh', 'eighth', 'ninth'][n] ?? `${n}th`;
 }

@@ -8,6 +8,7 @@ import * as C from '../../../../shared/content/index.js';
 import * as DE from '../../../../shared/rules/actions/decor.js';
 import { defOf } from '../../../../shared/content/index.js';
 import { UPGRADE_TABLE, UPGRADE_TARGETS, upgradeTargetOf, tierOf, levelOf, prettyId } from './w4-rules.js';
+import { t, t as tr, has, lang, ctext, nameEntry, fmtNum, fmtDec, name as cname } from '../../i18n/index.js';
 
 const isObj = (v) => Boolean(v) && typeof v === 'object' && !Array.isArray(v);
 const int = (v, d = 0) => (Number.isSafeInteger(v) ? v : d);
@@ -19,7 +20,7 @@ const own = (o, k) => (isObj(o) && Object.hasOwn(o, k) ? o[k] : undefined);
 const MIN = 60_000;
 const pct = (bp) => {
   const v = bp / 100;
-  return `${Number.isInteger(v) ? v : v.toFixed(1)} %`;
+  return `${Number.isInteger(v) ? fmtNum(v) : fmtDec(v, 1)}${lang() === 'bg' ? '\u00a0' : ' '}%`;   // bg: the % never starts a line
 };
 
 /** One short line per bonus key ("+40 Barn space", "Watering saves 5 % more time"). Pure. */
@@ -27,12 +28,12 @@ export function bonusLines(bonus) {
   if (!isObj(bonus)) return [];
   const out = [];
   const b = (k) => int(bonus[k]);
-  if (b('barnCap') > 0) out.push({ key: 'barnCap', glyph: 'barn', text: `+${b('barnCap')} Barn space` });
-  if (b('restedBp') > 0) out.push({ key: 'restedBp', glyph: 'sun', text: `Rested XP builds ${pct(b('restedBp'))} faster` });
-  if (b('waterBp') > 0) out.push({ key: 'waterBp', glyph: 'sprout', text: `Watering saves ${pct(b('waterBp'))} more time` });
-  if (b('demandUnits') > 0) out.push({ key: 'demandUnits', glyph: 'market', text: `+${b('demandUnits')} Market Demand a day` });
-  if (b('sellBp') > 0) out.push({ key: 'sellBp', glyph: 'coin', text: `Sales pay ${pct(b('sellBp'))} more` });
-  if (b('goldenMs') > 0) out.push({ key: 'goldenMs', glyph: 'heart', text: `Golden Hour lasts ${Math.round(b('goldenMs') / MIN)} min longer here` });
+  if (b('barnCap') > 0) out.push({ key: 'barnCap', glyph: 'barn', text: t('farm.up.barnCap', { n: b('barnCap') }) });
+  if (b('restedBp') > 0) out.push({ key: 'restedBp', glyph: 'sun', text: t('farm.up.rested', { pct: pct(b('restedBp')) }) });
+  if (b('waterBp') > 0) out.push({ key: 'waterBp', glyph: 'sprout', text: t('farm.up.water', { pct: pct(b('waterBp')) }) });
+  if (b('demandUnits') > 0) out.push({ key: 'demandUnits', glyph: 'market', text: t('farm.up.demand', { n: b('demandUnits') }) });
+  if (b('sellBp') > 0) out.push({ key: 'sellBp', glyph: 'coin', text: t('farm.up.sell', { pct: pct(b('sellBp')) }) });
+  if (b('goldenMs') > 0) out.push({ key: 'goldenMs', glyph: 'heart', text: t('farm.up.golden', { n: Math.round(b('goldenMs') / MIN) }) });
   return out;
 }
 
@@ -64,8 +65,8 @@ export function upgradeInfo(state, id) {
     const items = Object.entries(isObj(t.items) ? t.items : {}).filter(([, q]) => int(q) > 0)
       .sort((a, b) => (a[0] < b[0] ? -1 : 1)).map(([item, q]) => ({ item, n: q, have: availableOf(state, item) }));
     return {
-      n, name: t.name ?? `Tier ${n}`, unlock: int(t.unlock, 1), coins: int(t.coins), acorns: int(t.acorns), items,
-      bonus: isObj(t.bonus) ? { ...t.bonus } : {}, lines: bonusLines(t.bonus), text: typeof t.text === 'string' ? t.text : '',
+      n, name: ctext('upgrades', `${target}.${n}`, 'name', t.name ?? tr('farm.up.tier', { n })), unlock: int(t.unlock, 1), coins: int(t.coins), acorns: int(t.acorns), items,
+      bonus: isObj(t.bonus) ? { ...t.bonus } : {}, lines: bonusLines(t.bonus), text: ctext('upgrades', `${target}.${n}`, 'text', typeof t.text === 'string' ? t.text : ''),
       owned: n <= tier, next: n === tier + 1, open: level >= int(t.unlock, 1),
     };
   });
@@ -73,7 +74,8 @@ export function upgradeInfo(state, id) {
   const next = tiers[tier] ?? null;
   const def = defOf(o.def);
   return {
-    id, def: o.def, defName: def?.name ?? o.def, target, name: table.name ?? def?.name ?? target, tier, max: tiers.length,
+    id, def: o.def, defName: def ? cname(o.def) : o.def, target, tier, max: tiers.length,
+    name: table.name ? ctext('upgrades', target, 'name', lang() !== 'en' && nameEntry(o.def) ? cname(o.def) : table.name) : def ? cname(o.def) : target,
     tiers, now, next, perObject: target === 'bench', level,
   };
 }
@@ -130,7 +132,7 @@ export function sellStoredQuote(state, def) {
 export function storedDecor(state) {
   const s = state?.farm?.storage ?? {};
   return Object.keys(s).filter((d) => int(s[d]) > 0 && defOf(d)?.kind === 'decor')
-    .map((d) => ({ def: d, name: defOf(d).name ?? d, n: s[d] }))
+    .map((d) => ({ def: d, name: cname(d), n: s[d] }))
     .sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
 }
 
@@ -157,12 +159,27 @@ export function newestTrash(state, by, def) {
 
 // ---- 9: the farmer's look -------------------------------------------------------------------------------------------
 
-const opt = (list, names = {}) => list.map((x) => (typeof x === 'string' ? { id: x, name: names[x] ?? prettyId(x) } : { ...x, name: x.name ?? names[x.id] ?? prettyId(x.id) }));
+/**
+ * A look's name in the language in effect (a getter on the option, so LOOKS built at import still follows a switch):
+ * lane B's AVATAR_LOOKS text (ctext 'AVATAR_LOOKS', '<group>.<id>'), else this lane's catalog ('home.look.<group>.<id>'),
+ * else the English name.
+ */
+function lookName(group, id, english) {
+  if (lang() === 'en') return english;
+  const k = `home.look.${group}.${id}`;
+  return ctext('AVATAR_LOOKS', `${group}.${id}`, 'name', has(k) ? t(k) : english);
+}
+const named = (o, group, id, english) => Object.defineProperty(o, 'name', { get: () => lookName(group, id, english), enumerable: true, configurable: true });
+const opt = (list, names = {}, group = '') => list.map((x) => (typeof x === 'string'
+  ? named({ id: x }, group, x, names[x] ?? prettyId(x))
+  : named({ ...x }, group, x.id, x.name ?? names[x.id] ?? prettyId(x.id))));
 const HEX = /^#[0-9a-f]{6}$/i;
 /** Colour swatches as { id: '#RRGGBB', name } (content gives { id, name, hex }; plain '#rrggbb' strings work too). */
-const colours = (list) => list.map((x) => {
+const colours = (list, group = '') => list.map((x) => {
   const hex = typeof x === 'string' ? x : x?.hex;
-  return HEX.test(hex ?? '') ? { id: hex.toUpperCase(), name: typeof x === 'string' ? hex.toUpperCase() : x.name ?? hex } : null;
+  if (!HEX.test(hex ?? '')) return null;
+  return typeof x === 'string' ? { id: hex.toUpperCase(), name: hex.toUpperCase() }
+    : named({ id: hex.toUpperCase() }, group, x.id ?? hex, x.name ?? hex);
 }).filter(Boolean);
 
 /** The look catalog: content's AVATAR_LOOKS (what the rules accept and the rig draws), else these. */
@@ -170,14 +187,14 @@ export const LOOKS = (() => {
   const L = isObj(C.AVATAR_LOOKS) ? C.AVATAR_LOOKS : {};
   const list = (k, d) => (Array.isArray(L[k]) && L[k].length ? L[k] : d);
   return Object.freeze({
-    bodies: opt(list('bodies', ['farmer_a', 'farmer_b']), { farmer_a: 'Build A', farmer_b: 'Build B' }),
-    hair: opt(list('hair', ['short', 'long', 'ponytail', 'bun', 'curly', 'braid', 'buzz'])),
+    bodies: opt(list('bodies', ['farmer_a', 'farmer_b']), { farmer_a: 'Build A', farmer_b: 'Build B' }, 'bodies'), // i18n-ok: English defaults; lookName() translates
+    hair: opt(list('hair', ['short', 'long', 'ponytail', 'bun', 'curly', 'braid', 'buzz']), {}, 'hair'),
     hats: opt(list('hats', ['none', 'straw_hat', 'cap', 'beanie', 'sun_bonnet', 'cowboy_hat', 'flower_crown']),
-      { none: 'No hat', straw_hat: 'Straw hat', cap: 'Farm cap', sun_bonnet: 'Sun bonnet', cowboy_hat: 'Cowboy hat', flower_crown: 'Flower crown' }),
-    hairColor: colours(list('hairColors', ['#2A2420', '#4A3022', '#7A4A2A', '#9A3E22', '#D9B26A', '#D9875A', '#C9C6C2', '#E58AA8'])),
-    skin: colours(list('skinTones', ['#F6DCC8', '#EFC9A8', '#DDAA82', '#C08E62', '#A06D45', '#7A4E30', '#563522'])),
-    top: colours(list('outfitColors', ['#2BB3A3', '#FF7A6B', '#3E6FA8', '#8DAA7A', '#E0B23A', '#7A4A7E', '#B23A2E', '#F2E6CC', '#3A3A40', '#8CC8EA'])),
-    bottom: colours(list('outfitColors', ['#3E6FA8', '#2BB3A3', '#FF7A6B', '#8DAA7A', '#E0B23A', '#7A4A7E', '#B23A2E', '#F2E6CC', '#3A3A40', '#8CC8EA'])),
+      { none: 'No hat', straw_hat: 'Straw hat', cap: 'Farm cap', sun_bonnet: 'Sun bonnet', cowboy_hat: 'Cowboy hat', flower_crown: 'Flower crown' }, 'hats'), // i18n-ok: English defaults; lookName() translates
+    hairColor: colours(list('hairColors', ['#2A2420', '#4A3022', '#7A4A2A', '#9A3E22', '#D9B26A', '#D9875A', '#C9C6C2', '#E58AA8']), 'hairColors'),
+    skin: colours(list('skinTones', ['#F6DCC8', '#EFC9A8', '#DDAA82', '#C08E62', '#A06D45', '#7A4E30', '#563522']), 'skinTones'),
+    top: colours(list('outfitColors', ['#2BB3A3', '#FF7A6B', '#3E6FA8', '#8DAA7A', '#E0B23A', '#7A4A7E', '#B23A2E', '#F2E6CC', '#3A3A40', '#8CC8EA']), 'outfitColors'),
+    bottom: colours(list('outfitColors', ['#3E6FA8', '#2BB3A3', '#FF7A6B', '#8DAA7A', '#E0B23A', '#7A4A7E', '#B23A2E', '#F2E6CC', '#3A3A40', '#8CC8EA']), 'outfitColors'),
     defaults: isObj(L.defaults) ? L.defaults : {},
   });
 })();

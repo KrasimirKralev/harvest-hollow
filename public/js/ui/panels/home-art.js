@@ -4,6 +4,7 @@
 // the upper left. Built with createElementNS from content data only, never from player strings (names are set as
 // text nodes by the panels, outside the SVG).
 import { s } from './art.js';
+import { t, fmtNum, name as cname } from '../../i18n/index.js';
 
 const INK = '#3E2612';
 const LEAF = '#4C9A3E';
@@ -320,11 +321,11 @@ let atlasSeq = 0;
  * status is 'home' | 'ours' | 'sale' | 'soon' | 'later' | 'meadow-ours' | 'meadow-later'. `onPick(id)` makes every
  * parcel a button; `selected` rings one.
  */
-export function atlasSvg(parcels, { selected = null, onPick = null, label = 'Map of the farm' } = {}) {
+export function atlasSvg(parcels, { selected = null, onPick = null, label = t('home.art.map') } = {}) {
   const id = ++atlasSeq;
   const { x0, z0, x1, z1 } = ATLAS;
   const svg = s('svg', { viewBox: `${x0} ${z0} ${x1 - x0} ${z1 - z0}`, class: 'ha-atlas', role: 'group', 'aria-label': label,
-    focusable: 'false', preserveAspectRatio: 'xMidYMid meet' });
+    focusable: 'false', preserveAspectRatio: 'xMidYMid meet' }); // i18n-ok: an SVG attribute value
   put(svg, s('defs', {},
     s('pattern', { id: `ha-mow-${id}`, width: 3, height: 3, patternUnits: 'userSpaceOnUse', patternTransform: 'rotate(35)' },
       s('rect', { width: 3, height: 3, fill: '#7CC243' }), s('rect', { width: 1.5, height: 3, fill: '#86CB4B' })),
@@ -348,7 +349,7 @@ export function atlasSvg(parcels, { selected = null, onPick = null, label = 'Map
   [[12, 66.6, '#C8473A'], [16.4, 66.2, '#4AA8E8'], [21, 66.8, '#E39A1E'], [27.6, 66.4, '#C8473A'], [33, 66.9, '#4A7FE8']]
     .forEach(([vx, vz, roof]) => village.append(cottage(vx, vz, 2.6, roof)));
   village.append(s('path', { d: 'M38 67 v-3.4 l0.9 -1.4 l0.9 1.4 v3.4 z', fill: '#FFF8EC', ...sw(0.12) }));
-  village.append(s('text', { x: 24, y: 64.2, class: 'ha-label ha-label-far', 'text-anchor': 'middle' }, 'Hollow Village'));
+  village.append(s('text', { x: 24, y: 64.2, class: 'ha-label ha-label-far', 'text-anchor': 'middle' }, t('home.art.village')));
   put(svg, village);
   put(svg, s('ellipse', { cx: 54.5, cy: 66.4, rx: 4.6, ry: 1.9, fill: WATER, stroke: WATER_DEEP, 'stroke-width': 0.16 }));
 
@@ -412,7 +413,7 @@ function signpost(x, z) {
     s('path', { d: 'M0 2.2 V-1.2', stroke: INK, 'stroke-width': 0.55, 'stroke-linecap': 'round' }),
     s('path', { d: 'M0 2.2 V-1.2', stroke: '#B87533', 'stroke-width': 0.3, 'stroke-linecap': 'round' }),
     s('rect', { x: -3.3, y: -3.2, width: 6.6, height: 2.5, rx: 0.4, fill: '#F7D9A0', ...sw(0.16) }),
-    s('text', { x: 0, y: -1.45, 'text-anchor': 'middle', class: 'ha-sign-text' }, 'For sale'));
+    s('text', { x: 0, y: -1.45, 'text-anchor': 'middle', class: 'ha-sign-text' }, t('farm.map.pill.sale')));
 }
 
 // ---- the growing Barn (barn upgrades 0-10, GDD §3.6) ------------------------------------------------------------------
@@ -487,7 +488,7 @@ export function barnArt(n, { capacity = null, fresh = 0, label = '' } = {}) {
   if (capacity !== null) {
     const y = roofY + 49;
     put(svg, s('g', { class: 'ha-barn-sign' }, R(122, y, 76, 24, '#FFF4D6', { rx: 5, 'stroke-width': 2 }),
-      s('text', { x: 160, y: y + 18, 'text-anchor': 'middle', class: 'ha-barn-cap' }, `${capacity.toLocaleString('en-US')}`)));
+      s('text', { x: 160, y: y + 18, 'text-anchor': 'middle', class: 'ha-barn-cap' }, fmtNum(capacity))));
   }
   return svg;
 }
@@ -580,7 +581,7 @@ export function fishArt(id, hue = '#9DA9B0', { size = 64, caught = true, label =
  */
 export function pondScene({ seats = [], label = '' } = {}) {
   const svg = s('svg', { viewBox: '0 0 320 150', class: 'ha-pond', role: label ? 'img' : null, 'aria-label': label || null,
-    'aria-hidden': label ? null : 'true', focusable: 'false', preserveAspectRatio: 'xMidYMid slice' });
+    'aria-hidden': label ? null : 'true', focusable: 'false', preserveAspectRatio: 'xMidYMid slice' }); // i18n-ok: an SVG attribute value
   put(svg, 
     s('defs', {}, s('linearGradient', { id: 'ha-pond-sky', x1: 0, y1: 0, x2: 0, y2: 1 },
       s('stop', { offset: '0', 'stop-color': '#9ED8FF' }), s('stop', { offset: '1', 'stop-color': '#FFE8C4' })),
@@ -782,7 +783,7 @@ export function homeScene(projectId, done, { label = '' } = {}) {
   const f = HOME_SCENES[projectId];
   if (!f) return null;
   const svg = s('svg', { viewBox: '0 0 320 180', class: 'pc-scene ha-scene', role: label ? 'img' : null, 'aria-label': label || null,
-    'aria-hidden': label ? null : 'true', preserveAspectRatio: 'xMidYMid slice', focusable: 'false' });
+    'aria-hidden': label ? null : 'true', preserveAspectRatio: 'xMidYMid slice', focusable: 'false' }); // i18n-ok: an SVG attribute value
   f(svg, done instanceof Set ? done : new Set(done || []));
   return svg;
 }
@@ -915,7 +916,7 @@ export function furnitureArt(def, { px = 64, label = '' } = {}) {
  * `onCell(x, z)` / `onWall(wall, at)` / `onItem(id)` make it interactive (pointer and keyboard on the items).
  */
 export function roomPlan({ items, ghost = null, grid, walls, blocked = {}, clear = [], door = null, onCell = null, onWall = null,
-  onItem = null, onHover = null, label = 'The farmhouse room' }) {
+  onItem = null, onHover = null, label = t('home.art.room') }) {
   const [gw, gd] = grid;
   const T = 16;
   const vbw = gw * U + T + 4;
@@ -1016,7 +1017,7 @@ export function roomPlan({ items, ghost = null, grid, walls, blocked = {}, clear
     if (onItem && it.id && cls === '') {
       wrap.setAttribute('tabindex', '0');
       wrap.setAttribute('role', 'button');
-      wrap.setAttribute('aria-label', `${def.name}${it.fixed ? ' (the room\'s own)' : ''}`);
+      wrap.setAttribute('aria-label', t(it.fixed ? 'home.art.roomOwn' : 'home.art.piece', { name: cname(def.id, { family: 'furniture' }) }));
       wrap.addEventListener('click', (e) => { e.stopPropagation(); onItem(it.id); });
       wrap.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onItem(it.id); } });
     }

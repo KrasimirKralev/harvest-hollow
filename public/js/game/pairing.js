@@ -17,6 +17,7 @@ import { animalOf, BREEDING, defOf } from '../../../shared/content/index.js';
 import { footprint, occupantsOf } from '../../../shared/rules/grid.js';
 import { ERR } from '../../../shared/net/protocol.js';
 import { canRun as dryRun } from './targets.js';
+import { t, N, name as nameOf } from '../i18n/index.js';
 
 const objectOf = (state, id) => (state && typeof id === 'string' && Object.hasOwn(state.farm.objects, id) ? state.farm.objects[id] : null);
 
@@ -43,19 +44,19 @@ export function animalName(state, id) {
   const n = state?.farm?.names?.[id]?.name;
   if (typeof n === 'string' && n) return n;
   const o = objectOf(state, id);
-  return (o && animalOf(o.def)?.name) || 'the animal';
+  return (o && animalOf(o.def) ? nameOf(o.def) : null) || t('game.pair.theAnimal');
 }
 
 /** "Daisy and Clover", "Daisy and a Cow", "Two Cows" (pure): the pair as the toast says it. */
 export function pairWords(state, a, b) {
   const named = (id) => typeof state?.farm?.names?.[id]?.name === 'string';
-  const sp = animalName({ farm: { objects: state.farm.objects } }, a);
-  if (named(a) && named(b)) return `${animalName(state, a)} and ${animalName(state, b)}`;
-  if (named(a) || named(b)) return `${animalName(state, named(a) ? a : b)} and ${/^[aeiou]/i.test(sp) ? 'an' : 'a'} ${sp}`;
-  return `Two ${plural(sp)}`;
+  const def = objectOf(state, a)?.def;
+  const sp = def && animalOf(def) ? N(def) : t('game.pair.theAnimal');
+  const spName = animalName({ farm: { objects: state.farm.objects } }, a);
+  if (named(a) && named(b)) return t('game.pair.both', { a: animalName(state, a), b: animalName(state, b) });
+  if (named(a) || named(b)) return t('game.pair.oneNamed', { a: animalName(state, named(a) ? a : b), _a: /^[aeiou]/i.test(spName) ? 'an' : 'a', sp });
+  return t('game.pair.two', { sp });
 }
-
-const plural = (s) => (/[^aeiou]y$/i.test(s) ? `${s.slice(0, -1)}ies` : /(s|sh|ch|x)$/i.test(s) ? `${s}es` : /sheep$/i.test(s) ? s : `${s}s`);
 
 export function createPairing({ store, view, toast = () => {}, perform }) {
   const listeners = new Set();
@@ -72,11 +73,12 @@ export function createPairing({ store, view, toast = () => {}, perform }) {
   };
   function text() {
     if (!active) return '';
-    const sp = species ? animalOf(species)?.name ?? 'animal' : null;
-    if (!first) return sp ? `Pick two adult ${plural(sp)} to pair` : 'Pick two adults of one kind to pair';
+    const sp = species && animalOf(species) ? N(species) : null;
+    if (!first) return sp ? t('game.pair.pickTwo', { sp }) : t('game.pair.pickTwoAny');
     const named = typeof store.state?.farm?.names?.[first]?.name === 'string';
-    const one = named ? `${animalName(store.state, first)} it is.` : `One ${sp ?? 'animal'} picked.`;
-    return `${one} Now pick another adult ${sp ?? 'of the same kind'}`;
+    const one = named ? t('game.pair.picked', { name: animalName(store.state, first) })
+      : sp ? t('game.pair.pickedOne', { sp }) : t('game.pair.pickedAny');
+    return sp ? t('game.pair.next', { one, sp }) : t('game.pair.nextAny', { one });
   }
   /** Highlight the homes of the animals a click could pick now (render-world's tile highlight). */
   function glow() {
@@ -136,13 +138,13 @@ export function createPairing({ store, view, toast = () => {}, perform }) {
     const target = resolveTarget(id);
     const why = target ? pairable(store.state, target, now()) : ERR.NOT_FOUND;
     if (why) {
-      toast(why === ERR.NOT_READY ? 'Only grown-ups can be paired: babies grow up first.'
-        : why === ERR.BAD_ARGS ? 'Bees live in colonies: they never pair.' : 'Pick an adult animal.', {});
+      toast(why === ERR.NOT_READY ? t('game.pair.babies')
+        : why === ERR.BAD_ARGS ? t('game.pair.bees') : t('game.pair.adult'), {});
       return { ok: false, code: why };
     }
     const sp = store.state.farm.objects[target].def;
     if (!first) {
-      if (species && sp !== species) { toast(`Pick an adult ${animalOf(species)?.name ?? 'animal'}.`, {}); return { ok: false, code: ERR.BAD_ARGS }; }
+      if (species && sp !== species) { toast(animalOf(species) ? t('game.pair.adultOf', { sp: N(species) }) : t('game.pair.adult'), {}); return { ok: false, code: ERR.BAD_ARGS }; }
       first = target;
       species = sp;
       view.fx?.play?.({ e: 'heartSpark', id: target });
@@ -151,15 +153,16 @@ export function createPairing({ store, view, toast = () => {}, perform }) {
     }
     if (target === first) { first = null; emit(); return { ok: true, done: false }; }        // a second click undoes it
     if (sp !== species) {
-      toast(`${animalName(store.state, first)} pairs with another ${animalOf(species)?.name ?? 'of its kind'}.`, {});
+      toast(animalOf(species) ? t('game.pair.sameKind', { name: animalName(store.state, first), sp: N(species) })
+        : t('game.pair.sameKindAny', { name: animalName(store.state, first) }), {});
       return { ok: false, code: ERR.BAD_ARGS };
     }
     const args = { a: first, b: target };
     const code = dryRun(store, 'breed', args);
     if (code) {
-      toast(code === ERR.OCCUPIED ? 'The Breeding Barn has a pair in it already: one at a time.'
-        : code === ERR.CAP ? `No home has room for a baby ${animalOf(species)?.name ?? 'animal'}: upgrade or build one first.`
-          : code === ERR.UNKNOWN_ACTION || code === ERR.LOCKED ? 'The Breeding Barn opens at level 28.' : code, {});
+      toast(code === ERR.OCCUPIED ? t('game.pair.busy')
+        : code === ERR.CAP ? (animalOf(species) ? t('game.pair.noRoom', { sp: N(species) }) : t('game.pair.noRoomAny'))
+          : code === ERR.UNKNOWN_ACTION || code === ERR.LOCKED ? t('game.pair.locked', { n: 28 }) : code, {});
       return { ok: false, code };
     }
     const res = perform('breed', args);
@@ -170,7 +173,7 @@ export function createPairing({ store, view, toast = () => {}, perform }) {
     first = null;
     species = null;
     emit();
-    toast(`${names} are in the Breeding Barn. A baby is on its way!`, { kind: 'ok' });
+    toast(t('game.pair.done', { names }), { kind: 'ok' });
     return { ok: true, done: true };
   }
 

@@ -16,7 +16,8 @@ import { useIntent, relicIcon } from './panels/w4b-rules.js';
 import { probe, reason } from './panels/core.js';
 import { hasIcon } from '../render/icons.js';
 import { ONCE_VERBS } from '../game/targets.js';
-import { h, icon, svgIcon, fmt, fmtDuration, kv, touchPlayer } from './dom.js';
+import { h, icon, svgIcon, fmt, fmtDuration, kv, touchPlayer, touchText } from './dom.js';
+import { t as tr, tn, lang, onLang, N, name as cname, nameEntry, ctext } from '../i18n/index.js';
 
 /** Wave 4 (wishes A, C, E): the Hammer hint's Sell, Rotate and Upgrade flows live in a module loaded on first use. */
 const flows = () => import('./panels/w4-flows.js');
@@ -33,12 +34,13 @@ export const TOOL_CONTENT = Object.freeze({
  * The toolbar's one-word label of a tool: content's `short` when it has one, else these (two tools used to read
  * "Scoop" and the Watering Can "Can"; QA wave 1 UI-23). Pure.
  */
-const SHORT = Object.freeze({ seed_bag: 'Seeds', watering_can: 'Water', feed_scoop: 'Feed', compost_scoop: 'Compost',
-  big_watering_can: 'Water', wide_sickle: 'Sickle', basket: 'Basket' });
-const STROKE_VERB = { plant: 'Planting', goldenPlant: 'Planting', harvest: 'Harvesting', water: 'Watering', tend: 'Tending',
-  collect: 'Collecting', pet: 'Petting', fertilize: 'Fertilizing', shake: 'Picking', pick: 'Picking', clear: 'Clearing',
-  compost: 'Composting', uproot: 'Uprooting', chop: 'Chopping', feed: 'Feeding', collectTray: 'Collecting',
-  bottle: 'Bottle-feeding', nurse: 'Caring for', weed: 'Pulling weeds' };
+// values are catalog keys ('toolbar.short.*', 'toolbar.verb.*'), read when the label is drawn
+const SHORT = Object.freeze({ seed_bag: 'seeds', watering_can: 'water', feed_scoop: 'feed', compost_scoop: 'compost',
+  big_watering_can: 'water', wide_sickle: 'sickle', basket: 'basket' });
+const STROKE_VERB = { plant: 'plant', goldenPlant: 'plant', harvest: 'harvest', water: 'water', tend: 'tend',
+  collect: 'collect', pet: 'pet', fertilize: 'fertilize', shake: 'pick', pick: 'pick', clear: 'clear',
+  compost: 'compost', uproot: 'uproot', chop: 'chop', feed: 'feed', collectTray: 'collect',
+  bottle: 'bottle', nurse: 'nurse', weed: 'weed' };
 
 /**
  * The "Planting Carrot × 14" chip of a drag stroke: { item, text, n }, or null when there is none to show. A one-press
@@ -49,15 +51,22 @@ export function strokeChip(s) {
   if (!s || !s.count) return null;
   const verb = s.verb || s.kind;
   if (ONCE_VERBS.has(verb)) return null;
-  const what = s.item ? (CONTENT.crops.get(s.item)?.name || CONTENT.items.get(s.item)?.name || CONTENT.animals.get(s.item)?.name || s.item) : '';
-  return { item: s.item || null, text: `${STROKE_VERB[verb] ?? ''} ${what}`.trim(), n: s.count };
+  const fam = !s.item ? null : CONTENT.crops.get(s.item) ? 'crops' : CONTENT.items.get(s.item) ? 'items' : CONTENT.animals.get(s.item) ? 'animals' : null;
+  const vb = STROKE_VERB[verb] ? tr(`toolbar.verb.${STROKE_VERB[verb]}`) : '';
+  // "Planting Carrot" / "Засаждане: морков"
+  const text = !s.item ? vb : !vb ? (fam ? cname(s.item, { family: fam }) : s.item)
+    : tr('toolbar.stroke', { verb: vb, what: fam ? N(s.item, fam) : s.item });
+  return { item: s.item || null, text: text.trim(), n: s.count };
 }
 
 export function shortLabel(def, fallback = '') {
   if (!def) return fallback;
+  // the content names table carries every tool's Bulgarian toolbar word (`short`, at most 8 letters)
+  const e = lang() !== 'en' ? nameEntry(def.id, 'tools') : null;
+  if (e) return e.short ?? e.name;
   if (typeof def.short === 'string' && def.short) return def.short;
-  if (SHORT[def.id]) return SHORT[def.id];
-  if (def.upgrades && SHORT[def.upgrades]) return SHORT[def.upgrades];
+  if (SHORT[def.id]) return tr(`toolbar.short.${SHORT[def.id]}`);
+  if (def.upgrades && SHORT[def.upgrades]) return tr(`toolbar.short.${SHORT[def.upgrades]}`);
   const n = def.name || fallback;
   return n.length > 9 ? n.split(' ').at(-1) : n;
 }
@@ -92,12 +101,12 @@ export function seedRows(state) {
   return rows;
 }
 
-/** "1m", "45m", "2h", "1h 30m": the seed tray's short grow time. Pure. */
+/** "1m", "45m", "2h", "1h 30m" (Bulgarian "1 мин", "2 ч 30 мин"): the seed tray's short grow time. Pure. */
 export function shortTime(ms) {
   const m = Math.max(1, Math.round(ms / 60_000));
-  if (m < 60) return `${m}m`;
+  if (m < 60) return tr('toolbar.time.m', { m });
   const hr = Math.floor(m / 60);
-  return m % 60 ? `${hr}h ${m % 60}m` : `${hr}h`;
+  return m % 60 ? tr('toolbar.time.hm', { h: hr, m: m % 60 }) : tr('toolbar.time.h', { h: hr });
 }
 
 export function createToolbar(S) {
@@ -134,7 +143,7 @@ export function createToolbar(S) {
     more.hidden = false;
     more.dataset.dir = back ? 'back' : 'on';
     more.dataset.axis = v ? 'y' : 'x';
-    more.setAttribute('aria-label', back ? 'Back to the first tools' : 'More tools');
+    more.setAttribute('aria-label', back ? tr('toolbar.moreBack') : tr('toolbar.more'));
   }
   bar.addEventListener('scroll', paintMore, { passive: true });
   if (typeof ResizeObserver === 'function') new ResizeObserver(paintMore).observe(bar);
@@ -197,6 +206,8 @@ export function createToolbar(S) {
     const level = levelFromXp(state.farm.xp);
     const t = controller.tool;
     const sn = seen() || { tools: {}, crops: {} };
+    // a language switch re-labels every button (the key below changes with the language)
+    if (shownLang !== lang()) { shownLang = lang(); for (const b of buttons.values()) b.querySelector('.badge')?.remove(); }
     const visible = controller.TOOLS.filter((tool) => {
       const def = toolDefFor(tool.id, state);
       return !(def && def.unlock > level);
@@ -213,11 +224,14 @@ export function createToolbar(S) {
     for (const tool of visible) {
       const b = buttons.get(tool.id);
       const def = toolDefFor(tool.id, state);
-      const name = def ? def.name : tool.label;
+      const name = def ? cname(def.id, { family: 'tools' }) : tool.label;
       const label = `${name}${tool.key ? ` (${tool.key})` : ''}`;
       b.setAttribute('aria-pressed', String(t.id === tool.id || (isSeedTool(t.id) && isSeedTool(tool.id))));
       b.setAttribute('aria-label', label);
-      b.dataset.tip = `${label}${def && def.text ? `: ${def.text}` : ''}`;
+      const desc = def && def.text ? ctext('tools', def.id, 'desc', def.text) : '';
+      b.dataset.tip = `${label}${desc ? `: ${desc}` : ''}`;
+      // a finger has no number keys and no Shift: its tip leaves the key out and says the touch words of the text
+      b.dataset.tipTouch = `${name}${desc ? `: ${touchText(desc, true)}` : ''}`;
       const ico = b.querySelector('.ico');
       // the Compost Scoop spreading Fertilizer says so (wave 4, wish 2): its picture and name are the Fertilizer's
       const fertOn = TOOL_CONTENT[tool.id] === 'compost_scoop' && t.id === tool.id && t.spread === 'fertilizer';
@@ -227,12 +241,12 @@ export function createToolbar(S) {
         ico.replaceChildren(iconId ? icon(iconId, { size: 44 }) : svgIcon(tool.id === 'hand' ? 'hand' : 'star', 44));
       }
       const nameEl = b.querySelector('.name');
-      nameEl.textContent = isSeedTool(tool.id) ? (cropName(t.crop) || 'Seeds') : fertOn ? 'Fertilizer' : shortLabel(def, name);
+      nameEl.textContent = isSeedTool(tool.id) ? (cropName(t.crop) || tr('toolbar.short.seeds')) : fertOn ? tr('toolbar.fertilizer') : shortLabel(def, name);
       // a long name ("Fertilizer", "Strawberry") is set a size smaller so it fits a phone's tool button
       nameEl.classList.toggle('long', nameEl.textContent.length > 8);
       const isNew = !sn.tools?.[tool.id];
       const badge = b.querySelector('.badge');
-      if (isNew && !badge) b.append(h('span.badge.badge--new', 'New'));
+      if (isNew && !badge) b.append(h('span.badge.badge--new', tr('toolbar.new')));
       else if (!isNew && badge) badge.remove();
     }
     if (seedsOpen) renderSeeds(); else tray.hidden = true;
@@ -254,7 +268,9 @@ export function createToolbar(S) {
     if (w > 0) document.getElementById('tray-wrap')?.style.setProperty('--bar-w', `${Math.max(360, w)}px`);
   }
 
-  const cropName = (id) => CONTENT.crops.get(id)?.name ?? null;
+  // the seed's toolbar word: its short form ("Тръстика" for "Захарна тръстика")
+  const cropName = (id) => (CONTENT.crops.get(id) ? cname(id, { form: 'short', family: 'crops' }) : null);
+  let shownLang = lang();
   const isSeedTool = (id) => TOOL_CONTENT[id] === 'seed_bag';
 
   function onTool(id) {
@@ -284,21 +300,22 @@ export function createToolbar(S) {
       const card = h('button.seed', {
         type: 'button', role: 'option', dataset: { crop: r.id }, 'aria-selected': String(sel), 'aria-disabled': r.open ? null : 'true',
         'aria-label': r.open
-          ? `${r.name}: ${fmt(r.seed)} coins a plot, grows in ${fmtDuration(r.growMs)}, sells for ${fmt(r.sell)}, ${r.stars} mastery stars, ${fmt(r.stock)} in the barn`
-          : `${r.name}: unlocks at farm level ${r.unlock}`,
+          ? tr('toolbar.seed.label', { name: N(r.id, 'crops'), seed: r.seed, d: fmtDuration(r.growMs), sell: r.sell, stars: r.stars, stock: r.stock })
+          : tr('toolbar.seed.lockedLabel', { name: N(r.id, 'crops'), level: r.unlock }),
         'data-tip': r.open
-          ? `${r.name}: plant for ${fmt(r.seed)} coins a plot · ready in ${fmtDuration(r.growMs)} · harvest ${fmt(r.yield)} × ${fmt(r.sell)} coins · ${fmt(r.xp)} XP${r.stock ? ` · ${fmt(r.stock)} in the barn` : ''}`
-          : `${r.name} unlocks at farm level ${r.unlock}`,
+          ? tr(r.stock ? 'toolbar.seed.tipStock' : 'toolbar.seed.tip', { name: N(r.id, 'crops'), seed: r.seed, d: fmtDuration(r.growMs), yield: r.yield,
+            sell: r.sell, xp: r.xp, stock: r.stock })
+          : tr('toolbar.seed.locked', { name: N(r.id, 'crops'), level: r.unlock }),
         on: { click: () => pickSeed(r) },
       },
       icon(r.id, { size: 46 }),
-      h('span.nm', r.name),
+      h('span.nm', cname(r.id, { family: 'crops' })),
       // "Plant 2 · 1m" and "Harvest 2 × 2": what a plot costs and what it gives, labelled (QA wave 1 UI-25)
       r.open
-        ? [h('span.row', h('b', 'Plant'), icon('coins', { size: 16 }), fmt(r.seed), h('span.sep', '·'), shortTime(r.growMs)),
-          h('span.row.give', h('b', 'Harvest'), `${fmt(r.yield)}×`, icon('coins', { size: 16 }), fmt(r.sell)), stars]
-        : h('span.lockline', svgIcon('lock', 16), `Level ${r.unlock}`),
-      isNew ? h('span.badge.badge--new', 'New') : null);
+        ? [h('span.row', h('b', tr('toolbar.seed.plant')), icon('coins', { size: 16 }), fmt(r.seed), h('span.sep', '·'), shortTime(r.growMs)),
+          h('span.row.give', h('b', tr('toolbar.seed.harvest')), `${fmt(r.yield)}×`, icon('coins', { size: 16 }), fmt(r.sell)), stars]
+        : h('span.lockline', svgIcon('lock', 16), tr('common.level', { n: r.unlock })),
+      isNew ? h('span.badge.badge--new', tr('toolbar.new')) : null);
       tray.append(card);
     }
     tray.append(arrow(1));
@@ -308,7 +325,7 @@ export function createToolbar(S) {
 
   // ---- Compost or Fertilizer (wave 4, wish 2): while the Compost Scoop is in hand and the farm makes Fertilizer, a
   // strip over the toolbar picks what it spreads (the controller's `spread` tool option, client lane)
-  const spread = h('div.seed-strip.spread-strip', { role: 'toolbar', 'aria-label': 'What the scoop spreads', hidden: true });
+  const spread = h('div.seed-strip.spread-strip', { role: 'toolbar', 'aria-label': tr('toolbar.spread.label'), hidden: true });
   bar.before(spread);
   let spreadKey = '';
   function renderSpread() {
@@ -320,24 +337,25 @@ export function createToolbar(S) {
     const F = FARMING.FERTILIZER;
     const n = (id) => (st.farm.inventory[id] || 0) + (st.farm.overflow[id] || 0);
     const cur = t.spread === 'fertilizer' ? 'fertilizer' : 'compost';
-    const key = `${cur}|${n('compost')}|${n(F.item)}`;
+    const key = `${cur}|${n('compost')}|${n(F.item)}|${lang()}`;
     spread.hidden = false;
     if (key === spreadKey) return;
     spreadKey = key;
     const chipBtn = (id, label, tip) => h('button.ss-seed.spread-chip', {
-      type: 'button', 'aria-pressed': String(cur === id), 'aria-label': `${label}, ${fmt(n(id === 'fertilizer' ? F.item : id))} in the barn`,
+      type: 'button', 'aria-pressed': String(cur === id), 'aria-label': tr('toolbar.spread.chip', { label, n: n(id === 'fertilizer' ? F.item : id) }),
       dataset: { spread: id, tip }, on: { click: () => controller.setTool(t.id, { spread: id }) },
     }, icon(id === 'fertilizer' ? F.item : id, { size: 30 }), h('span.spread-n', fmt(n(id === 'fertilizer' ? F.item : id))));
-    spread.replaceChildren(h('span.ss-label', { 'aria-hidden': 'true' }, 'Spread'),
-      chipBtn('compost', 'Compost', `Compost: +${GROWTH_C.bonusUnits} at harvest and a blue-ribbon chance`),
-      chipBtn('fertilizer', 'Fertilizer', `Fertilizer: ${Math.round(F.timeBp / 100)} % sooner and +${F.bonusUnits} at harvest`),
-      h('span.spread-what', cur === 'fertilizer' ? 'Fertilizer' : 'Compost'));
+    spread.setAttribute('aria-label', tr('toolbar.spread.label'));
+    spread.replaceChildren(h('span.ss-label', { 'aria-hidden': 'true' }, tr('toolbar.spread.spread')),
+      chipBtn('compost', tr('toolbar.compost'), tr('toolbar.spread.compostTip', { units: GROWTH_C.bonusUnits })),
+      chipBtn('fertilizer', tr('toolbar.fertilizer'), tr('toolbar.spread.fertTip', { pct: Math.round(F.timeBp / 100), units: F.bonusUnits })),
+      h('span.spread-what', cur === 'fertilizer' ? tr('toolbar.fertilizer') : tr('toolbar.compost')));
   }
   store.subscribe('inventory', renderSpread);
 
   // ---- the Golden Watering Can (wave 4b, owner wish 2): while the Watering Can is in hand on a farm that owns it, one
   // button over the toolbar waters every growing crop and tree that wants it (the rules' waterAll, predicted)
-  const golden = h('div.seed-strip.spread-strip.golden-strip', { role: 'toolbar', 'aria-label': 'Golden Watering Can', hidden: true });
+  const golden = h('div.seed-strip.spread-strip.golden-strip', { role: 'toolbar', 'aria-label': tr('toolbar.golden.label'), hidden: true });
   bar.before(golden);
   let goldenKey = '';
   function renderGolden() {
@@ -347,14 +365,15 @@ export function createToolbar(S) {
     if (!show) { golden.hidden = true; goldenKey = ''; return; }
     golden.hidden = false;
     const code = probe(store, it.type, it.args);
-    const key = String(code);
+    const key = `${code}|${lang()}`;
     if (key === goldenKey) return;
     goldenKey = key;
+    golden.setAttribute('aria-label', tr('toolbar.golden.label'));
     const art = relicIcon('golden_can', hasIcon);
-    const why = code === null ? '' : code === 'NOT_NEEDED' ? 'Everything is watered' : reason(code);
-    const btn = h('button.btn.btn--small.btn--sky.golden-go', { type: 'button', disabled: code !== null, dataset: { relicUse: 'golden_can', tip: why || 'Waters every growing crop and tree that wants it' },
-      on: { click: () => controller.do(it.type, it.args) } }, 'Water everything');
-    golden.replaceChildren(...[icon(art.id, { size: 34, cls: art.gilded ? 'pn-gilded' : '' }), h('span.ss-label', 'Golden Can'), btn,
+    const why = code === null ? '' : code === 'NOT_NEEDED' ? tr('toolbar.golden.allWatered') : reason(code);
+    const btn = h('button.btn.btn--small.btn--sky.golden-go', { type: 'button', disabled: code !== null, dataset: { relicUse: 'golden_can', tip: why || tr('toolbar.golden.tip') },
+      on: { click: () => controller.do(it.type, it.args) } }, tr('toolbar.golden.go'));
+    golden.replaceChildren(...[icon(art.id, { size: 34, cls: art.gilded ? 'pn-gilded' : '' }), h('span.ss-label', tr('toolbar.golden.short')), btn,
       why ? h('span.golden-why', why) : null].filter(Boolean));
   }
   store.subscribe('objects', () => { if (!golden.hidden) renderGolden(); });
@@ -363,7 +382,7 @@ export function createToolbar(S) {
   // ---- the seed tray's overflow cue (QA wave 1 UI-38): a fading arrow at each end that has more cards ----------
   function arrow(dir) {
     return h(`button.tray-arrow.${dir < 0 ? 'left' : 'right'}`, { type: 'button', tabindex: '-1', hidden: true,
-      'aria-label': dir < 0 ? 'More seeds to the left' : 'More seeds to the right',
+      'aria-label': dir < 0 ? tr('toolbar.seedsLeft') : tr('toolbar.seedsRight'),
       on: { click: () => tray.scrollBy({ left: dir * Math.max(120, tray.clientWidth * 0.6), behavior: 'smooth' }) } },
     h('span', { 'aria-hidden': 'true' }, dir < 0 ? '‹' : '›'));
   }
@@ -400,7 +419,7 @@ export function createToolbar(S) {
   window.addEventListener('resize', () => requestAnimationFrame(() => { syncTrayState(); cue(); }));
 
   function pickSeed(r) {
-    if (!r.open) { ui.toast(`${r.name} unlocks at farm level ${r.unlock}.`, { kind: 'info', icon: r.id }); return; }
+    if (!r.open) { ui.toast(tr('toolbar.seed.lockedToast', { name: N(r.id, 'crops'), level: r.unlock }), { kind: 'info', icon: r.id }); return; }
     markSeen('crops', r.id);
     if (controller.tool.id === 'hand') {
       // the Smart Hand asked for a seed (an empty plot, no seed chosen): keep the Hand, remember the seed
@@ -425,36 +444,36 @@ export function createToolbar(S) {
       const n = st.farm.storage[d];
       return h('button.seed.build-card', {
         type: 'button', role: 'menuitem', dataset: { def: d },
-        'aria-label': `Place ${def.name}${n > 1 ? `, ${n} waiting` : ''}. Free`, 'data-tip': `${def.name}: free, it waits in your tray. Click, then click the farm`,
+        'aria-label': tr(n > 1 ? 'toolbar.build.placeN' : 'toolbar.build.place', { thing: N(d), n }), 'data-tip': tr('toolbar.build.tip', { thing: N(d) }),
         on: { click: () => placeStored(d) },
-      }, icon(d, { size: 46 }), h('span.nm', def.name), h('span.row.free', n > 1 ? `Free · ×${n}` : 'Free · Place'));
+      }, icon(d, { size: 46 }), h('span.nm', cname(d)), h('span.row.free', n > 1 ? tr('toolbar.build.freeN', { n }) : tr('toolbar.build.free')));
     });
     // stored decor can be sold back from here (wish A): the list with what each piece fetches
     if (stored.some((d) => defOf(d)?.kind === 'decor') && ui.panels.has('decorSell')) {
       cards.push(h('button.seed.build-card', {
-        type: 'button', role: 'menuitem', dataset: { def: 'sell' }, 'aria-label': 'Sell stored decor',
-        'data-tip': 'Sell decor waiting here for a share of its price (Undo for 10 minutes)',
+        type: 'button', role: 'menuitem', dataset: { def: 'sell' }, 'aria-label': tr('toolbar.build.sellLabel'),
+        'data-tip': tr('toolbar.build.sellTip'),
         on: { click: () => { buildOpen = false; btray.hidden = true; S.hud?.renderDock(); ui.panels.open('decorSell'); } },
-      }, icon('coins', { size: 46 }), h('span.nm', 'Sell'), h('span.row', 'stored decor')));
+      }, icon('coins', { size: 46 }), h('span.nm', tr('toolbar.build.sell')), h('span.row', tr('toolbar.build.sellSub'))));
     }
     cards.push(h('button.seed.build-card', {
-      type: 'button', role: 'menuitem', dataset: { def: 'move' }, 'aria-label': 'Move and rotate things (Hammer)',
-      'data-tip': 'Pick up anything on the farm and put it somewhere nicer. Timers keep running',
+      type: 'button', role: 'menuitem', dataset: { def: 'move' }, 'aria-label': tr('toolbar.build.moveLabel'),
+      'data-tip': tr('toolbar.build.moveTip'),
       on: { click: () => { buildOpen = false; btray.hidden = true; controller.setTool('hammer'); } },
-    }, icon('hammer', { size: 46 }), h('span.nm', 'Move'), h('span.row', 'and rotate')));
+    }, icon('hammer', { size: 46 }), h('span.nm', tr('toolbar.build.move')), h('span.row', tr('toolbar.build.moveSub'))));
     // the farmhouse, Market Stand, Well and benches upgrade from here too (wave 4, wish E)
     if (ui.panels.has('upgrades')) {
       cards.push(h('button.seed.build-card', {
-        type: 'button', role: 'menuitem', dataset: { def: 'upgrades' }, 'aria-label': 'Upgrade the farmhouse, Market Stand, Well and benches',
-        'data-tip': 'Upgrades: a new look for the farmhouse, the Market Stand, the Well and the benches, and a small bonus each',
+        type: 'button', role: 'menuitem', dataset: { def: 'upgrades' }, 'aria-label': tr('toolbar.build.upLabel'),
+        'data-tip': tr('toolbar.build.upTip'),
         on: { click: () => { buildOpen = false; btray.hidden = true; S.hud?.renderDock(); ui.panels.open('upgrades'); } },
-      }, icon('farmhouse', { size: 46 }), h('span.nm', 'Upgrade'), h('span.row', 'house, well…')));
+      }, icon('farmhouse', { size: 46 }), h('span.nm', tr('toolbar.build.up')), h('span.row', tr('toolbar.build.upSub'))));
     }
     if (ui.panels.has('market')) {
       cards.push(h('button.seed.build-card', {
-        type: 'button', role: 'menuitem', dataset: { def: 'shop' }, 'aria-label': 'Buy buildings and decor in the Market',
+        type: 'button', role: 'menuitem', dataset: { def: 'shop' }, 'aria-label': tr('toolbar.build.shopLabel'),
         on: { click: () => { buildOpen = false; btray.hidden = true; ui.panels.open('market', { tab: 'buildings' }); } },
-      }, icon('market_stand', { size: 46 }), h('span.nm', 'Shop'), h('span.row', 'buildings, decor')));
+      }, icon('market_stand', { size: 46 }), h('span.nm', tr('toolbar.build.shop')), h('span.row', tr('toolbar.build.shopSub'))));
     }
     btray.replaceChildren(...cards);
     btray.hidden = false;
@@ -463,7 +482,7 @@ export function createToolbar(S) {
     buildOpen = false;
     btray.hidden = true;
     const ok = typeof controller.place === 'function' ? controller.place(defId) : controller.setTool('hammer', { def: defId });
-    if (ok === false) ui.toast("That can't go on the farm right now.", { kind: 'info' });
+    if (ok === false) ui.toast(tr('toolbar.build.cannot'), { kind: 'info' });
     S.tutorial?.firstUse('hammer');
   }
   function openBuild(open = !buildOpen) {
@@ -539,23 +558,23 @@ export function createToolbar(S) {
     const touch = touchPlayer(controller);
     // only decor goes back into the tray; buildings, homes, trees, plots and the Homestead's landmarks just move
     const storable = def.kind === 'decor' && o.mw === undefined;
-    const parts = [icon(o.def, { size: 26 }), h('span', touch ? `${def.name}: tap to move it`
-      : `${def.name}: click to move it${storable ? ' · Del puts it away' : ''}`)];
+    const parts = [icon(o.def, { size: 26 }), h('span', touch ? tr('toolbar.hint.tap', { thing: N(o.def) })
+      : tr(storable ? 'toolbar.hint.clickDel' : 'toolbar.hint.click', { thing: N(o.def) }))];
     if (def.kind === 'decor' && typeof controller.pin === 'function') {
       const mine = o.pin === store.pid;
       const theirs = o.pin !== undefined && !mine;
-      parts.push(theirs ? h('span.hint-pin', `Pinned by ${st.players[o.pin]?.name || 'your partner'}`)
-        : btn(mine ? 'Unpin' : 'Pin', () => controller.pin(hintId, !mine), mine ? 'Take your pin out' : 'Pin it: moving it asks you first'));
+      parts.push(theirs ? h('span.hint-pin', tr('toolbar.hint.pinnedBy', { name: st.players[o.pin]?.name || tr('hud.tip.yourPartner') }))
+        : btn(mine ? tr('toolbar.hint.unpin') : tr('toolbar.hint.pin'), () => controller.pin(hintId, !mine), mine ? tr('toolbar.hint.unpinTip') : tr('toolbar.hint.pinTip')));
     }
     // ↻ turns it a quarter where it stands (wish C): the client's controller.rotate(id) (also R over it), else the
     // rules' rotateSpot sent as a move
     if (canTurn(hintId, def)) {
       const id = hintId;
-      parts.push(btn(touch ? '↻ Rotate' : '↻ Rotate (R)', () => turnObject(id), 'Turn it a quarter where it stands'));
+      parts.push(btn(touch ? tr('toolbar.hint.rotate') : tr('toolbar.hint.rotateKey'), () => turnObject(id), tr('toolbar.hint.rotateTip')));
     }
     if (typeof controller.canMoveBack === 'function' && controller.canMoveBack(hintId)) {
       const id = hintId;
-      parts.push(btn(touch ? 'Move back' : 'Move back (Ctrl+Z)', () => controller.moveBack(id), 'Put it back where it stood'));
+      parts.push(btn(touch ? tr('toolbar.hint.back') : tr('toolbar.hint.backKey'), () => controller.moveBack(id), tr('toolbar.hint.backTip')));
     }
     // the farmhouse, the Well, the Market Stand and the benches have upgrades (wish E): the tier and the way in
     const target = typeof UPG.upgradeTargetOf === 'function' ? UPG.upgradeTargetOf(o.def) : null;
@@ -563,20 +582,20 @@ export function createToolbar(S) {
     if (tiers && ui.panels.has('upgrades')) {
       const id = hintId;
       const n = typeof UPG.tierOf === 'function' ? UPG.tierOf(o) : 0;
-      parts.push(btn(n >= tiers ? `Upgrades ★${n}` : `Upgrade · ${n}/${tiers}`, () => ui.panels.open('upgrades', { id }),
-        n >= tiers ? 'Every upgrade is done' : 'See its upgrades: a new look and a small bonus'));
+      parts.push(btn(n >= tiers ? tr('toolbar.hint.upDone', { n }) : tr('toolbar.hint.up', { n, of: tiers }), () => ui.panels.open('upgrades', { id }),
+        n >= tiers ? tr('toolbar.hint.upDoneTip') : tr('toolbar.hint.upTip')));
     }
     // decor sells back for a share of its price (wish A), with a 10-minute Undo
     if (storable && ui.panels.has('decorSell')) {
       const id = hintId;
-      parts.push(btn('Sell…', () => flows().then((m) => m.sellPlaced(S, id)).catch((err) => console.error('sell', err)),
-        'Sell it back for a share of its price (Undo for 10 minutes)'));
+      parts.push(btn(tr('toolbar.hint.sell'), () => flows().then((m) => m.sellPlaced(S, id)).catch((err) => console.error('sell', err)),
+        tr('toolbar.hint.sellTip')));
     }
     // Masterwork (GDD §3.8): the workshop opens on this very piece
     if (hintMw && hintMw === hintId && S.ui?.panels?.has?.('decorsets')) {
       const id = hintId;
-      parts.push(btn('Masterwork', () => S.ui.panels.open('decorsets', { tab: 'masterwork', id }),
-        'Upgrade this piece: a stone or gilded border and more Farm Beauty'));
+      parts.push(btn(tr('toolbar.hint.masterwork'), () => S.ui.panels.open('decorsets', { tab: 'masterwork', id }),
+        tr('toolbar.hint.masterworkTip')));
     }
     hint.replaceChildren(...parts);
     hint.hidden = false;
@@ -597,11 +616,11 @@ export function createToolbar(S) {
     dropSwitch();
     hintId = null;
     shown();
-    const name = defOf(c.def)?.name ?? 'it';
+    const thing = defOf(c.def) ? N(c.def) : tr('toolbar.carry.it');
     const btn = (label, fn, title) => h('button.hint-btn', { type: 'button', title, on: { click: (ev) => { ev.stopPropagation(); fn(); } } }, label);
-    hint.replaceChildren(icon(c.def, { size: 26 }), h('span', `${c.moveId ? 'Moving' : 'Placing'} the ${name}`),
-      btn('↻ Rotate (R)', () => controller.rotate(), 'Turn it a quarter'),
-      btn('Cancel (Esc)', () => controller.cancel?.(), c.moveId ? 'Leave it where it was' : 'Put it back'));
+    hint.replaceChildren(icon(c.def, { size: 26 }), h('span', tr(c.moveId ? 'toolbar.carry.moving' : 'toolbar.carry.placing', { thing })),
+      btn(tr('toolbar.hint.rotateKey'), () => controller.rotate(), tr('toolbar.carry.rotateTip')),
+      btn(tr('toolbar.carry.cancel'), () => controller.cancel?.(), c.moveId ? tr('game.build.leave') : tr('toolbar.carry.putBack')));
     hint.classList.add('carry');
     hint.hidden = false;
   }
@@ -655,6 +674,14 @@ export function createToolbar(S) {
   });
   store.subscribe('xp', render);
   store.subscribe('tools', render);
+  // a language switch: the open trays and the hint re-draw (render() itself runs from ui/index.js relocalize)
+  onLang(() => {
+    if (seedsOpen) renderSeeds();
+    if (buildOpen) renderBuild();
+    if (hintId && !hint.hidden) renderHint();
+    carryKey = '';
+    paintMore();
+  });
   store.subscribe('mastery', () => { if (seedsOpen) renderSeeds(); });
   store.subscribe('inventory', () => { if (seedsOpen) renderSeeds(); });
   // a click on the farm closes the seed tray (the chosen seed stays)

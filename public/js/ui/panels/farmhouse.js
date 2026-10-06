@@ -23,13 +23,18 @@ import { levelOf } from './core.js';
 import { ledgerView } from './restoration.js';
 import { h, fmt, createKit, svgIcon, playerMark, fill, bar, pill, price } from './kit.js';
 import { homeScene, furnitureArt, roomPlan } from './home-art.js';
+import { t, lang, liveRows, ctext, name as cname } from '../../i18n/index.js';
 
 const own = (o, k) => (o && Object.hasOwn(o, k) ? o[k] : undefined);
 
-export const CATS = Object.freeze([
-  ['seating', 'Seating'], ['tables', 'Tables'], ['comfort', 'Comfort'], ['kitchen', 'Kitchen'], ['music', 'Music'],
-  ['lights', 'Lights'], ['plants', 'Plants & pets'], ['rugs', 'Rugs'], ['walls', 'Walls'],
-]);
+/** [category, its name] (the name read in the language in effect). */
+export const CATS = liveRows(['seating', 'tables', 'comfort', 'kitchen', 'music', 'lights', 'plants', 'rugs', 'walls']
+  .map((id) => [id, `home.fh.cat.${id}`]));
+/** A piece of furniture's name and words in the language in effect. */
+const furnName = (def) => cname(def.id, { family: 'furniture' });
+const furnText = (def) => ctext('furniture', def.id, 'desc', def.text ?? '');
+/** Grandma's visit texts (lane C: GRANDMA_VISIT.lines.<stop>, .letter.<part>, .card.missed). */
+const gv = (id, field, english) => ctext('GRANDMA_VISIT', id, field, english);
 
 const interiorOpen = (state) => (typeof interiorA.interiorOpen === 'function' ? interiorA.interiorOpen(state)
   : Boolean(INTERIOR) && isLive(INTERIOR) && projectDone(state, INTERIOR.needsProject));
@@ -63,14 +68,14 @@ export function roomView(state, pid, now) {
   }).filter(Boolean);
   const coins = state.farm.wallet.coins;
   const catalog = (typeof interiorA.furnitureCatalog === 'function' ? interiorA.furnitureCatalog(state)
-    : [...(CONTENT.furniture?.values() ?? [])].filter((d) => isLive(d) && !d.fixed).map((d) => ({ id: d.id, name: d.name, cat: d.cat,
+    : [...(CONTENT.furniture?.values() ?? [])].filter((d) => isLive(d) && !d.fixed).map((d) => ({ id: d.id, name: furnName(d), cat: d.cat,
       layer: d.layer, size: d.size, cost: d.cost, shop: d.shop === true, max: d.max ?? null, owned: 0, tray: room.tray?.[d.id] ?? 0 })))
     .map((c) => {
       const def = furnitureOf(c.id);
       const p = typeof interiorA.furnishPrice === 'function' ? interiorA.furnishPrice(state, def) : { coins: c.cost, fromTray: c.tray > 0 };
       const code = !open ? 'LOCKED' : p.code ?? (p.coins > coins ? 'NO_COINS' : null);
-      return { ...c, def, price: p.fromTray ? 0 : c.cost, fromTray: Boolean(p.fromTray), code,
-        hint: code === 'NO_COINS' ? { coins: p.coins - coins } : code === 'CAP' ? { cap: c.max } : code === 'LOCKED' && !open ? { text: 'The room opens with Grandma\'s Farmhouse' } : {} };
+      return { ...c, name: def ? furnName(def) : c.name, def, price: p.fromTray ? 0 : c.cost, fromTray: Boolean(p.fromTray), code,
+        hint: code === 'NO_COINS' ? { coins: p.coins - coins } : code === 'CAP' ? { cap: c.max } : code === 'LOCKED' && !open ? { text: t('home.fh.opensWith') } : {} };
     });
   const tray = catalog.filter((c) => c.tray > 0);
   const byCat = CATS.map(([id, name]) => ({ id, name, pieces: catalog.filter((c) => c.cat === id && (c.shop || c.tray > 0 || c.owned > 0)) }))
@@ -90,9 +95,9 @@ export function restoreView(state, pid) {
     doneIds: p.bundles.filter((b) => b.done).map((b) => b.id) }));
 }
 
-const STOP_WORDS = { porch: 'on the porch', field: 'by the fields', orchard: 'in the orchard', barnyard: 'with the animals',
-  bench: 'on the Sunset Bench', parlour: 'in the parlour' };
-export const stopWords = (stop) => STOP_WORDS[stop] ?? 'about the farm';
+const STOPS = ['porch', 'field', 'orchard', 'barnyard', 'bench', 'parlour'];
+/** Where Grandma is, in words: "on the porch" / "на верандата". */
+export const stopWords = (stop) => t(`home.fh.stop.${STOPS.includes(stop) ? stop : 'other'}`);
 
 /** Grandma's visit for the card. Pure. phase: 'coming' | 'here' | 'gone'. */
 export function visitView(state, pid, now) {
@@ -100,23 +105,25 @@ export function visitView(state, pid, now) {
   const v = typeof grandmaA.grandmaView === 'function' ? grandmaA.grandmaView(state, now, pid) : null;
   const q = G ? G.quest : null;
   const quest = q ? { id: q, done: Boolean(own(state.farm.quests?.done, q)), active: Boolean(own(state.farm.quests?.active, q)),
-    level: CONTENT.quests?.get?.(q)?.level ?? 38, title: CONTENT.quests?.get?.(q)?.title ?? 'Grandma Comes Home' } : null;
+    level: CONTENT.quests?.get?.(q)?.level ?? 38, title: ctext('quests', q, 'title', CONTENT.quests?.get?.(q)?.title ?? t('home.fh.questTitle')) } : null;
   const live = Boolean(G) && isLive(G);
   if (!v) {
     return { phase: 'coming', live, quest, farmhouseDone: projectDone(state, INTERIOR?.needsProject ?? 'farmhouse') };
   }
-  const lines = G.lines?.[v.stop] ?? [];
+  const lines = gv('lines', v.stop, G.lines?.[v.stop] ?? []);
   const met = Object.keys(state.farm.grandma?.met ?? {}).sort();
   if (v.here) {
     return { phase: 'here', live, quest, stop: v.stop, where: stopWords(v.stop), line: lines[v.line] ?? lines[0] ?? '',
-      arrive: G.lines?.arrive?.[0] ?? '', until: v.until, nextAt: v.nextAt, met, metMe: v.met, at: v.at };
+      arrive: gv('lines', 'arrive', G.lines?.arrive ?? [])[0] ?? '', until: v.until, nextAt: v.nextAt, met, metMe: v.met, at: v.at };
   }
   const gift = G.gift?.furniture ?? null;
   const giftDef = gift ? furnitureOf(gift) : null;
   const inTray = gift ? (state.farm.interior?.tray?.[gift] ?? 0) > 0 : false;
   const hung = gift ? Object.values(state.farm.interior?.items ?? {}).some((it) => it.def === gift) : false;
-  return { phase: 'gone', live, quest, letter: G.letter, missed: Boolean(v.missed), missedCard: G.missedCard, leave: G.lines?.leave ?? [],
-    gift: giftDef ? { id: gift, name: giftDef.name, text: giftDef.text ?? '', inTray, hung, waiting: Boolean(v.gift) } : null, met };
+  const L = G.letter ?? {};
+  const letter = G.letter ? { ...L, greeting: gv('letter', 'greeting', L.greeting), body: gv('letter', 'body', L.body), signoff: gv('letter', 'signoff', L.signoff) } : G.letter;
+  return { phase: 'gone', live, quest, letter, missed: Boolean(v.missed), missedCard: gv('card', 'missed', G.missedCard), leave: gv('lines', 'leave', G.lines?.leave ?? []),
+    gift: giftDef ? { id: gift, name: furnName(giftDef), text: furnText(giftDef), inTray, hung, waiting: Boolean(v.gift) } : null, met };
 }
 
 /** Everything the farmhouse panel draws (the three tabs). Pure. */
@@ -141,7 +148,7 @@ export function farmhouseBadge(state, pid, now) {
 // ---- the Home tab: the room plan and the catalog ---------------------------------------------------------------------
 
 function sizeWords(c) {
-  return c.layer === 'wall' ? `on a wall, ${c.size[0]} wide` : c.layer === 'floor' ? `a rug, ${c.size[0]}×${c.size[1]}` : `${c.size[0]}×${c.size[1]}`;
+  return c.layer === 'wall' ? t('home.fh.onWall', { w: c.size[0] }) : c.layer === 'floor' ? t('home.fh.rug', { w: c.size[0], h: c.size[1] }) : `${c.size[0]}×${c.size[1]}`;
 }
 
 function homeTab(body, ctx, kit) {
@@ -186,7 +193,7 @@ function homeTab(body, ctx, kit) {
     const placedDef = mode.def;
     mode = null;
     ghost = null;
-    if (placedDef) ctx.ui.toast?.(`${placedDef.name}: there it is.`);
+    if (placedDef) ctx.ui.toast?.(t('home.fh.placed', { name: furnName(placedDef) }));
     renderAll();
   }
 
@@ -215,11 +222,11 @@ function homeTab(body, ctx, kit) {
       onWall: v.open && mode && mode.def.layer === 'wall' ? onWall : null,
       onItem: v.open && !mode ? (id) => { sel = sel === id ? null : id; renderAll(); } : null,
       onHover: v.open && mode && !touch ? setGhost : null,
-      label: v.open ? 'The farmhouse room from above. Pick a piece to move it.' : 'The farmhouse room, still to be restored' });
+      label: v.open ? t('home.fh.planLabel') : t('home.fh.planPreview') });
     planSvg = svg;
     svg.classList.toggle('placing', Boolean(mode));
     svg.classList.toggle('preview', !v.open);
-    const wrap = h('div.fh-plan', { tabindex: v.open ? '0' : null, 'aria-label': mode ? `Placing the ${mode.def.name}: arrow keys move it, Enter puts it down, R turns it, Escape stops` : null,
+    const wrap = h('div.fh-plan', { tabindex: v.open ? '0' : null, 'aria-label': mode ? t('home.fh.placingAria', { name: furnName(mode.def) }) : null,
       on: { keydown: onKey } }, svg);
     planBox.replaceChildren(wrap);
   }
@@ -283,21 +290,19 @@ function homeTab(body, ctx, kit) {
     if (!v.open) { bar0.replaceChildren(); return; }
     if (!mode) {
       const r3 = room3d();
-      fill(bar0, h('span.fh-mode-text', svgIcon('hammer', 20), v.pieces
-        ? `${v.pieces} piece${v.pieces === 1 ? '' : 's'} in the room. Pick one to move, turn or store it; pick a piece in the catalog to add it.`
-        : 'Pick a piece in the catalog, then a spot in the room.'),
+      fill(bar0, h('span.fh-mode-text', svgIcon('hammer', 20), v.pieces ? t('home.fh.pieces', { n: v.pieces }) : t('home.fh.pickPiece')),
       r3 && typeof r3.enter === 'function' && !r3.inside ? h('button.btn.btn--sky.pn-sm', { type: 'button', dataset: { key: 'fh-enter' },
-        on: { click: () => { try { r3.enter(); } catch (err) { console.error('interior enter failed', err); } ctx.close(); } } }, 'Go inside') : null);
+        on: { click: () => { try { r3.enter(); } catch (err) { console.error('interior enter failed', err); } ctx.close(); } } }, t('home.banner.goInside')) : null);
       return;
     }
-    const why = ghost && !ghost.ok && ghost.code && ghost.code !== 'ALREADY_DONE' ? ({ OCCUPIED: 'Something stands there', BLOCKED: 'Keep the door and the hearth clear',
-      OUT_OF_BOUNDS: 'It does not fit there' }[ghost.code] ?? 'Not there') : null;
+    const why = ghost && !ghost.ok && ghost.code && ghost.code !== 'ALREADY_DONE'
+      ? t(['OCCUPIED', 'BLOCKED', 'OUT_OF_BOUNDS'].includes(ghost.code) ? `home.fh.why.${ghost.code}` : 'home.fh.why.other') : null;
     fill(bar0, h('span.fh-mode-text', furnitureArt(mode.def, { px: 32 }),
-      h('span', h('b', `${mode.kind === 'move' ? 'Moving' : 'Placing'}: ${mode.def.name}. `),
-        why ? h('span.fh-why', why) : touch ? (ghost ? 'Tap the same spot again, or "Put it here".' : 'Tap a spot in the room.') : 'Click a spot in the room.')),
-      touch && ghost && ghost.ok ? h('button.btn.btn--go.pn-sm', { type: 'button', dataset: { key: 'fh-put' }, on: { click: commit } }, 'Put it here') : null,
-      mode.def.layer === 'wall' ? null : h('button.pn-chipbtn', { type: 'button', dataset: { key: 'fh-turn' }, on: { click: turn } }, '⟳ Turn'),
-      h('button.pn-chipbtn', { type: 'button', dataset: { key: 'fh-cancel' }, on: { click: cancel } }, 'Cancel'));
+      h('span', h('b', t(mode.kind === 'move' ? 'home.fh.moving' : 'home.fh.placing', { name: furnName(mode.def) })),
+        why ? h('span.fh-why', why) : touch ? (ghost ? t('home.fh.tapAgain') : t('home.fh.tapSpot')) : t('home.fh.clickSpot'))),
+      touch && ghost && ghost.ok ? h('button.btn.btn--go.pn-sm', { type: 'button', dataset: { key: 'fh-put' }, on: { click: commit } }, t('home.fh.putHere')) : null,
+      mode.def.layer === 'wall' ? null : h('button.pn-chipbtn', { type: 'button', dataset: { key: 'fh-turn' }, on: { click: turn } }, t('home.fh.turnBtn')),
+      h('button.pn-chipbtn', { type: 'button', dataset: { key: 'fh-cancel' }, on: { click: cancel } }, t('common.cancel')));
   }
 
   function selectedCard(v) {
@@ -306,19 +311,19 @@ function homeTab(body, ctx, kit) {
     const s0 = st();
     const by = it.by && it.by !== 'sys' ? s0.players[it.by] : null;
     return h('section.fh-selected', { dataset: { item: it.id } },
-      h('div.fh-sel-head', furnitureArt(it.def, { px: 56 }), h('div', h('b', it.def.name),
-        h('small', it.fixed ? 'The room\'s own piece' : by ? `Placed by ${it.by === ctx.store.pid ? 'you' : by.name}` : 'In the room'))),
-      it.def.text ? h('p.fh-sel-text', it.def.text) : null,
+      h('div.fh-sel-head', furnitureArt(it.def, { px: 56 }), h('div', h('b', furnName(it.def)),
+        h('small', it.fixed ? t('home.fh.ownPiece') : by ? t('home.fh.placedBy', { who: it.by === ctx.store.pid ? t('home.fish.you') : by.name }) : t('home.fh.inRoom')))),
+      it.def.text ? h('p.fh-sel-text', furnText(it.def)) : null,
       h('div.fh-sel-acts',
-        it.movable ? h('button.btn.btn--sky.pn-sm', { type: 'button', dataset: { key: `mv-${it.id}` }, on: { click: () => startMove(it) } }, 'Move') : null,
-        it.movable && it.def.layer !== 'wall' ? kit.button({ label: 'Turn', cls: 'pn-sm btn--paper', type: 'furnishMove',
+        it.movable ? h('button.btn.btn--sky.pn-sm', { type: 'button', dataset: { key: `mv-${it.id}` }, on: { click: () => startMove(it) } }, t('home.fh.move')) : null,
+        it.movable && it.def.layer !== 'wall' ? kit.button({ label: t('home.fh.turn'), cls: 'pn-sm btn--paper', type: 'furnishMove',
           args: () => ({ id: it.id, x: it.x, z: it.z, rot: ((it.rot ?? 0) + 1) % 4 }), data: { turn: it.id },
-          hint: { texts: { OCCUPIED: 'No room to turn it here', OUT_OF_BOUNDS: 'No room to turn it here', BLOCKED: 'It would block the door' } } }) : null,
-        !it.fixed ? kit.button({ label: 'Store', cls: 'pn-sm btn--paper', type: 'furnishStore', args: { id: it.id }, data: { store: it.id },
+          hint: { texts: { OCCUPIED: t('home.fh.noTurn'), OUT_OF_BOUNDS: t('home.fh.noTurn'), BLOCKED: t('home.fh.blockDoor') } } }) : null,
+        !it.fixed ? kit.button({ label: t('home.fh.store'), cls: 'pn-sm btn--paper', type: 'furnishStore', args: { id: it.id }, data: { store: it.id },
           after: (r) => { if (r && r.ok) { sel = null; renderAll(); } } }) : null,
-        it.refundUntil ? h('span.fh-undo', kit.button({ label: 'Undo purchase', cls: 'pn-xs pn-ghost', type: 'furnishRefund', args: { id: it.id },
+        it.refundUntil ? h('span.fh-undo', kit.button({ label: t('farm.tree.undoBuy'), cls: 'pn-xs pn-ghost', type: 'furnishRefund', args: { id: it.id },
           data: { refund: it.id }, after: (r) => { if (r && r.ok) { sel = null; renderAll(); } } }),
-        kit.timer(h('small'), { end: it.refundUntil, prefix: `${fmt(it.paid)} back for `, doneText: '' })) : null));
+        kit.timer(h('small'), { end: it.refundUntil, prefix: t('home.fh.backFor', { n: it.paid }), doneText: '' })) : null));
   }
 
   function pieceCard(c) {
@@ -326,8 +331,9 @@ function homeTab(body, ctx, kit) {
       h('div.fh-piece-art', furnitureArt(c.def, { px: 72 })),
       h('b', c.name), h('small', sizeWords(c)),
       h('div.fh-piece-foot',
-        c.fromTray ? h('span.pn-cost.pn-free', `In the tray${c.tray > 1 ? ` ×${c.tray}` : ''}`) : c.code === 'CAP' ? pill(c.max > 1 ? `${c.owned} of ${c.max}` : 'In the room', 'pn-owned') : price({ coins: c.price }),
-        c.code === 'CAP' ? null : kit.button({ label: 'Place', glyph: 'hammer', cls: 'pn-sm', data: { place: c.id }, quiet: ['LOCKED'],
+        c.fromTray ? h('span.pn-cost.pn-free', c.tray > 1 ? t('home.fh.waitingN', { n: c.tray }) : t('home.fh.waiting'))
+          : c.code === 'CAP' ? pill(c.max > 1 ? t('market.facts.of', { n: c.owned, cap: c.max }) : t('home.fh.inRoom'), 'pn-owned') : price({ coins: c.price }),
+        c.code === 'CAP' ? null : kit.button({ label: t('market.card.place'), glyph: 'hammer', cls: 'pn-sm', data: { place: c.id }, quiet: ['LOCKED'],
           gate: () => {
             const f = rv().catalog.find((x) => x.id === c.id);
             return f && f.code ? { code: f.code, hint: f.hint } : null;
@@ -342,14 +348,14 @@ function homeTab(body, ctx, kit) {
     const cur = cats.find((x) => x.id === cat);
     fill(side,
       selectedCard(v),
-      v.tray.length ? h('section.fh-tray', h('h3', 'In your room\'s tray'), h('div.fh-pieces', ...v.tray.map(pieceCard))) : null,
+      v.tray.length ? h('section.fh-tray', h('h3', t('home.fh.tray')), h('div.fh-pieces', ...v.tray.map(pieceCard))) : null,
       h('section.fh-catalog',
-        h('h3', 'The catalog'),
-        h('div.fh-cats', { role: 'tablist', 'aria-label': 'Furniture' }, ...cats.map((x) => h(`button.pn-chipbtn${x.id === cat ? '.on' : ''}`, {
+        h('h3', t('home.fh.catalog')),
+        h('div.fh-cats', { role: 'tablist', 'aria-label': t('home.fh.furniture') }, ...cats.map((x) => h(`button.pn-chipbtn${x.id === cat ? '.on' : ''}`, {
           type: 'button', role: 'tab', 'aria-selected': String(x.id === cat), dataset: { key: `cat-${x.id}`, cat: x.id },
           on: { click: () => { cat = x.id; drawSide(); kit.refresh(); } } }, x.name))),
         cur ? h('div.fh-pieces', ...cur.pieces.filter((c) => !c.fromTray).map(pieceCard)) : null,
-        h('p.fh-note', 'Furniture is just for the two of you: no XP and no Farm Beauty, and it is never sold. A piece is refunded in full for ten minutes after you buy it.')));
+        h('p.fh-note', t('home.fh.note'))));
   }
 
   function drawLock() {
@@ -357,10 +363,10 @@ function homeTab(body, ctx, kit) {
     if (v.open) { lock.replaceChildren(); return; }
     const p = restoreView(st(), ctx.store.pid).find((x) => x.id === v.needs);
     lock.replaceChildren(h('div.fh-lock', svgIcon('lock', 26),
-      h('div', h('b', v.live ? 'The room opens when Grandma\'s Farmhouse is restored' : 'The farmhouse room opens with the next chapter of the valley'),
-        h('small', p ? (p.open ? `Restoration 6: ${p.stage} of ${p.bundles.length} bundles given.` : `Restoration 6, from level ${p.unlock}.`) : ''),
+      h('div', h('b', v.live ? t('home.fh.lock') : t('home.fh.lockLater')),
+        h('small', p ? (p.open ? t('home.fh.lockStage', { stage: p.stage, n: p.bundles.length }) : t('home.fh.lockFrom', { n: p.unlock })) : ''),
         p ? bar(p.pct, null, 'pn-thin pn-go') : null),
-      p && v.live ? h('button.btn.btn--sky.pn-sm', { type: 'button', on: { click: () => ctx.open('restoration', { id: p.id }) } }, 'The Ledger') : null));
+      p && v.live ? h('button.btn.btn--sky.pn-sm', { type: 'button', on: { click: () => ctx.open('restoration', { id: p.id }) } }, t('home.fh.ledger')) : null));
   }
 
   function renderAll() { drawLock(); drawBar(); drawPlan(); drawSide(); kit.refresh(); }
@@ -391,20 +397,20 @@ function homeTab(body, ctx, kit) {
 function restoreTab(body, ctx, kit) {
   const render = () => {
     const rows = restoreView(ctx.store.state, ctx.store.pid);
-    fill(body, h('p.pn-intro', 'The last three restorations bring the farm its pond, its fair grounds and Grandma\'s own house. Give the bundles in the Restoration Ledger, a piece at a time, either of you.'),
+    fill(body, h('p.pn-intro', t('home.fh.restoreIntro')),
       h('div.fh-projects', ...rows.map((p) => h(`article.fh-proj.st-${p.status}`, { dataset: { project: p.id } },
-        h('div.fh-proj-art', homeScene(p.id, new Set(p.doneIds), { label: `${p.name}: ${p.stage} of ${p.bundles.length} bundles given` }) ?? h('div'),
-          p.done ? h('span.fh-proj-tag', 'Restored') : null),
+        h('div.fh-proj-art', homeScene(p.id, new Set(p.doneIds), { label: t('home.fh.sceneLabel', { name: p.name, stage: p.stage, n: p.bundles.length }) }) ?? h('div'),
+          p.done ? h('span.fh-proj-tag', t('collect.rest.restored')) : null),
         h('div.fh-proj-main',
           h('header', h('span.fh-proj-n', String(p.n)), h('h3', p.name),
-            pill(p.done ? 'Restored' : p.open ? `${p.stage} of ${p.bundles.length}` : p.live ? `Level ${p.unlock}` : 'Soon', p.done ? 'pn-owned' : p.open ? 'pn-warn' : '')),
+            pill(p.done ? t('collect.rest.restored') : p.open ? t('market.facts.of', { n: p.stage, cap: p.bundles.length }) : p.live ? t('common.level', { n: p.unlock }) : t('home.grand.soon'), p.done ? 'pn-owned' : p.open ? 'pn-warn' : '')),
           h('p.fh-proj-reward', svgIcon('star', 18), h('span', p.text)),
           h('ul.fh-bundles', ...p.bundles.map((b) => h(`li${b.done ? '.done' : ''}`, h('b', b.name),
-            h('small', b.done ? 'given ✓' : `any ${b.need} of ${b.of}`), bar(b.done ? 1 : b.doneSlots / Math.max(1, b.need), null, `pn-thin${b.done ? ' pn-go' : ''}`)))),
+            h('small', b.done ? t('home.fh.given') : t('collect.rest.anyOf', { need: b.need, of: b.of })), bar(b.done ? 1 : b.doneSlots / Math.max(1, b.need), null, `pn-thin${b.done ? ' pn-go' : ''}`)))),
           p.done ? null : h('div.fh-proj-foot',
-            h('small', p.open ? 'Open in the Ledger now' : p.lockReason ?? ''),
+            h('small', p.open ? t('home.fh.openNow') : p.lockReason ?? ''),
             p.live ? h('button.btn.btn--sky.pn-sm', { type: 'button', dataset: { open: p.id }, on: { click: () => ctx.open('restoration', { id: p.id }) } },
-              p.open ? 'Give in the Ledger' : 'Look in the Ledger') : null))))));
+              p.open ? t('home.fh.give') : t('home.fh.look')) : null))))));
     kit.refresh();
   };
   const update = kit.memo(body, () => restoreView(ctx.store.state, ctx.store.pid).map((p) => [p.id, p.status, p.stage, p.bundles.map((b) => b.doneSlots)]), render);
@@ -415,45 +421,44 @@ function restoreTab(body, ctx, kit) {
 // ---- the Grandma tab ---------------------------------------------------------------------------------------------------
 
 function grandmaTab(body, ctx, kit) {
-  const portrait = (cls = '') => h(`img.fh-gran${cls}`, { src: '/assets/art/npc/hazel.webp', alt: 'Grandma Hazel', width: 160, height: 160, decoding: 'async' });
+  const portrait = (cls = '') => h(`img.fh-gran${cls}`, { src: '/assets/art/npc/hazel.webp', alt: cname('hazel'), width: 160, height: 160, decoding: 'async' });
   const render = () => {
     const st = ctx.store.state;
     const v = visitView(st, ctx.store.pid, ctx.now());
     if (v.phase === 'coming') {
       fill(body, h('article.fh-visit.coming', portrait(),
         h('div.fh-visit-main',
-          h('h3', 'Grandma Hazel is coming home'),
-          h('p', v.farmhouseDone ? `The farmhouse is ready for her. Ollie's last letter, "${v.quest?.title ?? 'Grandma Comes Home'}" (level ${v.quest?.level ?? 38}), brings her to the farm for three days.`
-            : `When Grandma's Farmhouse is restored, Ollie's last letter, "${v.quest?.title ?? 'Grandma Comes Home'}" (level ${v.quest?.level ?? 38}), brings her to the farm for three days.`),
+          h('h3', t('home.fh.coming')),
+          h('p', t(v.farmhouseDone ? 'home.fh.comingReady' : 'home.fh.comingWhen', { title: v.quest?.title ?? t('home.fh.questTitle'), n: v.quest?.level ?? 38 })),
           h('ul.fh-visit-list',
-            h('li', svgIcon('heart', 20), 'She strolls the farm: the porch, the fields, the orchard, the animals, the bench and the parlour.'),
-            h('li', svgIcon('chat', 20), 'Find her and listen: she has something to say at every stop.'),
-            h('li', svgIcon('star', 20), 'When she leaves she gives you something for the parlour wall, and a page for the Memory Book.')),
-          v.quest && v.quest.active ? pill('Her letter is open in the Journal', 'pn-warn') : null,
-          v.live ? null : h('p.hm-note.hm-note-later', svgIcon('lock', 18), 'Her visit comes with the next chapter of the valley.'))));
+            h('li', svgIcon('heart', 20), t('home.fh.strolls')),
+            h('li', svgIcon('chat', 20), t('home.fh.listen')),
+            h('li', svgIcon('star', 20), t('home.fh.leaves'))),
+          v.quest && v.quest.active ? pill(t('home.fh.letterOpen'), 'pn-warn') : null,
+          v.live ? null : h('p.hm-note.hm-note-later', svgIcon('lock', 18), t('home.fh.visitLater')))));
       return;
     }
     if (v.phase === 'here') {
       const metWho = v.met.map((p) => h('span.fh-met', playerMark(p, st.players[p], { size: 20 }), st.players[p]?.name ?? ''));
       fill(body, h('article.fh-visit.here', portrait('.here'),
         h('div.fh-visit-main',
-          h('h3', `Grandma is on the farm, ${v.where}`),
-          h('blockquote.fh-quote', `“${v.line}”`),
+          h('h3', t('home.fh.here', { where: v.where })),
+          h('blockquote.fh-quote', t('market.orders.quote', { line: v.line })),
           h('p.fh-visit-times',
-            h('span', svgIcon('sun', 18), kit.timer(h('span'), { end: v.nextAt, prefix: 'She moves on in ', doneText: 'She is moving on…', done: () => ctx.refreshVisit?.() })),
-            h('span', svgIcon('heart', 18), kit.timer(h('span'), { end: v.until, prefix: 'She stays for ', doneText: 'She is packing her bag' }))),
-          metWho.length ? h('p.fh-visit-met', 'Has seen her: ', ...metWho) : null,
-          h('p.fh-hint', 'Walk up to her and tap her to hear what she says there.'))));
+            h('span', svgIcon('sun', 18), kit.timer(h('span'), { end: v.nextAt, prefix: t('home.fh.movesIn'), doneText: t('home.fh.movingOn'), done: () => ctx.refreshVisit?.() })),
+            h('span', svgIcon('heart', 18), kit.timer(h('span'), { end: v.until, prefix: t('home.fh.staysFor'), doneText: t('home.fh.packing') }))),
+          metWho.length ? h('p.fh-visit-met', t('home.fh.seenHer'), ...metWho) : null,
+          h('p.fh-hint', t('home.fh.walkUp')))));
       return;
     }
     const L = v.letter ?? {};
     fill(body, h('article.fh-visit.gone',
-      h('div.fh-letter', h('p.fh-letter-hi', L.greeting ?? 'My dears,'), ...(L.body ?? []).map((t) => h('p', t)), h('p.fh-letter-sign', L.signoff ?? 'Grandma')),
+      h('div.fh-letter', h('p.fh-letter-hi', L.greeting ?? t('home.fh.myDears')), ...(L.body ?? []).map((x) => h('p', x)), h('p.fh-letter-sign', L.signoff ?? t('home.fh.grandma'))),
       h('div.fh-visit-side', portrait('.small'),
         v.missed ? h('p.fh-missed', v.missedCard) : null,
         v.gift ? h('div.fh-gift', h('b', v.gift.name), h('small', v.gift.text),
-          v.gift.hung ? pill('On the wall', 'pn-owned') : v.gift.inTray ? h('button.btn.btn--sun.pn-sm', { type: 'button', on: { click: () => ctx.setTab('room') } }, 'Hang it in the room')
-            : v.gift.waiting ? h('small', 'It arrives in the room\'s tray.') : null) : null)));
+          v.gift.hung ? pill(t('collect.wall.onWall'), 'pn-owned') : v.gift.inTray ? h('button.btn.btn--sun.pn-sm', { type: 'button', on: { click: () => ctx.setTab('room') } }, t('home.fh.hang'))
+            : v.gift.waiting ? h('small', t('home.fh.arrives')) : null) : null)));
   };
   const update = kit.memo(body, () => {
     const v = visitView(ctx.store.state, ctx.store.pid, ctx.now());
@@ -468,10 +473,10 @@ function grandmaTab(body, ctx, kit) {
 // ---- the panel -----------------------------------------------------------------------------------------------------------
 
 export const farmhousePanel = {
-  title: 'The farmhouse',
+  title: () => t('home.fh.title'),
   icon: 'farmhouse',
   size: 'full',
-  tabs: () => [{ id: 'room', label: 'Home' }, { id: 'restore', label: 'Restoration' }, { id: 'grandma', label: 'Grandma' }],
+  tabs: () => [{ id: 'room', label: t('home.fh.tab.room') }, { id: 'restore', label: t('home.fh.tab.restore') }, { id: 'grandma', label: t('home.fh.tab.grandma') }],
   topics: ['interior', 'restore', 'restoration', 'wallet', 'grandma', 'quests', 'players', 'xp', 'inventory'],
   mount(body, ctx) {
     const kit = createKit(ctx);

@@ -10,6 +10,7 @@ import { landCard, openProof } from './market.js';
 import { landMap } from './art.js';
 import { I } from './intents.js';
 import * as decorA from '../../../../shared/rules/actions/decor.js';
+import { t, name as cname } from '../../i18n/index.js';
 
 const lazy = (f) => ({ type: () => f().type, args: () => f().args });
 
@@ -21,20 +22,20 @@ export function wishPrice(state, def) {
 }
 
 export const wishlistPanel = {
-  title: 'Wishlist',
+  get title() { return t('market.wish.title'); },
   size: 'side',
   topics: ['wishlist', 'wallet', 'players', 'xp', 'objects'],
-  locked: (state) => (levelOf(state) < SAFETY.wishlist.unlock ? `The Wishlist opens at level ${SAFETY.wishlist.unlock}` : null),
+  locked: (state) => (levelOf(state) < SAFETY.wishlist.unlock ? t('market.wish.locked', { n: SAFETY.wishlist.unlock }) : null),
   mount(body, ctx) {
     const kit = createKit(ctx);
     const up = kit.memo(body, () => [ctx.store.state.farm.wishlist, levelOf(ctx.store.state)], render);
     function render() {
       const st = ctx.store.state;
       body.replaceChildren();
-      if (levelOf(st) < SAFETY.wishlist.unlock) { body.append(empty(`The Wishlist opens at level ${SAFETY.wishlist.unlock}.`, 'lock')); return; }
+      if (levelOf(st) < SAFETY.wishlist.unlock) { body.append(empty(t('market.wish.lockedDot', { n: SAFETY.wishlist.unlock }), 'lock')); return; }
       const wishes = Object.entries(st.farm.wishlist ?? {}).sort((a, b) => a[1].at - b[1].at || (a[0] < b[0] ? -1 : 1));
-      body.append(h('p.pn-intro', 'Coins on a wish are set aside: nobody spends them by accident. A funded wish buys itself.'));
-      if (!wishes.length) body.append(empty('No wishes yet. Tap ♡ on anything in the Market.', 'heart'));
+      body.append(h('p.pn-intro', t('market.wish.intro')));
+      if (!wishes.length) body.append(empty(t('market.wish.none'), 'heart'));
       const me = ctx.store.pid;
       for (const [id, w] of wishes) {
         const def = defOf(w.def);
@@ -49,19 +50,19 @@ export const wishlistPanel = {
         body.append(h('article.pn-wish', { dataset: { wish: id } },
           icon(w.def, { size: 56 }),
           h('div.pn-wish-main',
-            h('div.pn-wish-top', h('b', def?.name ?? w.def), who(st, w.by, { me })),
+            h('div.pn-wish-top', h('b', def ? cname(w.def) : w.def), who(st, w.by, { me })),
             p.coins ? bar(pct, `${fmt(w.coins)} / ${fmt(p.coins)}`, 'pn-go') : null,
-            p.code ? h('small.pn-wish-wait', `${reason(p.code, { unlock: def?.unlock })}: it buys itself once it can.`) : null,
+            p.code ? h('small.pn-wish-wait', t('market.wish.wait', { why: reason(p.code, { unlock: def?.unlock }) })) : null,
             h('div.pn-wish-acts', ...steps.map((n) => dep(n)),
-              w.coins > 0 && mine ? kit.button({ label: 'Take back', cls: 'pn-xs pn-ghost', ...lazy(() => I.wishWithdraw(id)) }) : null,
-              w.coins > 0 && !mine && !release ? kit.button({ label: 'Ask to use it', cls: 'pn-xs pn-ghost', title: `${st.players[w.by]?.name ?? 'Your partner'} is asked; with no answer in 12 hours it is released`, ...lazy(() => I.wishWithdraw(id)) }) : null,
-              mine ? kit.confirmButton({ label: 'Remove', cls: 'pn-xs pn-ghost', confirm: w.coins ? `Remove? ${fmt(w.coins)} come back` : 'Remove?', ...lazy(() => I.unwish(id)) }) : null),
+              w.coins > 0 && mine ? kit.button({ label: t('market.wish.takeBack'), cls: 'pn-xs pn-ghost', ...lazy(() => I.wishWithdraw(id)) }) : null,
+              w.coins > 0 && !mine && !release ? kit.button({ label: t('market.wish.ask'), cls: 'pn-xs pn-ghost', title: t('market.wish.askTip', { name: st.players[w.by]?.name ?? t('common.partner') }), ...lazy(() => I.wishWithdraw(id)) }) : null,
+              mine ? kit.confirmButton({ label: t('market.wish.remove'), cls: 'pn-xs pn-ghost', confirm: w.coins ? t('market.wish.removeCoins', { n: w.coins }) : t('market.wish.removeQ'), ...lazy(() => I.unwish(id)) }) : null),
             release ? h('div.pn-wish-ask', svgIcon('note', 18),
-              release.by === me ? `You asked to use these coins. Released by itself in ${fmtDuration(release.at + SAFETY.wishlist.autoReleaseMs - ctx.now())} if there is no answer.`
-                : `${st.players[release.by]?.name ?? 'Your partner'} would like to use these coins.`,
-              mine ? [kit.button({ label: 'Yes, go ahead', cls: 'pn-xs', ...lazy(() => I.wishAnswer(id, true)) }), kit.button({ label: 'Keep saving', cls: 'pn-xs pn-ghost', ...lazy(() => I.wishAnswer(id, false)) })] : null) : null)));
+              release.by === me ? t('market.wish.youAsked', { d: fmtDuration(release.at + SAFETY.wishlist.autoReleaseMs - ctx.now()) })
+                : t('market.wish.wouldLike', { name: st.players[release.by]?.name ?? t('common.partner') }),
+              mine ? [kit.button({ label: t('market.wish.yes'), cls: 'pn-xs', ...lazy(() => I.wishAnswer(id, true)) }), kit.button({ label: t('market.wish.keepSaving'), cls: 'pn-xs pn-ghost', ...lazy(() => I.wishAnswer(id, false)) })] : null) : null)));
       }
-      body.append(h('p.pn-hint', `Up to ${SAFETY.wishlist.maxWishes} wishes for the farm.`));
+      body.append(h('p.pn-hint', t('market.wish.max', { n: SAFETY.wishlist.maxWishes })));
       kit.refresh();
     }
     up(true);
@@ -70,7 +71,7 @@ export const wishlistPanel = {
 };
 
 export const expansionPanel = {
-  title: (args) => expansionOf(args.id)?.name ?? 'Land for sale',
+  title: (args) => (expansionOf(args.id) ? cname(args.id, { family: 'expansions' }) : t('market.land.forSaleTitle')),
   size: 'wide',
   topics: ['expansions', 'proofs', 'wallet', 'inventory', 'xp', 'objects'],
   mount(body, ctx) {
@@ -81,7 +82,7 @@ export const expansionPanel = {
       const cards = storeCards(st, 'land', { now: ctx.now(), pid: ctx.store.pid });
       const c = cards.find((x) => x.id === ctx.args.id) ?? cards.find((x) => x.isNext && !x.owned) ?? cards[0];
       body.replaceChildren();
-      if (!c) { body.append(empty('No land is for sale right now.', 'hammer')); return; }
+      if (!c) { body.append(empty(t('market.land.noneForSale'), 'hammer')); return; }
       ctx.setTitle(c.name);
       body.append(h('div.pn-land.pn-land-one', h('div.pn-mapbox', landMap(st, cards, { selected: c.id })), landCard(c, ctx, kit, true)));
       if (c.isNext && !c.owned) openProof(ctx, c);

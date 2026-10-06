@@ -445,11 +445,15 @@ export class StaticFiles {
         return e ? `${attr}=${q}${url}?v=${e.hash}${q}` : all;
       });
     });
-    // the asset packs (SV-03): their index rides in the page; a changed model re-renders it (deps)
-    const packs = this.packIndex();
-    deps.push(...packs.deps);
-    const packJson = JSON.stringify(packs.index).replace(/</g, '\\u003c');
-    const meta = `<meta name="hh-build" content="${this.build}">\n  <script type="application/json" id="hh-packs">${packJson}</script>`;
+    // the asset packs (SV-03): their index rides in the game page; a changed model re-renders it (deps). Another page
+    // (the multi-farm landing page) loads no models: no index there (it was 5.7 KB of the front door's 10 KB gzip)
+    let meta = `<meta name="hh-build" content="${this.build}">`;
+    if (name === 'index.html') {
+      const packs = this.packIndex();
+      deps.push(...packs.deps);
+      const packJson = JSON.stringify(packs.index).replace(/</g, '\\u003c');
+      meta += `\n  <script type="application/json" id="hh-packs">${packJson}</script>`;
+    }
     html = /<meta\s+charset=[^>]*>/i.test(html)
       ? html.replace(/<meta\s+charset=[^>]*>/i, (m) => `${m}\n  ${meta}`)
       : html.replace(/<head(\s[^>]*)?>/i, (h) => `${h}\n  ${meta}`);

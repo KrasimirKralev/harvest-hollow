@@ -19,6 +19,7 @@ import * as restoreA from '../../../../shared/rules/actions/restoration.js';
 import { levelOf } from './model.js';
 import { h, fmt, fmtDuration, icon, svgIcon, pill, bar, hintable } from './kit.js';
 import { setState } from './collections.js';
+import { t, N, Q, ctext, name as cname } from '../../i18n/index.js';
 
 const own = (o, k) => (o && Object.hasOwn(o, k) ? o[k] : undefined);
 const have = (state, item) => (own(state.farm.inventory, item) ?? 0) + (own(state.farm.overflow, item) ?? 0);
@@ -68,9 +69,9 @@ export function homeExtras(state, homeId, now) {
   const product = itemOf(sp.product);
   const premium = itemOf(sp.premium);
   const uses = usesOf(sp.product).map((id) => recipeOf(id)).filter((r) => r && isLive(r)).slice(0, 4)
-    .map((r) => ({ id: r.id, name: r.name, unlock: r.unlock ?? 1, building: r.building }));
-  const base = { kind: sp.id, species: sp, product: sp.product, productName: product?.name ?? sp.product, out: sp.out,
-    premium: sp.premium, premiumName: premium?.name ?? sp.premium, premiumPct: (sp.premiumBp ?? 0) / 100,
+    .map((r) => ({ id: r.id, name: cname(r.id), unlock: r.unlock ?? 1, building: r.building }));
+  const base = { kind: sp.id, species: sp, product: sp.product, productName: product ? cname(sp.product) : sp.product, out: sp.out,
+    premium: sp.premium, premiumName: premium ? cname(sp.premium) : sp.premium, premiumPct: (sp.premiumBp ?? 0) / 100,
       cycleMs: sp.cycleMs,
     inBarn: have(state, sp.product), uses, level };
   switch (sp.id) {
@@ -78,7 +79,7 @@ export function homeExtras(state, homeId, now) {
       const fos = setState(state, 'fossils');
       const woods = state.farm.expansions.includes('pig_woods');
       const slop = feedOf(sp.feed);
-      return { ...base, feed: sp.feed, feedName: itemOf(sp.feed)?.name ?? 'Pig Slop', feedHave: have(state, sp.feed),
+      return { ...base, feed: sp.feed, feedName: itemOf(sp.feed) ? cname(sp.feed) : cname('pig_slop'), feedHave: have(state, sp.feed),
         slopIn: slop?.classes?.[0]?.qty ?? 2, slopOut: slop?.out ?? 6,
         woods, woodsPct: (expansionOf('pig_woods')?.feature?.truffleSpeedBp ?? 0) / 100,
         fossils: Object.keys(fos.items).length, fossilsOf: collectionOf('fossils')?.items.length ?? 5,
@@ -116,7 +117,7 @@ const fact = (glyphOrIcon, title, text, cls = '') => h(`li.pc-fact${cls ? `.${cl
 function albumLink(ctx, set, n, of) {
   if (!ctx.ui.panels.has('collections')) return null;
   return h('button.pn-chipbtn.pc-albumlink', { type: 'button', on: { click: () => ctx.open('collections', { set }) } },
-    `${collectionOf(set)?.name ?? 'Album'} ${n}/${of}`);
+    t('farm.m1b.album', { name: collectionOf(set) ? cname(set, { family: 'collections' }) : t('farm.m1b.albumWord'), n, of }));
 }
 
 /** The occupants of a home as the section needs them (when called without the panel's homeView). */
@@ -128,8 +129,7 @@ function homeAnimals(state, homeId, now) {
   });
 }
 
-const RIDE_TEXT = { NOT_READY: 'Too young to ride yet', OCCUPIED: 'Every horse has a rider',
-  LOCKED: 'No grown horse yet', NOT_FOUND: 'No horse here' };
+const RIDE_CODES = ['NOT_READY', 'OCCUPIED', 'LOCKED', 'NOT_FOUND'];
 
 /**
  * Ride / Get off (client lane: controller.ride(horseId) walks to the Stable and mounts, controller.dismount(),
@@ -142,16 +142,16 @@ function rideButton(ctx, v) {
   const horse = (v.animals ?? []).find((a) => !a.baby && a.def?.id === 'horse')?.id ?? (v.animals ?? [])[0]?.id ?? null;
   const riding = Boolean(c.riding);
   const code = riding ? null : (typeof c.rideCode === 'function' ? c.rideCode(horse ?? undefined) : null);
-  const why = code ? RIDE_TEXT[code] ?? 'Not right now' : '';
+  const why = code ? (RIDE_CODES.includes(code) ? t(`farm.m1b.ride.${code}`) : t('farm.m1b.ride.other')) : '';
   const btn = h(`button.btn.pn-sm${riding ? '.btn--wood' : '.btn--sky'}.pc-ride`,
     { type: 'button', 'aria-disabled': code ? 'true' : null, title: why || null,
     on: { click: () => {
       if (code) { ctx.ui.toast(why, { kind: 'info' }); return; }
       if (riding) { c.dismount(); wrap.replaceWith(rideButton(ctx, v) ?? h('span')); }
       else { ctx.close?.(); c.ride(horse ?? undefined); }
-    } } }, svgIcon('hand', 20), riding ? 'Get off' : 'Ride');
+    } } }, svgIcon('hand', 20), riding ? t('farm.m1b.getOff') : t('farm.m1b.ride.btn'));
   const wrap = h('span.pc-ride-wrap', btn,
-    h('small', riding ? 'You are riding: 1.8× faster' : why || 'Ride around the farm: 1.8× faster (V)'));
+    h('small', riding ? t('farm.m1b.riding') : why || t('farm.m1b.rideTip')));
   return wrap;
 }
 
@@ -167,53 +167,49 @@ export function m1bSection(v, ctx) {
   if (x && !v.animals) v = { ...v, animals: homeAnimals(st, v.id, ctx.now()) };
   if (!x) return null;
   const list = h('ul.pc-facts');
-  const head = { pig: 'Truffle hunting', duck: 'Life on the pond', goat: 'The goat yard', horse: 'In the stable',
-    bee: 'The hive' }[x.kind];
+  const head = t(`farm.m1b.head.${x.kind}`);
   const extra = [];
+  const every = fmtDuration(x.cycleMs, { cut: 'm=0' });
   switch (x.kind) {
     case 'pig':
       list.append(
-        hintable(fact('pig_slop', `${x.feedName}: ${fmt(x.feedHave)} in the barn`,
-          `The Feed Mill turns any ${x.slopIn} spare crops or fruit into ${x.slopOut} slop: the pigs eat your surplus.`), x.feed ?? 'pig_slop'),
-        fact('truffle', `A ${x.productName} every ${fmtDuration(x.cycleMs).replace(/ 00m$/, '')}`,
-          `Each dig: a ${x.premiumPct} % chance of a ${x.premiumName} once a pig has a blue ribbon.${x.woods ? ` In the Pig Woods they dig ${x.woodsPct} % faster.` : ''}`),
-        x.fossilsLive ? fact('#star', 'Fossils turn up in the dirt',
-          'Truffle digs, rocks and boulders can find an Ammonite, a Trilobite or an Arrowhead.') : null);
+        hintable(fact('pig_slop', t('farm.m1b.inBarn', { item: x.feedName, n: x.feedHave }),
+          t('farm.m1b.slop', { a: x.slopIn, b: x.slopOut, q: Q('pig_slop', x.slopOut) })), x.feed ?? 'pig_slop'),
+        fact('truffle', t('farm.m1b.aEvery', { prod: x.productName, d: every }),
+          x.woods ? t('farm.m1b.digWoods', { p: x.premiumPct, premium: x.premiumName, w: x.woodsPct }) : t('farm.m1b.dig', { p: x.premiumPct, premium: x.premiumName })),
+        x.fossilsLive ? fact('#star', t('farm.m1b.fossils'), t('farm.m1b.fossilsText')) : '');
       if (x.fossilsLive) extra.push(albumLink(ctx, 'fossils', x.fossils, x.fossilsOf));
       {
         const mill = millId(st);
         if (mill && ctx.ui.panels.has('building')) extra.push(h('button.pn-chipbtn',
           { type: 'button', on: { click: () => ctx.open('building', { id: mill, focus: 'pig_slop' }) } },
-            'Make Pig Slop'));
+            t('farm.m1b.makeSlop', { item: N('pig_slop') })));
       }
       break;
     case 'duck':
       list.append(
-        fact('duck_egg', `A ${x.productName} every ${fmtDuration(x.cycleMs).replace(/ 00m$/, '')}`,
-          `Ducks eat ${itemOf(x.species.feed)?.name ?? 'Chicken Feed'} and paddle about the pond between meals.`),
-        fact('golden_feather', `${x.premiumName}`,
-          `A ${x.premiumPct} % chance on every collection from a blue-ribbon duck. It counts double at the Fair.`),
-        x.feathersLive ? fact('#flower', 'Feathers for the album',
-          'Collecting from ducks and chickens can find a Speckled, Barred or Copper Feather.') : null);
+        fact('duck_egg', t('farm.m1b.aEvery', { prod: x.productName, d: every }),
+          t('farm.m1b.ducksEat', { feed: itemOf(x.species.feed) ? N(x.species.feed) : N('chicken_feed') })),
+        fact('golden_feather', `${x.premiumName}`, t('farm.m1b.duckPremium', { p: x.premiumPct })),
+        x.feathersLive ? fact('#flower', t('farm.m1b.feathers'), t('farm.m1b.feathersText')) : '');
       if (x.feathersLive) extra.push(albumLink(ctx, 'feathers', x.feathers, x.feathersOf));
       break;
     case 'goat':
       list.append(
-        fact('goat_milk', `${x.productName} every ${fmtDuration(x.cycleMs).replace(/ 00m$/, '')}`,
-          `${fmt(x.inBarn)} in the barn. Each meal is ${x.species.feedQty} ${itemOf(x.species.feed)?.name ?? 'feed'}.`),
-        fact('aged_goat_cheese', x.premiumName,
-          `A ${x.premiumPct} % chance on every collection from a blue-ribbon goat.`),
-        x.uses.length ? fact('#star', 'Good for', x.uses.map((u) => u.name).join(', ')) : null);
+        fact('goat_milk', t('farm.m1b.every', { prod: x.productName, d: every }),
+          t('farm.m1b.goatMeal', { n: x.inBarn, k: x.species.feedQty, feed: itemOf(x.species.feed) ? cname(x.species.feed) : t('farm.ani.feed'),
+            q: itemOf(x.species.feed) ? Q(x.species.feed, x.species.feedQty) : `${x.species.feedQty}` })),
+        fact('aged_goat_cheese', x.premiumName, t('farm.m1b.goatPremium', { p: x.premiumPct })),
+        x.uses.length ? fact('#star', t('farm.m1b.goodFor'), x.uses.map((u) => cname(u.id)).join(', ')) : '');   // a recipe shares its item's id (names table)
       break;
     case 'horse': {
       const b = x.barge;
       list.append(
-        fact('#coin', `River Barge crates pay +${b.pct} %`,
-          `Each grown horse pulls the cart to the jetty: +${b.each} % per horse, up to +${b.max} % (${b.adults} now).`,
+        fact('#coin', t('farm.m1b.barge', { pct: b.pct }), t('farm.m1b.bargeText', { each: b.each, max: b.max, adults: b.adults }),
             b.pct ? 'on' : ''),
-        fact('manure', `${x.out} ${x.productName} every ${fmtDuration(x.cycleMs).replace(/ 00m$/, '')}`,
-          `The Compost Bin turns each into ${x.compostPer} Compost.`),
-        fact('show_ribbon', x.premiumName, 'A blue-ribbon horse sometimes brings home a Show Ribbon.'));
+        fact('manure', t('farm.m1b.nEvery', { n: x.out, prod: x.productName, q: Q(x.product, x.out), d: every }),
+          t('farm.m1b.manure', { q: Q('compost', x.compostPer) })),
+        fact('show_ribbon', x.premiumName, t('farm.m1b.showRibbon')));
       const ride = rideButton(ctx, v);
       if (ride) extra.push(ride);
       break;
@@ -225,26 +221,24 @@ export function m1bSection(v, ctx) {
       const run = (v.animals ?? []).find((a) => a.status === 'producing' && a.start && a.end);
       const runMs = run ? run.end - run.start : null;
       const differs = runMs !== null && Math.abs(runMs - f.cycleMs) > 60_000;
-      const span = (ms) => fmtDuration(ms).replace(/ 00m$/, '');
+      const span = (ms) => fmtDuration(ms, { cut: 'm=0' });
       const meter = h('div.pc-forage',
-        { title: `Flower crops, flowering trees and flower decor within ${f.radius} tiles` },
+        { title: t('farm.m1b.forageTip', { r: f.radius }) },
         h('div.pc-forage-head',
-          h('b', f.fast ? `Honey every ${span(f.cycleMs)}` : `Slow honey: every ${span(f.cycleMs)}`),
-          pill(`${fmt(f.n)} flower${f.n === 1 ? '' : 's'} nearby · ${f.need} needed`, f.fast ? 'pn-owned' : 'pn-warn')),
+          h('b', f.fast ? t('farm.m1b.honeyEvery', { d: span(f.cycleMs) }) : t('farm.m1b.slowHoney', { d: span(f.cycleMs) })),
+          pill(t('farm.m1b.flowers', { n: f.n, need: f.need }), f.fast ? 'pn-owned' : 'pn-warn')),
         h('div.pc-forage-dots',
           ...Array.from({ length: Math.max(f.need, Math.min(8, f.n)) },
             (_, i) => h(`span${i < f.n ? '.on' : ''}`, { 'aria-hidden': 'true' }))),
-        h('small', f.fast ? `Busy bees: ${f.sources.slice(0, 4).map((src) => defOf(src.def)?.name ?? cropOf(src.def)?.name ?? src.def).join(', ')}${f.sources.length > 4 ? '…' : ''}.`
-          : `Plant flowers, a flowering tree or a Flower Bed within ${f.radius} tiles: with ${f.need} the hive makes honey twice as fast.`),
-        differs ? h('small.pc-forage-now',
-          `This batch was timed when it began (${span(runMs)}${run.end > now ? `, ready in ${fmtDuration(run.end - now)}` : ''}); the next one counts the flowers again.`) : null);
+        h('small', f.fast ? t('farm.m1b.busyBees', { list: `${f.sources.slice(0, 4).map((src) => (defOf(src.def) || cropOf(src.def) ? cname(src.def) : src.def)).join(', ')}${f.sources.length > 4 ? '…' : ''}` })
+          : t('farm.m1b.plantFlowers', { r: f.radius, need: f.need })),
+        differs ? h('small.pc-forage-now', run.end > now ? t('farm.m1b.batchReady', { span: span(runMs), d: fmtDuration(run.end - now) })
+          : t('farm.m1b.batch', { span: span(runMs) })) : null);
       list.append(
-        fact('honey', `${x.productName}: ${fmt(x.inBarn)} in the barn`,
-          `Bees need no feed. ${x.premiumName}: a ${x.premiumPct} % chance from a blue-ribbon colony.`),
-        fact('#sprout', `Pollination +${x.pollinationPct} %`,
-          `Crops and trees within ${f.radius} tiles of a busy hive: a bonus-unit chance.`),
-        fact('beehive', `${x.hives} of ${x.hiveCap} hives`,
-          x.hiveNextAt ? `One more hive at level ${x.hiveNextAt}.` : 'As many hives as the farm can hold.'));
+        fact('honey', t('farm.m1b.inBarn', { item: x.productName, n: x.inBarn }), t('farm.m1b.beesNoFeed', { premium: x.premiumName, p: x.premiumPct })),
+        fact('#sprout', t('farm.m1b.pollination', { p: x.pollinationPct }), t('farm.m1b.pollinationText', { r: f.radius })),
+        fact('beehive', t('farm.m1b.hives', { n: x.hives, cap: x.hiveCap }),
+          x.hiveNextAt ? t('farm.m1b.moreHive', { n: x.hiveNextAt }) : t('farm.m1b.maxHives')));
       extra.unshift(meter);
       if (x.jarsLive) extra.push(albumLink(ctx, 'honey_jars', x.jars, x.jarsOf));
       break;
@@ -261,17 +255,18 @@ export function m1bSection(v, ctx) {
 /** The banner of a giant event: giantFormed { id, ids, crop, by } or giantFelled { id, crop, qty, by, team }. Pure. */
 export function giantText(state, ev, me) {
   const crop = cropOf(ev.crop);
-  const name = crop?.name ?? 'crop';
-  const who = (pid) => (pid === me ? 'You' : state.players[pid]?.name ?? 'Your partner');
+  const name = crop?.name ?? 'crop'; // i18n-ok: English names (Bulgarian: the crop ref)
+  const ref = crop ? N(ev.crop) : t('farm.giant.crop');
+  const who = (pid) => (pid === me ? t('common.you') : state.players[pid]?.name ?? t('common.partner'));
   if (ev.e === 'giantFelled') {
-    const units = `${fmt(ev.qty ?? 0)} ${pluralOf(name, ev.qty ?? 0)}`;
-    return { kind: 'golden', ribbon: ev.team ? 'Felled together!' : 'Timber!',
-      message: ev.team ? `The giant ${name} is down: ${units} for the barn, and one more for the Teamwork ribbon.` : `${who(ev.by)} brought the giant ${name} down: ${units} for the barn.` };
+    const q = crop ? Q(ev.crop, ev.qty ?? 0) : `${fmt(ev.qty ?? 0)} ${pluralOf(name, ev.qty ?? 0)}`;
+    return { kind: 'golden', ribbon: ev.team ? t('farm.giant.together') : t('farm.giant.timber'),
+      message: ev.team ? t('farm.giant.downTeam', { name, crop: ref, q }) : t('farm.giant.downBy', { who: who(ev.by), name, crop: ref, q }) };
   }
   const G = COOP.giant ?? { hp: 60 };
-  const lead = ev.by === me ? 'Your planting' : `${who(ev.by)}'s planting`;
-  return { kind: 'quest', ribbon: 'A giant crop!',
-    message: `${lead} finished a composted 3×3 block of ${pluralOf(name, 2)}, and it grew into one Giant ${name}. When it is ripe, fell it with the Axe: ${G.hp} points, 10 a chop, 15 when you chop right after each other.` };
+  const p = { what: pluralOf(name, 2), name, crop: ref, hp: G.hp };
+  return { kind: 'quest', ribbon: t('farm.giant.formedRibbon'),
+    message: ev.by === me ? t('farm.giant.formedYou', p) : t('farm.giant.formedBy', { ...p, who: who(ev.by) }) };
 }
 
 export function giantBanners(ui, store, view) {
@@ -279,14 +274,16 @@ export function giantBanners(ui, store, view) {
     if (!ev || (ev.e !== 'giantFormed' && ev.e !== 'giantFelled')) return;
     const st = store.state;
     if (!st) return;
-    const t = giantText(st, ev, store.pid);
+    const gt = giantText(st, ev, store.pid);
     const anchor = own(st.farm.objects, ev.id);
     const felled = ev.e === 'giantFelled';
     const v = view || globalThis.__hh?.view;
-    ui.banner({ id: `giant-${ev.id}-${felled ? 'f' : 'g'}`, kind: t.kind, ribbon: t.ribbon, message: t.message,
-      things: ev.crop ? [{ icon: ev.crop, name: cropOf(ev.crop)?.name ?? ev.crop }] : [], ttl: felled ? 8000 : 12000,
+    // functions: a language switch while the card is up says it again (from the same event and farm)
+    const again = () => giantText(st, ev, store.pid) ?? gt;
+    ui.banner({ id: `giant-${ev.id}-${felled ? 'f' : 'g'}`, kind: gt.kind, ribbon: () => again().ribbon, message: () => again().message,
+      things: ev.crop ? [{ icon: ev.crop, name: () => (cropOf(ev.crop) ? cname(ev.crop) : ev.crop) }] : [], ttl: felled ? 8000 : 12000,
       actions: !felled && anchor && v && typeof v.focus === 'function'
-        ? [{ label: 'Show me', kind: 'sky',
+        ? [{ label: t('farm.crate.show'), kind: 'sky',
           fn: () => { ui.panels.closeAll(); v.focus(anchor.x + 1, anchor.z + 1); } }] : [] });
   });
   return () => off?.();
@@ -308,20 +305,10 @@ export function featureTarget(id) {
   }
 }
 
-const UNLOCK_TEXT = {
-  collections: ['The Collections album is open',
-    'Little treasures turn up while you farm. Whoever finds one, it goes in the album for both of you.',
-      'Open the album'],
-  restoration: ['A ruin to bring back',
-    'The Restoration Ledger asks for goods, a piece at a time. The Old Greenhouse gives 12 plots beyond the cap, always in season.', 'Open the Ledger'],
-  farm_beauty: ['Farm Beauty counts now',
-    `Decor, buildings and trees add beauty. Each star pays ${FARM_BEAUTY.starAcorns} Acorns and makes orders pay 1 % more.`, 'See Farm Beauty'],
-  decor_sets: ['Decor sets',
-    'Place a themed set close together: +25 % beauty and a little magic. Masterwork upgrades your decor too.',
-      'See the sets'],
-  giant_crops: ['Giant crops',
-    'Compost a 3×3 block of one crop and plant it within a minute: one block in five grows into a Giant. Fell it together.', null],
-};
+/** The lane's system unlocks: [title, text, button label | null], read in the language in effect. */
+const UNLOCK_IDS = ['collections', 'restoration', 'farm_beauty', 'decor_sets', 'giant_crops'];
+const unlockText = (id) => [t(`farm.unlock.${id}.title`), t(`farm.unlock.${id}.text`, { n: FARM_BEAUTY.starAcorns }),
+  id === 'giant_crops' ? null : t(`farm.unlock.${id}.label`)];
 
 /** The lane's unlocks at a level: systems without a drip-feed card of their own, and restoration projects. Pure. */
 export function unlocksOfLevel(level, state = null) {
@@ -329,15 +316,17 @@ export function unlocksOfLevel(level, state = null) {
   // a project opens at its level only when the one before it is restored (the rules' openProject); with a state,
   // only the project that is open now is announced (the Ledger's own banner names the next one when one finishes)
   const open = state ? restoreA.openProject(state)?.id ?? null : undefined;
-  for (const [id, [title, text, label]] of Object.entries(UNLOCK_TEXT)) {
+  for (const id of UNLOCK_IDS) {
     const f = featureOf(id);
     if (!f || !isLive(f) || f.unlock !== level || f.card) continue;
+    const [title, text, label] = unlockText(id);
     out.push({ id, title, text, label, target: featureTarget(id) });
   }
   for (const p of CONTENT.restoration.values()) {
     if (!isLive(p) || p.unlock !== level || p.n === 1 || (open !== undefined && open !== p.id)) continue;
-    out.push({ id: `restore-${p.id}`, title: `A new restoration: the ${p.name}`, text: p.text,
-      label: 'Open the Ledger', target: { panel: 'restoration', args: { id: p.id } } });
+    out.push({ id: `restore-${p.id}`, title: t('farm.unlock.restore', { name: p.name, proj: N(p.id, 'restoration') }),
+      text: ctext('restoration', p.id, 'desc', p.text),
+      label: t('farm.unlock.restoration.label'), target: { panel: 'restoration', args: { id: p.id } } });
   }
   return out;
 }
@@ -349,10 +338,12 @@ export function unlockBanners(ui, store) {
     // after the level-up banner and its unlock tour (about 3 s)
     setTimeout(() => {
       for (const u of unlocksOfLevel(lvl, store.state)) {
-        ui.banner({ id: `unlock-${u.id}`, kind: 'card', ribbon: u.title, message: u.text, things: [], ttl: 20000,
-          actions: u.label && u.target && ui.panels.has(u.target.panel) ? [{ label: u.label, kind: 'sky',
+        // functions: a language switch while the card is up says it again
+        const again = () => unlocksOfLevel(lvl, store.state).find((x) => x.id === u.id) ?? u;
+        ui.banner({ id: `unlock-${u.id}`, kind: 'card', ribbon: () => again().title, message: () => again().text, things: [], ttl: 20000,
+          actions: u.label && u.target && ui.panels.has(u.target.panel) ? [{ label: () => again().label, kind: 'sky',
             fn: () => ui.panels.open(u.target.panel, u.target.args) }]
-            : [{ label: 'Got it', kind: 'go', fn: () => {} }] });
+            : [{ label: t('farm.unlock.gotIt'), kind: 'go', fn: () => {} }] });
       }
     }, 3600);
   });

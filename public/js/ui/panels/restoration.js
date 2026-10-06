@@ -16,17 +16,19 @@ import * as restoreA from '../../../../shared/rules/actions/restoration.js';
 import { projectDone } from '../../../../shared/rules/economy.js';
 import { levelOf } from './model.js';
 import { startPlacement } from './placement.js';
-import { h, fmt, createKit, bar, pill, icon, svgIcon, playerMark, hintable } from './kit.js';
+import { h, fmt, createKit, bar, pill, icon, svgIcon, playerMark, hintable, phoneTitle } from './kit.js';
 import { s } from './art.js';
 import { homeScene } from './home-art.js';
 import { flagButton } from './fair.js';
+import { t, N, Q, list, lang, ctext, name as cname } from '../../i18n/index.js';
 
 const own = (o, k) => (o && Object.hasOwn(o, k) ? o[k] : undefined);
-const SPECIAL = Object.freeze({
-  prized_crop: ['Blue-ribbon crops', 'show_ribbon', 'counted as you harvest them from composted plots'],
-  prized_animal_good: ['A blue-ribbon animal good', 'golden_egg', 'counted when a prized animal brings one'],
-  prized_fruit: ['A blue-ribbon fruit', 'apple', 'counted when a prized tree gives one'],
-});
+/** A "special" slot (blue-ribbon goods): [name, icon, how it counts], the words read in the language in effect. */
+const SPECIAL_ICON = Object.freeze({ prized_crop: 'show_ribbon', prized_animal_good: 'golden_egg', prized_fruit: 'apple' });
+const special = (id) => (SPECIAL_ICON[id] ? [t(`collect.rest.special.${id}`), SPECIAL_ICON[id], t(`collect.rest.specialHow.${id}`)] : null);
+/** A project's and a bundle's name in the language in effect (lane B: restoration.<id>.bundles.<bundle>). */
+const projName = (p) => cname(p.id, { family: 'restoration' });
+const bundleName = (p, b) => ctext('restoration', p.id, `bundles.${b.id}`, b.name);
 
 const have = (state, item) => (own(state.farm.inventory, item) ?? 0) + (own(state.farm.overflow, item) ?? 0);
 
@@ -48,13 +50,13 @@ export function ledgerView(state, pid, { projects = [...live('restoration')].sor
         const by = { ...(own(own(own(book, p.id)?.s, b.id), String(i))?.by ?? {}) };
         const flag = restoreA.flagOf ? restoreA.flagOf(state, { project: p.id, bundle: b.id, slot: i }) : null;
         const base = { i, kind: need.kind, qty: need.need, n, by, done: n >= need.need, flag };
-        if (need.kind === 'coins') return { ...base, name: `${fmt(need.need)} coins`, iconId: 'coins',
+        if (need.kind === 'coins') return { ...base, name: t('market.land.coins', { n: need.need }), iconId: 'coins',
           have: state.farm.wallet.coins };
         if (need.kind === 'special') {
-          const [name, ic, how] = SPECIAL[need.special] ?? [need.special, 'show_ribbon', ''];
+          const [name, ic, how] = special(need.special) ?? [need.special, 'show_ribbon', ''];
           return { ...base, special: need.special, name, iconId: ic, how, have: null };
         }
-        return { ...base, item: need.item, name: itemOf(need.item)?.name ?? need.item, iconId: need.item,
+        return { ...base, item: need.item, name: itemOf(need.item) ? cname(need.item) : need.item, iconId: need.item,
           have: have(state, need.item) };
       });
       const doneSlots = slots.filter((x) => x.done).length;
@@ -63,15 +65,15 @@ export function ledgerView(state, pid, { projects = [...live('restoration')].sor
       const ready = (x) => (x.have ?? 0) >= x.qty - x.n;
       const left = slots.filter((x) => !x.done && x.kind !== 'special')
         .sort((a, c) => Number(ready(c)) - Number(ready(a)) || (c.n / c.qty) - (a.n / a.qty) || a.i - c.i);
-      return { id: b.id, name: b.name, need: b.need, of: slots.length, slots, doneSlots, done: isDone,
+      return { id: b.id, name: bundleName(p, b), need: b.need, of: slots.length, slots, doneSlots, done: isDone,
         toGo: isDone ? 0 : Math.max(0, b.need - doneSlots),
         nextSlots: isDone ? [] : left.slice(0, Math.max(0, b.need - doneSlots)).map((x) => x.i) };
     });
     const stage = bundles.filter((b) => b.done).length;
     const isOpen = Boolean(open && open.id === p.id);
     const prev = k > 0 ? projects[k - 1] : null;
-    const lockReason = done || isOpen ? null : level < p.unlock ? `Opens at level ${p.unlock}`
-      : prev && !projectDone(state, prev.id) ? `Opens when the ${prev.name} is restored` : 'Not open yet';
+    const lockReason = done || isOpen ? null : level < p.unlock ? t('collect.rest.opensAt', { n: p.unlock })
+      : prev && !projectDone(state, prev.id) ? t('collect.rest.opensAfter', { name: prev.name, prev: N(prev.id, 'restoration') }) : t('collect.rest.notOpen');
     const donors = {};
     for (const b of bundles) {
       for (const sl of b.slots) {
@@ -79,14 +81,14 @@ export function ledgerView(state, pid, { projects = [...live('restoration')].sor
         for (const [who, n] of Object.entries(sl.by)) donors[who] = (donors[who] ?? 0) + n;
       }
     }
-    return { id: p.id, name: p.name, n: p.n, unlock: p.unlock, text: p.text, reward: p.reward, bundles, stage, done,
+    return { id: p.id, name: projName(p), n: p.n, unlock: p.unlock, text: ctext('restoration', p.id, 'desc', p.text), reward: p.reward, bundles, stage, done,
       open: isOpen, status: done ? 'done' : isOpen ? 'open' : 'locked', lockReason,
       pct: stage / Math.max(1, bundles.length), donors, doneAt: own(own(book, p.id), 'done') ?? null };
   });
   const later = [...CONTENT.restoration.values()].filter((p) => !projects.includes(p))
     .sort((a, b) => a.n - b.n)[0] ?? null;
   return { projects: rows, active: rows.find((p) => p.open) ?? null, me: pid,
-    teaser: later ? { id: later.id, name: later.name, unlock: later.unlock } : null };
+    teaser: later ? { id: later.id, name: projName(later), unlock: later.unlock } : null };
 }
 
 // ---- the painted scenes ---------------------------------------------------------------------------------------------
@@ -111,7 +113,7 @@ function backdrop(svg, healed) {
       s('stop', { offset: '1', 'stop-color': healed ? '#FFF1D6' : '#E6E1D3' }))),
     s('rect', { x: 0, y: 0, width: 320, height: 180, fill: `url(#${id})` }),
     s('circle', { cx: 270, cy: 34, r: 15, fill: healed ? '#FFE58A' : '#EFEAD8', opacity: healed ? 1 : 0.8 }),
-    healed ? s('circle', { cx: 270, cy: 34, r: 22, fill: '#FFE58A', opacity: 0.35 }) : null,
+    healed ? s('circle', { cx: 270, cy: 34, r: 22, fill: '#FFE58A', opacity: 0.35 }) : '',
     cloud(56, 30, healed), cloud(196, 22, healed, 0.8),
     s('path', { d: 'M0 108 Q60 80 140 98 T320 90 V180 H0 Z', fill: healed ? '#A6D873' : '#AFB38C' }),
     s('path', { d: 'M0 124 Q100 104 200 120 T320 116 V180 H0 Z', fill: healed ? '#7CC243' : '#979C74' }));
@@ -369,7 +371,7 @@ const SCENES = { greenhouse, mill_wheel: millWheel, stone_bridge: stoneBridge };
 export function restoreScene(projectId, doneBundles, { label = '' } = {}) {
   const svg = s('svg',
     { viewBox: '0 0 320 180', class: 'pc-scene', role: label ? 'img' : null, 'aria-label': label || null,
-    'aria-hidden': label ? null : 'true', preserveAspectRatio: 'xMidYMid slice', focusable: 'false' });
+    'aria-hidden': label ? null : 'true', preserveAspectRatio: 'xMidYMid slice', focusable: 'false' }); // i18n-ok: an SVG attribute value
   // Restoration 4-6 (M2): ui-home paints them (each bundle heals its own part)
   if (!SCENES[projectId]) { const hs = homeScene(projectId, doneBundles, { label }); if (hs) return hs; }
   (SCENES[projectId] ?? sketch)(svg, doneBundles);
@@ -379,14 +381,14 @@ export function restoreScene(projectId, doneBundles, { label = '' } = {}) {
 // ---- the panel ------------------------------------------------------------------------------------------------------
 
 /** A farmer's name; a slot that left the farm reads as "A farmer" (never a raw slot id). */
-const nameOf = (st, pid) => st.players[pid]?.name ?? 'A farmer';
+const nameOf = (st, pid) => st.players[pid]?.name ?? t('collect.rest.aFarmer');
 
 function donors(st, by, me) {
   const list = Object.entries(by || {}).filter(([, n]) => n > 0).sort(([a], [b]) => a.localeCompare(b));
   if (!list.length) return null;
   return h('span.pc-donors',
     ...list.map(([pid, n]) => h('span.pc-donor',
-      { title: `${nameOf(st, pid)}${pid === me ? ' (you)' : ''} gave ${fmt(n)}` },
+      { title: t(pid === me ? 'collect.rest.gaveYou' : 'collect.rest.gave', { name: nameOf(st, pid), n }) },
     playerMark(pid, st.players[pid], { size: 16 }), h('small', fmt(n)))));
 }
 
@@ -403,42 +405,41 @@ function slotCard(ctx, kit, p, b, sl) {
   if (!sl.done && !b.done && p.open && sl.kind !== 'special') {
     const g = giveNow();
     act = kit.button({
-      label: sl.kind === 'coins' ? `Fund ${fmt(g > 0 ? g : left)}` : `Give ${fmt(g > 0 ? g : left)}`,
+      label: sl.kind === 'coins' ? t('collect.rest.fund', { n: g > 0 ? g : left }) : t('collect.rest.give', { n: g > 0 ? g : left }),
       glyph: sl.kind === 'coins' ? 'coin' : 'heart', cls: `pn-xs${sl.kind === 'coins' ? ' btn--sun' : ''}`,
         type: 'donate',
       args: () => ({ project: p.id, bundle: b.id, slot: sl.i, qty: Math.max(1, giveNow()) }),
       data: { donate: `${p.id}:${b.id}:${sl.i}` }, quiet: ['NO_ITEMS', 'NO_COINS'],
-      title: sl.kind === 'coins' ? 'Coins from the farm treasury' : `${sl.name} from the barn: as many as the slot still needs`,
+      title: sl.kind === 'coins' ? t('collect.rest.fundTip') : t('collect.rest.giveTip', { item: sl.name }),
       hint: () => (sl.kind === 'coins' ? { coins: Math.max(0, left - ctx.store.state.farm.wallet.coins) }
         : { missing: [{ item: sl.item, n: left }] }),
     });
   }
   const spare = b.done && !sl.done;
-  const line = spare ? 'Not needed: the bundle is done'
-    : sl.kind === 'coins' ? `${fmt(sl.n)} / ${fmt(sl.qty)} coins`
+  const line = spare ? t('collect.rest.spare')
+    : sl.kind === 'coins' ? t('collect.rest.coinsOf', { n: sl.n, q: sl.qty })
       : sl.kind === 'special' ? `${fmt(sl.n)} / ${fmt(sl.qty)} · ${sl.how}`
-        : `${fmt(sl.n)} / ${fmt(sl.qty)}${sl.done ? '' : ` · ${fmt(sl.have)} in the barn`}`;
+        : sl.done ? `${fmt(sl.n)} / ${fmt(sl.qty)}` : t('collect.rest.inBarn', { n: sl.n, q: sl.qty, have: sl.have });
   const next = p.open && b.nextSlots.includes(sl.i);
   return h(`li.pc-slot${sl.done ? '.done' : ''}${next ? '.next' : ''}${spare ? '.spare' : ''}${sl.kind === 'special' ? '.special' : ''}`, { dataset: { slot: String(sl.i) } },
     hintable(h('span.pc-slot-art', icon(sl.iconId, { size: 40, alt: '' }),
-      sl.done ? h('span.pc-slot-tick', { 'aria-label': 'full' }, '✓') : null), sl.kind === 'coins' || sl.kind === 'special' ? null : sl.item,
+      sl.done ? h('span.pc-slot-tick', { 'aria-label': t('collect.rest.full') }, '✓') : null), sl.kind === 'coins' || sl.kind === 'special' ? null : sl.item,
     { need: sl.done || spare ? undefined : left }),
-    h('span.pc-slot-main', h('b', sl.kind === 'coins' ? 'Coins' : sl.name), h('small', line),
+    h('span.pc-slot-main', h('b', sl.kind === 'coins' ? t('collect.rest.coins') : sl.name), h('small', line),
       sl.done || spare ? null : ring, donors(st, sl.by, ctx.store.pid)),
     // the give button, and under it "Need help" (GDD §6.2 #3, L23: the partner filling a flagged slot is a Heart each)
     act ? h('span.pc-slot-acts', act, restoreA.bundleFlagsOpen?.(st)
       ? flagButton(ctx, st, sl.flag, { type: 'restoreFlag', args: { project: p.id, bundle: b.id, slot: sl.i },
-        title: 'Ask your partner to fill this slot: a Heart each when they do' }) : null) : null);
+        title: t('collect.rest.flagTip') }) : null) : null);
 }
 
 function bundleCard(ctx, kit, p, b) {
   const partial = !b.done && b.slots.some((x) => !x.done && x.n > 0);
   return h(`section.pc-bundle${b.done ? '.done' : ''}`, { dataset: { bundle: b.id } },
-    h('header', h('h4', b.name), h('span.pc-need', b.done ? 'Done ✓' : `any ${b.need} of ${b.of}`),
-      b.done ? null : h('small', b.toGo === 1 ? 'one more slot' : `${b.toGo} more slots`)),
+    h('header', h('h4', b.name), h('span.pc-need', b.done ? t('collect.rest.doneTick') : t('collect.rest.anyOf', { need: b.need, of: b.of })),
+      b.done ? null : h('small', b.toGo === 1 ? t('collect.rest.oneMore') : t('collect.rest.nMore', { n: b.toGo }))),
     h('ul.pc-slots', ...b.slots.map((sl) => slotCard(ctx, kit, p, b, sl))),
-    partial && b.toGo <= 1 ? h('p.pc-bundle-note',
-      'When it is done, whatever sits in an unfinished slot goes back to the barn.') : null);
+    partial && b.toGo <= 1 ? h('p.pc-bundle-note', t('collect.rest.backNote')) : null);
 }
 
 /** The cut follows the range's thumb centre exactly (a 44 px thumb travels 22 px .. width - 22 px; QA2 UI-12). */
@@ -447,22 +448,22 @@ export const cutAt = (v) => `calc(22px + (100% - 44px) * ${Math.max(0, Math.min(
 function compare(p) {
   const now = new Set(p.bundles.filter((b) => b.done).map((b) => b.id));
   const after = new Set(p.bundles.map((b) => b.id));
-  const before = restoreScene(p.id, now, { label: `${p.name} now: ${p.stage} of ${p.bundles.length} bundles done` });
-  const done = restoreScene(p.id, after, { label: `${p.name} when it is restored` });
+  const before = restoreScene(p.id, now, { label: t('collect.rest.sceneNow', { name: p.name, stage: p.stage, n: p.bundles.length }) });
+  const done = restoreScene(p.id, after, { label: t('collect.rest.sceneAfter', { name: p.name }) });
   const top = h('div.pc-compare-after', done);
   const wrap = h('div.pc-compare', { style: { '--cut': p.done ? '0%' : cutAt(55) } }, h('div.pc-compare-now', before), top,
-    h('span.pc-compare-tag.l', p.done ? 'Restored' : p.stage ? 'Now' : 'Before'),
-      p.done ? null : h('span.pc-compare-tag.r', 'After'),
+    h('span.pc-compare-tag.l', p.done ? t('collect.rest.restored') : p.stage ? t('collect.rest.now') : t('collect.rest.before')),
+      p.done ? null : h('span.pc-compare-tag.r', t('collect.rest.after')),
     p.done ? null : h('span.pc-compare-handle', { 'aria-hidden': 'true' }));
   const range = p.done ? null : h('input.pc-compare-range', { type: 'range', min: '0', max: '100', value: '55',
-    'aria-label': `Compare ${p.name} now and after`,
+    'aria-label': t('collect.rest.compare', { name: p.name }),
       on: { input: (e) => wrap.style.setProperty('--cut', cutAt(e.target.value)) } });
   if (range) wrap.append(range);
   return wrap;
 }
 
 export const restorationPanel = {
-  title: 'Restoration Ledger',
+  get title() { return phoneTitle('collect.rest.title', 'collect.rest.titleShort'); },
   icon: 'planks',
   size: 'full',
   topics: ['restore', 'restoration', 'inventory', 'wallet', 'xp', 'stats', 'players'],
@@ -484,33 +485,33 @@ export const restorationPanel = {
       const st = ctx.store.state;
       const v = ledgerView(st, ctx.store.pid);
       const p = v.projects.find((x) => x.id === sel) ?? v.projects[0];
-      if (!p) { body.replaceChildren(h('p.pn-intro', 'Nothing to restore yet.')); return; }
-      const tabs = h('nav.pc-projects', { 'aria-label': 'Projects' },
+      if (!p) { body.replaceChildren(h('p.pn-intro', t('collect.rest.nothing'))); return; }
+      const tabs = h('nav.pc-projects', { 'aria-label': t('collect.rest.projects') },
         ...v.projects.map((x) => h(`button.pc-project${x.id === p.id ? '.sel' : ''}${x.done ? '.done' : ''}${x.open ? '' : '.locked'}`, {
           type: 'button', 'aria-pressed': String(x.id === p.id), dataset: { key: `proj-${x.id}`, project: x.id },
           on: { click: () => { sel = x.id; update(true); const sc = body.closest('.hh-panel-scroll'); if (sc) sc.scrollTop = 0; } } },
         h('span.pc-project-n', String(x.n)), h('span.pc-project-text', h('b', x.name),
-          h('small', x.done ? 'Restored ✓' : x.open ? `${x.stage} of ${x.bundles.length} bundles` : x.lockReason)),
+          h('small', x.done ? t('collect.rest.restoredTick') : x.open ? t('collect.rest.stageOf', { stage: x.stage, n: x.bundles.length }) : x.lockReason)),
         x.open && !x.done ? bar(x.pct, null, 'pn-thin pn-go') : null)),
         v.teaser ? h('div.pc-project.teaser', h('span.pc-project-n', '…'),
-          h('span.pc-project-text', h('b', v.teaser.name), h('small', 'A later chapter'))) : null);
+          h('span.pc-project-text', h('b', v.teaser.name), h('small', t('collect.rest.laterChapter')))) : null);
       const intro = h('div.pc-ledger-intro',
         h('p.pn-intro',
-          p.done ? `${p.name} is restored. ${p.text}` : `A bundle is done when enough of its slots are full (the number is on its label); all ${p.bundles.length} bundles restore the ${p.name}. Either of you can give, a piece at a time.`),
+          p.done ? t('collect.rest.isRestored', { name: p.name, text: p.text })
+            : t('collect.rest.how', { n: p.bundles.length, name: p.name, proj: N(p.id, 'restoration') })),
         h('div.pc-reward-box', svgIcon('star', 26),
-          h('div', h('b', p.done ? 'Yours for good' : 'When it is done'), h('span', p.text))));
+          h('div', h('b', p.done ? t('collect.rest.yoursForGood') : t('collect.rest.whenDone')), h('span', p.text))));
       // the restored Old Greenhouse waits in the build tray as a frame (rules: restoration.js greenhouseDef)
       const gh = p.done && p.reward?.greenhouse ? restoreA.greenhouseDef() : null;
       const ghTray = gh ? (st.farm.storage?.[gh.id] ?? 0) : 0;
       const placeGh = ghTray > 0 ? h('div.pc-place-gh',
         h('button.btn.btn--sun.pn-sm',
           { type: 'button', dataset: { place: gh.id }, on: { click: () => startPlacement(ctx, gh.id) } },
-        svgIcon('hammer', 22), `Place the ${gh.name}`),
-          h('small', 'It is in your build tray: 12 plots beyond the plot cap, always in season.')) : null;
+        svgIcon('hammer', 22), t('collect.rest.placeGh', { name: gh.name, gh: N(gh.id) })),
+          h('small', t('collect.rest.ghNote'))) : null;
       const left = h('div.pc-ledger-left', compare(p), placeGh, intro,
-        p.open || p.done ? null : h('p.pc-lock', svgIcon('lock', 20),
-          `${p.lockReason}. You can look at the bundles already.`),
-        Object.keys(p.donors).length ? h('p.pn-hint.pc-donor-sum', 'Given so far: ',
+        p.open || p.done ? null : h('p.pc-lock', svgIcon('lock', 20), t('collect.rest.lockNote', { why: p.lockReason })),
+        Object.keys(p.donors).length ? h('p.pn-hint.pc-donor-sum', t('collect.rest.given'),
           ...Object.entries(p.donors).sort(([a], [b]) => a.localeCompare(b))
           .map(([pid, n]) => h('span.pc-donor', playerMark(pid, st.players[pid], { size: 16 }),
             ` ${nameOf(st, pid)} ${fmt(n)} `))) : null);
@@ -529,31 +530,36 @@ export const restorationPanel = {
 export function restoreText(state, ev, me) {
   const p = CONTENT.restoration.get(ev.project);
   if (!p) return null;
-  const who = ev.by === me ? 'You' : state.players[ev.by]?.name ?? 'Your partner';
+  const who = ev.by === me ? t('common.you') : state.players[ev.by]?.name ?? t('common.partner');
+  const pr = { name: projName(p), proj: N(p.id, 'restoration'), text: ctext('restoration', p.id, 'desc', p.text) };
   if (ev.e === 'projectDone') {
     const next = restoreA.openProject(state);
-    return { ribbon: 'Restored!', kind: 'golden',
-      message: `The ${p.name} stands again. ${p.text}${next && next.id !== p.id ? ` Next in the Ledger: the ${next.name}.` : ''}` };
+    return { ribbon: t('collect.rest.restoredBang'), kind: 'golden',
+      message: next && next.id !== p.id ? t('collect.rest.standsNext', { ...pr, next: projName(next) }) : t('collect.rest.stands', pr) };
   }
   const b = p.bundles.find((x) => x.id === ev.bundle);
   if (!b) return null;
   const done = p.bundles.filter((x) => restoreA.bundleDone(state, p.id, x.id)).length;
   if (done >= p.bundles.length) return null;                          // the project's own banner follows
-  const back = (ev.back ?? []).map((x) => (x.coins ? `${fmt(x.coins)} coins` : `${fmt(x.qty)} ${itemOf(x.item)?.name ?? x.item}`));
-  return { ribbon: 'Bundle done!', kind: 'quest',
-    message: `${who} finished ${b.name} for the ${p.name}: ${done} of ${p.bundles.length} bundles.${back.length ? ` ${back.join(' and ')} went back to the barn.` : ''}` };
+  const english = (x) => (x.coins ? `${fmt(x.coins)} coins` : `${fmt(x.qty)} ${itemOf(x.item)?.name ?? x.item}`); // i18n-ok: the English list
+  const back = (ev.back ?? []).map((x) => (t('collect.rest.backItem', { en: english(x), q: x.coins ? t('market.land.coins', { n: x.coins }) : itemOf(x.item) ? Q(x.item, x.qty) : `${x.item} ×${fmt(x.qty)}` })));
+  const msg = { who, bundle: bundleName(p, b), ...pr, done, n: p.bundles.length };
+  return { ribbon: t('collect.rest.bundleBang'), kind: 'quest',
+    message: back.length ? t('collect.rest.bundleDoneBack', { ...msg, back: lang() === 'en' ? back.join(' and ') : list(back) }) : t('collect.rest.bundleDone', msg) };
 }
 
 export function restorationBanners(ui, store) {
   const off = store.on('fx', ({ ev }) => {
     if (!ev || (ev.e !== 'bundleDone' && ev.e !== 'projectDone')) return;
     const st = store.state;
-    const t = st ? restoreText(st, ev, store.pid) : null;
-    if (!t) return;
-    ui.banner({ id: `restore-${ev.project}-${ev.e === 'projectDone' ? 'done' : ev.bundle}`, kind: t.kind,
-      ribbon: t.ribbon, message: t.message,
+    const rt = st ? restoreText(st, ev, store.pid) : null;
+    if (!rt) return;
+    // functions: a language switch while the card is up says it again (from the same event and farm)
+    const again = () => restoreText(st, ev, store.pid) ?? rt;
+    ui.banner({ id: `restore-${ev.project}-${ev.e === 'projectDone' ? 'done' : ev.bundle}`, kind: rt.kind,
+      ribbon: () => again().ribbon, message: () => again().message,
       things: [], ttl: ev.e === 'projectDone' ? 12000 : 7000,
-      actions: [{ label: ev.e === 'projectDone' ? 'Look' : 'See it', kind: 'sky',
+      actions: [{ label: ev.e === 'projectDone' ? t('collect.rest.look') : t('collect.rest.seeIt'), kind: 'sky',
         fn: () => ui.panels.open('restoration', { id: ev.project }) }] });
   });
   return () => off?.();

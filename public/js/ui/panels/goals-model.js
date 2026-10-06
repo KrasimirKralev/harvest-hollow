@@ -3,32 +3,35 @@
 // Challenge). PURE (state, pid, now) -> plain data; every count comes from the rules' own helpers or the state.
 import {
   live, itemOf, defOf, cropOf, recipeOf, npcOf, questOf, ribbonOf, levelFromXp, personalLevelFromXp, titleFor,
-  masteryStars, QUEST_VERBS, RIBBON_REWARDS, RIBBON_WALL, DAILY_GIFT, FARM_WEEKS, ALMANAC, COUPLE_CHALLENGE, MASTERY,
-  STORY_BEATS, isLive,
+  masteryStars, RIBBON_REWARDS, RIBBON_WALL, DAILY_GIFT, FARM_WEEKS, ALMANAC, COUPLE_CHALLENGE, MASTERY,
+  STORY_BEATS, isLive, relicOf,
 } from '../../../../shared/content/index.js';
 import * as questsA from '../../../../shared/rules/actions/quests.js';
 import * as ribbonsA from '../../../../shared/rules/actions/ribbons.js';
 import * as dailyR from '../../../../shared/rules/daily.js';
 import * as feedR from '../../../../shared/rules/feed.js';
-import * as goalsR from '../../../../shared/rules/goals.js';
-import { m1bFeedText, foldGiants } from '../feed.js';
+import { m1bFeedText, foldGiants, feedLine, feedText as feedRowText } from '../feed.js';
 import * as coopR from '../../../../shared/rules/coop.js';
 import * as ordersA from '../../../../shared/rules/actions/orders.js';
-import { ORDERS, furnitureOf } from '../../../../shared/content/index.js';
+import { CONTENT, ORDERS, furnitureOf } from '../../../../shared/content/index.js';
 import { LEDGER_MAX } from '../../../../shared/content/config.js';
+import { taskMsg } from '../../../../shared/rules/goal-text.js';
+import { goalText, prep } from '../goal-text.js';
+import { t, tn, has, live as liveKeys, fmtNum, ctext, N, Q, nameEntry } from '../../i18n/index.js';
 
 const own = (o, k) => (o && Object.hasOwn(o, k) ? o[k] : 0);
-const NUM = new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 });
-const fmt = (n) => NUM.format(Math.trunc(Number(n) || 0));
-/** Ledger reasons in neutral words (GDD §6.3: "who, why and when, neutral wording"). */
-export const LEDGER_REASONS = Object.freeze({
-  sell: 'Sold at the stand', order: 'Order for Mabel', quest: 'Letter reward', level: 'Level-up gift', ribbon: 'Ribbon reward',
-  gift: 'Daily Gift', meter: 'Mabel\'s weekly chest', almanac: 'Almanac task', challenge: 'Couple Challenge', together: 'Together task',
-  combo: 'Together Combo', debris: 'Cleared debris', seed: 'Seeds', uproot: 'Seeds back (uproot)', undo: 'Undo: refund',
-  buy: 'Bought', land: 'Bought the land:', slot: 'New slot for the', upgrade: 'Upgraded the', tool: 'Bought the', store: 'Store goods:',
-  restore: 'Brought back the', barn: 'Barn upgrade', hurry: 'Hurry', golden_seeds: 'Golden Seeds', cancel: 'Cancelled',
-  mastery: 'Mastery star',
-});
+const fmt = (n) => fmtNum(n);
+/** Ledger reasons in neutral words (GDD §6.3: "who, why and when, neutral wording"), in the language in effect. */
+const LEDGER_KEYS = ['sell', 'order', 'quest', 'level', 'ribbon', 'gift', 'meter', 'almanac', 'challenge', 'together', 'combo',
+  'debris', 'seed', 'uproot', 'undo', 'buy', 'land', 'slot', 'upgrade', 'tool', 'store', 'restore', 'barn', 'hurry', 'golden_seeds',
+  'cancel', 'mastery', 'crate', 'barge', 'fair', 'townsfolk', 'track', 'weeds', 'petBreed', 'legacy', 'album'];
+export const LEDGER_REASONS = liveKeys(Object.fromEntries(LEDGER_KEYS.map((k) => [k, `goals.ledger.${k}`])));
+/** A content name for a line: the Bulgarian ref when the names table has one, else the English the code holds. */
+const nm = (id, en, family) => (nameEntry(id, family) ? N(id, family) : en);
+/** The same as text (a label, a pill). */
+const nmText = (id, en, family) => (nameEntry(id, family) ? t('goals.tr.name', { x: N(id, family) }) : en);
+/** An item quantity for a Bulgarian line ({q}); English lines say `counted()` through '_what'. */
+const qRef = (id, n) => (itemOf(id) ? Q(id, n, 'items') : Q(id, n));
 
 const UNCOUNTED = new Set(['wheat', 'corn', 'flour', 'wool', 'milk', 'butter', 'cream', 'sugar', 'cornmeal', 'cheese',
   'yogurt', 'popcorn', 'compost', 'wood', 'sugarcane', 'ketchup', 'coleslaw', 'sauerkraut', 'yarn', 'planks', 'oats',
@@ -71,18 +74,10 @@ export function rushPrice(state, now) {
 
 // ---- story letters (GDD §5.3) -------------------------------------------------------------------------------------
 
-/** One quest task as a line: "Harvest 6 Wheat", with its progress. */
-export function taskLine(t) {
+/** One quest task as a line: "Harvest 6 Wheat", with its progress (the rules' words, in the language in effect). */
+export function taskLine(task) {
   // the rules word every task to L25 (Barge rows, Fair medals, bee forage, duets, ...) with content's plurals
-  if (typeof goalsR.taskText === 'function') return goalsR.taskText(t);
-  const verb = QUEST_VERBS[t.verb]?.text ?? t.verb;
-  const special = { order: t.qty === 1 ? 'order' : 'orders', debris: 'pieces of debris', demand: 'Demand goods', prized: 'blue-ribbon harvests',
-    barn: 'Barn upgrade', slot: 'building slot', plot: 'plots', duet: 'duet recipe', bench: 'Golden Hour on the bench', help_flag: 'help flags' };
-  if (t.verb === 'expand') return `Buy the ${nameOf(t.ref)}`;
-  if (t.verb === 'upgrade' && t.ref === 'barn') return t.qty > 1 ? `Upgrade the Barn ${t.qty} times` : 'Upgrade the Barn';
-  if (t.verb === 'empty') return `Empty the ${nameOf(t.ref)} ${t.qty > 1 ? `${t.qty} times` : ''}`.trim();
-  if (special[t.ref]) return `${verb} ${fmt(t.qty)} ${special[t.ref]}`;
-  return `${verb} ${counted(t.qty, t.ref)}`;
+  return goalText(taskMsg(task));
 }
 
 /** Progress of task i of an active quest: { have, need, done } (fill counts quarter orders: shown in orders). */
@@ -113,8 +108,9 @@ export function storyView(state, now, { tab = 'story' } = {}) {
     const tasks = def.tasks.map((t, i) => ({ ...t, line: taskLine(t), ...(done ? { have: t.qty, need: t.qty, done: true } : taskState(state, id, i, now)) }));
     const deliver = def.tasks.some((t) => t.verb === 'deliver');
     return {
-      id, chain: def.chain, title: def.title, level: def.level, giver: npcOf(def.giver) ?? null, letter: def.letter ?? null,
-      doneText: def.done ?? '', coins: def.coins, xp: def.xp, rewards: def.rewards ?? {}, extraText: def.extraText,
+      id, chain: def.chain, title: ctext('quests', id, 'title', def.title), level: def.level, giver: npcOf(def.giver) ?? null,
+      letter: letterOf(id, def.letter), doneText: ctext('quests', id, 'done', def.done ?? ''), coins: def.coins, xp: def.xp,
+      rewards: def.rewards ?? {}, extraText: def.extraText ? ctext('quests', id, 'extraText', def.extraText) : def.extraText,
       tasks, deliver, ready: !done && tasks.every((t) => t.done), at: done ? q.done[id] : q.active[id]?.at ?? 0, finished: done,
     };
   };
@@ -132,10 +128,19 @@ export function storyView(state, now, { tab = 'story' } = {}) {
   // story beats of finished chapters (GDD §5.3: illustrated letter cards in M1, replayable from the Journal)
   const beats = done.filter((q) => q.rewards && q.rewards.beat).map((q) => {
     const b = STORY_BEATS.find((x) => x.id === q.rewards.beat && isLive(x));
-    return b ? { id: b.id, title: b.title, text: b.text, art: b.art, from: npcOf(b.from) ?? null, after: q.id, at: q.at } : null;
+    return b ? { id: b.id, title: ctext('STORY_BEATS', b.id, 'title', b.title), text: ctext('STORY_BEATS', b.id, 'text', b.text), art: b.art,
+      from: npcOf(b.from) ?? null, after: q.id, at: q.at } : null;
   }).filter(Boolean);
   return { active, done, beats,
-    nextUp: nextUp && nextUp.level > level ? { title: nextUp.title, level: nextUp.level, giver: npcOf(nextUp.giver) } : null };
+    nextUp: nextUp && nextUp.level > level ? { title: ctext('quests', nextUp.id, 'title', nextUp.title), level: nextUp.level,
+      giver: npcOf(nextUp.giver) } : null };
+}
+
+/** A quest's letter (greeting, paragraphs, signoff, art) in the language in effect, or null. */
+function letterOf(id, L) {
+  if (!L) return null;
+  return { ...L, greeting: ctext('quests', id, 'letter.greeting', L.greeting), signoff: ctext('quests', id, 'letter.signoff', L.signoff),
+    body: ctext('quests', id, 'letter.body', L.body ?? []) };
 }
 
 /** True when `pid` has already read the story beat `id` (per-player seen flags, GDD §6.1). */
@@ -144,22 +149,29 @@ export const beatSeen = (state, pid, id) => Boolean(state.players[pid]?.seen?.be
 /** Extra rewards of a quest as short phrases ("5 Acorns", "2 Hearts each", "Jam-jar shelf decor"). */
 export function rewardPhrases(r) {
   const out = [];
-  if (r.acorns) out.push(`${r.acorns} Acorn${r.acorns > 1 ? 's' : ''}`);
-  if (r.hearts) out.push(`${r.hearts} Heart${r.hearts > 1 ? 's' : ''} each`);
-  for (const [it, n] of Object.entries(r.items ?? {})) out.push(`${n} ${nameOf(it)}`);
-  for (const d of r.decor ?? []) out.push(nameOf(d));
-  for (const [sp, n] of Object.entries(r.animalsAtStart ?? {})) out.push(`${n} free ${nameOf(sp)}${n > 1 ? 's' : ''}`);
-  for (const d of r.giftAtStart ?? []) out.push(`a free ${nameOf(d)}`);
-  for (const d of r.gift ?? []) out.push(`a free ${nameOf(d)}`);
-  for (const f of r.furniture ?? []) out.push(`${furnitureOf(f)?.name ?? f} for the farmhouse`);
-  if (r.name) out.push(`you name the ${nameOf(r.name)}`);
-  if (r.beat) out.push('a story letter');
+  if (r.acorns) out.push(tn('goals.j.reward.acorns', r.acorns));
+  if (r.hearts) out.push(tn('goals.j.reward.hearts', r.hearts));
+  for (const [it, n] of Object.entries(r.items ?? {})) out.push(t('goals.j.reward.item', { n, _name: nameOf(it), q: qRef(it, n) }));
+  for (const d of r.decor ?? []) out.push(nmText(d, nameOf(d)));
+  for (const [sp, n] of Object.entries(r.animalsAtStart ?? {})) out.push(t('goals.j.reward.animals', { n, _name: nameOf(sp), q: Q(sp, n, 'animals') }));
+  for (const d of [...(r.giftAtStart ?? []), ...(r.gift ?? [])]) out.push(t('goals.j.reward.free', { d: nm(d, nameOf(d)) }));
+  for (const f of r.furniture ?? []) out.push(t('goals.j.reward.furniture', { f: nm(f, furnitureOf(f)?.name ?? f, 'furniture') }));
+  if (r.name) out.push(t('goals.j.reward.name', { x: nm(r.name, nameOf(r.name)) }));
+  if (r.beat) out.push(t('goals.j.reward.beat'));
   return out;
 }
 
 // ---- ribbons (GDD §5.4) ---------------------------------------------------------------------------------------------
 
-const SCOPE_LABEL = { F: 'Farm', P: 'Yours', T: 'Together' };
+/** A ribbon's scope word: Farm / Yours / Together. */
+const scopeLabel = (scope) => (['F', 'P', 'T'].includes(scope) ? t(`goals.j.scope.${scope}`) : scope);
+/** A ribbon's text fields in the language in effect. */
+const ribbonText = (r, field) => ctext('ribbons', r.id, field, r[field]);
+/** A personal title (the English one the rules use) in the language in effect (content CONTENT.titles by level). */
+export function titleWord(en) {
+  const row = (CONTENT.titles || []).find((x) => x.title === en);
+  return row ? ctext('titles', String(row.level), 'title', en) : en;
+}
 
 /** Every live ribbon for `pid`: tier held, counter, next threshold; hidden ones only once earned. */
 export function ribbonsView(state, pid) {
@@ -173,8 +185,9 @@ export function ribbonsView(state, pid) {
     const prev = tier > 0 ? r.tiers[tier - 1] : 0;
     const shown = r.scale ? value : value;
     const together = r.scope === 'T' ? Object.keys(state.players).sort().map((p) => ({ pid: p, n: own(state.players[p].stats, r.stat) })) : null;
-    rows.push({ id: r.id, n: r.n, name: r.name, text: r.text, scope: r.scope, scopeLabel: SCOPE_LABEL[r.scope], tier, tiers: r.tiers,
-      value: shown, next, prev, pct: next ? Math.max(0, Math.min(1, (shown - prev) / Math.max(1, next - prev))) : 1, title: r.title,
+    rows.push({ id: r.id, n: r.n, name: ribbonText(r, 'name'), text: ribbonText(r, 'text'), scope: r.scope, scopeLabel: scopeLabel(r.scope),
+      tier, tiers: r.tiers, value: shown, next, prev, pct: next ? Math.max(0, Math.min(1, (shown - prev) / Math.max(1, next - prev))) : 1,
+      title: ribbonText(r, 'title'),
       hidden: false, secret: Boolean(r.hidden), together,
       reward: next ? (r.hidden ? RIBBON_REWARDS.hidden : (r.scope === 'P' ? RIBBON_REWARDS.P : RIBBON_REWARDS.F)[tier]) : null });
   }
@@ -192,7 +205,8 @@ export function titlesView(state, pid) {
   const p = state.players[pid];
   const list = typeof ribbonsA.titlesOf === 'function' ? ribbonsA.titlesOf(state, pid) : [];
   const levelTitle = titleFor(personalLevelFromXp(p?.xp ?? 0));
-  return { levelTitle, worn: p?.title ?? null, options: list.map((id) => ({ id, title: ribbonOf(id)?.title ?? id })) };
+  return { levelTitle: titleWord(levelTitle), worn: p?.title ?? null,
+    options: list.map((id) => ({ id, title: ribbonOf(id) ? ribbonText(ribbonOf(id), 'title') : id })) };
 }
 
 // ---- mastery book (GDD §4.8) ---------------------------------------------------------------------------------------
@@ -205,15 +219,16 @@ export function masteryBook(state) {
     const stars = level < MASTERY.unlock ? 0 : masteryStars(d, count, level);
     const next = stars < 3 ? d.mastery[stars] : null;
     const prev = stars > 0 ? d.mastery[Math.min(stars, 3) - 1] : 0;
-    return { id: d.id, name: d.name, count, stars, next, prev, unit, pct: next ? Math.min(1, (count - prev) / Math.max(1, next - prev)) : 1 };
+    return { id: d.id, name: nmText(d.id, d.name, family === 'recipes' ? 'items' : family), count, stars, next, prev, unit,
+      pct: next ? Math.min(1, (count - prev) / Math.max(1, next - prev)) : 1 };
   });
   return {
     open: level >= MASTERY.unlock, unlock: MASTERY.unlock,
     families: [
-      { id: 'crops', label: 'Crops', rows: fam('crops', live('crops'), 'harvests') },
-      { id: 'trees', label: 'Trees', rows: fam('trees', live('trees'), 'harvests') },
-      { id: 'animals', label: 'Animals', rows: fam('animals', live('animals'), 'collections') },
-      { id: 'recipes', label: 'Recipes', rows: fam('recipes', live('recipes'), 'crafts') },
+      { id: 'crops', label: t('goals.j.mastery.crops'), rows: fam('crops', live('crops'), 'harvests') },
+      { id: 'trees', label: t('goals.j.mastery.trees'), rows: fam('trees', live('trees'), 'harvests') },
+      { id: 'animals', label: t('goals.j.mastery.animals'), rows: fam('animals', live('animals'), 'collections') },
+      { id: 'recipes', label: t('goals.j.mastery.recipes'), rows: fam('recipes', live('recipes'), 'crafts') },
     ],
   };
 }
@@ -227,42 +242,62 @@ export function statsView(state) {
   const pids = Object.keys(state.players).sort();
   const split = (fn) => pids.map((pid) => ({ pid, n: fn(state.players[pid].stats || {}) }));
   const rows = [
-    { id: 'crops', label: 'crops harvested', icon: 'wheat', n: own(f, 'cropsHarvested'), by: split((s) => sumPrefix(s, 'harvest.')) },
-    { id: 'plantings', label: 'plots planted', icon: 'plot', n: sumPrefix(f, 'plant.'), by: split((s) => own(s, 'plantings')) },
-    { id: 'goods', label: 'goods crafted', icon: 'bread', n: own(f, 'goodsCrafted') },
-    { id: 'animals', label: 'animal goods collected', icon: 'egg', n: own(f, 'animalsCollected') },
-    { id: 'fruit', label: 'tree harvests', icon: 'apple', n: own(f, 'treesHarvested') },
-    { id: 'orders', label: 'orders filled', icon: 'order_board', n: Math.floor(own(f, 'ordersQ') / 4), by: split((s) => own(s, 'ordersFilled')) },
-    { id: 'coins', label: 'coins earned', icon: 'coins', n: own(f, 'coins.earned') },
-    { id: 'debris', label: 'debris cleared', icon: 'rock', n: own(f, 'debrisCleared'), by: split((s) => own(s, 'debrisCleared')) },
-    { id: 'duets', label: 'duets cooked together', icon: 'hearts', n: own(f, 'duets') },
+    { id: 'crops', label: t('goals.j.stat.crops'), icon: 'wheat', n: own(f, 'cropsHarvested'), by: split((s) => sumPrefix(s, 'harvest.')) },
+    { id: 'plantings', label: t('goals.j.stat.plantings'), icon: 'plot', n: sumPrefix(f, 'plant.'), by: split((s) => own(s, 'plantings')) },
+    { id: 'goods', label: t('goals.j.stat.goods'), icon: 'bread', n: own(f, 'goodsCrafted') },
+    { id: 'animals', label: t('goals.j.stat.animals'), icon: 'egg', n: own(f, 'animalsCollected') },
+    { id: 'fruit', label: t('goals.j.stat.fruit'), icon: 'apple', n: own(f, 'treesHarvested') },
+    { id: 'orders', label: t('goals.j.stat.orders'), icon: 'order_board', n: Math.floor(own(f, 'ordersQ') / 4), by: split((s) => own(s, 'ordersFilled')) },
+    { id: 'coins', label: t('goals.j.stat.coins'), icon: 'coins', n: own(f, 'coins.earned') },
+    { id: 'debris', label: t('goals.j.stat.debris'), icon: 'rock', n: own(f, 'debrisCleared'), by: split((s) => own(s, 'debrisCleared')) },
+    { id: 'duets', label: t('goals.j.stat.duets'), icon: 'hearts', n: own(f, 'duets') },
   ];
   const players = pids.map((pid) => {
     const p = state.players[pid];
     const lvl = personalLevelFromXp(p.xp);
-    return { pid, name: p.name, color: p.color, xp: p.xp, level: lvl, title: p.title ? ribbonOf(p.title)?.title ?? titleFor(lvl) : titleFor(lvl), hearts: p.hearts };
+    const worn = p.title ? ribbonOf(p.title) : null;
+    return { pid, name: p.name, color: p.color, xp: p.xp, level: lvl, title: worn ? ribbonText(worn, 'title') : titleWord(titleFor(lvl)), hearts: p.hearts };
   });
   return { rows, players, level: levelFromXp(state.farm.xp), xp: state.farm.xp };
 }
 
 // ---- the treasury ledger (GDD §6.3) ---------------------------------------------------------------------------------
 
-/** A friendly, neutral sentence for a ledger reason ("sell", "buy:bakery", "order", "slot:mill" ...). */
 const anAnimal = (id) => defOf(id)?.layer === 'none';
-const REF_REASONS = Object.freeze({
-  sell: (n, id) => `Sold ${anAnimal(id) ? 'a' : 'the'} ${n}`, undo: (n) => `Took back the ${n} (undo)`,
-  buy: (n, id) => `Bought ${anAnimal(id) ? 'a' : 'the'} ${n}`, land: (n) => `Bought ${n}`,
-  slot: (n) => `A new slot for the ${n}`, upgrade: (n) => `Upgraded the ${n}`, tool: (n) => `Bought the ${n}`,
-  store: (n) => `Bought ${n} from the store`, restore: (n) => `Brought back the ${n}`,
-});
+/**
+ * "kind:id" reasons name the thing ({x}); the family says where its name lives (null: a placeable, an item, a crop).
+ * A restoration project shares its id with its landmark ("greenhouse"): `restore:` names the project first.
+ */
+const REF_FAMILY = { sell: null, undo: null, buy: null, upgrade: null, slot: null, masterwork: null, restore: null,
+  land: 'expansions', tool: 'tools', store: 'items', town: 'townProjects', furnish: 'furniture', relic: null };
 
+/** The thing a "kind:id" reason names, as a sentence ref: [catalog key, name ref]. */
+function refLine(k, ref) {
+  if (k === 'restore' && CONTENT.restoration.has(ref)) {
+    return ['goals.ledger.ref.restoreProject', nm(ref, CONTENT.restoration.get(ref).name, 'restoration')];
+  }
+  if (k === 'relic') return ['goals.ledger.ref.relic', nm(ref, relicOf(ref)?.name ?? nameOf(ref))];
+  const fam = REF_FAMILY[k];
+  const en = (fam && CONTENT[fam]?.get(ref)?.name) || nameOf(ref);
+  const animal = (k === 'sell' || k === 'buy') && anAnimal(ref);
+  return [`goals.ledger.ref.${k}${animal ? '.animal' : ''}`, nm(ref, en, fam ?? undefined)];
+}
+
+/**
+ * A friendly, neutral sentence for a ledger reason ("sell", "buy:bakery", "order", "slot:mill", "town:bandstand" ...).
+ * Every reason the rules write has its words (test/i18n.leftovers.test.js walks them in shared/rules); an unknown one
+ * (an old save's) reads as a neutral "Coins moved", never as its id.
+ */
 export function ledgerText(reason) {
-  if (reason === 'wish:in') return 'Set aside for the Wishlist';
-  if (reason === 'wish:out') return 'Back from the Wishlist';
+  if (reason === 'wish:in') return t('goals.ledger.wishIn');
+  if (reason === 'wish:out') return t('goals.ledger.wishOut');
   const [k, ref] = String(reason).split(':');
-  if (ref && REF_REASONS[k]) return REF_REASONS[k](nameOf(ref), ref);
-  const base = LEDGER_REASONS[k] ?? k.replace(/_/g, ' ');
-  return ref ? `${base} ${nameOf(ref)}` : base;
+  if (ref === 'surplus' && (k === 'sell' || k === 'undo')) return t(`goals.ledger.${k}Surplus`);
+  if (ref && Object.hasOwn(REF_FAMILY, k)) {
+    const [key, x] = refLine(k, ref);
+    return prep(t(key, { x }));
+  }
+  return LEDGER_KEYS.includes(k) ? LEDGER_REASONS[k] : t('goals.ledger.other');
 }
 
 /** Ledger rows, newest first: { n, at, by, coins, text }; and this week's totals per direction. */
@@ -294,43 +329,65 @@ export function feedView(state, limit = 60) {
   return foldGiants(list, ([, r]) => r, ([i], r) => [i, r]).map(([i, row]) => ({ i, row }));
 }
 
-/** One feed row as a sentence (actor name added by the panel). */
+/** "a" / "an" before an English name (English-only grammar). */
+const an = (en) => (/^[aeiou]/i.test(String(en)) ? 'an' : 'a');
+/** A wish's thing as a ref ({w}), or null. */
+const wishRef = (def) => (def ? nm(def, nameOf(def)) : null);
+
+/** One feed row as a sentence (actor name added by the panel): the Journal's own, longer words. */
 export function feedText(row) {
-  const q = (n) => fmt(n);
+  const L = (key, params) => feedLine(key, params).text;
+  const what = (n, id) => ({ _what: counted(n, id), q: qRef(id, n) });
   switch (row.k) {
-    case 'harvest': return `harvested ${counted(row.q, row.item)}${row.p > 1 ? ` from ${q(row.p)} plots` : ''}`;
-    case 'tree': return `picked ${counted(row.q, row.item)}`;
-    case 'collect': return `collected ${counted(row.q, row.item)}`;
-    case 'tend': return `tended ${q(row.q)} animal${row.q === 1 ? '' : 's'}`;
-    case 'craft': return `made ${counted(row.q, row.item)}`;
-    case 'sell': return `sold ${counted(row.q, row.item)} for ${q(row.c)} coins`;
-    case 'order': return `filled ${row.g ? 'a golden order' : 'an order'} (+${q(row.c)} coins)`;
-    case 'level': return `reached farm level ${row.level}!`;
-    case 'buy':
-      if (row.what === 'slot') return `added a ${nameOf(row.def)} slot${row.c ? ` for ${q(row.c)} coins` : ''}`;
-      if (row.what === 'hurry') return `${row.def === 'plot' ? (row.q > 1 ? `finished ${q(row.q)} crops early` : 'finished crops early') : row.q > 1 ? `hurried ${q(row.q)} batches` : 'hurried a batch'} for ${q(row.acorns ?? row.a ?? 0)} Acorn${(row.acorns ?? row.a) === 1 ? '' : 's'}`;
-      return `bought ${/^[aeiou]/i.test(nameOf(row.def)) ? 'an' : 'a'} ${nameOf(row.def)}${row.c ? ` for ${q(row.c)} coins` : ''}${row.a ? ` and ${row.a} Acorns` : ''}`;
-    case 'expand': return `bought the ${nameOf(row.def)}`;
-    case 'ribbon': return `earned the ${ribbonOf(row.id)?.name ?? row.id} ribbon (${['', 'bronze', 'silver', 'gold'][row.t] ?? 'tier'})`;
-    case 'quest': return `finished “${questOf(row.id)?.title ?? row.id}”`;
-    case 'keepsake': return `gave a keepsake: ${nameOf(row.item)}`;
-    case 'note': return 'pinned a note on the farm';
-    case 'golden': return 'Golden Hour began on the bench';
-    case 'hf': return 'high-fived!';
-    case 'gift': return `opened day ${row.day} of the Daily Gift`;
-    case 'chest': return { meter: 'opened a chest on Mabel\'s meter', almanac: 'finished the day\'s Almanac', challenge: 'completed the Couple Challenge', together: 'finished the Together task' }[row.what] ?? 'opened a chest';
-    case 'name': return row.what === 'farm' ? `named the farm “${row.text}”` : `named an animal “${row.text}”`;
-    case 'wish': {
-      const the = row.def ? `the ${nameOf(row.def)}` : 'the Wishlist';
-      if (row.what === 'bought') return `got ${row.def ? `the ${nameOf(row.def)}` : 'a wish'} from the Wishlist${row.c ? ` (${q(row.c)} coins saved up)` : ''}!`;
-      if (row.what === 'withdraw') return `took ${q(row.c ?? 0)} coins back from ${the}`;
-      if (row.what === 'asked') return `asked to use the coins saved for ${the}`;
-      if (row.what === 'denied') return `kept saving for ${the}`;
-      if (row.what === 'deposit' || row.c) return `put ${q(row.c ?? 0)} coins toward ${the}`;
-      return row.def ? `wished for the ${nameOf(row.def)}` : 'made a wish';
+    case 'harvest': return row.p > 1 ? L('feed.j.harvest.from', { ...what(row.q, row.item), p: row.p, n: row.p }) : L('feed.j.harvest', what(row.q, row.item));
+    case 'tree': return L('feed.j.tree', what(row.q, row.item));
+    case 'collect': return L('feed.j.collect', what(row.q, row.item));
+    case 'tend': return L('feed.j.tend', { n: row.q });
+    case 'craft': return L('feed.j.craft', what(row.q, row.item));
+    case 'sell': return L('feed.j.sell', { ...what(row.q, row.item), n: row.c });
+    case 'order': return L(row.g ? 'feed.j.order.golden' : 'feed.j.order', { n: row.c });
+    case 'level': return L('feed.j.level', { level: row.level });
+    case 'buy': {
+      if (row.what === 'slot') return L(row.c ? 'feed.buy.slotFor' : 'feed.buy.slot', { b: nm(row.def, nameOf(row.def)), ...(row.c ? { n: row.c } : {}) });
+      if (row.what === 'hurry') {
+        const many = row.q > 1;
+        const key = row.def === 'plot' ? (many ? 'feed.hurry.crops' : 'feed.hurry.crop') : many ? 'feed.hurry.batches' : 'feed.hurry.batch';
+        return L(key, { n: row.acorns ?? row.a ?? 0, ...(many ? { k: row.q } : {}) });
+      }
+      const en = nameOf(row.def);
+      const key = `feed.j.buy${row.c && row.a ? '.ca' : row.c ? '.c' : row.a ? '.a' : ''}`;
+      return L(key, { _a: an(en), b: nm(row.def, en), ...(row.c ? { c: row.c } : {}), ...(row.a ? { n: row.a } : {}) });
     }
-    case 'keep': return row.q > 0 ? `keeps ${counted(row.q, row.item)}` : `stopped keeping ${nameOf(row.item)}`;
-    default: return m1bFeedText(row)?.text ?? row.k;
+    case 'expand': return L('feed.j.expand', { land: nm(row.def, nameOf(row.def), 'expansions') });
+    case 'ribbon': {
+      const rb = ribbonOf(row.id);
+      return L(`feed.j.ribbon.${[1, 2, 3].includes(row.t) ? row.t : 'x'}`, { r: rb ? ribbonText(rb, 'name') : row.id });
+    }
+    case 'quest': {
+      const qd = questOf(row.id);
+      return L('feed.j.quest', { title: qd ? ctext('quests', row.id, 'title', qd.title) : row.id });
+    }
+    case 'keepsake': return L('feed.j.keepsake', { item: nm(row.item, nameOf(row.item), 'items') });
+    case 'note': return L('feed.j.note');
+    case 'golden': return L('feed.j.golden');
+    case 'hf': return L('feed.j.hf');
+    case 'gift': return L('feed.j.gift', { day: row.day });
+    case 'chest': return L(['meter', 'almanac', 'challenge', 'together'].includes(row.what) ? `feed.j.chest.${row.what}` : 'feed.j.chest');
+    case 'name': return L(row.what === 'farm' ? 'feed.j.name.farm' : 'feed.j.name.animal', { text: row.text });
+    case 'wish': {
+      const w = wishRef(row.def);
+      const p = w ? { w } : {};
+      const any = w ? '' : '.any';
+      if (row.what === 'bought') return L(`feed.j.wish.bought${any}${row.c ? '.c' : ''}`, { ...p, ...(row.c ? { n: row.c } : {}) });
+      if (row.what === 'withdraw') return L(`feed.j.wish.withdraw${any}`, { ...p, n: row.c ?? 0 });
+      if (row.what === 'asked') return L(`feed.j.wish.asked${any}`, p);
+      if (row.what === 'denied') return L(`feed.j.wish.denied${any}`, p);
+      if (row.what === 'deposit' || row.c) return L(`feed.j.wish.deposit${any}`, { ...p, n: row.c ?? 0 });
+      return L(w ? 'feed.j.wish.made' : 'feed.j.wish.made.any', p);
+    }
+    case 'keep': return row.q > 0 ? L('feed.j.keep', what(row.q, row.item)) : L('feed.j.unkeep', { item: nm(row.item, nameOf(row.item), 'items') });
+    // the rows only the feed words (balloon crates, treasures, upgrades...): the feed's own sentence, never the bare kind
+    default: return m1bFeedText(row)?.text ?? feedRowText(row).text;
   }
 }
 
@@ -359,16 +416,18 @@ export function weeksView(state) {
     next: FARM_WEEKS.milestones.find((m) => m > w.streak) ?? null };
 }
 
+const ALMANAC_VERBS = ['harvest', 'plant', 'water', 'collect', 'pet', 'make', 'fill', 'clear', 'enter'];
 /** A task line of the Almanac: "Harvest 12 Wheat" etc. */
-export function almanacLine(t) {
-  const verb = { harvest: 'Harvest', plant: 'Plant', water: 'Water', collect: 'Collect', pet: 'Pet', make: 'Make', fill: 'Fill', clear: 'Clear', enter: 'Enter' }[t.verb] ?? t.verb;
-  let what;
-  if (t.ref === '*') what = 'crops';
-  else if (t.ref === 'animal') what = t.qty === 1 ? 'animal' : 'animals';
-  else if (t.ref === 'order') what = t.qty === 1 ? 'order' : 'orders';
-  else if (t.ref === 'debris') what = 'debris';
-  else return `${verb} ${counted(t.qty, t.ref)}`;
-  return `${verb} ${fmt(t.qty)} ${what}`;
+export function almanacLine(task) {
+  const n = task.qty;
+  if (!ALMANAC_VERBS.includes(task.verb)) {
+    return t('goals.j.alm.any', { verb: task.verb, _what: counted(n, task.ref), q: qRef(task.ref, n) });
+  }
+  const kind = task.ref === '*' ? 'crops' : ['animal', 'order', 'debris', 'fair'].includes(task.ref) ? task.ref : 'item';
+  const key = `goals.j.alm.${task.verb}.${kind}`;
+  if (!has(key)) return t('goals.j.alm.any', { verb: task.verb, _what: counted(n, task.ref), q: qRef(task.ref, n) });
+  if (kind === 'item') return t(key, { n, _what: counted(n, task.ref), q: qRef(task.ref, n), item: nm(task.ref, nameOf(task.ref)) });
+  return t(key, { n });
 }
 
 /** This player's Almanac: 4 tasks with progress, paid count, reroll, chest; plus the shared Together task. */
@@ -383,7 +442,8 @@ export function almanacView(state, pid) {
     tasks: a && a.tasks ? Object.keys(a.tasks).sort().map((slot) => ({ slot: Number(slot), ...a.tasks[slot], line: almanacLine(a.tasks[slot]),
       live: slot === dailyR.almanacLiveSlot(a) })) : [],
     paid: a?.paid ?? 0, paidMax: ALMANAC.paidPerDay, rerolls: a?.rerolls ?? 0, freeRerolls: ALMANAC.freeRerollsPerDay, chest: Boolean(a?.chest), done: a?.done ?? 0,
-    together: t && tpl ? { text: tpl.text.replace('{n}', fmt(tpl.verb === 'fill' ? t.qty / 4 : t.qty)), n: tpl.verb === 'fill' ? Math.floor(t.n / 4) : t.n,
+    together: t && tpl ? { text: ctext('ALMANAC', `together.${tpl.id}`, 'text', tpl.text).replace('{n}', fmt(tpl.verb === 'fill' ? t.qty / 4 : t.qty)),
+      n: tpl.verb === 'fill' ? Math.floor(t.n / 4) : t.n,
       qty: tpl.verb === 'fill' ? t.qty / 4 : t.qty, by: t.by, done: t.done, hearts: ALMANAC.together.hearts } : null,
   };
 }
@@ -394,7 +454,8 @@ export function challengeView(state) {
   const level = levelFromXp(state.farm.xp);
   if (!c || !c.cur) return { open: level >= COUPLE_CHALLENGE.unlock, unlock: COUPLE_CHALLENGE.unlock, cur: null, done: c?.done ?? 0 };
   const tpl = COUPLE_CHALLENGE.templates.find((x) => x.id === c.cur.tpl);
-  const text = tpl ? tpl.text.replace('{coins}', `${fmt(c.cur.target)} coins`).replace('{n}', fmt(c.cur.target)) : c.cur.tpl;
+  const text = tpl ? ctext('COUPLE_CHALLENGE', tpl.id, 'text', tpl.text).replace('{coins}', tn('goals.j.challenge.coins', c.cur.target))
+    .replace('{n}', fmt(c.cur.target)) : c.cur.tpl;
   return { open: true, unlock: COUPLE_CHALLENGE.unlock, done: c.done, reward: COUPLE_CHALLENGE.reward,
     cur: { text, n: c.cur.n, target: c.cur.target, by: c.cur.by, finished: c.cur.done, pct: Math.min(1, c.cur.n / Math.max(1, c.cur.target)) } };
 }

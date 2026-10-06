@@ -25,6 +25,7 @@ import { itemHint, haveLine } from './item-sources.js';
 import { TOUCH } from '../game/touch.js';
 import { I, actUndoable } from './panels/intents.js';
 import { noFeedText, unkeepText } from './panels/model.js';
+import { t } from '../i18n/index.js';
 
 export const HINT_SEL = '[data-hint-item], .pn-chip[data-item]';
 /** The card an anchor sits in: its buttons are what the player is about to press (the bubble keeps clear of them). */
@@ -158,10 +159,11 @@ export function createItemHints(S) {
   /** The class part: every member in the Barn with why the Feed Mill skips it (data-hint-recipe), else just the names. */
   function clsPart(c) {
     if (!c) return null;
-    const lead = `${c.words[0].toUpperCase()}${c.words.slice(1)} works`;
-    if (!c.rows) return h('p.ih-cls', `${lead}: `, ...c.members.map((x, i) => [i ? ', ' : '', h('b', x.name), ` ${x.have}`]));
+    // c.words ("any fruit") is the item-sources model's (lane C): this module only builds the sentence around it
+    const words = `${c.words[0].toUpperCase()}${c.words.slice(1)}`;
+    if (!c.rows) return h('p.ih-cls', t('toolbar.ih.works', { words }), ...c.members.map((x, i) => [i ? ', ' : '', h('b', x.name), ` ${x.have}`]));
     return h('div.ih-feed',
-      h('p.ih-cls', `${lead}, cheapest first:`),
+      h('p.ih-cls', t('toolbar.ih.cheapest', { words })),
       c.rows.length ? h('ul.ih-feed-list', ...c.rows.map((x) => h(`li.ih-feed-row.${x.why ? `skip.why-${x.why}` : 'use'}`,
         { dataset: { feedRow: x.id } },
         icon(x.id, { size: 26, alt: '' }),
@@ -170,7 +172,7 @@ export function createItemHints(S) {
           ? h('button.btn.btn--sky.btn--small.ih-fix', { type: 'button', dataset: { fix: x.fix.kind, item: x.id },
             'aria-label': `${x.fix.label}: ${x.name}`, on: { click: (e) => { e.stopPropagation(); fixSkip(x); } } }, x.fix.label)
           : x.fix ? h('span.ih-feed-note', x.fix.label) : null))) : null,
-      c.none.length ? h('p.ih-feed-none', `None in the barn: ${c.none.join(', ')}`) : null);
+      c.none.length ? h('p.ih-feed-none', t('toolbar.ih.none', { list: c.none.join(', ') })) : null);
   }
 
   let drawn = null;        // what the bubble shows now: a store change that alters nothing leaves its nodes alone
@@ -188,16 +190,16 @@ export function createItemHints(S) {
         h('div.ih-titles', h('b.ih-name', m.name),
           h(`span.ih-have${short ? '.short' : m.need !== null ? '.ok' : ''}`, haveLine(m)))),
       clsPart(m.cls),
-      h('div.ih-label', svgIcon('sprout', 14), 'Where to get it'),
+      h('div.ih-label', svgIcon('sprout', 14), t('toolbar.ih.where')),
       h('ol.ih-list', ...m.sources.map((s) => h(`li.ih-src.${s.state}`, { dataset: { src: s.key } },
         h('span.ih-src-art', icon(s.icon, { size: 34, alt: '' })),
         h('div.ih-src-main',
           h('b.ih-src-title', s.title),
           h('span.ih-src-text', s.text),
           s.note ? h('span.ih-src-note', svgIcon(STATE_GLYPH[s.state] ?? 'star', 14), s.note) : null),
-        s.show ? h('button.btn.btn--sky.btn--small.ih-show', { type: 'button', 'aria-label': `Show me: ${s.title}`,
-          on: { click: (e) => { e.stopPropagation(); showMe(s); } } }, 'Show me') : null))),
-      touch ? null : h('p.ih-foot', cur?.via === 'focus' ? 'Enter: show me · Esc: close' : null)));
+        s.show ? h('button.btn.btn--sky.btn--small.ih-show', { type: 'button', 'aria-label': t('toolbar.ih.showLabel', { title: s.title }),
+          on: { click: (e) => { e.stopPropagation(); showMe(s); } } }, t('moments.showMe')) : null))),
+      touch ? null : h('p.ih-foot', cur?.via === 'focus' ? t('toolbar.ih.keys') : null)));
     box.classList.toggle('touch', touch);
     return true;
   }

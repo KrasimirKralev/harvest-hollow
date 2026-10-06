@@ -10,27 +10,32 @@
 //     The nudge: once per farm, a few seconds after this farmer's first guide step is done (Grandma's first evening),
 //     a gentle card "Farming is better with two" with "Invite a friend" (never on a farm that has two farmers).
 //   copyText(text, { input }) -> Promise<boolean>   the clipboard, else the old select + execCommand('copy')
+//   linkBox(url, { label, masked, shareText })       a link field with Copy (and Share on a phone; shareText may be the
+//                                                     share sheet's own words), also used by ui/keep.js
 //   INVITE_TEXT                                       the words (tests)
+// A farm with two farmers: the card also offers a new key for a farmer who lost theirs (ui/keep.js fullRows), so a
+// lost phone never leaves the farm "full" for good.
 import { h, kv, svgIcon, ensureStylesheet } from './dom.js';
 import { farm, session, createInvite, inviteLink, personalLink, TTL_DAYS } from '../net/farm.js';
+import { t, tn, getters, lang } from '../i18n/index.js';
 
 const DAY_MS = 86_400_000;
 const NUDGE_DELAY_MS = 2500;
 
-export const INVITE_TEXT = Object.freeze({
-  lead: 'Farming is better with two. Send this link to one friend: whoever opens it first becomes the second farmer and plays here with you, live.',
-  rules: `The link works once, for ${TTL_DAYS} days. Making a new link turns the old one off.`,
-  full: 'Your farm has two farmers. That is everyone a farm can have, so there is nothing to invite to.',
-  personal: 'Opens this farm as you on any device. Keep it private: it is your key.',
-  retention: `This farm is kept while you play; after ${TTL_DAYS} days without a visit it is deleted.`,
-  nudge: 'Farming is better with two. Send a friend a link and they can farm here with you, live.',
-  share: 'Come and farm with me in Harvest Hollow!',
-  errors: Object.freeze({
-    FULL: 'Your farm already has two farmers.',
-    AUTH: 'This device cannot make an invite for this farm. Open your personal farm link first.',
-    RATE: 'Lots of invites just now. Try again in a minute.',
-    NET: 'The farm did not answer. Try again in a moment.',
-  }),
+export const INVITE_TEXT = getters({
+  lead: () => t('multi.invite.lead'),
+  rules: () => tn('multi.invite.rules', TTL_DAYS),
+  full: () => t('multi.invite.full'),
+  personal: () => t('multi.personal.help'),
+  retention: () => tn('multi.retention', TTL_DAYS),
+  nudge: () => t('multi.invite.nudge'),
+  share: () => t('multi.invite.share'),
+  errors: {
+    FULL: () => t('multi.invite.err.FULL'),
+    AUTH: () => t('multi.invite.err.AUTH'),
+    RATE: () => t('multi.invite.err.RATE'),
+    NET: () => t('multi.invite.err.NET'),
+  },
 });
 
 /** Copy to the clipboard; on an http page (no clipboard API) select the field and use the old command. */
@@ -38,47 +43,51 @@ export async function copyText(text, { input = null, nav = globalThis.navigator,
   try {
     if (nav?.clipboard && typeof nav.clipboard.writeText === 'function') { await nav.clipboard.writeText(text); return true; }
   } catch { /* denied: try the old way */ }
+  // the old command copies the SELECTION: with no field holding the text it would copy nothing and still say yes
+  if (!input) return false;
   try {
-    if (input) { input.focus(); input.select(); input.setSelectionRange?.(0, text.length); }
+    input.focus();
+    input.select();
+    input.setSelectionRange?.(0, text.length);
     return Boolean(doc?.execCommand?.('copy'));
   } catch { return false; }
 }
 
 /** The Settings line about deleting a farm nobody visits (the server's HH_FARM_TTL_DAYS, 7 by default). Pure. */
-export const retentionText = (days = TTL_DAYS) => (days === TTL_DAYS ? INVITE_TEXT.retention
-  : `This farm is kept while you play; after ${days} day${days === 1 ? '' : 's'} without a visit it is deleted.`);
+export const retentionText = (days = TTL_DAYS) => tn('multi.retention', days);
 
 const canShare = (nav = globalThis.navigator) => typeof nav?.share === 'function';
 
-async function share(url, nav = globalThis.navigator) {
+async function share(url, text = INVITE_TEXT.share, nav = globalThis.navigator) {
   try {
-    await nav.share({ title: 'Harvest Hollow', text: INVITE_TEXT.share, url });
+    await nav.share({ title: 'Harvest Hollow', text, url }); // i18n-ok: brand
     return true;
   } catch { return false; }   // the player closed the sheet: nothing to say
 }
 
 /** A link field with Copy and (on a phone) Share, and a status line. `masked`: shown only after "Show". */
-function linkBox(url, { label, masked = false, shareText = true } = {}) {
+export function linkBox(url, { label, masked = false, shareText = true } = {}) {
   const status = h('p.link-status', { role: 'status', 'aria-live': 'polite' });
   const field = h('input.field.link-field', { type: 'text', readonly: true, value: masked ? '' : url, 'aria-label': label, spellcheck: 'false' });
-  if (masked) field.placeholder = '•••••••••••• (hidden)';
+  if (masked) field.placeholder = t('multi.link.hidden');
   field.addEventListener('focus', () => { if (field.value) field.select(); });
   const copy = h('button.btn.btn--sky.btn--small', { type: 'button', dataset: { act: 'copy' }, on: { click: async () => {
     const ok = await copyText(url, { input: field.value ? field : null });
-    status.textContent = ok ? 'Copied. Paste it in a message.' : 'Press and hold the link to copy it.';
+    status.textContent = ok ? t('multi.link.copied') : t('multi.link.hold');
     if (!ok && !field.value) { field.value = url; field.select(); }
-  } } }, 'Copy');
+  } } }, t('multi.link.copy'));
   const acts = [copy];
   if (shareText && canShare()) {
-    acts.push(h('button.btn.btn--small', { type: 'button', dataset: { act: 'share' }, on: { click: () => share(url) } }, 'Share…'));
+    acts.push(h('button.btn.btn--small', { type: 'button', dataset: { act: 'share' },
+      on: { click: () => share(url, typeof shareText === 'string' ? shareText : INVITE_TEXT.share) } }, t('multi.link.share')));
   }
   if (masked) {
     const show = h('button.btn.btn--paper.btn--small', { type: 'button', 'aria-pressed': 'false', dataset: { act: 'show' }, on: { click: () => {
       const on = !field.value;
       field.value = on ? url : '';
-      show.textContent = on ? 'Hide' : 'Show';
+      show.textContent = on ? t('multi.link.hide') : t('multi.link.show');
       show.setAttribute('aria-pressed', String(on));
-    } } }, 'Show');
+    } } }, t('multi.link.show'));
     acts.unshift(show);
   }
   return h('div.link-box', field, h('div.link-acts', acts), status);
@@ -98,26 +107,35 @@ export function createInviteUi(S) {
   };
 
   ui.panels.register('invite', {
-    title: 'Invite a friend',
+    // a getter, not a function: the shell reads it at every open, so it follows the language
+    get title() { return t('multi.invite.title'); },
     size: 'card',
     topics: ['players'],
     mount(body, ctx) {
       const wrap = h('div.invite');
       body.append(wrap);
       let busy = false;
-      const paint = (error = null) => {
+      // the card listens to `players`, which changes on every presence beat: repaint only when what it shows changed,
+      // or a tap that spans a repaint lands on a button that is no longer there (live walk 2026-10-05)
+      let shown = null;
+      const paint = (error = null, force = true) => {
+        const sig = JSON.stringify([full(), saved()?.token ?? null, busy, error, S.keep?.fullSig?.() ?? null, lang()]);
+        if (!force && sig === shown) return;
+        shown = sig;
         if (full()) {
+          // a farmer who lost their key keeps their seat: the way to fill it again is a new key (ui/keep.js)
           wrap.replaceChildren(h('div.invite-art', svgIcon('heart', 64)), h('p.invite-lead', INVITE_TEXT.full),
-            h('div.invite-acts', h('button.btn', { type: 'button', on: { click: () => ctx.close() } }, 'Back to the farm')));
+            ...(S.keep ? S.keep.fullRows(ctx) : []),
+            h('div.invite-acts', h('button.btn', { type: 'button', on: { click: () => ctx.close() } }, t('multi.invite.back'))));
           return;
         }
         const inv = saved();
         const make = h(`button.btn${inv ? '.btn--paper.btn--small' : ''}`, { type: 'button', dataset: { act: 'make' }, disabled: busy || null,
-          on: { click: () => makeLink() } }, busy ? 'Making a link…' : inv ? 'Make a new link' : 'Make an invite link');
+          on: { click: () => makeLink() } }, busy ? t('multi.invite.making') : inv ? t('multi.invite.makeNew') : t('multi.invite.make'));
         wrap.replaceChildren(...[
           h('div.invite-art', svgIcon('letter', 64)),
           h('p.invite-lead', INVITE_TEXT.lead),
-          inv ? linkBox(inviteLink(origin(), farm.id, inv.token), { label: 'Invite link for a friend' }) : null,
+          inv ? linkBox(inviteLink(origin(), farm.id, inv.token), { label: t('multi.invite.linkLabel') }) : null,
           h('p.invite-rules', INVITE_TEXT.rules),
           error ? h('p.modal-error', { role: 'alert' }, error) : null,
           h('div.invite-acts', make),
@@ -136,7 +154,7 @@ export function createInviteUi(S) {
         if (r.ok) wrap.querySelector('.link-field')?.focus({ preventScroll: true });
       }
       paint();
-      return { update: () => { if (!busy) paint(); } };
+      return { update: () => { if (!busy) paint(null, false); } };
     },
   });
 
@@ -150,25 +168,29 @@ export function createInviteUi(S) {
     clearTimeout(nudgeT);
     nudgeT = setTimeout(() => {
       if (full()) return;
-      ui.banner({ ribbon: 'Invite a friend', message: INVITE_TEXT.nudge, kind: 'card', id: 'invite-nudge', ttl: 20_000,
-        actions: [{ label: 'Invite a friend', fn: open }, { label: 'Later', kind: 'paper', fn: () => {} }] });
+      ui.banner({ ribbon: t('multi.invite.title'), message: INVITE_TEXT.nudge, kind: 'card', id: 'invite-nudge', ttl: 20_000,
+        actions: [{ label: t('multi.invite.title'), fn: open }, { label: t('multi.invite.later'), kind: 'paper', fn: () => {} }] });
     }, NUDGE_DELAY_MS);
   });
 
   function settingsRows(ctx) {
     const mine = session.secret ? personalLink(origin(), farm.id, session.secret) : null;
     return [
-      h('h3', 'Sharing this farm'),
-      h('div.set-row', h('span.lbl', 'Invite a friend'), h('div',
-        full() ? h('span.help', 'Two farmers already: the farm is full.')
-          : h('button.btn.btn--sky.btn--small', { type: 'button', dataset: { invite: 'open' }, on: { click: () => { ctx.close(); open(); } } }, 'Invite a friend')),
-      h('span.help', 'A one-time link: your friend opens it and plays here with you.')),
-      mine ? h('div.set-row.set-personal', h('span.lbl', 'Your personal farm link'),
-        linkBox(mine, { label: 'Your personal farm link', masked: true }),
+      h('h3', t('multi.set.sharing')),
+      h('div.set-row', h('span.lbl', t('multi.invite.title')), h('div',
+        full() ? h('span.help', t('multi.set.full'))
+          : h('button.btn.btn--sky.btn--small', { type: 'button', dataset: { invite: 'open' }, on: { click: () => { ctx.close(); open(); } } }, t('multi.invite.title'))),
+      h('span.help', t('multi.set.inviteHelp'))),
+      mine ? h('div.set-row.set-personal', h('span.lbl', t('multi.personal.label')),
+        linkBox(mine, { label: t('multi.personal.label'), masked: true }),
         h('span.help', INVITE_TEXT.personal)) : null,
-      h('div.set-row', h('span.lbl', 'Keeping the farm'), h('span.help.set-retention', retentionText(session.ttlDays))),
-      h('div.set-row', h('span.lbl', 'Your farms'), h('div', h('a.btn.btn--paper.btn--small', { href: '/?home=1' }, 'All farms on this device')),
-        h('span.help', 'Start another farm, or open one you played on this device.')),
+      // "Keep your farm safe" (ui/keep.js)
+      ...(S.keep ? S.keep.keepRows(ctx) : []),
+      h('div.set-row', h('span.lbl', t('multi.set.keeping')), h('span.help.set-retention', retentionText(session.ttlDays))),
+      h('div.set-row', h('span.lbl', t('multi.set.farms')), h('div', h('a.btn.btn--paper.btn--small', { href: '/?home=1' }, t('multi.set.allFarms'))),
+        h('span.help', t('multi.set.farmsHelp'))),
+      // the Farmers: when each was last here, and a new key for one who lost theirs (ui/keep.js)
+      ...(S.keep ? S.keep.farmerRows(ctx) : []),
     ].filter(Boolean);
   }
 

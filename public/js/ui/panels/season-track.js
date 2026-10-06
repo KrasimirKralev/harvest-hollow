@@ -11,6 +11,10 @@ import { h, icon, svgIcon, fmt, fmtShort, createKit, fill } from './kit.js';
 import { banner, lockedBody, toTop } from './fair.js';
 import { trackOf, levelOf, actFor, canAct, ARGS, SEASONAL_TRACK_UNLOCK } from './league-rules.js';
 import { hubNav, hubSig, ring, rewardChips, rewardText } from './league-kit.js';
+import { t, lang, ctext, has, name as cname } from '../../i18n/index.js';
+
+/** A coat's word in the language in effect (text-b `coats`). */
+const coatName = (id) => ctext('coats', id, 'name', id);
 
 const DAY = 86_400_000;
 /** The painting per season: spring blossom orchard, summer animals, autumn sunset with a pumpkin, winter porch. */
@@ -38,14 +42,14 @@ export function animalsOf(state) {
     n[o.def] = (n[o.def] ?? 0) + 1;
     const name = state.farm.names?.[id]?.name;
     // own: the bred coat kept under a season coat (the rules never overwrite it)
-    out.push({ id, def: o.def, label: name ? `${name} (${a.name})` : `${a.name} ${n[o.def]}`, coat: o.coat ?? null,
+    out.push({ id, def: o.def, label: name ? t('league.track.animalNamed', { name, kind: cname(o.def) }) : t('league.track.animalN', { kind: cname(o.def), n: n[o.def] }), coat: o.coat ?? null,
       own: o.bcoat ?? null });
   }
   return out.sort((a, b) => (a.def < b.def ? -1 : a.def > b.def ? 1 : a.label < b.label ? -1 : 1));
 }
 
 export const seasonTrackPanel = {
-  title: 'Ribbon Track',
+  get title() { return t('league.track.panelTitle'); },
   icon: 'ticket_stub',
   size: 'full',
   topics: ['track', 'xp', 'players', 'meta', 'wallet', 'objects', 'names', 'fair', 'duel'],
@@ -66,19 +70,20 @@ export const seasonTrackPanel = {
       const now = ctx.now();
       const v = seasonTrackView(st, ctx.store.pid, now);
       if (!v.open) {
-        fill(body, hubNav(ctx, 'seasonTrack'), lockedBody('d', 'The Seasonal Ribbon Track', [
-          'Every real season brings a free track of 30 tiers.',
-          'Every bit of farm XP the two of you earn moves you along it.',
-          'Hearts, Compost, seed packets, Golden Seeds, coins, decor, Acorns, and a coat for one of your animals that only that season has.',
+        fill(body, hubNav(ctx, 'seasonTrack'), lockedBody('d', t('league.track.lockedTitle'), [
+          t('league.track.locked.1'),
+          t('league.track.locked.2'),
+          t('league.track.locked.3'),
         ], v.unlock, v.level));
         return;
       }
       const [art, focus] = ART[v.season] ?? ART.autumn;
-      const chip = h('div.wk-clock', svgIcon('sun', 20), h('span', 'Season ends'),
-        h('b.wk-clock-t', v.daysLeft > 1 ? `in ${v.daysLeft} days` : v.daysLeft === 1 ? 'tomorrow' : 'today'));
+      const chip = h('div.wk-clock', svgIcon('sun', 20), h('span', t('league.track.ends')),
+        h('b.wk-clock-t', v.daysLeft > 1 ? t('league.track.inDays', { n: v.daysLeft }) : v.daysLeft === 1 ? t('league.track.tomorrow') : t('league.track.today')));
+      const titleKey = `league.track.title.${v.season}`;
       fill(body,
         hubNav(ctx, 'seasonTrack'),
-        banner(art, `The ${v.name} Ribbon Track`, `${dateText(v.start, st)} – ${dateText(v.end - DAY, st)} · ${SEASONAL_TRACK.tiers} tiers · every XP you earn counts`,
+        banner(art, has(titleKey) ? t(titleKey) : t('league.track.titleAny', { name: v.name }), t('league.track.bannerSub', { from: dateText(v.start, st), to: dateText(v.end - DAY, st), n: SEASONAL_TRACK.tiers }),
           { chip, focus, cls: 'lg-banner' }),
         h('div.lg-track-top', statusCard(v), nextCard(v)),
         trackStrip(st, v),
@@ -104,17 +109,17 @@ export const seasonTrackPanel = {
     function statusCard(v) {
       const p = v.done ? 1 : v.inTier / Math.max(1, v.need);
       const claimable = v.tiers.filter((x) => x.claimable);
-      const all = claimable.length > 1 && canAct('trackClaim') ? kit.button({ label: `Claim all ${claimable.length}`, cls: 'btn--small btn--sun', key: 'track:all',
+      const all = claimable.length > 1 && canAct('trackClaim') ? kit.button({ label: t('league.track.claimAll', { n: claimable.length }), cls: 'btn--small btn--sun', key: 'track:all',
         type: actFor('trackClaim'), args: ARGS.trackClaim(claimable[0].n),
         onClick: () => { for (const x of claimable) ctx.act(actFor('trackClaim'), ARGS.trackClaim(x.n)); } }) : null;
       return h('section.lg-track-status',
         ring(p, 78, String(v.tier), { cls: 'lg-ring-tier' }),
         h('div.lg-track-text',
-          h('small', v.done ? 'Track complete!' : `Tier ${v.tier} of ${SEASONAL_TRACK.tiers}`),
-          h('b', v.done ? 'Every prize of the season is yours' : `${fmt(v.toNext)} XP to tier ${v.tier + 1}`),
-          h('span.lg-track-sub', `${fmt(v.need)} XP a tier · about an hour of farming at level ${v.L}`),
+          h('small', v.done ? t('league.track.complete') : t('league.track.tierOf', { n: v.tier, of: SEASONAL_TRACK.tiers })),
+          h('b', v.done ? t('league.track.allYours') : t('league.track.toNext', { xp: v.toNext, n: v.tier + 1 })),
+          h('span.lg-track-sub', t('league.track.perTier', { xp: v.need, n: v.L })),
           h('span.pn-bar.pn-thin.lg-track-bar', { role: 'progressbar', 'aria-valuemin': '0', 'aria-valuemax': String(v.need),
-            'aria-valuenow': String(v.done ? v.need : v.inTier), 'aria-label': `${fmt(v.inTier)} of ${fmt(v.need)} XP in this tier`,
+            'aria-valuenow': String(v.done ? v.need : v.inTier), 'aria-label': t('league.track.inTier', { n: v.inTier, of: v.need }),
             style: { '--p': String(p) } }, h('span.pn-bar-fill'))),
         all);
     }
@@ -123,9 +128,9 @@ export const seasonTrackPanel = {
       const nx = v.tiers.find((x) => !x.reached) ?? null;
       const ms = v.tiers.find((x) => x.milestone && !x.reached && x !== nx) ?? null;
       return h('section.lg-track-next',
-        v.claimable ? h('p.lg-claim-note', svgIcon('star', 18), `${v.claimable} prize${v.claimable === 1 ? '' : 's'} to claim for the farm`) : null,
-        nx ? h('div.lg-next-row', h('small', `Tier ${nx.n} brings`), rewardChips(nx.reward, { size: 30, ...opts(v) })) : h('p.wk-muted', 'Every tier of this season is reached.'),
-        ms ? h('div.lg-next-row.ms', h('small', `Tier ${ms.n}`), rewardChips(ms.reward, { size: 26, ...opts(v) })) : null);
+        v.claimable ? h('p.lg-claim-note', svgIcon('star', 18), t('league.track.toClaim', { n: v.claimable })) : null,
+        nx ? h('div.lg-next-row', h('small', t('league.track.brings', { n: nx.n })), rewardChips(nx.reward, { size: 30, ...opts(v) })) : h('p.wk-muted', t('league.track.allReached')),
+        ms ? h('div.lg-next-row.ms', h('small', t('league.track.tier', { n: ms.n })), rewardChips(ms.reward, { size: 26, ...opts(v) })) : null);
     }
 
     function coatsCard(st, v) {
@@ -133,19 +138,20 @@ export const seasonTrackPanel = {
       const def = v.coatDef && v.coatDef.id === coat ? v.coatDef : { id: coat, hue: null };
       const list = v.animals;
       const sel = coatFor && list.some((a) => a.id === coatFor) ? coatFor : null;
-      const select = h('select.lg-coat-pick', { 'aria-label': 'Which animal wears it', on: { change: (e) => { coatFor = e.target.value || null; update(true); } } },
-        h('option', { value: '' }, list.length ? 'Choose an animal…' : 'No animals yet'),
+      const select = h('select.lg-coat-pick', { 'aria-label': t('league.track.coat.which'), on: { change: (e) => { coatFor = e.target.value || null; update(true); } } },
+        h('option', { value: '' }, list.length ? t('league.track.coat.choose') : t('league.track.coat.none')),
         ...list.map((a) => h('option', { value: a.id, selected: a.id === sel ? true : null },
-          `${a.label}${a.coat ? ` · ${a.coat}` : ''}${a.own ? ` (its ${a.own} coat kept)` : ''}`)));
-      const wear = kit.button({ label: 'Put it on', cls: 'btn--small btn--sun', key: 'coat:wear', type: 'coatWear',
-        args: () => ({ id: sel ?? '', coat }), gate: () => (sel ? null : { code: 'BAD_ARGS', hint: { text: 'Choose an animal first' } }) });
+          `${a.label}${a.coat ? ` · ${coatName(a.coat)}` : ''}${a.own ? t('league.track.coat.kept', { coat: coatName(a.own) }) : ''}`)));
+      const wear = kit.button({ label: t('league.track.coat.wear'), cls: 'btn--small btn--sun', key: 'coat:wear', type: 'coatWear',
+        args: () => ({ id: sel ?? '', coat }), gate: () => (sel ? null : { code: 'BAD_ARGS', hint: { text: t('league.track.coat.chooseFirst') } }) });
       const own = sel ? list.find((a) => a.id === sel)?.own : null;
-      const back = own ? kit.button({ label: `Back to ${own}`, cls: 'btn--small btn--sky', key: 'coat:own', type: 'coatWear',
-        args: () => ({ id: sel ?? '', coat: own }), title: `Put its own ${own} coat back on (the season coat returns to the chest)` }) : null;
+      const back = own ? kit.button({ label: t('league.track.coat.back', { coat: coatName(own) }), cls: 'btn--small btn--sky', key: 'coat:own', type: 'coatWear',
+        args: () => ({ id: sel ?? '', coat: own }), title: t('league.track.coat.backTip', { coat: coatName(own) }) }) : null;
       return h('section.wk-card.lg-coats',
         h('span.lg-coat-swatch.big', { style: { '--coat': def.hue ?? '#C9A36A' } }, icon('saddle_rack', { size: 40, alt: '' })),
-        h('div.lg-coat-text', h('b', `The ${cap(coat)} coat${v.coats.length > 1 ? ` (+${v.coats.length - 1} more)` : ''}`),
-          h('small', 'A season coat from the track: put it on one of your animals. Only looks, and only this season had it.')),
+        h('div.lg-coat-text', h('b', v.coats.length > 1 ? t('league.track.coat.titleMore', { coat: lang() === 'en' ? cap(coat) : coatName(coat), n: v.coats.length - 1 })
+          : t('league.track.coat.title', { coat: lang() === 'en' ? cap(coat) : coatName(coat) })),
+          h('small', t('league.track.coat.note'))),
         h('div.lg-coat-acts', select, wear, back));
     }
 
@@ -153,30 +159,30 @@ export const seasonTrackPanel = {
       const claimType = actFor('trackClaim');
       const cards = v.tiers.map((x) => {
         const cls = x.got ? '.got' : x.claimable ? '.claim' : x.n === v.tier + 1 ? '.now' : '.ahead';
-        const claim = x.claimable ? kit.button({ label: 'Claim', cls: 'btn--small btn--sun', key: `track:${x.n}`,
+        const claim = x.claimable ? kit.button({ label: t('league.track.claim'), cls: 'btn--small btn--sun', key: `track:${x.n}`,
           type: claimType, args: ARGS.trackClaim(x.n) }) : null;
-        const who = x.got && x.got.by && st.players?.[x.got.by] ? st.players[x.got.by].name : x.got ? 'Auto' : null;
+        const who = x.got && x.got.by && st.players?.[x.got.by] ? st.players[x.got.by].name : x.got ? t('league.track.auto') : null;
         const words = rewardText(x.reward, opts(v));
         return h(`li.lg-tier${cls}${x.milestone ? '.ms' : ''}`, { dataset: { tier: String(x.n) },
-          'aria-label': `Tier ${x.n}: ${words}${x.got ? ', claimed' : x.claimable ? ', ready to claim' : ''}` },
+          'aria-label': t(x.got ? 'league.track.tierClaimed' : x.claimable ? 'league.track.tierReady' : 'league.track.tierLabel', { n: x.n, words }) },
         h('span.lg-tier-n', String(x.n)),
         h('span.lg-tier-prize', rewardChips(x.reward, { size: x.milestone ? 50 : 44, words: false, ...opts(v) })),
         h('span.lg-tier-what', words),
-        x.got ? h('span.lg-tier-stamp', svgIcon('check', 16), who) : claim ?? h('span.lg-tier-at', `${fmtShort(x.at)} XP`),
+        x.got ? h('span.lg-tier-stamp', svgIcon('check', 16), who) : claim ?? h('span.lg-tier-at', t('league.track.atXp', { xp: fmtShort(x.at) })),
         x.n === v.tier + 1 ? h('span.lg-tier-fill', { style: { '--p': String(v.inTier / Math.max(1, v.need)) }, 'aria-hidden': 'true' }) : null);
       });
-      return h('section.lg-track-wrap', { 'aria-label': 'The track' },
-        h('ol.lg-track', { tabindex: '0', 'aria-label': `${SEASONAL_TRACK.tiers} tiers; scroll sideways` }, ...cards));
+      return h('section.lg-track-wrap', { 'aria-label': t('league.track.label') },
+        h('ol.lg-track', { tabindex: '0', 'aria-label': t('league.track.stripLabel', { n: SEASONAL_TRACK.tiers }) }, ...cards));
     }
 
     function rulesCard(v) {
-      return h('section.wk-card.wk-rules', h('h3.pn-h', h('span', 'How the track works')),
+      return h('section.wk-card.wk-rules', h('h3.pn-h', h('span', t('league.track.rules.head'))),
         h('ul.wk-bullets',
-          h('li', 'Every farm XP point either of you earns moves the track: it is the farm\'s, shared. Either of you can claim a prize.'),
-          h('li', `A tier needs ${fmt(v.need)} XP: about an hour of play at level ${v.L}, the level the season began with.`),
-          h('li', `Tiers ${SEASONAL_TRACK.acornTiers.join(', ')} pay ${SEASONAL_TRACK.acorns} Acorns. Hearts go to each of you.`),
-          h('li', v.done ? 'The track is done for the season. A new one starts with the next season.'
-            : `At the season's end every reached tier is paid even if nobody claimed it, and the XP past your last tier turns into coins (${fmtShort(v.leftoverCoins)} now).`)));
+          h('li', t('league.track.rules.1')),
+          h('li', t('league.track.rules.2', { xp: v.need, n: v.L })),
+          h('li', t('league.track.rules.3', { tiers: SEASONAL_TRACK.acornTiers.join(', '), n: SEASONAL_TRACK.acorns })),
+          h('li', v.done ? t('league.track.rules.done')
+            : t('league.track.rules.4', { coins: fmtShort(v.leftoverCoins) }))));
     }
 
     update(true);
@@ -190,7 +196,7 @@ const cap = (s) => String(s).replace(/^./, (c) => c.toUpperCase());
 /** "1 Sept" in the farm's zone. */
 function dateText(ms, state) {
   try {
-    return new Intl.DateTimeFormat('en-GB', { timeZone: state?.meta?.tz || 'UTC', day: 'numeric', month: 'short' }).format(ms);
+    return new Intl.DateTimeFormat(lang() === 'bg' ? 'bg-BG' : 'en-GB', { timeZone: state?.meta?.tz || 'UTC', day: 'numeric', month: lang() === 'bg' ? 'long' : 'short' }).format(ms);
   } catch { return ''; }
 }
 

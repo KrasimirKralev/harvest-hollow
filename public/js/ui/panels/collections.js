@@ -18,7 +18,7 @@
 import { COLLECTION_RULES, decorOf, collectionOf } from '../../../../shared/content/index.js';
 import * as albumA from '../../../../shared/rules/actions/album.js';
 import { startPlacement } from './placement.js';
-import { h, fmt, createKit, bar, icon, svgIcon, playerMark } from './kit.js';
+import { h, fmt, createKit, bar, icon, svgIcon, playerMark, phoneTitle } from './kit.js';
 import { s } from './art.js';
 import { ensureStylesheet } from '../dom.js';
 import { ribbonWallPanel } from './ribbon-wall.js';
@@ -26,24 +26,29 @@ import { restorationPanel, restorationBanners } from './restoration.js';
 import { beautyPanel, mountBeautyMeter, beautyBanners } from './beauty.js';
 import { decorSetsPanel } from './decor-sets.js';
 import { giantBanners, unlockBanners } from './animals-m1b.js';
+import { t, has, ctext, name as cname } from '../../i18n/index.js';
 
 const own = (o, k) => (o && Object.hasOwn(o, k) ? o[k] : undefined);
 
 /** How each set's items turn up, in the album's words (GDD §5.5 "Found by"), and the noun its lucky bar counts. */
+// English (tests read it); the album shows the catalog's words: 'collect.album.how.<set>' / 'collect.album.noun.<set>'
 export const FOUND_BY = Object.freeze({
-  recipe_cards: ['crafting any recipe', 'crafts'],
-  butterflies: ['harvesting flowers and flowering trees', 'harvests'],
-  lost_tools: ['clearing debris and chopping', 'clears'],
-  feathers: ['collecting from chickens and ducks', 'collections'],
-  heirloom_seeds: ['harvesting crops of 4 hours or more', 'harvests'],
-  pond_treasures: ['duck pond collects and the Fishing Dock', 'tries'],
-  fossils: ['rocks, boulders and truffle digs', 'digs'],
-  honey_jars: ['collecting honey from your hives', 'honey collects'],
-  buttons: ["crafts at the Weaver's Shed and the Sewing Table", 'crafts'],
-  fair_rosettes: ['entries at the County Fair', 'entries'],
-  old_coins: ['selling at the Market Stand (a roll per 100 coins)', 'rolls'],
-  love_notes: ['things you do together', 'tries'],
+  recipe_cards: ['crafting any recipe', 'crafts'], // i18n-ok: English source of collect.album.how.*
+  butterflies: ['harvesting flowers and flowering trees', 'harvests'], // i18n-ok
+  lost_tools: ['clearing debris and chopping', 'clears'], // i18n-ok
+  feathers: ['collecting from chickens and ducks', 'collections'], // i18n-ok
+  heirloom_seeds: ['harvesting crops of 4 hours or more', 'harvests'], // i18n-ok
+  pond_treasures: ['duck pond collects and the Fishing Dock', 'tries'], // i18n-ok
+  fossils: ['rocks, boulders and truffle digs', 'digs'], // i18n-ok
+  honey_jars: ['collecting honey from your hives', 'honey collects'], // i18n-ok
+  buttons: ["crafts at the Weaver's Shed and the Sewing Table", 'crafts'], // i18n-ok
+  fair_rosettes: ['entries at the County Fair', 'entries'], // i18n-ok
+  old_coins: ['selling at the Market Stand (a roll per 100 coins)', 'rolls'], // i18n-ok
+  love_notes: ['things you do together', 'tries'], // i18n-ok
 });
+/** A set's name, an album item's name (lane B: finds.<id>.name), a set's perk, in the language in effect. */
+const setName = (c) => cname(c.id, { family: 'collections' });
+const findName = (it) => ctext('finds', it.id, 'name', it.name);
 
 /** The rules' record of a set (farm.album.sets[id] = { r, pity, items: { [itemId]: { by, at, n } }, done }), or empty. */
 export function setState(state, setId) {
@@ -61,20 +66,22 @@ export function albumView(state, pid) {
     const st = setState(state, c.id);
     const items = c.items.map((it) => {
       const g = own(st.items, it.id);
-      return { id: it.id, name: it.name, found: Boolean(g), by: g?.by ?? null, at: g?.at ?? null,
+      return { id: it.id, name: findName(it, c.id), found: Boolean(g), by: g?.by ?? null, at: g?.at ?? null,
         dup: g ? Math.max(0, (g.n ?? 1) - 1) : 0 };
     });
     const missing = albumA.missingOf(state, c);
     const spares = albumA.dupesOf(state, c);
     const found = items.length - missing.length;
     const done = st.done !== null;
-    const [how, noun] = FOUND_BY[c.id] ?? ['playing', 'tries'];
+    const key = FOUND_BY[c.id] ? c.id : 'other';
+    const how = has(`collect.album.how.${key}`) ? t(`collect.album.how.${key}`) : (FOUND_BY[c.id] ?? ['playing'])[0]; // i18n-ok: fallback
+    const noun = has(`collect.album.noun.${key}`) ? t(`collect.album.noun.${key}`) : (FOUND_BY[c.id] ?? [null, 'tries'])[1]; // i18n-ok: fallback
     return {
-      id: c.id, name: c.name, how, noun, items, found, total: items.length, missing, spares,
+      id: c.id, name: setName(c), how, noun, nounKey: key, items, found, total: items.length, missing, spares,
       canTrade: spares >= R.tradeIn && missing.length > 0, pity: st.pity, pityMax: R.pity,
       // the rules: once `pity` rolls in a row found nothing new, the NEXT roll is certain (the 41st after a find)
-      pityLeft: Math.max(1, R.pity - st.pity + 1), done, doneAt: st.done, perkText: c.perkText,
-      display: c.display, displayName: decorOf(c.display)?.name ?? 'A display piece', acorns: R.acorns,
+      pityLeft: Math.max(1, R.pity - st.pity + 1), done, doneAt: st.done, perkText: ctext('collections', c.id, 'perkText', c.perkText),
+      display: c.display, displayName: decorOf(c.display) ? cname(c.display) : t('collect.album.displayPiece'), acorns: R.acorns,
       mine: items.filter((i) => i.by === pid).length,
     };
   });
@@ -294,24 +301,25 @@ const FRESH_MS = 2 * 3_600_000;           // "New" on a sticker for two hours af
 function sticker(ctx, set, it) {
   const st = ctx.store.state;
   const p = it.by ? st.players[it.by] : null;
-  const label = it.found ? `${it.name}: found${p ? ` by ${p.name}` : ''}${it.dup ? `, ${it.dup} spare${it.dup === 1 ? '' : 's'}` : ''}` : `${it.name}: not found yet`;
+  const base = it.found ? (p ? t('collect.album.foundBy', { item: it.name, who: p.name }) : t('collect.album.found', { item: it.name })) : null;
+  const label = !it.found ? t('collect.album.notFound', { item: it.name }) : it.dup ? t('collect.album.withSpares', { base, n: it.dup }) : base;
   const fresh = it.found && it.at && ctx.now() - it.at < FRESH_MS;
   return h(`figure.pc-sticker${it.found ? '.found' : '.missing'}${fresh ? '.fresh' : ''}`,
     { role: 'img', 'aria-label': label, title: label, dataset: { item: it.id } },
     h('span.pc-sticker-face', stickerArt(set.id, it.id, 60),
       it.found ? null : h('span.pc-sticker-q', { 'aria-hidden': 'true' }, '?')),
     h('figcaption', h('b', it.name),
-      it.found ? h('small.pc-finder', p ? [playerMark(it.by, p, { size: 16 }), ` ${p.name}`] : 'Found')
-        : h('small', 'Not yet')),
-    fresh ? h('span.pc-new', 'New') : null,
-    it.dup ? h('span.pc-dup', { title: `${it.dup} spare${it.dup === 1 ? '' : 's'}` }, `+${it.dup}`) : null);
+      it.found ? h('small.pc-finder', p ? [playerMark(it.by, p, { size: 16 }), ` ${p.name}`] : t('collect.album.foundShort'))
+        : h('small', t('collect.album.notYet'))),
+    fresh ? h('span.pc-new', t('collect.album.new')) : null,
+    it.dup ? h('span.pc-dup', { title: t('collect.album.spares', { n: it.dup }) }, `+${it.dup}`) : null);
 }
 
 /** Spares and the 3 -> 1 trade: a chooser of the missing items, each gated by the rules' own check. */
 function tradeRow(ctx, kit, set, open, toggle) {
   const R = COLLECTION_RULES;
   const choose = open && set.canTrade ? h('div.pc-trade-pick',
-    h('span.pc-trade-q', `${R.tradeIn} spares for which one?`),
+    h('span.pc-trade-q', t('collect.album.which', { n: R.tradeIn })),
     ...set.missing.map((id) => {
       const it = set.items.find((x) => x.id === id);
       return h('span.pc-trade-opt', stickerArt(set.id, id, 34),
@@ -321,14 +329,14 @@ function tradeRow(ctx, kit, set, open, toggle) {
     })) : null;
   return h('div.pc-trade',
     h('span.pc-spares',
-      { title: `A spare is a second find of an item: ${R.tradeIn} spares trade for one you are missing` },
-      h('b', fmt(set.spares)), set.spares === 1 ? ' spare' : ' spares'),
+      { title: t('collect.album.spareTip', { n: R.tradeIn }) },
+      h('b', fmt(set.spares)), t('collect.album.sparesWord', { n: set.spares })),
     set.canTrade
       ? h('button.pn-chipbtn.pc-trade-btn',
         { type: 'button', 'aria-expanded': String(open), dataset: { key: `trade-${set.id}` },
           on: { click: () => toggle(!open) } },
-        open ? 'Not now' : `Trade ${R.tradeIn} spares`)
-      : h('small.pc-trade-hint', `${R.tradeIn - Math.min(R.tradeIn - 1, set.spares)} more for a trade`),
+        open ? t('collect.album.notNow') : t('collect.album.trade', { n: R.tradeIn }))
+      : h('small.pc-trade-hint', t('collect.album.moreToTrade', { n: R.tradeIn - Math.min(R.tradeIn - 1, set.spares) })),
     choose);
 }
 
@@ -336,25 +344,26 @@ function page(ctx, kit, set, ui) {
   const st = ctx.store.state;
   const inTray = (own(st.farm.storage, set.display) ?? 0) > 0;
   const head = h('header.pc-page-head',
-    h('div.pc-page-title', h('h4', set.name), h('small', `Found by ${set.how}`)),
-    h(`span.pc-count${set.done ? '.done' : ''}`, { 'aria-label': `${set.found} of ${set.total} found` },
+    h('div.pc-page-title', h('h4', set.name), h('small', t('collect.album.foundByHow', { how: set.how }))),
+    h(`span.pc-count${set.done ? '.done' : ''}`, { 'aria-label': t('collect.album.nOf', { n: set.found, total: set.total }) },
       `${set.found}/${set.total}`));
   const stickers = h('div.pc-stickers', ...set.items.map((it) => sticker(ctx, set, it)));
   const luck = set.done ? null : h('div.pc-luck',
-    { title: `Every try has a ${COLLECTION_RULES.dropBp / 100} % chance; after ${set.pityMax} tries without a new item the next one is certain` },
-    h('span.pc-luck-label', clover(18), 'Lucky find'), bar(set.pity / Math.max(1, set.pityMax), null, 'pn-thin pn-go'),
-    h('small', set.pityLeft <= 1 ? 'the very next one is certain' : `certain within ${fmt(set.pityLeft)} ${set.noun}`));
+    { title: t('collect.album.luckTip', { p: COLLECTION_RULES.dropBp / 100, max: set.pityMax }) },
+    h('span.pc-luck-label', clover(18), t('collect.album.lucky')), bar(set.pity / Math.max(1, set.pityMax), null, 'pn-thin pn-go'),
+    h('small', set.pityLeft <= 1 ? t('collect.album.nextCertain')
+      : t('collect.album.within', { n: set.pityLeft, noun: set.noun, count: t(`collect.album.count.${set.nounKey}`, { n: set.pityLeft }) })));
   const reward = h(`div.pc-reward${set.done ? '.kept' : ''}`,
-    h('span.pc-reward-label', set.done ? 'Yours:' : 'Complete it:'),
-    set.done ? null : h('span.pc-reward-item', icon('acorns', { size: 20 }), `${set.acorns} Acorns`),
+    h('span.pc-reward-label', set.done ? t('collect.album.yours') : t('collect.album.completeIt')),
+    set.done ? null : h('span.pc-reward-item', icon('acorns', { size: 20 }), t('collect.album.acorns', { n: set.acorns })),
     h('span.pc-reward-item', icon(set.display, { size: 22 }), set.displayName),
     h(`span.pc-reward-item.pc-perk${set.done ? '.on' : ''}`, set.perkText),
     set.done && inTray ? h('button.pn-chipbtn.pc-place',
-      { type: 'button', on: { click: () => startPlacement(ctx, set.display) } }, 'Place it') : null);
+      { type: 'button', on: { click: () => startPlacement(ctx, set.display) } }, t('market.relic.place')) : null);
   const trade = set.spares > 0 && !set.done && ui.open ? tradeRow(ctx, kit, set, ui.trading === set.id,
     (on) => { ui.trading = on ? set.id : null; ui.redraw(); }) : null;
   return h(`article.pc-page${set.done ? '.done' : ''}`, { dataset: { set: set.id } },
-    head, stickers, luck, trade, reward, set.done ? h('span.pc-stamp', { 'aria-hidden': 'true' }, 'Complete!') : null);
+    head, stickers, luck, trade, reward, set.done ? h('span.pc-stamp', { 'aria-hidden': 'true' }, t('collect.album.stamp')) : null);
 }
 
 /** Mount the album into `body` (the 'collections' panel and the Journal's Album tab share it). */
@@ -370,16 +379,14 @@ function mountAlbum(body, ctx, kit) {
     const v = albumView(st, ctx.store.pid);
     ui.open = v.open;
     const head = h('header.pc-album-head',
-      h('div.pc-album-title', h('b', `${fmt(v.found)} of ${fmt(v.total)} found`),
-        h('small', `${fmt(v.setsDone)} of ${fmt(v.sets.length)} sets complete · each set pays ${COLLECTION_RULES.acorns} Acorns, a display piece and a lasting perk`)),
+      h('div.pc-album-title', h('b', t('collect.album.nOf', { n: v.found, total: v.total })),
+        h('small', t('collect.album.setsDone', { done: v.setsDone, sets: v.sets.length, a: COLLECTION_RULES.acorns }))),
       bar(v.found / Math.max(1, v.total), null, 'pn-go pc-album-bar'));
     const intro = v.open
-      ? h('p.pn-intro',
-        `Little treasures turn up while you farm: each try has a ${v.dropPct} % chance, and the lucky-find bar makes sure one comes. Whoever finds it, it goes in the album for both of you.`)
-      : h('p.pn-intro.pc-locked', svgIcon('lock', 20),
-        `The album opens at level ${v.unlock}. Here is what will be waiting to be found.`);
+      ? h('p.pn-intro', t('collect.album.intro', { p: v.dropPct }))
+      : h('p.pn-intro.pc-locked', svgIcon('lock', 20), t('collect.album.opensAt', { n: v.unlock }));
     wrap.replaceChildren(head, intro, v.sets.length ? h('div.pc-pages', ...v.sets.map((set) => page(ctx, kit, set, ui)))
-      : h('div.pn-empty', svgIcon('book', 44), h('p', 'The album arrives in a later chapter.')));
+      : h('div.pn-empty', svgIcon('book', 44), h('p', t('collect.album.later'))));
     kit.refresh();
     if (ui.focus) {
       const el = wrap.querySelector(`[data-set="${CSS.escape(ui.focus)}"]`);
@@ -396,7 +403,7 @@ function mountAlbum(body, ctx, kit) {
 }
 
 export const albumPanel = {
-  title: 'Collections Album',
+  get title() { return phoneTitle('collect.album.title', 'collect.album.titleShort'); },
   icon: 'recipe_cards_display',
   size: 'full',
   topics: ['album', 'stats', 'players', 'objects', 'xp'],
@@ -426,14 +433,15 @@ export function findText(state, ev, me) {
   const item = set?.items.find((i) => i.id === ev.item);
   if (!set || !item) return null;
   if (!ev.dup && setState(state, ev.set).done !== null) return null;
-  const name = ev.by === me ? 'You' : state.players[ev.by]?.name ?? 'Your partner';
-  if (ev.dup) return { title: 'A spare!',
-    text: `${name} found another ${item.name}. ${COLLECTION_RULES.tradeIn} spares of ${set.name} trade for one you are missing.` };
+  const name = ev.by === me ? t('common.you') : state.players[ev.by]?.name ?? t('common.partner');
+  const iname = findName(item, set.id);
+  const sname = setName(set);
+  if (ev.dup) return { title: t('collect.find.spare'), text: t('collect.find.spareText', { who: name, item: iname, n: COLLECTION_RULES.tradeIn, set: sname }) };
   const found = set.items.length - albumA.missingOf(state, set).length;
-  const lead = ev.how === 'trade' ? `${name} traded ${COLLECTION_RULES.tradeIn} spares for the ${item.name}.`
-    : ev.how === 'gift' ? `A gift for the album: the ${item.name}.` : `${name} found the ${item.name}.`;
-  return { title: ev.how === 'trade' ? 'Traded!' : 'Album find!',
-    text: `${lead} ${set.name}: ${found} of ${set.items.length}.` };
+  const lead = ev.how === 'trade' ? t('collect.find.traded', { who: name, n: COLLECTION_RULES.tradeIn, item: iname })
+    : ev.how === 'gift' ? t('collect.find.gift', { item: iname }) : t('collect.find.found', { who: name, item: iname });
+  return { title: ev.how === 'trade' ? t('collect.find.tradedTitle') : t('collect.find.title'),
+    text: t('collect.find.text', { lead, set: sname, found, total: set.items.length }) };
 }
 
 function findBanners(ui, store) {
@@ -442,12 +450,14 @@ function findBanners(ui, store) {
     const st = store.state;
     if (!st) return;
     if (ev.e === 'albumFind') {
-      const t = findText(st, ev, store.pid);
-      if (!t) return;
+      const ft = findText(st, ev, store.pid);
+      if (!ft) return;
       const item = collectionOf(ev.set)?.items.find((i) => i.id === ev.item);
-      const b = ui.banner({ id: `find-${ev.set}-${ev.item}`, kind: 'find', ribbon: t.title, message: t.text, ttl: 7000,
-        things: [{ icon: collectionOf(ev.set)?.display ?? 'recipe_cards_display', name: item?.name ?? '' }],
-        actions: [{ label: 'Open the album', kind: 'sky',
+      // functions: a language switch while the card is up says it again (from the same event and farm)
+      const again = () => findText(st, ev, store.pid) ?? ft;
+      const b = ui.banner({ id: `find-${ev.set}-${ev.item}`, kind: 'find', ribbon: () => again().title, message: () => again().text, ttl: 7000,
+        things: [{ icon: collectionOf(ev.set)?.display ?? 'recipe_cards_display', name: () => (item ? findName(item, ev.set) : '') }],
+        actions: [{ label: t('farm.unlock.collections.label'), kind: 'sky',
           fn: () => ui.panels.open('collections', { set: ev.set }) }] });
       // the album's own sticker instead of the display piece's icon (when the card is on screen now)
       const img = b?.el?.querySelector('.thing img, .thing svg');
@@ -461,11 +471,11 @@ function findBanners(ui, store) {
     if (ev.e !== 'albumSet') return;
     const set = collectionOf(ev.set);
     if (!set) return;
-    const display = decorOf(set.display)?.name ?? 'its display piece';
-    ui.banner({ id: `set-${ev.set}`, kind: 'golden', ribbon: 'A set is complete!',
-      message: `${set.name}: ${COLLECTION_RULES.acorns} Acorns, the ${display} in your build tray, and for good: ${set.perkText}.`,
+    const display = () => (decorOf(set.display) ? cname(set.display) : t('collect.album.itsDisplay'));
+    ui.banner({ id: `set-${ev.set}`, kind: 'golden', ribbon: t('collect.set.ribbon'),
+      message: () => t('collect.set.text', { set: setName(set), n: COLLECTION_RULES.acorns, display: display(), perk: ctext('collections', set.id, 'perkText', set.perkText) }),
       things: [{ icon: set.display, name: display }], ttl: 12000,
-      actions: [{ label: 'See the page', kind: 'sky', fn: () => ui.panels.open('collections', { set: ev.set }) }] });
+      actions: [{ label: t('collect.set.see'), kind: 'sky', fn: () => ui.panels.open('collections', { set: ev.set }) }] });
   });
   return () => off?.();
 }

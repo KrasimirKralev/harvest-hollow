@@ -443,7 +443,9 @@ test('the partner\'s duel invitation reaches me once, with a one-click answer', 
   m.check();
   m.check();
   assert.equal(notices.length, 1, 'once');
-  assert.match(notices[0][0], /Rowan challenges you/);
+  // the invitation is a function: a language switch while it is up asks it again (ui/toasts.js)
+  assert.equal(typeof notices[0][0], 'function');
+  assert.match(notices[0][0](), /Rowan challenges you/);
   notices[0][1].action.fn();
   h.flush();
   assert.equal(h.state.farm.duel.cur.ok, true, 'accepted from the notice');

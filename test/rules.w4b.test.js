@@ -752,8 +752,8 @@ test('the Goal Tracker: a waiting crate (NOW), the Farmhand ready (NOW), "saving
   assert.ok(goals(s, 'p1', now).now, 'the tracker still deals its cards');
 });
 
-test('an older save gets `relics` and `crates` from the backfill and stays valid; RULES_VERSION is 11', () => {
-  assert.equal(RULES_VERSION, 11);
+test('an older save gets `relics` and `crates` from the backfill and stays valid; RULES_VERSION is 12', () => {
+  assert.equal(RULES_VERSION, 12);
   const s = farmAt(12);
   delete s.farm.relics;
   delete s.farm.crates;

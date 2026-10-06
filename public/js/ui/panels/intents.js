@@ -5,6 +5,7 @@
 // this build lacks it: the probe then answers UNKNOWN_ACTION and the button says "Not open yet" instead of failing.
 import { ACTIONS } from '../../../../shared/rules/index.js';
 import { pick } from './core.js';
+import { t } from '../../i18n/index.js';
 
 const first = (...names) => pick(...names) ?? names[0];
 /** True when this build's `type` takes the argument `arg` (a rule lane may add an identity argument later). */
@@ -94,7 +95,7 @@ export const UNDO_MS = 7000;
 export function actUndoable(act, toast, it, undo, text) {
   const r = act(it.type, it.args);
   if (r && r.ok && typeof toast === 'function') {
-    toast(text, { kind: 'ok', ms: UNDO_MS, action: { label: 'Undo', fn: () => act(undo.type, undo.args) } });
+    toast(text, { kind: 'ok', ms: UNDO_MS, action: { label: t('market.barn.undo'), fn: () => act(undo.type, undo.args) } });
   }
   return r;
 }

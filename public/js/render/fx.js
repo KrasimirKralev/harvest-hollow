@@ -51,11 +51,12 @@
 //                               hidden, so renderer.compileAsync() compiles its program before the first harvest
 // Arrivals dispatch window 'hh:fly-arrive' { detail: { kind, item, qty, by, local } } (the UI rolls counters).
 import * as THREE from 'three';
-import { CONTENT, cropOf, itemOf } from '../../../shared/content/index.js';
+import { CONTENT, TREE_AGE, cropOf, itemOf } from '../../../shared/content/index.js';
 import { TILE_M, WORLD_TILES } from '../../../shared/content/config.js';
 import { iconUrl } from './icons.js';
 import { loadTexture } from './assets.js';
 import { EASE, createTweener } from './tweens.js';
+import { t, tn, Q, name as cname, ctext, lang } from '../i18n/index.js';
 
 // ---------------------------------------------------------------------------------------------------
 // Pure helpers (exported for tests)
@@ -104,9 +105,29 @@ for (const set of (CONTENT.collections ? CONTENT.collections.values() : [])) for
 /** Display name for an item id (content first, then a collection find, then a readable fallback). */
 export function itemName(id) {
   const it = typeof id === 'string' ? itemOf(id) : null;
-  if (it && it.name) return it.name;
-  if (typeof id === 'string' && FINDS.has(id)) return FINDS.get(id).name;
+  if (it && it.name) return cname(id, { family: 'items' });
+  // a collection find's name is content (lane B: i18n/bg/text-b.js finds.<id>.name)
+  if (typeof id === 'string' && FINDS.has(id)) return ctext('finds', id, 'name', FINDS.get(id).name);
   return typeof id === 'string' ? id.replace(/_/g, ' ').replace(/^\w/, (c) => c.toUpperCase()) : '';
+}
+
+/**
+ * A bought upgrade tier's own name ("Soft Cushions") in the language in effect: the rules' `upgraded { target, tier,
+ * name }` carries the English one; Bulgarian is the content text (lane B: i18n/bg/text-b.js upgrades['<target>.<n>']).
+ */
+export function upgradeTierName(ev) {
+  return ev && ev.name ? ctext('upgrades', `${ev.target}.${ev.tier}`, 'name', ev.name) : null;
+}
+
+/** A tree age's word ("Mature") in the language in effect (content TREE_AGE.stages; the event carries the id). */
+export function treeAgeName(stage) {
+  const en = TREE_AGE?.stages?.find((s) => s.id === stage)?.name ?? stage;
+  return ctext('TREE_AGE', stage, 'name', en);
+}
+
+/** "+3 Wheat" over the farm: English as always (the bare name), Bulgarian with the count form ("+12 моркова"). */
+function gotText(id, n) {
+  return itemOf(id) ? t('game.fx.got', { q: Q(id, n, 'items') }) : `+${n} ${itemName(id)}`;
 }
 
 /** Fair medal colours (bronze I-III, silver, gold, platinum): rosette, centre, sparkle. */
@@ -691,9 +712,9 @@ export function createFx(layer, overlay, toScreenM) {
     const qty = ev.qty ?? 1;
     f.burst('leaf', pos, { n: 5, colors: leafColors, speed: 1.4, up: 2.6, size: 0.22, grav: 0.45, life: 0.9 });
     f.pop(item, pos, { qty, by: meta.by, local: meta.local });
-    f.float(pos, `+${qty} ${itemName(item)}`, { color: '#FFFFFF', icon: null });
-    if (ev.xp) f.float(pos, `+${ev.xp} XP`, { color: '#BFE6FF', delay: 120, size: 1.0, dy: -28 });
-    if (ev.fresh) f.float(pos, 'Fresh!', { color: '#9BE36E', delay: 200, size: 1.0, dy: ev.xp ? -54 : -28 });
+    f.float(pos, gotText(item, qty), { color: '#FFFFFF', icon: null });
+    if (ev.xp) f.float(pos, t('game.fx.xp', { n: ev.xp }), { color: '#BFE6FF', delay: 120, size: 1.0, dy: -28 });
+    if (ev.fresh) f.float(pos, t('game.fx.fresh'), { color: '#9BE36E', delay: 200, size: 1.0, dy: ev.xp ? -54 : -28 });
     if (ev.ribbon || ev.blueRibbon) R.get('blueRibbon')(f, ev, pos, meta);
     // drag-paint streak: every 10th plot of a stroke gets a sparkle burst
     streak = time - streak.at < 1.6 ? { n: streak.n + 1, at: time } : { n: 1, at: time };
@@ -702,7 +723,7 @@ export function createFx(layer, overlay, toScreenM) {
   R.set('blueRibbon', (f, ev, pos) => {
     f.burst('sparkle', pos, { n: 18, color: '#7CC4FF', speed: 2.4, up: 3.2, size: 0.5, grav: 0.15, life: 1.1 });
     f.ring(pos, { color: '#4AA8E8', radius: 2.2, duration: 0.7 });
-    f.float(up(pos, 1.2), 'Blue ribbon!', { color: '#7CC4FF', delay: 300 });
+    f.float(up(pos, 1.2), t('game.fx.blueRibbon'), { color: '#7CC4FF', delay: 300 });
   });
   R.set('watered', (f, ev, pos, meta) => {
     f.burst('droplet', up(pos, 1.6), { n: 10, color: '#6FD3E6', speed: 0.5, up: -0.5, size: 0.2, grav: 0.9, life: 0.55, spread: 0.6, spin: 0 });
@@ -726,7 +747,7 @@ export function createFx(layer, overlay, toScreenM) {
     f.burst('star', up(pos, small ? 0.5 : 1), { n: small ? 12 : 18, colors: ['#FFE27A', '#FFFFFF', '#F5C542'], speed: 2.4, up: 3.4, size: 0.42, grav: 0.3, drag: 0.6, life: 1.0 });
     f.burst('sparkle', up(pos, 0.2), { n: 10, color: '#FFE9A8', speed: 1.3, up: 2, size: 0.3, grav: 0.1, life: 0.9, delay: 0.08 });
     f.ring(pos, { color: '#FFC83D', radius: small ? 1.4 : 2.6, duration: 0.6, opacity: 0.75 });
-    f.float(up(pos, 0.3), 'Ready!', { color: '#FFE58A', delay: 140 });
+    f.float(up(pos, 0.3), t('hud.tip.ready'), { color: '#FFE58A', delay: 140 });
   });
   const dustRing = (f, pos, big = 1) => {
     if (!pos) return;
@@ -746,7 +767,7 @@ export function createFx(layer, overlay, toScreenM) {
   R.set('sold', (f, ev, pos, meta) => {
     const n = Math.min(8, Math.max(1, Math.ceil((ev.coins || 1) / 25)));
     for (let i = 0; i < n; i++) f.fly('coins', pos || null, { qty: i === 0 ? ev.coins : 0, by: meta.by, local: meta.local, delay: i * 40, size: 34 });
-    if (pos) f.float(pos, `+${ev.coins} coins`, { color: '#FFE58A' });
+    if (pos) f.float(pos, tn('game.fx.coins', ev.coins), { color: '#FFE58A' });
   });
   R.set('delivered', (f, ev, pos, meta) => {
     R.get('sold')(f, { coins: ev.coins || 0 }, pos, meta);
@@ -808,20 +829,20 @@ export function createFx(layer, overlay, toScreenM) {
     if (!item) return;
     const qty = ev.qty ?? 1;
     f.pop(item, up(pos, 0.4), { qty, by: meta.by, local: meta.local });
-    f.float(pos, `+${qty} ${itemName(item)}`, { color: '#FFFFFF' });
+    f.float(pos, gotText(item, qty), { color: '#FFFFFF' });
     if (ev.ribbon || ev.premium) R.get('blueRibbon')(f, ev, pos, meta);
   });
   R.set('trayCollected', (f, ev, pos, meta) => {
     const items = ev.items ? Object.entries(ev.items) : (ev.item ? [[ev.item, ev.qty ?? 1]] : []);
     items.forEach(([id, qty], i) => { f.pop(id, up(pos, 1.2), { qty, by: meta.by, local: meta.local, delay: i * 0.08 }); });
-    if (items.length) f.float(up(pos, 1.5), items.map(([id, q]) => `+${q} ${itemName(id)}`).join('  '), { color: '#FFFFFF' });
+    if (items.length) f.float(up(pos, 1.5), items.map(([id, q]) => gotText(id, q)).join('  '), { color: '#FFFFFF' });
   });
   R.set('shaken', (f, ev, pos, meta) => {
     f.burst('leaf', up(pos, 3.2), { n: 12, colors: leafColors, speed: 1.6, up: 0.4, size: 0.3, grav: 0.18, drag: 1.2, life: 1.8, spread: 1.4, spin: 4 });
     const item = ev.item || ev.product;
     if (item) {
       f.pop(item, up(pos, 2.2), { qty: ev.qty ?? 1, by: meta.by, local: meta.local, n: Math.min(4, ev.qty ?? 1) });
-      f.float(up(pos, 2), `+${ev.qty ?? 1} ${itemName(item)}`, { color: '#FFFFFF' });
+      f.float(up(pos, 2), gotText(item, ev.qty ?? 1), { color: '#FFFFFF' });
     }
   });
   R.set('treeHarvested', R.get('shaken'));
@@ -834,7 +855,7 @@ export function createFx(layer, overlay, toScreenM) {
     f.burst('leaf', pos, { n: 4, colors: leafColors, speed: 1.6, up: 2.5, size: 0.22, grav: 0.5, life: 0.8 });
     if (ev.wood) f.pop('wood', pos, { qty: ev.wood, by: meta.by, local: meta.local });
     if (ev.coins) f.fly('coins', pos, { qty: ev.coins, by: meta.by, local: meta.local });
-    if (ev.xp) f.float(up(pos, 0.3), `+${ev.xp} XP`, { color: '#BFE6FF' });
+    if (ev.xp) f.float(up(pos, 0.3), t('game.fx.xp', { n: ev.xp }), { color: '#BFE6FF' });
   });
   // ---- wave 4 (the owners' wish list) ----
   // weeds pulled with the Hand (wish F, rules `weedsCleared { cells: [z * WORLD_TILES + x], coins, by }`): a puff of
@@ -857,7 +878,8 @@ export function createFx(layer, overlay, toScreenM) {
     dustRing(f, c, 1.1);
     f.burst('confetti', up(c, 2.5), { n: 22, colors: confetti, speed: 2.6, up: 3.4, size: 0.36, grav: 0.35, drag: 0.6, life: 1.5, spread: 1.4, delay: 0.15 });
     f.burst('star', up(c, 1.5), { n: 10, colors: ['#FFE27A', '#FFFFFF'], speed: 2, up: 2.6, size: 0.4, grav: 0.2, life: 1.0, delay: 0.2 });
-    f.float(up(c, 3.2), ev.name ? `${ev.name}!` : 'Upgraded!', { color: '#FFE58A', size: 1.15, delay: 250 });
+    const tier = upgradeTierName(ev);
+    f.float(up(c, 3.2), tier ? t('game.fx.upgradedTier', { name: tier }) : t('game.fx.upgraded'), { color: '#FFE58A', size: 1.15, delay: 250 });
   });
   // ---- wave 4b (the owners' wish list of 2026-10-05) ----
   // a tree came of age (`treeAged { stage }`): it grows (objects-view), leaves fly, its new age floats up
@@ -866,7 +888,7 @@ export function createFx(layer, overlay, toScreenM) {
     f.burst('leaf', up(pos, 3), { n: 16, colors: leafColors, speed: 1.8, up: 1.4, size: 0.3, grav: 0.2, drag: 1, life: 1.6, spread: 1.6, spin: 4 });
     f.burst('sparkle', up(pos, 2.6), { n: 12, colors: ['#FFE27A', '#FFFFFF'], speed: 1.6, up: 2.2, size: 0.4, grav: 0.2, life: 1.0, delay: 0.2 });
     const st = typeof ev.stage === 'string' ? ev.stage : '';
-    f.float(up(pos, 3.4), st ? `${st[0].toUpperCase()}${st.slice(1)} tree!` : 'Older and bigger!', { color: '#B9F27A', size: 1.15, delay: 300 });
+    f.float(up(pos, 3.4), st ? t('game.fx.treeAged', { stage: treeAgeName(st) }) : t('game.fx.older'), { color: '#B9F27A', size: 1.15, delay: 300 });
   });
   // a home grew its pen (`homeGrew`): the dust of the new fence, confetti, "Bigger pen!" (only when it really grew)
   R.set('homeGrew', (f, ev, pos) => {
@@ -874,7 +896,7 @@ export function createFx(layer, overlay, toScreenM) {
     const c = here(pos);
     if (ev.grows) dustRing(f, c, 1.6);
     f.burst('confetti', up(c, 2), { n: ev.grows ? 20 : 10, colors: confetti, speed: 2.4, up: 3, size: 0.32, grav: 0.35, drag: 0.6, life: 1.4, spread: 1.6, delay: 0.1 });
-    f.float(up(c, 2.6), ev.grows ? 'Bigger pen!' : 'More room!', { color: '#FFE58A', size: 1.1, delay: 250 });
+    f.float(up(c, 2.6), ev.grows ? t('game.fx.biggerPen') : t('game.fx.moreRoom'), { color: '#FFE58A', size: 1.1, delay: 250 });
   });
   // the Golden Watering Can (`wateredAll`): render/index.js gathers the crops of the same moment into ev.positions (metres,
   // nearest the farmer first): a wave of water rolls out over them, every crop a few drops and a ripple, one line of text
@@ -886,7 +908,7 @@ export function createFx(layer, overlay, toScreenM) {
       if (i % 2 === 0) f.burst('sparkle', up(p, 0.8), { n: 1, color: '#FFE27A', speed: 0.3, up: 0.8, size: 0.25, grav: 0, life: 0.6, delay: d + 0.1 });
     });
     const at = pos || ps[0];
-    if (at) f.float(up(at, 0.6), `Watered ${ev.n ?? ps.length}`, { color: '#BFEFFF', size: 1.15, delay: 200 });
+    if (at) f.float(up(at, 0.6), t('game.fx.watered', { n: ev.n ?? ps.length }), { color: '#BFEFFF', size: 1.15, delay: 200 });
   });
   // the Farmhand (`farmhandDone`): hearts and feed over every animal it tended (ev.positions), the goods it gathered fly
   // home in one pop per kind (ev.items from the batch's `collected`), "Farmhand: N animals"
@@ -899,7 +921,7 @@ export function createFx(layer, overlay, toScreenM) {
     });
     const at = pos || ps[0] || null;
     Object.entries(ev.items || {}).forEach(([item, qty], i) => f.pop(item, at ? up(at, 0.5) : null, { qty, by: meta.by, local: meta.local, delay: 0.3 + i * 0.12 }));
-    if (at) f.float(up(at, 1.2), `Farmhand: ${ev.n ?? ps.length} animals`, { color: '#FFFFFF', delay: 150 });
+    if (at) f.float(up(at, 1.2), tn('game.fx.farmhand', ev.n ?? ps.length), { color: '#FFFFFF', delay: 150 });
   });
   // the Time Turner (`timeTurned { ids }`): a golden swirl over every workshop it finished (ev.positions)
   R.set('timeTurned', (f, ev) => {
@@ -908,7 +930,7 @@ export function createFx(layer, overlay, toScreenM) {
       f.burst('star', up(p, 3), { n: 8, colors: ['#FFE27A', '#FFFFFF', '#F2C230'], speed: 1.8, up: 1.2, size: 0.35, grav: 0.1, life: 1.0, spread: 0.6, spin: 6, delay: d });
       f.burst('glow', up(p, 3), { n: 2, color: '#FFE9A8', speed: 0, up: 0.3, size: 1.4, sizeEnd: 0.4, life: 0.9, grav: 0, delay: d });
       f.ring(up(p, 0), { color: '#FFD45A', radius: 3, duration: 0.8, width: 0.3, delay: d });
-      if (i === 0) f.float(up(p, 3.6), 'Done!', { color: '#FFE58A', size: 1.15, delay: 200 });
+      if (i === 0) f.float(up(p, 3.6), t('game.fx.done'), { color: '#FFE58A', size: 1.15, delay: 200 });
     });
   });
   // a relic bought (`relicBought`): golden sparkles where the buyer looks (the Golden Barn shows its cupola itself)
@@ -921,7 +943,7 @@ export function createFx(layer, overlay, toScreenM) {
   R.set('luckyClover', (f, ev, pos) => {
     if (!pos) return;
     f.burst('leaf', up(pos, 1.6), { n: 8, colors: ['#3FAE4A', '#4FC25A', '#8BE07A'], speed: 1.4, up: 2.2, size: 0.32, grav: 0.2, drag: 1, life: 1.3, spread: 0.6, spin: 3 });
-    f.float(up(pos, 1.6), 'Lucky!', { color: '#9BE36E', size: 1.0, delay: 550, dy: -28 });
+    f.float(up(pos, 1.6), t('game.fx.lucky'), { color: '#9BE36E', size: 1.0, delay: 550, dy: -28 });
   });
   // the loot crates play in render/crates-view.js (the fall, the shake, the lid, the loot's flights)
   R.set('crateDropped', () => {});
@@ -973,7 +995,7 @@ export function createFx(layer, overlay, toScreenM) {
       f.burst('leaf', up(c, 1.4), { n: 6, colors: leafColors, speed: 2.2, up: 2.4, size: 0.3, grav: 0.5, life: 1.0 });
       const prev = giantHp.get(ev.id); giantHp.set(ev.id, ev.hp);
       const hit = Number.isFinite(prev) && Number.isFinite(ev.hp) ? prev - ev.hp : null;
-      if (hit) f.float(up(c, 1.6), hit >= 15 ? `-${hit} Together!` : `-${hit}`, { color: hit >= 15 ? '#FFB3C1' : '#FFFFFF', size: hit >= 15 ? 1.2 : 1.05 });
+      if (hit) f.float(up(c, 1.6), hit >= 15 ? t('game.fx.chopTogether', { n: hit }) : `-${hit}`, { color: hit >= 15 ? '#FFB3C1' : '#FFFFFF', size: hit >= 15 ? 1.2 : 1.05 });
       return;
     }
     chips(f, pos);
@@ -983,7 +1005,7 @@ export function createFx(layer, overlay, toScreenM) {
     const c = pos ? new THREE.Vector3(pos.x + TILE, 0, pos.z + TILE) : here(null);
     for (let k = 0; k < 3; k++) f.burst('sparkle', up(c, 0.4), { n: 16, colors: ['#FFE27A', '#FFFFFF', '#9BE36E'], speed: 2.6, up: 3.2, size: 0.45, grav: 0.1, drag: 0.6, life: 1.5, spread: 2.4, delay: k * 0.25 });
     f.ring(c, { color: '#FFE9A8', radius: 4.2, duration: 1.1, opacity: 0.7 });
-    f.float(up(c, 2.2), 'A Giant is growing!', { color: '#FFE58A', size: 1.25, life: 1400 });
+    f.float(up(c, 2.2), t('game.fx.giantGrowing'), { color: '#FFE58A', size: 1.25, life: 1400 });
   });
   // a Giant felled: a 3 x 3 dust ring, a fountain of the produce, confetti; together = hearts too
   R.set('giantFelled', (f, ev, pos, meta) => {
@@ -994,9 +1016,9 @@ export function createFx(layer, overlay, toScreenM) {
     const item = ev.crop || ev.item;
     if (item) {
       for (let k = 0; k < 6; k++) f.pop(item, new THREE.Vector3(c.x + (Math.random() - 0.5) * 3, 0.2, c.z + (Math.random() - 0.5) * 3), { qty: k === 0 ? ev.qty ?? 0 : 0, by: meta.by, local: meta.local, delay: 0.1 + k * 0.08, n: 1 });
-      f.float(up(c, 2.4), `Giant ${itemName(item)}! +${ev.qty ?? ''}`, { color: '#FFE58A', size: 1.4, life: 1600 });
+      f.float(up(c, 2.4), t('game.fx.giant', { item: itemName(item), n: ev.qty ?? '' }), { color: '#FFE58A', size: 1.4, life: 1600 });
     }
-    if (ev.team || ev.pair) { f.burst('heart', up(c, 2.2), { n: 10, colors: ['#FF5A7A', '#FF9FB0', '#FFC83D'], speed: 1.4, up: 2.4, size: 0.45, grav: -0.05, life: 1.8 }); f.float(up(c, 3.2), 'Felled together!', { color: '#FFB3C1', delay: 400 }); }
+    if (ev.team || ev.pair) { f.burst('heart', up(c, 2.2), { n: 10, colors: ['#FF5A7A', '#FF9FB0', '#FFC83D'], speed: 1.4, up: 2.4, size: 0.45, grav: -0.05, life: 1.8 }); f.float(up(c, 3.2), t('game.fx.felled'), { color: '#FFB3C1', delay: 400 }); }
     f.ring(c, { color: '#FFFFFF', radius: 7, duration: 1.0, opacity: 0.45 });
   });
   // harvesting the nine plots of a felled Giant: the giant's own show plays, the plots only drop leaves
@@ -1008,7 +1030,7 @@ export function createFx(layer, overlay, toScreenM) {
   R.set('picked', R.get('shaken'));
   R.set('heirloom', (f, ev, pos) => {
     f.burst('star', up(pos, 2.8), { n: 14, colors: ['#FFE27A', '#FFFFFF'], speed: 2, up: 2.2, size: 0.45, grav: 0.15, life: 1.3, spread: 1.4 });
-    f.float(up(pos, 3), 'Heirloom tree!', { color: '#FFE58A', delay: 200 });
+    f.float(up(pos, 3), t('game.fx.heirloom'), { color: '#FFE58A', delay: 200 });
   });
   R.set('prized', R.get('blueRibbon'));
   R.set('grewUp', (f, ev, pos) => { f.burst('sparkle', up(pos, 0.8), { n: 10, color: '#FFE27A', speed: 1.4, up: 2, size: 0.32, life: 0.9 }); f.burst('heart', up(pos, 1), { n: 3, colors: ['#FF5A7A', '#FF9FB0'], speed: 0.6, up: 1.6, size: 0.3, grav: -0.08, life: 1.1 }); });
@@ -1019,7 +1041,7 @@ export function createFx(layer, overlay, toScreenM) {
     f.burst('sparkle', up(pos, 0.8), { n: big ? 30 : 18, colors: ['#FFD84A', '#FFF3C4', '#E9B13A'], speed: 2, up: 3, size: 0.42, grav: 0.12, life: 1.4, spread: 0.8 });
     f.ring(pos, { color: '#FFD84A', radius: big ? 3.2 : 2.2, duration: 0.9 });
     if (big) f.ring(pos, { color: '#FFFFFF', radius: 4.2, duration: 1.2, opacity: 0.5, delay: 0.2 });
-    f.float(up(pos, 1.6), big ? 'Masterwork ★★' : 'Masterwork ★', { color: '#FFE58A', delay: 150 });
+    f.float(up(pos, 1.6), t('game.fx.masterwork', { stars: big ? '★★' : '★' }), { color: '#FFE58A', delay: 150 });
   });
   // Farm Beauty: petals drift down over the middle of the farm, a star for every new beauty star
   R.set('beautyStar', (f, ev, pos) => {
@@ -1027,13 +1049,13 @@ export function createFx(layer, overlay, toScreenM) {
     f.burst('petal', up(c, 6), { n: 40, colors: ['#FF9FB0', '#FFFFFF', '#FFE27A', '#C8B5F0'], speed: 1.6, up: -0.3, size: 0.32, grav: 0.06, drag: 0.8, life: 3.5, spread: 9, spin: 3 });
     const n = Math.max(1, Math.min(5, ev.stars || 1));
     for (let k = 0; k < n; k++) f.burst('star', up(c, 2.5), { n: 4, colors: ['#FFE27A', '#FFFFFF'], speed: 2.5, up: 3.5, size: 0.6, grav: 0.2, life: 1.4, delay: k * 0.25 });
-    f.float(up(c, 3), `Farm Beauty ${'★'.repeat(n)}`, { color: '#FFE58A', size: 1.3, life: 1500 });
+    f.float(up(c, 3), t('game.fx.beauty', { stars: '★'.repeat(n) }), { color: '#FFE58A', size: 1.3, life: 1500 });
   });
   // a decor set completed: a soft glow ring under every piece (render-world passes ev.positions), else here
   R.set('decorSet', (f, ev, pos) => {
     const spots = Array.isArray(ev.positions) && ev.positions.length ? ev.positions.map((p) => new THREE.Vector3(p.x, p.y || 0, p.z)) : [here(pos)];
     spots.forEach((p, i) => { f.ring(p, { color: '#FFE9A8', radius: 2.4, duration: 1.0, opacity: 0.7, delay: i * 0.12 }); f.burst('sparkle', up(p, 0.6), { n: 8, colors: ['#FFE27A', '#FFFFFF'], speed: 1.4, up: 2, size: 0.32, life: 1.0, delay: i * 0.12 }); });
-    f.float(up(spots[0], 2), 'Set complete!', { color: '#FFE58A', size: 1.2 });
+    f.float(up(spots[0], 2), t('game.fx.setDone'), { color: '#FFE58A', size: 1.2 });
   });
   // the Level-up Bloom (owner rule 2026-10-04: a new level finishes everything growing): a sparkle wave rolls out from
   // the middle of the view with the level-up's ripple, over every crop, tree and animal that just finished (render-world
@@ -1061,7 +1083,7 @@ export function createFx(layer, overlay, toScreenM) {
     const c = here(pos);
     f.burst('sparkle', up(c, 1.5), { n: 24, colors: ['#FFE27A', '#FFFFFF', '#9BE36E'], speed: 2.4, up: 3, size: 0.45, grav: 0.12, life: 1.3, spread: 1.5 });
     f.ring(c, { color: '#9BE36E', radius: 4, duration: 0.9 });
-    f.float(up(c, 2.5), 'Bundle complete!', { color: '#BFF0A8' });
+    f.float(up(c, 2.5), t('game.fx.bundleDone'), { color: '#BFF0A8' });
   });
   R.set('projectDone', (f, ev, pos) => {
     const c = here(pos);
@@ -1072,7 +1094,7 @@ export function createFx(layer, overlay, toScreenM) {
     }
     f.ring(c, { color: '#FFE9A8', radius: 14, duration: 1.6, opacity: 0.5, delay: 0.6 });
     f.ring(c, { color: '#FFFFFF', radius: 8, duration: 1.1, opacity: 0.4, delay: 0.85 });
-    f.float(up(c, 3.5), 'Restored!', { color: '#FFE58A', size: 1.6, delay: 700, life: 1800 });
+    f.float(up(c, 3.5), t('game.fx.restored'), { color: '#FFE58A', size: 1.6, delay: 700, life: 1800 });
   });
   R.set('restorationDone', R.get('projectDone'));
   // Town Projects: lights come on in the village, confetti over it
@@ -1081,7 +1103,7 @@ export function createFx(layer, overlay, toScreenM) {
     f.burst('glow', up(c, 2), { n: 30, colors: ['#FFE08A', '#FFD39B', '#FFFFFF'], speed: 2, up: 1.5, size: 0.4, grav: -0.03, drag: 0.6, life: 2.4, spread: 4 });
     f.burst('confetti', up(c, 4), { n: 50, colors: confetti, speed: 5, up: 6, size: 0.5, grav: 0.35, drag: 0.6, life: 2.2, spread: 3, spin: 8, delay: 0.3 });
     f.ring(c, { color: '#FFE08A', radius: 10, duration: 1.4, opacity: 0.5 });
-    f.float(up(c, 4), 'The village grew!', { color: '#FFE58A', size: 1.3, delay: 300, life: 1600 });
+    f.float(up(c, 4), t('game.fx.village'), { color: '#FFE58A', size: 1.3, delay: 300, life: 1600 });
   });
   R.set('townReady', (f, ev, pos) => { f.burst('sparkle', up(here(pos), 2), { n: 14, color: '#FFE27A', speed: 2, up: 2.5, size: 0.4, life: 1.1 }); });
   R.set('townFunded', (f, ev, pos, meta) => { if (ev.coins && meta.local) f.fly('coins', null, { qty: 0, to: screenAt(0.5, 0.35), size: 34 }); });
@@ -1090,12 +1112,12 @@ export function createFx(layer, overlay, toScreenM) {
   R.set('fairEntered', (f, ev, pos, meta) => {
     if (ev.item && pos) f.pop(ev.item, up(pos, 1), { qty: 0, to: screenAt(0.5, 0.4), by: meta.by, local: meta.local, n: 1 });
     const pts = Number.isFinite(ev.p10) ? ev.p10 / 10 : null;
-    if (pts !== null) f.float(up(here(pos), 1.6), `+${pts % 1 ? pts.toFixed(1) : pts} Fair points`, { color: '#BFE6FF' });
+    if (pts !== null) f.float(up(here(pos), 1.6), t('game.fx.fairPoints', { n: Math.round(pts * 10) / 10 }), { color: '#BFE6FF' });
     f.burst('sparkle', up(here(pos), 1.2), { n: 10, colors: ['#7CC4FF', '#FFFFFF'], speed: 1.6, up: 2, size: 0.35, life: 0.9 });
   });
   R.set('fairPoints', (f, ev, pos) => {
     const pts = Number.isFinite(ev.p10) ? ev.p10 / 10 : null;
-    if (pos && pts !== null) f.float(up(pos, 0.8), `+${pts % 1 ? pts.toFixed(1) : pts} Fair`, { color: '#7CC4FF', size: 0.95, delay: 250, dy: -28 });
+    if (pos && pts !== null) f.float(up(pos, 0.8), t('game.fx.fair', { n: Math.round(pts * 10) / 10 }), { color: '#7CC4FF', size: 0.95, delay: 250, dy: -28 });
   });
   R.set('fairCeremony', (f, ev, pos, meta) => {
     const c = here(pos);
@@ -1107,7 +1129,7 @@ export function createFx(layer, overlay, toScreenM) {
     }
     f.burst('glow', up(c, 2), { n: 24, color: glint, speed: 3, up: 2, size: 0.5, grav: -0.02, drag: 0.8, life: 2.4, spread: 2 });
     f.ring(c, { color: rose, radius: 12, duration: 1.6, opacity: 0.5 });
-    if (fam) f.float(up(c, 3.4), `${fam[0].toUpperCase()}${fam.slice(1)} medal!`, { color: core === '#FFFFFF' ? '#E6EEF5' : core, size: 1.6, life: 1800 });
+    if (fam) f.float(up(c, 3.4), t(`game.fx.medal.${fam}`), { color: core === '#FFFFFF' ? '#E6EEF5' : core, size: 1.6, life: 1800 });
     if (ev.coins) for (let i = 0; i < 6; i++) f.fly('coins', up(c, 1), { qty: i ? 0 : ev.coins, by: meta.by, local: meta.local ?? true, delay: 600 + i * 60, size: 34 });
     if (ev.acorns) for (let i = 0; i < Math.min(5, ev.acorns); i++) f.fly('acorns', up(c, 1), { qty: i ? 0 : ev.acorns, by: meta.by, local: meta.local ?? true, delay: 900 + i * 80, size: 34 });
   });
@@ -1118,12 +1140,12 @@ export function createFx(layer, overlay, toScreenM) {
     f.burst('droplet', up(c, 0.4), { n: 18, colors: ['#BFEFFF', '#FFFFFF', '#6FD3E6'], speed: 2.4, up: 3, size: 0.18, grav: 0.9, life: 0.8, spread: 1.6 });
     for (let k = 0; k < 3; k++) f.burst('ring', up(c, 0.05), { n: 1, color: '#E4F4FF', speed: 0, up: 0, size: 0.4, sizeEnd: 3.2, grav: 0, spin: 0, life: 1.2, spread: 0.2, alpha: 0.6, flat: true, additive: false, delay: k * 0.2 });
   };
-  R.set('bargeDocked', (f, ev, pos) => { const c = here(pos); splash(f, c); f.float(up(c, 3), 'The barge is in!', { color: '#BFEFFF', size: 1.2 }); });
+  R.set('bargeDocked', (f, ev, pos) => { const c = here(pos); splash(f, c); f.float(up(c, 3), t('game.fx.barge'), { color: '#BFEFFF', size: 1.2 }); });
   R.set('bargeLoaded', (f, ev, pos, meta) => {
     const c = here(pos);
     f.burst('dust', up(c, 0.3), { n: 6, color: '#E3CFA8', speed: 1.2, up: 0.8, size: 0.7, sizeEnd: 1.2, grav: 0, life: 0.6 });
     if (ev.item) f.pop(ev.item, up(c, 0.8), { qty: 0, by: meta.by, local: meta.local, n: 1 });
-    if (ev.coins) { f.fly('coins', up(c, 1), { qty: ev.coins, by: meta.by, local: meta.local, size: 34 }); f.float(up(c, 1.5), `+${ev.coins} coins`, { color: '#FFE58A' }); }
+    if (ev.coins) { f.fly('coins', up(c, 1), { qty: ev.coins, by: meta.by, local: meta.local, size: 34 }); f.float(up(c, 1.5), tn('game.fx.coins', ev.coins), { color: '#FFE58A' }); }
   });
   R.set('bargeRow', (f, ev, pos, meta) => {
     const c = here(pos);
@@ -1131,13 +1153,13 @@ export function createFx(layer, overlay, toScreenM) {
     f.ring(c, { color: '#6FD3E6', radius: 8, duration: 1.2, opacity: 0.5 });
     if (ev.acorns) for (let i = 0; i < Math.min(4, ev.acorns); i++) f.fly('acorns', up(c, 1), { qty: i ? 0 : ev.acorns, by: meta.by, local: meta.local ?? true, delay: 300 + i * 80, size: 34 });
     if (ev.coins) f.fly('coins', up(c, 1), { qty: ev.coins, by: meta.by, local: meta.local ?? true, delay: 200, size: 34 });
-    f.float(up(c, 3), 'Row loaded!', { color: '#BFEFFF', size: 1.25 });
+    f.float(up(c, 3), t('game.fx.rowLoaded'), { color: '#BFEFFF', size: 1.25 });
   });
   R.set('bargeCastOff', (f, ev, pos) => {
     const c = here(pos);
     for (let k = 0; k < 4; k++) f.burst('dust', up(c, 4.2), { n: 2, color: '#FFFFFF', speed: 0.5, up: 2.2, size: 0.8, sizeEnd: 2.2, grav: -0.05, life: 1.6, delay: k * 0.18, alpha: 0.8 });
     for (let k = 0; k < 5; k++) f.burst('ring', new THREE.Vector3(c.x - k * 1.6, 0.05, c.z), { n: 1, color: '#E4F4FF', speed: 0, up: 0, size: 0.6, sizeEnd: 3.5, grav: 0, spin: 0, life: 1.6, spread: 0.3, alpha: 0.55, flat: true, additive: false, delay: 0.3 + k * 0.25 });
-    f.float(up(c, 4.5), 'Bon voyage!', { color: '#BFEFFF', size: 1.3, delay: 200 });
+    f.float(up(c, 4.5), t('game.fx.voyage'), { color: '#BFEFFF', size: 1.3, delay: 200 });
   });
   // collections: a find rises out of a parchment-coloured sparkle column and flies to the HUD; a set completes big
   R.set('albumFind', (f, ev, pos, meta) => {
@@ -1146,18 +1168,18 @@ export function createFx(layer, overlay, toScreenM) {
     f.ring(c, { color: '#FFF3C4', radius: 2.4, duration: 0.8 });
     if (ev.item) {
       f.pop(ev.item, up(c, 1.4), { qty: 1, by: meta.by, local: meta.local ?? true, n: 1, delay: 0.25 });
-      f.float(up(c, 2.6), `${ev.dup ? 'Another' : 'Found:'} ${itemName(ev.item)}!`, { color: '#FFE58A', size: 1.25, delay: 250, life: 1400 });
+      f.float(up(c, 2.6), t(ev.dup ? 'game.fx.another' : 'game.fx.found', { item: itemName(ev.item) }), { color: '#FFE58A', size: 1.25, delay: 250, life: 1400 });
     }
   });
   R.set('albumSet', (f, ev, pos) => {
     const c = here(pos);
     for (let k = 0; k < 3; k++) f.burst('confetti', up(c, 3), { n: 40, colors: ['#FFE27A', '#FFF3C4', '#FF9FB0', '#9BE36E', '#7CC4FF'], speed: 5.5, up: 7, size: 0.45, grav: 0.35, drag: 0.6, life: 2.2, spread: 2, delay: k * 0.25, spin: 8 });
     f.ring(c, { color: '#FFE27A', radius: 10, duration: 1.4, opacity: 0.5 });
-    f.float(up(c, 3.2), 'Collection complete!', { color: '#FFE58A', size: 1.4, life: 1700 });
+    f.float(up(c, 3.2), t('game.fx.collectionDone'), { color: '#FFE58A', size: 1.4, life: 1700 });
   });
   R.set('friendship', (f, ev, pos) => { f.burst('heart', up(here(pos), 2), { n: 10, colors: ['#FF5A7A', '#FF9FB0'], speed: 1.4, up: 2.4, size: 0.42, grav: -0.05, life: 1.6, spread: 1 }); });
   R.set('befriended', R.get('friendship'));
-  R.set('memoryPage', (f, ev, pos) => { const c = here(pos); f.ring(c, { color: '#FFFFFF', radius: 16, duration: 0.5, opacity: 0.6 }); f.float(up(c, 2.5), 'Memory Book +1', { color: '#FFF3C4' }); });
+  R.set('memoryPage', (f, ev, pos) => { const c = here(pos); f.ring(c, { color: '#FFFFFF', radius: 16, duration: 0.5, opacity: 0.6 }); f.float(up(c, 2.5), t('game.fx.memory'), { color: '#FFF3C4' }); });
   // ---- wave 3 (M2) ----------------------------------------------------------------------------------------
   // the NPC league rides on the ceremony: a promotion is a second, rising burst and the new league's name
   const ceremony = R.get('fairCeremony');
@@ -1166,10 +1188,12 @@ export function createFx(layer, overlay, toScreenM) {
     const lg = ev.league;
     if (!lg || !lg.move) return;
     const c = here(pos);
+    // Bulgarian names the league ("Лига „Градина“"); English keeps "League 3"
+    const leagueName = ctext('FAIR', `league.${lg.to}`, 'name', String(lg.to));
     if (lg.move > 0) {
       f.burst('star', up(c, 1), { n: 18, colors: ['#FFE27A', '#FFFFFF', '#9FD8E8'], speed: 2.2, up: 7, size: 0.55, grav: 0.1, drag: 0.5, life: 1.8, delay: 1.0 });
-      f.float(up(c, 4.4), `Promoted to League ${lg.to}!`, { color: '#BFEFFF', size: 1.35, delay: 1100, life: 1800 });
-    } else f.float(up(c, 4.4), `League ${lg.to} next week`, { color: '#E6EEF5', size: 1.1, delay: 1100 });
+      f.float(up(c, 4.4), t('game.fx.promoted', { league: lg.to, leagueName }), { color: '#BFEFFF', size: 1.35, delay: 1100, life: 1800 });
+    } else f.float(up(c, 4.4), t('game.fx.leagueNext', { league: lg.to, leagueName }), { color: '#E6EEF5', size: 1.1, delay: 1100 });
   });
   // the Breeding Barn: a baby comes home in its coat (a golden one with a shower of gold), the Nursery's care steps
   const COAT_SPARK = { white: ['#FFFFFF', '#F4F0E7'], brown: ['#C8864E', '#FFE3B0'], spotted: ['#FFFFFF', '#5A4636'], golden: ['#FFE27A', '#FFC83D', '#FFFFFF'] };
@@ -1179,20 +1203,26 @@ export function createFx(layer, overlay, toScreenM) {
     f.burst('heart', up(c, 1), { n: 8, colors: ['#FF5A7A', '#FF9FB0'], speed: 1.2, up: 2.2, size: 0.4, grav: -0.05, life: 1.6, spread: 0.6 });
     f.burst('sparkle', up(c, 0.6), { n: ev.golden ? 40 : 16, colors: cols, speed: ev.golden ? 2.6 : 1.6, up: ev.golden ? 4 : 2.4, size: 0.4, grav: 0.1, life: ev.golden ? 1.8 : 1.2, spread: 0.6 });
     if (ev.golden) { f.ring(c, { color: '#FFE27A', radius: 4, duration: 1.2, opacity: 0.6 }); f.burst('confetti', up(c, 2), { n: 30, colors: ['#FFE27A', '#FFC83D', '#FFFFFF'], speed: 4, up: 5, size: 0.4, grav: 0.35, drag: 0.6, life: 2, spin: 8 }); }
-    const sp = ev.species ? `${ev.species[0].toUpperCase()}${ev.species.slice(1)}` : 'Baby';
-    f.float(up(c, 2.2), ev.golden ? `A golden ${sp.toLowerCase()}!` : `New ${ev.coat || ''} ${sp.toLowerCase()}!`.replace('  ', ' '), { color: ev.golden ? '#FFE58A' : '#FFFFFF', size: ev.golden ? 1.4 : 1.15, life: 1700 });
+    // the species id reads as its name ("cow"); a coat's own word is content (lane B: ctext('coats', id))
+    const sp = ev.species ? (lang() === 'en' ? ev.species : cname(ev.species, { form: 'lc' })) : t('game.fx.baby');
+    const coat = ev.coat ? ctext('coats', ev.coat, 'name', ev.coat) : '';
+    f.float(up(c, 2.2), ev.golden ? t('game.fx.goldenBaby', { sp }) : coat ? t('game.fx.newCoat', { coat, sp }) : t('game.fx.newBaby', { sp }),
+      { color: ev.golden ? '#FFE58A' : '#FFFFFF', size: ev.golden ? 1.4 : 1.15, life: 1700 });
   });
   R.set('breedStarted', (f, ev, pos) => { f.burst('heart', up(here(pos), 1.4), { n: 6, colors: ['#FF5A7A', '#FF9FB0'], speed: 1, up: 1.8, size: 0.36, grav: -0.05, life: 1.4, spread: 1 }); });
   R.set('nursed', (f, ev, pos) => {
     if (!pos) return;
     f.burst('heart', up(pos, 0.7), { n: 4, colors: ['#FF5A7A', '#FF9FB0'], speed: 0.7, up: 1.6, size: 0.32, grav: -0.06, life: 1.2 });
     f.burst('sparkle', up(pos, 0.4), { n: 6, colors: ['#BFEFFF', '#FFFFFF'], speed: 1, up: 1.4, size: 0.26, life: 0.8 });
-    if (Number.isFinite(ev.n) && Number.isFinite(ev.of)) f.float(up(pos, 1.3), `${ev.step || 'Care'} ${ev.n}/${ev.of}`, { color: '#FFFFFF', size: 0.95 });
+    if (Number.isFinite(ev.n) && Number.isFinite(ev.of)) f.float(up(pos, 1.3), `${ev.step ? ctext('nurseSteps', ev.step, 'name', ev.step) : t('game.fx.care')} ${ev.n}/${ev.of}`, { color: '#FFFFFF', size: 0.95 });
   });
   R.set('nurseDone', (f, ev, pos) => {
     const c = here(pos);
     f.burst('confetti', up(c, 1.4), { n: 24, colors: ['#FF9FB0', '#BFEFFF', '#FFE27A', '#B8F28A'], speed: 3, up: 4, size: 0.36, grav: 0.35, drag: 0.6, life: 1.8, spin: 8 });
-    if (ev.personality) f.float(up(c, 2), `${ev.personality[0].toUpperCase()}${ev.personality.slice(1)}!`, { color: '#FFE58A', size: 1.2 });
+    if (ev.personality) {
+      const p = ctext('personalities', ev.personality, 'name', ev.personality);
+      f.float(up(c, 2), `${p[0].toUpperCase()}${p.slice(1)}!`, { color: '#FFE58A', size: 1.2 });
+    }
   });
   R.set('coatWorn', (f, ev, pos) => { const c = here(pos); f.burst('sparkle', up(c, 0.6), { n: 18, colors: ['#FFFFFF', '#FFE27A', '#F4B6C8', '#DDE8F2'], speed: 1.6, up: 2.6, size: 0.38, grav: 0.1, life: 1.3, spread: 0.6 }); f.ring(c, { color: '#FFF3C4', radius: 2.2, duration: 0.9 }); });
   // the Fishing Dock: the farmer's cast and catch play on the avatar (avatars-view); fishing together pops hearts
@@ -1201,7 +1231,7 @@ export function createFx(layer, overlay, toScreenM) {
   R.set('fishTogether', (f, ev, pos) => {
     const c = here(pos);
     f.burst('heart', up(c, 1.2), { n: 10, colors: ['#FF5A7A', '#FF9FB0', '#FFC83D'], speed: 1.2, up: 2.2, size: 0.42, grav: -0.05, life: 1.8, spread: 1.2 });
-    f.float(up(c, 2.4), 'Fishing together!', { color: '#FFB3C1', size: 1.2 });
+    f.float(up(c, 2.4), t('game.fx.fishTogether'), { color: '#FFB3C1', size: 1.2 });
   });
   // the Friendly Duel: the invitation and the start in both farmers' colours, the end a crown of gold over the winner
   const DUEL_COLS = ['#2BB3A3', '#FF7A6B', '#FFC83D', '#FFFFFF'];
@@ -1209,7 +1239,7 @@ export function createFx(layer, overlay, toScreenM) {
   R.set('duelAccepted', (f, ev, pos) => {
     const c = here(pos);
     f.burst('confetti', up(c, 2.5), { n: 36, colors: DUEL_COLS, speed: 4.5, up: 5.5, size: 0.42, grav: 0.35, drag: 0.6, life: 2, spread: 2, spin: 8 });
-    f.float(up(c, 3), 'Game on!', { color: '#FFE58A', size: 1.35, life: 1500 });
+    f.float(up(c, 3), t('game.duel.on'), { color: '#FFE58A', size: 1.35, life: 1500 });
   });
   R.set('duelEnded', (f, ev, pos) => {
     if (!ev.scored) return;
@@ -1217,7 +1247,7 @@ export function createFx(layer, overlay, toScreenM) {
     for (let k = 0; k < 3; k++) f.burst('confetti', up(c, 3), { n: 40, colors: DUEL_COLS, speed: 5, up: 7, size: 0.46, grav: 0.35, drag: 0.6, life: 2.3, spread: 2.4, delay: k * 0.25, spin: 8 });
     f.burst('star', up(c, 2.5), { n: 16, colors: ['#FFE27A', '#FFFFFF'], speed: 4, up: 5, size: 0.6, grav: 0.2, drag: 1, life: 1.5 });
     f.ring(c, { color: '#FFE27A', radius: 10, duration: 1.4, opacity: 0.5 });
-    f.float(up(c, 3.6), ev.tie ? 'A dead heat! Two crowns!' : 'Duel Champion!', { color: '#FFE58A', size: 1.5, life: 1900 });
+    f.float(up(c, 3.6), ev.tie ? t('game.fx.duelTie') : t('game.fx.duelWin'), { color: '#FFE58A', size: 1.5, life: 1900 });
   });
   for (const e of ['duelDeclined', 'duelCancelled', 'duelLapsed']) R.set(e, () => {});
   // the Seasonal Ribbon Track: a ribbon of the season's colours unfurls and the tier floats up
@@ -1225,7 +1255,7 @@ export function createFx(layer, overlay, toScreenM) {
     const c = here(pos);
     f.burst('confetti', up(c, 2.5), { n: 30, colors: ['#F4B6C8', '#F2C46B', '#B5562E', '#9FD3E8', '#FFFFFF'], speed: 4, up: 5.5, size: 0.42, grav: 0.35, drag: 0.6, life: 2, spread: 2, spin: 8 });
     f.ring(c, { color: '#FFF3C4', radius: 6, duration: 1.0, opacity: 0.5 });
-    if (Number.isFinite(ev.tier)) f.float(up(c, 3), `Season tier ${ev.tier}!`, { color: '#FFE58A', size: 1.3 });
+    if (Number.isFinite(ev.tier)) f.float(up(c, 3), t('game.fx.seasonTier', { n: ev.tier }), { color: '#FFE58A', size: 1.3 });
   });
   R.set('perkPicked', (f, ev, pos) => { const c = here(pos); f.burst('star', up(c, 1.4), { n: 10, colors: ['#FFE27A', '#BFEFFF', '#FFFFFF'], speed: 1.8, up: 2.6, size: 0.42, grav: 0.1, life: 1.2, spread: 0.6 }); });
   R.set('perksReset', (f, ev, pos) => { f.burst('glow', up(here(pos), 1.2), { n: 12, color: '#BFEFFF', speed: 1.2, up: 1.6, size: 0.36, grav: 0, life: 1.0, spread: 0.8 }); });
@@ -1234,7 +1264,7 @@ export function createFx(layer, overlay, toScreenM) {
     const c = here(pos);
     f.burst('petal', up(c, 4), { n: 36, colors: ['#FF9FB0', '#FFFFFF', '#FFE27A', '#C8B5F0'], speed: 1.6, up: -0.2, size: 0.32, grav: 0.06, drag: 0.8, life: 3.2, spread: 6, spin: 3 });
     f.burst('heart', up(c, 1.6), { n: 12, colors: ['#FF5A7A', '#FF9FB0'], speed: 1.2, up: 2.4, size: 0.42, grav: -0.05, life: 1.8, spread: 1.4 });
-    f.float(up(c, 3), 'Grandma is here!', { color: '#FFB3C1', size: 1.35, life: 1800 });
+    f.float(up(c, 3), t('game.fx.grandma'), { color: '#FFB3C1', size: 1.35, life: 1800 });
   });
   R.set('grandmaLeft', (f, ev, pos) => { const c = here(pos); f.burst('heart', up(c, 1.6), { n: 16, colors: ['#FF5A7A', '#FF9FB0', '#FFE27A'], speed: 1.4, up: 2.8, size: 0.42, grav: -0.05, life: 2.2, spread: 2 }); });
   // the farmhouse room opens (Grandma's Farmhouse restored): the restoration's own ta-da
@@ -1248,7 +1278,7 @@ export function createFx(layer, overlay, toScreenM) {
     const c = here(pos);
     f.burst('glow', up(c, 2.5), { n: 36, colors: ['#FFE08A', '#FF9F43', '#FFFFFF'], speed: 2, up: 2, size: 0.42, grav: -0.04, drag: 0.6, life: 2.6, spread: 4 });
     f.burst('confetti', up(c, 4), { n: 50, colors: confetti, speed: 5, up: 6, size: 0.5, grav: 0.35, drag: 0.6, life: 2.2, spread: 3, spin: 8, delay: 0.3 });
-    f.float(up(c, 4), `The Festival Pavilion: tier ${ev.tier}!`, { color: '#FFE58A', size: 1.3, delay: 300, life: 1700 });
+    f.float(up(c, 4), t('game.fx.pavilion', { n: ev.tier }), { color: '#FFE58A', size: 1.3, delay: 300, life: 1700 });
   });
 
   // a pet's hearts rise from the pet (avatars-view passes its position); a find also sparkles

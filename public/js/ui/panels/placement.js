@@ -5,6 +5,8 @@
 // The controller is client-core's: this calls the first placement entry point it offers
 // (controller.place(def) | controller.build(def) | controller.setTool('hammer', { def })), closes the panel so the
 // farm is visible, and tells the player what to do.
+import { t } from '../../i18n/index.js';
+
 export function startPlacement(ctx, defId) {
   const c = ctx.controller;
   let ok = false;
@@ -16,7 +18,7 @@ export function startPlacement(ctx, defId) {
     console.error('placement failed to start', err);
     ok = false;
   }
-  if (!ok) { ctx.ui.toast("Building isn't ready yet. Try again in a moment."); return false; }
+  if (!ok) { ctx.ui.toast(t('farm.place.notReady')); return false; }
   ctx.close();
   return true;
 }

@@ -1,0 +1,68 @@
+// English catalog, area 'multi' (lane A): the multi-farm surfaces: the landing page's title and description (its words
+// are the 'front' area), the farm gate (ui/farm-gate.js), the invite card and Settings rows (ui/invite.js), net/farm.js's
+// farm labels and the server's refusal codes (the server sends codes, never words).
+export default {
+  'multi.start': 'Start a new farm',
+  'multi.farmsHere': 'Your farms on this device',
+  'multi.farmOf': "{name}'s farm",
+  'multi.farmOf2': "{a} & {b}'s farm",
+  'multi.inviteOwn': 'You are already a farmer here, so that invite link is still waiting for your friend.',
+  'multi.retention': {
+    one: 'This farm is kept while you play; after {n} day without a visit it is deleted.',
+    other: 'This farm is kept while you play; after {n} days without a visit it is deleted.',
+  },
+
+  // the landing page
+  'multi.ld.title': 'Harvest Hollow · a cozy farm for two',
+  'multi.ld.description': 'Harvest Hollow: a cozy 3D farm for two, in your browser. Start a farm in one tap and invite a friend to farm with you, live. Free and open source.',
+
+  // the farm gate
+  'multi.gate.private.title': 'This farm is private',
+  'multi.gate.private.lead': 'Ask its farmer for an invite link.',
+  'multi.gate.private.note': 'Farms nobody visits for {days} days are deleted, so an old link may lead to a farm that is gone.',
+  'multi.gate.invite.title': 'This invite link no longer works',
+  'multi.gate.invite.lead': 'An invite opens the gate once, for one friend, for {days} days. Ask the farmer for a new link.',
+  'multi.gate.invite.note': 'A new invite also replaces the old one, so only the newest link works.',
+  'multi.gate.gone.title': 'This farm is gone',
+  'multi.gate.gone.lead': 'It was deleted: by one of its farmers, or because nobody visited it for {days} days. A new farm takes one tap.',
+  'multi.gate.full.title': 'This farm already has two farmers',
+  'multi.gate.full.lead': 'A farm is for two. Start your own and invite a friend!',
+  'multi.gate.noName': 'A farm without a name yet',
+  'multi.gate.startOwn': 'Start your own farm',
+  'multi.gate.haveLink': 'I have my personal farm link',
+  'multi.gate.pasteHelp': 'It opens the farm as you on any device. Paste it here:',
+
+  // invites and the personal link
+  'multi.invite.title': 'Invite a friend',
+  'multi.invite.lead': 'Farming is better with two. Send this link to one friend: whoever opens it first becomes the second farmer and plays here with you, live.',
+  'multi.invite.rules': 'The link works once, for {n} days. Making a new link turns the old one off.',
+  'multi.invite.full': 'Your farm has two farmers. That is everyone a farm can have, so there is nothing to invite to.',
+  'multi.invite.nudge': 'Farming is better with two. Send a friend a link and they can farm here with you, live.',
+  'multi.invite.share': 'Come and farm with me in Harvest Hollow!',
+  'multi.invite.err.FULL': 'Your farm already has two farmers.',
+  'multi.invite.err.AUTH': 'This device cannot make an invite for this farm. Open your personal farm link first.',
+  'multi.invite.err.RATE': 'Lots of invites just now. Try again in a minute.',
+  'multi.invite.err.NET': 'The farm did not answer. Try again in a moment.',
+  'multi.invite.back': 'Back to the farm',
+  'multi.invite.making': 'Making a link…',
+  'multi.invite.makeNew': 'Make a new link',
+  'multi.invite.make': 'Make an invite link',
+  'multi.invite.linkLabel': 'Invite link for a friend',
+  'multi.invite.later': 'Later',
+  'multi.personal.label': 'Your personal farm link',
+  'multi.personal.help': 'Opens this farm as you on any device. Keep it private: it is your key.',
+  'multi.link.hidden': '•••••••••••• (hidden)',
+  'multi.link.copied': 'Copied. Paste it in a message.',
+  'multi.link.hold': 'Press and hold the link to copy it.',
+  'multi.link.copy': 'Copy',
+  'multi.link.share': 'Share…',
+  'multi.link.show': 'Show',
+  'multi.link.hide': 'Hide',
+  'multi.set.sharing': 'Sharing this farm',
+  'multi.set.full': 'Two farmers already: the farm is full.',
+  'multi.set.inviteHelp': 'A one-time link: your friend opens it and plays here with you.',
+  'multi.set.keeping': 'Keeping the farm',
+  'multi.set.farms': 'Your farms',
+  'multi.set.allFarms': 'All farms on this device',
+  'multi.set.farmsHelp': 'Start another farm, or open one you played on this device.',
+};

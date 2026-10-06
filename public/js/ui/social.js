@@ -7,17 +7,25 @@
 import { EMOTES, MARKS, MSG, LIMITS } from '../../../shared/net/protocol.js';
 import { ACTIONS } from '../../../shared/rules/index.js';
 import { h, svgIcon, kv } from './dom.js';
+import { t, tn, onLang } from '../i18n/index.js';
 
-/** Protocol emote id -> [emoji, label, render-life bubble kind]. */
+/** Protocol emote id -> [emoji, label, render-life bubble kind, feed verb]. Label and verb are read in the language in
+ *  effect (catalog 'social.emote.<id>' / '.did'). */
+const emoteRow = (id, emoji, kind) => {
+  const row = [emoji, undefined, kind, undefined];
+  Object.defineProperty(row, 1, { get: () => t(`social.emote.${id}`), enumerable: true });
+  Object.defineProperty(row, 3, { get: () => t(`social.emote.${id}.did`), enumerable: true });
+  return Object.freeze(row);
+};
 export const EMOTE_INFO = Object.freeze({
-  wave: ['👋', 'Wave', 'wave', 'waves'],
-  heart: ['💖', 'Love', 'heart', 'sends love'],
-  laugh: ['😄', 'Laugh', 'laugh', 'laughs'],
-  thumbs_up: ['👍', 'Thumbs up', 'thumbs', 'gives a thumbs up'],
-  come_here: ['🙋', 'Come here!', 'come', 'calls you over'],
-  cheer: ['🎉', 'Cheer', 'star', 'cheers'],
-  high_five: ['✋', 'High five', null, 'holds up a hand for a high five'],
-  dance: ['💃', 'Dance', 'wow', 'dances'],
+  wave: emoteRow('wave', '👋', 'wave'),
+  heart: emoteRow('heart', '💖', 'heart'),
+  laugh: emoteRow('laugh', '😄', 'laugh'),
+  thumbs_up: emoteRow('thumbs_up', '👍', 'thumbs'),
+  come_here: emoteRow('come_here', '🙋', 'come'),
+  cheer: emoteRow('cheer', '🎉', 'star'),
+  high_five: emoteRow('high_five', '✋', null),
+  dance: emoteRow('dance', '💃', 'wow'),
 });
 
 const PING_GAP_MS = 1000;
@@ -38,34 +46,36 @@ export function createSocial(S) {
     return net && typeof net.raw === 'function' ? net.raw(m) : undefined;
   };
   const avatars = () => (view && view.avatars) || null;
-  const nameOf = (pid) => (pid === store.pid ? 'You' : store.state?.players?.[pid]?.name ?? 'Your partner');
+  const nameOf = (pid) => (pid === store.pid ? t('common.you') : store.state?.players?.[pid]?.name ?? t('common.partner'));
 
   controller.on('hover', (p) => { hover = p; });
 
   // ---- buttons ---------------------------------------------------------------------------------------------
-  const pingBtn = h('button.social-btn', {
-    type: 'button', 'aria-label': 'Ping a spot for your partner (G)', 'data-tip': 'Ping a spot (G): click, then click the farm',
-    'aria-pressed': 'false', dataset: { label: 'Ping' }, on: { click: () => arm(!armed) },
-  }, svgIcon('ping', 32), h('span.key', { 'aria-hidden': 'true' }, 'G'));
-  const emoteBtn = h('button.social-btn', {
-    type: 'button', 'aria-label': 'Emotes (T)', 'aria-haspopup': 'menu', 'aria-expanded': 'false', 'data-tip': 'Emotes (T)',
-    dataset: { label: 'Emotes' }, on: { click: () => toggleWheel(emoteBtn) },
-  }, svgIcon('smile', 32), h('span.key', { 'aria-hidden': 'true' }, 'T'));
+  // data-label is the phone's caption under each button (css/mobile.css content: attr(data-label))
+  const pingBtn = h('button.social-btn', { type: 'button', 'aria-pressed': 'false', on: { click: () => arm(!armed) } },
+    svgIcon('ping', 32), h('span.key', { 'aria-hidden': 'true' }, 'G'));
+  const emoteBtn = h('button.social-btn', { type: 'button', 'aria-haspopup': 'menu', 'aria-expanded': 'false', on: { click: () => toggleWheel(emoteBtn) } },
+    svgIcon('smile', 32), h('span.key', { 'aria-hidden': 'true' }, 'T'));
   const notesBtn = h('button.social-btn', {
-    type: 'button', 'aria-label': 'Notes', 'data-tip': 'Notes for each other', dataset: { label: 'Notes' },
-    on: { click: () => (ui.panels.has('notes') ? ui.panels.toggle('notes') : ui.toast('Notes arrive soon. Pings and emotes work now.', { kind: 'info' })) },
+    type: 'button', on: { click: () => (ui.panels.has('notes') ? ui.panels.toggle('notes') : ui.toast(t('social.notesSoon'), { kind: 'info' })) },
   }, svgIcon('note', 32));
-  const chatBtn = h('button.social-btn', {
-    type: 'button', 'aria-label': 'Say something', 'aria-expanded': 'false', 'data-tip': 'Say something to your partner',
-    dataset: { label: 'Chat' }, on: { click: () => toggleChat() },
-  }, svgIcon('chat', 30));
+  const chatBtn = h('button.social-btn', { type: 'button', 'aria-expanded': 'false', on: { click: () => toggleChat() } }, svgIcon('chat', 30));
+  function labelButtons() {
+    const set = (b, label, tip, caption) => { b.setAttribute('aria-label', label); b.dataset.tip = tip; b.dataset.label = caption; };
+    set(pingBtn, t('social.ping.label'), t('social.ping.tip'), t('social.ping.caption'));
+    set(emoteBtn, t('social.emotes.label'), t('social.emotes.label'), t('social.emotes.caption'));
+    set(notesBtn, t('social.notes.label'), t('social.notes.tip'), t('social.notes.label'));
+    set(chatBtn, t('social.chat.label'), t('social.chat.tip'), t('social.chat.caption'));
+  }
+  labelButtons();
+  onLang(() => { labelButtons(); refreshUnread(); });
   box.append(pingBtn, emoteBtn, chatBtn, notesBtn);
 
   // ---- chat: a one-line message, shown in the partner's feed (textContent only) ----------------------------
   let chatBox = null;
   function toggleChat(open = !chatBox) {
     if (!open) { chatBox?.remove(); chatBox = null; chatBtn.setAttribute('aria-expanded', 'false'); return; }
-    const input = h('input.field', { type: 'text', maxlength: String(LIMITS.CHAT_MAX), placeholder: 'Say something nice…', 'aria-label': 'Message to your partner', autocomplete: 'off' });
+    const input = h('input.field', { type: 'text', maxlength: String(LIMITS.CHAT_MAX), placeholder: t('social.chat.placeholder'), 'aria-label': t('social.chat.input'), autocomplete: 'off' });
     const sendIt = () => {
       const text = input.value.replace(/\s+/g, ' ').trim().slice(0, LIMITS.CHAT_MAX);
       if (!text) { toggleChat(false); return; }
@@ -76,7 +86,7 @@ export function createSocial(S) {
       if (e.key === 'Enter') { e.preventDefault(); sendIt(); }
       else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); toggleChat(false); chatBtn.focus(); }
     });
-    chatBox = h('div.chat-box.paper', input, h('button.btn.btn--small', { type: 'button', on: { click: sendIt } }, 'Send'));
+    chatBox = h('div.chat-box.paper', input, h('button.btn.btn--small', { type: 'button', on: { click: sendIt } }, t('social.chat.send')));
     box.before(chatBox);
     chatBtn.setAttribute('aria-expanded', 'true');
     input.focus();
@@ -85,8 +95,8 @@ export function createSocial(S) {
     if (!m || typeof m.text !== 'string' || !m.pid) return;
     const mine = m.pid === store.pid;
     // a chat line has a verb like every feed line: 'Rowan says “...”' (QA wave 1 ui-ux-20)
-    S.feed?.push({ by: m.pid, actor: mine ? 'You' : nameOf(m.pid), text: `${mine ? 'say' : 'says'} “${m.text.slice(0, LIMITS.CHAT_MAX)}”`, glyph: 'chat', at: m.ts });
-    if (!mine) ui.toast(`${nameOf(m.pid)}: “${m.text.slice(0, 80)}${m.text.length > 80 ? '…' : ''}”`, { kind: 'love', ms: 5000 });
+    S.feed?.push({ by: m.pid, actor: nameOf(m.pid), text: t(mine ? 'social.chat.sayMine' : 'social.chat.says', { text: m.text.slice(0, LIMITS.CHAT_MAX) }), glyph: 'chat', at: m.ts });
+    if (!mine) ui.toast(t('social.chat.toast', { name: nameOf(m.pid), text: `${m.text.slice(0, 80)}${m.text.length > 80 ? '…' : ''}` }), { kind: 'love', ms: 5000 });
   }
   const refreshNotes = () => { notesBtn.hidden = !ui.panels.has('notes'); };
   ui.panels.on('register', refreshNotes);
@@ -102,7 +112,7 @@ export function createSocial(S) {
     const n = Object.values(notes).filter((x) => x && x.by !== store.pid && x.at > seen).length;
     unreadBadge.hidden = n === 0;
     unreadBadge.textContent = String(n);
-    notesBtn.setAttribute('aria-label', n ? `Notes (${n} new from your partner)` : 'Notes');
+    notesBtn.setAttribute('aria-label', n ? tn('social.notes.unread', n) : t('social.notes.label'));
   }
   ui.panels.on('open', (name) => {
     if (name !== 'notes') return;
@@ -126,7 +136,7 @@ export function createSocial(S) {
   }
   function arm(on) {
     // pressed from the phone's farm menu: the button is out of sight, so say what the next tap does
-    if (on && !pingBtn.getClientRects().length) ui.toast('Tap a spot on the farm to ping it for your partner.', { kind: 'info', ms: 2600 });
+    if (on && !pingBtn.getClientRects().length) ui.toast(t('social.ping.armed'), { kind: 'info', ms: 2600 });
     armed = on;
     pingBtn.setAttribute('aria-pressed', String(on));
     document.body.classList.toggle('ping-armed', on);
@@ -156,7 +166,7 @@ export function createSocial(S) {
     const av = avatars();
     if (av && typeof av.ping === 'function') av.ping(pid, m.x, m.z);
     else if (view.fx) view.fx.play({ e: 'ping', color: store.state?.players?.[pid]?.color }, { x: m.x, z: m.z });
-    if (pid !== store.pid) S.feed?.push({ by: pid, actor: nameOf(pid), text: m.kind === 'help' ? 'asks for help here' : 'pinged a spot', glyph: 'ping' });
+    if (pid !== store.pid) S.feed?.push({ by: pid, actor: nameOf(pid), text: m.kind === 'help' ? t('social.ping.help') : t('social.ping.did'), glyph: 'ping' });
   }
 
   // ---- emotes ----------------------------------------------------------------------------------------------
@@ -195,8 +205,8 @@ export function createSocial(S) {
     const r = anchor && anchor.getClientRects().length ? anchor.getBoundingClientRect() : null;
     const cx = at ? at.x : r ? r.left + r.width / 2 + 90 : innerWidth / 2;
     const cy = at ? at.y : r ? r.top - 120 : innerHeight / 2;
-    const hub = h('span.hub', 'Say it with a wave');
-    wheel = h('div.emote-wheel', { role: 'menu', 'aria-label': 'Emotes', style: { left: `${Math.max(126, Math.min(innerWidth - 126, cx))}px`, top: `${Math.max(126, Math.min(innerHeight - 126, cy))}px` } }, hub);
+    const hub = h('span.hub', t('social.emotes.hub'));
+    wheel = h('div.emote-wheel', { role: 'menu', 'aria-label': t('social.emotes.caption'), style: { left: `${Math.max(126, Math.min(innerWidth - 126, cx))}px`, top: `${Math.max(126, Math.min(innerHeight - 126, cy))}px` } }, hub);
     EMOTES.forEach((id, i) => {
       const a = (i / EMOTES.length) * Math.PI * 2 - Math.PI / 2;
       const [emoji, label] = EMOTE_INFO[id] || ['★', id];
@@ -253,7 +263,7 @@ export function createSocial(S) {
     /** welcome.chat: the newest lines, oldest first (late joiners); the feed shows the last few. */
     chatHistory(list) {
       for (const m of (Array.isArray(list) ? list : []).slice(-3)) {
-        if (m && typeof m.text === 'string') S.feed?.push({ by: m.pid, actor: m.pid === store.pid ? 'You' : nameOf(m.pid), text: `said “${m.text}”`, glyph: 'chat', at: m.ts });
+        if (m && typeof m.text === 'string') S.feed?.push({ by: m.pid, actor: nameOf(m.pid), text: t('social.chat.said', { text: m.text }), glyph: 'chat', at: m.ts });
       }
     },
   };

@@ -28,7 +28,7 @@
 // acceptance (E10 at L38 after a quick Grandma's Farmhouse: nothing could ever count for it again). Completing
 // GRANDMA_VISIT.quest brings Grandma for her visit (grandma.js).
 import {
-  CONTENT, questOf, isLive, levelFromXp, animalOf, STORY_BEATS, itemOf, expansionOf, QUEST_VERBS, pluralOf,
+  CONTENT, questOf, isLive, levelFromXp, animalOf, STORY_BEATS, itemOf, expansionOf,
   TOWNSFOLK, GRANDMA_VISIT, BREEDING,
 } from '../../content/index.js';
 import { ERR } from '../../net/protocol.js';
@@ -45,7 +45,7 @@ import { albumGive } from './album.js';
 import { befriend } from './folk.js';
 import { dockedBarge, bargeUnlocked, dockAt } from './barge.js';
 import { openFair, fairUnlocked, fairOpenAt } from './fair.js';
-import { mmss } from '../goals.js';
+import { blocked, msg, name, int, ms, noun, sub, moreMsg, enText } from '../goal-text.js';
 import { grandmaArrive } from './grandma.js';
 import { giveFurniture } from './interior.js';
 import { leagueUnlocked, LEAGUE } from './league.js';
@@ -127,6 +127,10 @@ function pickAvailable(state, quests, level, free, now) {
 
 const defName = (id) => (CONTENT.buildings.get(id) ?? CONTENT.homes.get(id) ?? CONTENT.trees.get(id)
   ?? CONTENT.animals.get(id) ?? itemOf(id))?.name ?? id;
+/** "build the Dairy first" (a message with its English, as every blocker carries). */
+const buildFirst = (id) => msg('goals.r.block.build', { b: name(id, defName(id)) });
+/** "the Fair opens in 2:15 h". */
+const fairIn = (state, now) => msg('goals.r.block.fairIn', { t: ms(fairOpenAt(state, weekOf(state, now) + 1) - now) });
 
 /**
  * The first missing link of the chain that makes `item` (depth-first through recipe inputs), or null when the farm
@@ -141,10 +145,11 @@ function missingFor(state, P, item, now, seen = new Set()) {
     case 'crop': return null;
     case 'fruit': case 'wood': {
       if ((P.owned.get(it.source) ?? 0) === 0) {
-        return { kind: 'tree', ref: it.source, text: `plant ${/^[AEIOU]/i.test(defName(it.source)) ? 'an' : 'a'} ${defName(it.source)} first` };
+        return blocked('tree', it.source, msg('goals.r.block.plantTree', { tree: name(it.source, defName(it.source), 'trees'),
+          _a: /^[AEIOU]/i.test(defName(it.source)) ? 'an' : 'a' }));
       }
       if ((P.mature.get(it.source) ?? 0) === 0) {
-        return { kind: 'grow', ref: it.source, text: `wait for the ${defName(it.source)} to bear fruit` };
+        return blocked('grow', it.source, msg('goals.r.block.bearFruit', { tree: name(it.source, defName(it.source), 'trees') }));
       }
       return null;
     }
@@ -153,18 +158,18 @@ function missingFor(state, P, item, now, seen = new Set()) {
       if (!a) return null;
       if ((P.animals.get(a.id) ?? 0) === 0) {
         const home = a.homes.find((h) => (P.owned.get(h) ?? 0) > 0);
-        if (!home) return { kind: 'home', ref: a.homes[0], text: `build the ${defName(a.homes[0])} first` };
-        return { kind: 'animal', ref: a.id, text: `buy a ${a.name} first` };
+        if (!home) return blocked('home', a.homes[0], buildFirst(a.homes[0]));
+        return blocked('animal', a.id, msg('goals.r.block.buyAnimal', { animal: name(a.id, a.name, 'animals') }));
       }
       if ((P.adults.get(a.id) ?? 0) === 0) {
-        return { kind: 'grow', ref: a.id, text: `wait for the ${a.name} to grow up` };
+        return blocked('grow', a.id, msg('goals.r.block.growUp', { animal: name(a.id, a.name, 'animals') }));
       }
       return a.feed ? missingFor(state, P, a.feed, now, seen) : null;
     }
     case 'feed': {
       const f = CONTENT.feeds.get(it.source);
       if (f && (P.owned.get(f.building) ?? 0) === 0) {
-        return { kind: 'building', ref: f.building, text: `build the ${defName(f.building)} first` };
+        return blocked('building', f.building, buildFirst(f.building));
       }
       return null;
     }
@@ -172,7 +177,7 @@ function missingFor(state, P, item, now, seen = new Set()) {
       const r = CONTENT.recipes.get(it.source);
       if (!r) return null;
       if ((P.owned.get(r.building) ?? 0) === 0) {
-        return { kind: 'building', ref: r.building, text: `build the ${defName(r.building)} first` };
+        return blocked('building', r.building, buildFirst(r.building));
       }
       for (const input of sortedKeys(r.inputs ?? {})) {
         const m = missingFor(state, P, input, now, seen);
@@ -198,13 +203,13 @@ export function blockerOf(state, t, now) {
     case 'raise': case 'buy': case 'tend': {
       const a = animalOf(t.ref);
       if (!a || a.homes.some((h) => (P.owned.get(h) ?? 0) > 0)) return null;
-      return { kind: 'home', ref: a.homes[0], text: `build the ${defName(a.homes[0])} first` };
+      return blocked('home', a.homes[0], buildFirst(a.homes[0]));
     }
     case 'expand': {
       const e = expansionOf(t.ref);
       if (!e || state.farm.expansions.includes(e.id)) return null;
       if (levelFromXp(state.farm.xp) < e.unlock) {
-        return { kind: 'level', ref: e.id, text: `reach level ${e.unlock} first` };
+        return blocked('level', e.id, msg('goals.r.block.level', { n: int(e.unlock) }));
       }
       for (let i = 0; i < e.proof.length; i++) {
         // the land card's proof progress (actions/expansions.js proofProgress; not imported: expansions.js imports
@@ -217,7 +222,7 @@ export function blockerOf(state, t, now) {
         } else have = state.farm.proofs?.[e.id]?.n?.[String(i)] ?? 0;
         if (have >= pt.qty) continue;
         const left = { verb: pt.verb, ref: Array.isArray(pt.ref) ? pt.ref[0] : pt.ref, qty: pt.qty - have };
-        return { kind: 'proof', ref: e.id, text: `first ${moreText(left).replace(/^\S+/, (w) => w.toLowerCase())}` };
+        return blocked('proof', e.id, msg('goals.r.block.proof', { task: sub(moreMsg(left)) }));
       }
       return null;
     }
@@ -227,47 +232,43 @@ export function blockerOf(state, t, now) {
       if (!dockedBarge(state, now)) {
         const w = weekOf(state, now);
         const at = state.farm.barge.w < w && now < dockAt(state, w) ? dockAt(state, w) : dockAt(state, w + 1);
-        return { kind: 'wait', ref: 'barge', text: `the barge docks in ${mmss(at - now)}` };
+        return blocked('wait', 'barge', msg('goals.r.block.bargeIn', { t: ms(at - now) }));
       }
-      return state.farm.barge.rows === 0 ? { kind: 'wait', ref: 'barge', text: 'the barge sails light this week' }
+      return state.farm.barge.rows === 0 ? blocked('wait', 'barge', msg('goals.r.block.bargeLight'))
         : null;
     }
     case 'enter':
       if (!fairUnlocked(state) || openFair(state, now)) return null;
-      return { kind: 'wait', ref: 'fair',
-        text: `the Fair opens in ${mmss(fairOpenAt(state, weekOf(state, now) + 1) - now)}` };
+      return blocked('wait', 'fair', fairIn(state, now));
     case 'reach':
       if (t.ref !== 'league') return null;
       // "League Night": the league is judged at the Sunday ceremony; a week with no Fair point never promotes
-      if (!leagueUnlocked(state)) return { kind: 'level', ref: 'league', text: `reach level ${LEAGUE.unlock} first` };
-      return openFair(state, now) ? null : { kind: 'wait', ref: 'fair',
-        text: `the Fair opens in ${mmss(fairOpenAt(state, weekOf(state, now) + 1) - now)}` };
+      if (!leagueUnlocked(state)) return blocked('level', 'league', msg('goals.r.block.level', { n: int(LEAGUE.unlock) }));
+      return openFair(state, now) ? null : blocked('wait', 'fair', fairIn(state, now));
     case 'breed': {
       // "New Coats": two adults of the species in a home, and the Breeding Barn's level
       const a = animalOf(t.ref);
       if (!a) return null;
       if (levelFromXp(state.farm.xp) < BREEDING.unlock) {
-        return { kind: 'level', ref: 'breeding', text: `reach level ${BREEDING.unlock} first` };
+        return blocked('level', 'breeding', msg('goals.r.block.level', { n: int(BREEDING.unlock) }));
       }
       if (!a.homes.some((h) => (P.owned.get(h) ?? 0) > 0)) {
-        return { kind: 'home', ref: a.homes[0], text: `build the ${defName(a.homes[0])} first` };
+        return blocked('home', a.homes[0], buildFirst(a.homes[0]));
       }
       let adults = 0;
       for (const id of Object.keys(state.farm.objects)) {
         const o = state.farm.objects[id];
         if (o.def === t.ref && typeof o.home === 'string' && isAdult(o, now)) adults++;
       }
-      return adults >= 2 ? null : { kind: 'animal', ref: t.ref, text: `raise two grown ${pluralOf(a.name, 2)} first` };
+      return adults >= 2 ? null : blocked('animal', t.ref, msg('goals.r.block.raiseTwo', {
+        animals: noun(a.id, 2, a.name), a: name(a.id, a.name, 'animals') }));
     }
     default: return null;
   }
 }
 
 /** "Harvest 12 more Wheat": what is left of a land proof task (the NOW land card and the e1 blocker). */
-export function moreText(t) {
-  const verb = QUEST_VERBS[t.verb]?.text ?? t.verb;
-  return `${verb} ${t.qty} more ${pluralOf(defName(t.ref), t.qty)}`;
-}
+export const moreText = (t) => enText(moreMsg(t));
 
 /** Is `task` a state verb (counts holdings, not deeds)? Planting a tree species counts trees owned. */
 export const isStateTask = (t) => STATE_VERBS.has(t.verb) || (t.verb === 'plant' && CONTENT.trees.has(t.ref))

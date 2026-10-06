@@ -699,7 +699,7 @@ export function createAnimalsView(layers, overlay, toScreenM, { now: nowFn } = {
     const legs = [];
     c.object.traverse((x) => {
       if (!x.isBone) return;
-      if (!head && x.name === (info.headBone || 'Head')) head = x;
+      if (!head && x.name === (info.headBone || 'Head')) head = x; // i18n-ok: a GLB bone name, never shown
       // procedural walk for the hoppers (the source sheep has no walk clip): the four upper legs
       const m = /^(Front|Back)UpLeg([LR])$/.exec(x.name);
       if (m) legs.push({ bone: x, phase: (m[1] === 'Front') === (m[2] === 'L') ? 0 : Math.PI });
@@ -739,7 +739,7 @@ export function createAnimalsView(layers, overlay, toScreenM, { now: nowFn } = {
       const y0 = lowY();
       for (const [name, k] of Object.entries(BABY_BONES[a.def])) {
         const b = bones[name];
-        if (!b || name === (info.headBone || 'Head')) continue;
+        if (!b || name === (info.headBone || 'Head')) continue; // i18n-ok: a GLB bone name, never shown
         babyBones.push({ bone: b, base: b.scale.clone(), k });
         b.scale.multiplyScalar(k);
       }

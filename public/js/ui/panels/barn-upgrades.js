@@ -9,8 +9,9 @@
 import { CONTENT, isLive, barnCapacity } from '../../../../shared/content/index.js';
 import { barnUpgrades, barnView, nextBarnUpgrade, levelOf, available } from './model.js';
 import { I } from './intents.js';
-import { h, fmt, createKit, chip, svgIcon, icon, pill, bar, fill, hintable, counted } from './kit.js';
+import { h, fmt, createKit, chip, svgIcon, icon, pill, bar, fill, hintable, counted, phoneTitle } from './kit.js';
 import { barnArt } from './home-art.js';
+import { t } from '../../i18n/index.js';
 
 const PLANKS = 'planks';
 const CRATES = 'wooden_crate';
@@ -52,34 +53,30 @@ export function barnLadderView(state) {
   };
 }
 
-const STATUS = {
-  start: ['Where it began', ''], done: ['Done', 'pn-owned'], next: ['Ready', 'pn-warn'], wait: ['Next', ''],
-  later: ['Later', ''], soon: ['Coming soon', ''],
-};
+const STATUS_CLS = { start: '', done: 'pn-owned', next: 'pn-warn', wait: '', later: '', soon: '' };
 
 function nextCard(ctx, kit, v) {
   const nx = v.next;
   if (!nx) {
     const soon = v.rungs.find((r) => r.status === 'soon');
     return h('section.hb-next.hb-top',
-      h('h3', v.n >= v.max ? 'The biggest barn in the county' : 'As big as it gets for now'),
-      h('p', soon ? `Upgrade ${soon.n} (room for ${fmt(soon.capacity)}) comes with a later chapter of the valley.`
-        : 'Every upgrade is done. Sell surplus or use goods in recipes when the Barn fills up.'));
+      h('h3', v.n >= v.max ? t('market.barn.biggest') : t('market.barn.maxNow')),
+      h('p', soon ? t('market.ladder.soon', { n: soon.n, cap: soon.capacity }) : t('market.ladder.allDone')));
   }
   return h('section.hb-next', { dataset: { upgrade: String(nx.n) } },
-    h('header', h('span.hb-n', String(nx.n)), h('div', h('h3', `Upgrade ${nx.n}: room for ${fmt(nx.capacity)}`),
-      h('small', nx.locked ? `Ollie can do it from level ${nx.unlock}` : `+${fmt(nx.add)} room for everything the farm makes`))),
+    h('header', h('span.hb-n', String(nx.n)), h('div', h('h3', t('market.ladder.next', { n: nx.n, cap: nx.capacity })),
+      h('small', nx.locked ? t('market.ladder.ollie', { n: nx.unlock }) : t('market.ladder.add', { n: nx.add })))),
     h('div.hb-cost',
       h('span.pn-cost.hb-coins', svgIcon('coin', 24), h('b', fmt(nx.coins))),
       ...nx.need.map((x) => chip(x.item, { have: x.have, need: x.n, size: 34, label: true }))),
     nx.missing.length && !v.sawmill && nx.missing.some((m) => m.item === PLANKS || m.item === CRATES)
-      ? hintable(h('p.hb-tip', svgIcon('hammer', 18), 'Planks and Crates come from the Sawmill (Market › Buildings): 1 Wood makes 2 Planks in 10 minutes.'), PLANKS)
+      ? hintable(h('p.hb-tip', svgIcon('hammer', 18), t('market.ladder.sawmill')), PLANKS)
       : null,
-    kit.button({ label: `Upgrade the Barn`, glyph: 'hammer', cls: 'btn--sun', type: () => I.barnUpgrade().type, args: () => I.barnUpgrade().args,
+    kit.button({ label: t('market.ladder.btn'), glyph: 'hammer', cls: 'btn--sun', type: () => I.barnUpgrade().type, args: () => I.barnUpgrade().args,
       data: { upgrade: 'barn' },
       gate: () => {
         const x = nextBarnUpgrade(ctx.store.state);
-        if (!x) return { code: 'ALREADY_DONE', hint: { done: 'As big as it gets for now' } };
+        if (!x) return { code: 'ALREADY_DONE', hint: { done: t('market.barn.maxNow') } };
         if (x.locked) return { code: 'LOCKED', hint: { unlock: x.unlock } };
         if (x.missing.length) return { code: 'NO_ITEMS', hint: { missing: x.missing } };
         if (x.short) return { code: 'NO_COINS', hint: { coins: x.short } };
@@ -92,30 +89,33 @@ function outlook(v) {
   const line = (id, want, got) => {
     const ok = got >= want;
     return hintable(h(`li${ok ? '.ok' : ''}`, icon(id, { size: 28, alt: '' }),
-      h('span', `${counted(want, id)} in all · ${fmt(got)} in the barn`),
-      ok ? h('b.hb-ok', 'enough') : h('b.hb-short', `${fmt(want - got)} to go`)), id, { need: want, tab: true });
+      h('span', t('market.ladder.inAll', { all: counted(want, id), n: got })),
+      ok ? h('b.hb-ok', t('market.ladder.enough')) : h('b.hb-short', t('market.ladder.toGo', { n: want - got }))), id, { need: want, tab: true });
   };
   return h('section.hb-outlook',
-    h('h4', v.ahead === 1 ? 'The last upgrade needs' : `The ${v.ahead} upgrades still to come need`),
+    h('h4', v.ahead === 1 ? t('market.ladder.lastNeeds') : t('market.ladder.restNeed', { n: v.ahead })),
     h('ul', line(PLANKS, v.need.planks, v.have.planks), v.need.crates ? line(CRATES, v.need.crates, v.have.crates) : null,
-      h('li', svgIcon('coin', 28), h('span', `${fmt(v.need.coins)} coins in all`))));
+      h('li', svgIcon('coin', 28), h('span', t('market.ladder.coinsAll', { n: v.need.coins })))));
 }
 
 function ladder(v) {
-  return h('ol.hb-ladder', { 'aria-label': 'Every Barn upgrade' },
+  return h('ol.hb-ladder', { 'aria-label': t('market.ladder.aria') },
     ...v.rungs.slice().reverse().map((r) => {
-      const [word, cls] = STATUS[r.status];
+      const word = t(`market.ladder.status.${r.status}`);
+      const cls = STATUS_CLS[r.status];
       return h(`li.hb-rung.hb-${r.status}`, { dataset: { rung: String(r.n) } },
         h('span.hb-rung-n', r.status === 'done' || (r.status === 'start' && v.n === 0) ? '✓' : String(r.n)),
-        h('div.hb-rung-main', h('b', r.n === 0 ? `The first barn · ${fmt(r.capacity)}` : `Room for ${fmt(r.capacity)}`),
-          h('small', r.n === 0 ? 'Grandma\'s barn' : `+${fmt(r.add)} · level ${r.unlock} · ${fmt(r.cost)} coins, ${r.planks} Planks${r.crates ? `, ${r.crates} Crate${r.crates === 1 ? '' : 's'}` : ''}`)),
+        h('div.hb-rung-main', h('b', r.n === 0 ? t('market.ladder.first', { n: r.capacity }) : t('market.ladder.room', { n: r.capacity })),
+          h('small', r.n === 0 ? t('market.ladder.grandma') : r.crates
+            ? t('market.ladder.rungCrates', { add: r.add, lv: r.unlock, cost: r.cost, planks: r.planks, n: r.crates })
+            : t('market.ladder.rung', { add: r.add, lv: r.unlock, cost: r.cost, planks: r.planks }))),
         h('div.hb-rung-cap', bar(Math.min(1, r.capacity / Math.max(1, v.top)), null, `pn-thin${r.status === 'done' || r.status === 'start' ? ' pn-go' : ''}`)),
         pill(word, cls));
     }));
 }
 
 export const barnUpgradesPanel = {
-  title: 'Barn upgrades',
+  title: () => phoneTitle('market.ladder.title', 'market.ladder.titleShort'),
   icon: 'barn',
   size: 'wide',
   topics: ['barn', 'inventory', 'overflow', 'wallet', 'xp', 'objects'],
@@ -137,13 +137,13 @@ export const barnUpgradesPanel = {
       fill(body,
         h('div.hb-wrap',
           h('div.hb-left',
-            h('div.hb-art', barnArt(v.n, { capacity: v.cap, fresh, label: `The Barn after ${v.n} upgrade${v.n === 1 ? '' : 's'}: room for ${fmt(v.cap)} items` })),
-            h('div.hb-fill', h('div.hb-fill-line', h('b', `${fmt(v.used)} / ${fmt(v.cap)}`), h('span', 'items stored'),
-              v.over > 0 ? pill(`${fmt(v.over)} in overflow`, 'pn-warn') : null),
+            h('div.hb-art', barnArt(v.n, { capacity: v.cap, fresh, label: t('market.ladder.artLabel', { n: v.n, cap: v.cap }) })),
+            h('div.hb-fill', h('div.hb-fill-line', h('b', `${fmt(v.used)} / ${fmt(v.cap)}`), h('span', t('market.barn.stored')),
+              v.over > 0 ? pill(t('market.barn.inOverflow', { n: v.over }), 'pn-warn') : null),
             bar(Math.min(1, pct), null, v.status === 'ok' ? 'pn-go' : v.status === 'near' ? '' : 'pn-over'),
-            h('small', `Upgrade ${fmt(v.n)} of ${fmt(v.max)} · the biggest barn holds ${fmt(v.top)}`))),
+            h('small', t('market.ladder.of', { n: v.n, max: v.max, top: v.top })))),
           h('div.hb-right', nextCard(ctx, kit, v), outlook(v))),
-        h('h3.pn-h.hb-h', h('span', 'Every upgrade')),
+        h('h3.pn-h.hb-h', h('span', t('market.barn.every'))),
         ladder(v));
       kit.refresh();
     }

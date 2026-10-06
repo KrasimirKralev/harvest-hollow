@@ -14,6 +14,7 @@
 import { svgIcon } from '../ui/dom.js';
 import { footprint } from '../../../shared/rules/grid.js';
 import { defOf } from '../../../shared/content/index.js';
+import { t, onLang } from '../i18n/index.js';
 
 const CSS = `
 .touch-build { position: fixed; left: 0; top: 0; z-index: 20; display: flex; gap: 14px; align-items: center;
@@ -73,31 +74,40 @@ export function createTouchBuild({ controller, view, ui = null, doc = document }
     st.textContent = CSS;
     doc.head.append(st);
   }
+  // label / caption are catalog keys: a language switch re-labels the bar (relabel below)
   const mk = (cls, label, glyph, fn, caption = label) => {
     const b = doc.createElement('button');
     b.type = 'button';
     b.className = `btn btn--round ${cls}`;
-    b.setAttribute('aria-label', label);
-    b.title = label;
+    b.dataset.label = label;
+    b.dataset.caption = caption;
     b.append(svgIcon(glyph, cls.includes('tb-place') ? 34 : 28));
     const cap = doc.createElement('span');
     cap.className = 'tb-cap';
     cap.setAttribute('aria-hidden', 'true');
-    cap.textContent = caption;
     b.append(cap);
     b.addEventListener('click', (e) => { e.stopPropagation(); fn(); });
     return b;
   };
-  const turn = mk('btn--wood tb-turn', 'Rotate it', 'rotr', () => controller.rotate(), 'Rotate');
-  const cancel = mk('btn--stop tb-cancel', 'Cancel', 'close', () => controller.cancel(), 'Cancel');
-  const place = mk('tb-place', 'Put it here', 'check', () => controller.confirm(), 'Place');
+  const turn = mk('btn--wood tb-turn', 'game.build.rotateIt', 'rotr', () => controller.rotate(), 'game.build.rotate');
+  const cancel = mk('btn--stop tb-cancel', 'common.cancel', 'close', () => controller.cancel(), 'common.cancel');
+  const place = mk('tb-place', 'game.build.putHere', 'check', () => controller.confirm(), 'game.build.place');
   // Del on a keyboard: a piece being moved goes into storage (mobile QA M-06: a phone had no way to put one away)
-  const away = mk('btn--wood tb-away', 'Put it away', 'crate', () => controller.storeHeld?.(), 'Put away');
+  const away = mk('btn--wood tb-away', 'game.build.putAway', 'crate', () => controller.storeHeld?.(), 'game.build.away');
   const el = doc.createElement('div');
   el.className = 'touch-build';
   el.id = 'touch-build';
   el.setAttribute('role', 'toolbar');
-  el.setAttribute('aria-label', 'Placing');
+  const relabel = () => {
+    for (const b of [turn, cancel, place, away]) {
+      b.setAttribute('aria-label', t(b.dataset.label));
+      b.title = t(b.dataset.label);
+      b.querySelector('.tb-cap').textContent = t(b.dataset.caption);
+    }
+    el.setAttribute('aria-label', t('game.build.placing'));
+  };
+  relabel();
+  onLang(relabel);
   el.hidden = true;
   away.hidden = true;
   el.append(away, turn, cancel, place);
@@ -134,8 +144,8 @@ export function createTouchBuild({ controller, view, ui = null, doc = document }
     if (!show) return;
     // a red ghost cannot go down: the ✓ says so (the ghost's own badge says why)
     place.setAttribute('aria-disabled', String(!b.valid));
-    place.setAttribute('aria-label', b.moveId ? 'Put it here' : 'Place it here');
-    cancel.setAttribute('aria-label', b.moveId ? 'Leave it where it was' : 'Cancel');
+    place.setAttribute('aria-label', t(b.moveId ? 'game.build.putHere' : 'game.build.placeHere'));
+    cancel.setAttribute('aria-label', t(b.moveId ? 'game.build.leave' : 'common.cancel'));
     // only decor goes back into the tray (a Masterwork piece neither): a building or a landmark has no "Put it away"
     const canAway = Boolean(b.moveId) && typeof controller.storeHeld === 'function' && b.storable === true;
     if (away.hidden === canAway) { away.hidden = !canAway; lastT = ''; }

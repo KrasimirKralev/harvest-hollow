@@ -3,10 +3,11 @@
 // decor sold in the last 10 minutes with Undo. Placed decor sells from the Hammer's hint (toolbar.js). Loaded on first
 // open (panels/w4.js lazyPanel).
 import { defOf } from '../../../../shared/content/index.js';
-import { h, icon, svgIcon, fmt, createKit, fill, price } from './kit.js';
+import { h, icon, svgIcon, fmt, createKit, fill, price, tParts } from './kit.js';
 import { actFor } from './w4-rules.js';
 import { storedDecor, sellStoredQuote } from './w4-model.js';
 import { sellStored, undoSale, simulatedGain } from './w4-flows.js';
+import { t, name as cname } from '../../i18n/index.js';
 
 /** Decor sold in the last 10 minutes (farm.trash): placed pieces (`obj`) and tray copies (`tray`), newest first. */
 export function soldDecor(state, now) {
@@ -34,9 +35,9 @@ export const decorSellPanel = {
       const sold = soldDecor(st, ctx.now());
       // what was just sold comes first: its Undo runs out
       fill(body,
-        sold.length ? h('section.pn-section', h('h3.pn-h', h('span', 'Sold lately')), h('ul.ds-list.ds-sold', ...sold.map((s) => soldRow(st, s)))) : null,
-        h('p.pn-intro', 'Decor in your tray can go back to the shop for a share of its price. Changed your mind? Undo works for 10 minutes.'),
-        list.length ? h('ul.ds-list', ...list.map((d) => row(st, d))) : h('div.pn-empty', svgIcon('flower', 44), h('p', 'No decor waits in the tray. Put a piece away with the Hammer (Del) to sell it here, or sell a placed piece from the Hammer\'s hint.')));
+        sold.length ? h('section.pn-section', h('h3.pn-h', h('span', t('market.decorSell.lately'))), h('ul.ds-list.ds-sold', ...sold.map((s) => soldRow(st, s)))) : null,
+        h('p.pn-intro', t('market.decorSell.intro')),
+        list.length ? h('ul.ds-list', ...list.map((d) => row(st, d))) : h('div.pn-empty', svgIcon('flower', 44), h('p', t('market.decorSell.none'))));
       kit.refresh();
       kit.tick();
     }
@@ -46,22 +47,24 @@ export const decorSellPanel = {
       const q = sellStoredQuote(st, d.def) ?? simulatedGain(ctx.store, type, { def: d.def }) ?? { coins: 0, acorns: 0 };
       return h('li.ds-row', { dataset: { def: d.def } },
         icon(d.def, { size: 48, alt: '' }),
-        h('div.ds-main', h('b', d.name), h('small', d.n > 1 ? `${fmt(d.n)} in the tray` : 'In the tray'),
-          q.coins || q.acorns ? h('span.ds-each', 'Sells for ', price(q), d.n > 1 ? ' each' : '')
-            : h('span.ds-each.gift', 'A gift: the shop pays nothing for it')),
-        kit.button({ label: 'Sell…', cls: 'btn--paper pn-sm', key: `ds:${d.def}`, type, args: { def: d.def },
+        h('div.ds-main', h('b', d.name), h('small', d.n > 1 ? t('market.decorSell.inTrayN', { n: d.n }) : t('market.decorSell.inTray')),
+          q.coins || q.acorns ? h('span.ds-each', tParts(d.n > 1 ? 'market.decorSell.sellsForEach' : 'market.decorSell.sellsFor', { price: price(q) }))
+            : h('span.ds-each.gift', t('market.decorSell.gift'))),
+        kit.button({ label: t('market.decorSell.sell'), cls: 'btn--paper pn-sm', key: `ds:${d.def}`, type, args: { def: d.def },
           onClick: () => { sellStored(S, d.def).then(() => update(true)); } }));
     }
 
     function soldRow(st, s) {
-      const who = s.by === ctx.store.pid ? 'You' : st.players?.[s.by]?.name ?? 'Your partner';
+      const mine = s.by === ctx.store.pid;
+      const who = st.players?.[s.by]?.name ?? t('common.partner');
       const left = h('small.ds-left');
-      kit.timer(left, { end: s.until, prefix: 'Undo for ', doneText: 'Too late to undo' });
+      kit.timer(left, { end: s.until, prefix: t('market.decorSell.undoFor'), doneText: t('market.decorSell.tooLate') });
+      const key = `market.decorSell.sold${mine ? 'You' : 'By'}${s.tray ? 'Tray' : ''}`;
       return h('li.ds-row.sold', { dataset: { id: s.id } },
         icon(s.def, { size: 40, alt: '' }),
-        h('div.ds-main', h('b', defOf(s.def)?.name ?? s.def), h('small', `${who} sold it${s.tray ? ' from the tray' : ''} for `, price(s)), left),
-        kit.button({ label: 'Undo', cls: 'btn--sky pn-sm', key: `ds:undo:${s.id}`, type: actFor('restore'), args: { id: s.id },
-          hint: { texts: { NO_COINS: 'The coins it fetched are spent', NOT_FOUND: 'Too late to undo' } },
+        h('div.ds-main', h('b', defOf(s.def) ? cname(s.def) : s.def), h('small', tParts(key, { who, price: price(s) })), left),
+        kit.button({ label: t('market.barn.undo'), cls: 'btn--sky pn-sm', key: `ds:undo:${s.id}`, type: actFor('restore'), args: { id: s.id },
+          hint: { texts: { NO_COINS: t('market.decorSell.spent'), NOT_FOUND: t('market.decorSell.tooLate') } },
           onClick: () => { undoSale(S, s.id); update(true); } }));
     }
 

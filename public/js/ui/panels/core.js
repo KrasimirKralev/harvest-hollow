@@ -18,6 +18,7 @@ import { ACTIONS, runAction, makeCtx } from '../../../../shared/rules/index.js';
 import { parseArgs } from '../../../../shared/rules/schema.js';
 import { ERR, SOFT } from '../../../../shared/net/protocol.js';
 import { itemOf, levelFromXp } from '../../../../shared/content/index.js';
+import { t, N, Q } from '../../i18n/index.js';
 
 /** A cid that can never be a real client's (real cids are base-36 [a-z0-9]): previews never collide. */
 const PROBE_CID = 'zzprobe';
@@ -99,8 +100,6 @@ export const countOwned = (state, defId) => objectsOf(state, defId).length;
 
 // ---- reasons ----------------------------------------------------------------------------------------------------
 
-const NUM = new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 });
-const fmt = (n) => NUM.format(Math.trunc(Number(n) || 0));
 
 /**
  * One friendly sentence for why a button is off (GDD §7.2: the reason is shown BEFORE the click). `hint` makes
@@ -112,43 +111,47 @@ export function reason(code, hint = {}) {
   switch (code) {
     case null: case undefined: return '';
     case ERR.NO_COINS:
-      if (hint.coins > 0) return `Need ${fmt(hint.coins)} more coins`;
-      if (hint.acorns > 0) return `Need ${fmt(hint.acorns)} more Acorn${hint.acorns === 1 ? '' : 's'}`;
-      return 'Not enough coins';
+      if (hint.coins > 0) return t('market.why.moreCoins', { n: hint.coins });
+      if (hint.acorns > 0) return t('market.why.moreAcorns', { n: hint.acorns });
+      return t('market.why.noCoins');
     case ERR.NO_ACORNS:
-      return hint.acorns > 0 ? `Need ${fmt(hint.acorns)} more Acorn${hint.acorns === 1 ? '' : 's'}` : 'Not enough Acorns';
+      return hint.acorns > 0 ? t('market.why.moreAcorns', { n: hint.acorns }) : t('market.why.noAcorns');
     case ERR.NO_ITEMS: {
       const m = hint.missing && hint.missing[0];
       if (m) {
         const it = itemOf(m.item);
-        const more = hint.missing.length > 1 ? ` (+${hint.missing.length - 1} more)` : '';
-        return `Need ${fmt(m.n)} more ${m.label ?? (it ? it.name : m.item)}${more}`;
+        const more = hint.missing.length - 1;
+        // a class row ("grain (any)") or an unknown id has no name in the table: its label goes in as it is
+        const line = m.label != null || !it
+          ? t('market.why.moreLabel', { n: m.n, label: m.label ?? m.item })
+          : t('market.why.moreItem', { n: m.n, item: N(m.item), q: Q(m.item, m.n) });
+        return more > 0 ? t('market.why.andMore', { line, more }) : line;
       }
-      if (hint.acorns > 0) return `Need ${fmt(hint.acorns)} more Acorn${hint.acorns === 1 ? '' : 's'}`;
-      return 'Not enough in the barn';
+      if (hint.acorns > 0) return t('market.why.moreAcorns', { n: hint.acorns });
+      return t('market.why.noItems');
     }
-    case ERR.LOCKED: return hint.unlock ? `Unlocks at level ${hint.unlock}` : 'Not unlocked yet';
-    case ERR.CAP: return hint.cap ? `Limit reached (${hint.cap})` : 'Limit reached for this level';
-    case ERR.QUEUE_FULL: return 'Every slot is busy';
-    case ERR.STORAGE_FULL: return 'The Barn is overflowing: sell some first';
-    case ERR.NOT_READY: return hint.what ? `${hint.what} is not ready yet` : 'Not ready yet';
-    case ERR.NOT_HUNGRY: return 'Not hungry right now';
-    case ERR.EMPTY: return 'Nothing waiting here';
-    case ERR.OCCUPIED: return 'Already busy';
-    case ERR.ALREADY_DONE: return hint.done || 'Already done';
-    case ERR.COOLDOWN: return hint.at ? `Again ${hint.at}` : 'Not again just yet';
-    case ERR.NOT_REFUNDABLE: return 'No longer refundable';
-    case ERR.SELF_ONLY: return 'Only the other farmer can do this';
-    case ERR.NOT_FOUND: return "That's gone";
-    case ERR.BLOCKED: return "That spot isn't free";
-    case ERR.OUT_OF_BOUNDS: return "That land isn't ours yet";
-    case ERR.OFFLINE: return 'Reconnecting to the farm...';
-    case ERR.NOT_JOINED: return 'Connecting to the farm...';
-    case ERR.RATE: return 'Easy there, farmer';
-    case ERR.UNKNOWN_ACTION: return 'Not open yet';
-    case ERR.RESERVED: return hint.name ? `${hint.name} is keeping some` : 'Some of these are kept';
-    case ERR.PINNED: return hint.name ? `${hint.name} pinned this` : 'Pinned by your partner';
-    case ERR.BIG_SPEND: return 'A big purchase: your partner gets a heads-up';
-    default: return "Can't right now";
+    case ERR.LOCKED: return hint.unlock ? t('market.why.unlockAt', { n: hint.unlock }) : t('market.why.locked');
+    case ERR.CAP: return hint.cap ? t('market.why.capN', { cap: hint.cap }) : t('market.why.cap');
+    case ERR.QUEUE_FULL: return t('market.why.queueFull');
+    case ERR.STORAGE_FULL: return t('market.why.storageFull');
+    case ERR.NOT_READY: return hint.what ? t('market.why.notReadyWhat', { what: hint.what }) : t('market.why.notReady');
+    case ERR.NOT_HUNGRY: return t('market.why.notHungry');
+    case ERR.EMPTY: return t('market.why.empty');
+    case ERR.OCCUPIED: return t('market.why.occupied');
+    case ERR.ALREADY_DONE: return hint.done || t('market.why.done');
+    case ERR.COOLDOWN: return hint.at ? t('market.why.again', { at: hint.at }) : t('market.why.cooldown');
+    case ERR.NOT_REFUNDABLE: return t('market.why.notRefundable');
+    case ERR.SELF_ONLY: return t('market.why.selfOnly');
+    case ERR.NOT_FOUND: return t('market.why.notFound');
+    case ERR.BLOCKED: return t('market.why.blocked');
+    case ERR.OUT_OF_BOUNDS: return t('market.why.outOfBounds');
+    case ERR.OFFLINE: return t('market.why.offline');
+    case ERR.NOT_JOINED: return t('market.why.notJoined');
+    case ERR.RATE: return t('market.why.rate');
+    case ERR.UNKNOWN_ACTION: return t('market.why.unknown');
+    case ERR.RESERVED: return hint.name ? t('market.why.reservedBy', { name: hint.name }) : t('market.why.reserved');
+    case ERR.PINNED: return hint.name ? t('market.why.pinnedBy', { name: hint.name }) : t('market.why.pinned');
+    case ERR.BIG_SPEND: return t('market.why.bigSpend');
+    default: return t('market.why.default');
   }
 }

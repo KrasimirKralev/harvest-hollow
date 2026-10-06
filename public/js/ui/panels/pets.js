@@ -13,6 +13,10 @@ import { h, svgIcon, fmt, createKit, fill, hintable } from './kit.js';
 import { levelOf, available } from './core.js';
 import { actFor, canAct, takesArg, breedsOf, breedOf, breedName } from './w4-rules.js';
 import { petFace } from './pet-art.js';
+import { t, lang, list, ctext, name as cname } from '../../i18n/index.js';
+
+/** A pet kind's name ("Dog" / "Куче"; lane B: PETS['kind.<id>'].name). */
+const kindName = (k) => ctext('PETS', `kind.${k.id}`, 'name', k.name);
 
 const today = (state, now) => dayIndex(now, state.meta.tz);
 
@@ -32,7 +36,7 @@ export function petsView(state, me, now) {
       fedToday: Boolean(pet && pet.fed === day),
       pettedByMe: Boolean(pet && pet.pets && pet.pets.day === day && pet.pets.by.includes(me)),
       pettedBy: pet && pet.pets && pet.pets.day === day ? [...pet.pets.by] : [],
-      treat, treats: treat ? available(state, treat) : 0, treatName: treat ? itemOf(treat)?.name ?? treat : null,
+      treat, treats: treat ? available(state, treat) : 0, treatName: treat ? (itemOf(treat) ? cname(treat) : treat) : null,
       home: kind ? kind.home : null, homePlaced: Boolean(kind && homes.has(kind.home)),
       breed: pet ? breedOf(pet) : null, breedName: pet ? breedName(pet.kind, breedOf(pet)) : null,
     };
@@ -52,14 +56,14 @@ export function petsBadge(state, pid, now) {
 function adoptCard(ctx, kit) {
   let kind = PETS.kinds[0].id;
   let breed = breedsOf(kind)[0]?.id ?? null;
-  const input = h('input.pc-pet-name', { type: 'text', maxLength: 16, placeholder: 'Its name', 'aria-label': 'Your pet\'s name',
+  const input = h('input.pc-pet-name', { type: 'text', maxLength: 16, placeholder: t('home.pets.namePh'), 'aria-label': t('home.pets.nameAria'),
     on: { input: () => kit.refresh(), keydown: (e) => e.stopPropagation() } });
-  const choices = h('div.pc-pet-kinds', { role: 'radiogroup', 'aria-label': 'Dog or cat' });
-  const breeds = h('div.pc-breeds', { role: 'radiogroup', 'aria-label': 'Breed' });
+  const choices = h('div.pc-pet-kinds', { role: 'radiogroup', 'aria-label': t('home.pets.kind') });
+  const breeds = h('div.pc-breeds', { role: 'radiogroup', 'aria-label': t('home.pets.breed') });
   const drawChoices = () => choices.replaceChildren(...PETS.kinds.map((k) => h(`button.pc-pet-kind${k.id === kind ? '.on' : ''}`, {
     type: 'button', role: 'radio', 'aria-checked': String(k.id === kind),
     on: { click: () => { kind = k.id; breed = breedsOf(kind)[0]?.id ?? null; drawChoices(); drawBreeds(); kit.refresh(); } },
-  }, petFace(k.id, k.id === kind ? breed : null, { size: 56 }), h('b', k.name))));
+  }, petFace(k.id, k.id === kind ? breed : null, { size: 56 }), h('b', kindName(k)))));
   // the breed (wave 4, wish 6): three of each, changeable later on this page
   const drawBreeds = () => breeds.replaceChildren(...breedsOf(kind).map((b) => breedButton(kind, b, b.id === breed, () => {
     breed = b.id; drawChoices(); drawBreeds();
@@ -68,13 +72,13 @@ function adoptCard(ctx, kit) {
   drawBreeds();
   const withBreed = takesArg('adoptPet', 'breed');
   return h('article.pc-pet.pc-pet-adopt',
-    h('h3', 'Adopt your pet'),
-    h('p', 'A dog or a cat of your own: it follows you about the farm. One treat a day and it brings you a find the next morning.'),
+    h('h3', t('home.pets.adoptTitle')),
+    h('p', t('home.pets.adoptText')),
     choices,
-    withBreed ? h('div.pc-breed-pick', h('b.pc-breed-lbl', 'Breed'), breeds) : null,
+    withBreed ? h('div.pc-breed-pick', h('b.pc-breed-lbl', t('home.pets.breed')), breeds) : null,
     input,
-    kit.button({ label: 'Adopt', glyph: 'heart', cls: 'btn--sun', type: actFor('adoptPet'),
-      args: () => ({ kind, name: String(input.value ?? '').trim() || PETS.kinds.find((k) => k.id === kind).name, ...(withBreed && breed ? { breed } : {}) }) }));
+    kit.button({ label: t('home.pets.adopt'), glyph: 'heart', cls: 'btn--sun', type: actFor('adoptPet'),
+      args: () => ({ kind, name: String(input.value ?? '').trim() || kindName(PETS.kinds.find((k) => k.id === kind)), ...(withBreed && breed ? { breed } : {}) }) }));
 }
 
 /** One breed in a picker: its portrait and name (a radio). */
@@ -87,45 +91,46 @@ function petCard(ctx, kit, p) {
   const st = ctx.store.state;
   if (!p.pet) {
     return h('article.pc-pet.pc-pet-none', { style: { '--who': p.color } },
-      h('h3', `${p.owner} has no pet yet`), h('p', 'Every farmer adopts their own dog or cat from this page.'));
+      h('h3', t('home.pets.none', { name: p.owner })), h('p', t('home.pets.noneText')));
   }
+  const by = p.pettedBy.map((x) => (x === ctx.store.pid ? t('home.fish.you') : st.players[x]?.name ?? t('home.breed.partner')));
   const lines = [
-    p.fedToday ? `Had today's ${p.treatName}: a find tomorrow morning` : `Would love a ${p.treatName} today (${fmt(p.treats)} in the barn)`,
-    p.pettedBy.length ? `Petted today by ${p.pettedBy.map((x) => (x === ctx.store.pid ? 'you' : st.players[x]?.name ?? 'your partner')).join(' and ')}`
-      : 'Nobody has petted it today',
+    p.fedToday ? t('home.pets.fed', { treat: p.treatName }) : t('home.pets.wants', { treat: p.treatName, n: p.treats }),
+    p.pettedBy.length ? t('home.pets.pettedBy', { who: lang() === 'en' ? by.join(' and ') : list(by) }) : t('home.pets.notPetted'),
   ];
-  if (!p.homePlaced && p.home) lines.push(`Its home: the ${defOf(p.home)?.name ?? p.home} (decor, in the Market) gives it a place to wait and to sleep at night`);
-  else if (p.home) lines.push(`Sleeps in its ${defOf(p.home)?.name ?? 'home'} at night 💤 and wakes with the morning`);
+  if (!p.homePlaced && p.home) lines.push(t('home.pets.homeHint', { home: defOf(p.home) ? cname(p.home) : p.home }));
+  else if (p.home) lines.push(t('home.pets.sleeps', { home: defOf(p.home) ? cname(p.home) : t('home.pets.homeWord') }));
   const change = p.mine && canAct('petBreed') && breedsOf(p.pet.kind).length > 1;
   const picker = change ? breedPicker(ctx, p) : null;
   return h(`article.pc-pet${p.mine ? '.mine' : ''}`, { style: { '--who': p.color }, dataset: { owner: p.pid } },
-    h('div.pc-pet-head', h('span.pc-pet-face', petFace(p.pet.kind, p.breed, { size: 68, label: `${p.pet.name}, a ${p.breedName}` })),
-      h('div', h('h3', p.pet.name), h('small', `${p.mine ? 'Your' : `${p.owner}'s`} ${p.breedName ?? p.kind?.name.toLowerCase() ?? 'pet'}`)),
+    h('div.pc-pet-head', h('span.pc-pet-face', petFace(p.pet.kind, p.breed, { size: 68, label: t('home.pets.face', { name: p.pet.name, breed: p.breedName }) })),
+      h('div', h('h3', p.pet.name), h('small', t(p.mine ? 'home.pets.yours' : 'home.pets.theirs', { owner: p.owner,
+        what: p.breedName ?? (p.kind ? (lang() === 'en' ? p.kind.name.toLowerCase() : kindName(p.kind)) : t('home.pets.petWord')) }))),
       change ? h('button.btn.btn--paper.pn-xs.pc-breed-toggle', { type: 'button', 'aria-expanded': 'false',
-        on: { click: (e) => { const open = picker.hidden; picker.hidden = !open; e.currentTarget.setAttribute('aria-expanded', String(open)); } } }, 'Change breed') : null),
+        on: { click: (e) => { const open = picker.hidden; picker.hidden = !open; e.currentTarget.setAttribute('aria-expanded', String(open)); } } }, t('home.pets.change')) : null),
     picker,
     // the treat line names what it wants: hovering or holding it says where Dog Biscuits and Cat Treats come from
     h('ul.pc-pet-lines', ...lines.map((l, i) => (i === 0 && !p.fedToday && p.treat ? hintable(h('li', l), p.treat) : h('li', l)))),
     h('div.pc-pet-acts',
-      kit.button({ label: `Give a ${p.treatName}`, icon: p.treat, cls: 'pn-sm', type: 'feedPet', args: { owner: p.pid },
+      kit.button({ label: t('home.pets.give', { treat: p.treatName }), icon: p.treat, cls: 'pn-sm', type: 'feedPet', args: { owner: p.pid },
         quiet: ['ALREADY_DONE'], hint: p.treat ? { missing: [{ item: p.treat, n: 1 }] } : {} }),
-      kit.button({ label: p.pettedByMe ? 'Petted ♥' : 'Pet', glyph: 'heart', cls: 'pn-sm btn--paper', type: 'petPet',
+      kit.button({ label: p.pettedByMe ? t('home.pets.petted') : t('home.pets.pet'), glyph: 'heart', cls: 'pn-sm btn--paper', type: 'petPet',
         args: { owner: p.pid }, quiet: ['ALREADY_DONE'] })));
 }
 
 /** My pet's breed, changeable any time for free (wave 4, wish 6: rules petBreed { breed }). Folded until asked for. */
 function breedPicker(ctx, p) {
-  const box = h('div.pc-breeds.pc-breed-change', { role: 'radiogroup', 'aria-label': `${p.pet.name}'s breed`, hidden: true });
+  const box = h('div.pc-breeds.pc-breed-change', { role: 'radiogroup', 'aria-label': t('home.pets.breedOf', { name: p.pet.name }), hidden: true });
   box.append(...breedsOf(p.pet.kind).map((b) => breedButton(p.pet.kind, b, b.id === p.breed, () => {
     if (b.id === p.breed) return;
     const r = ctx.act(actFor('petBreed'), { breed: b.id });
-    if (r?.ok) ctx.ui.toast(`${p.pet.name} is a ${b.name} now 🐾`, { kind: 'ok' });
+    if (r?.ok) ctx.ui.toast(() => t('home.pets.nowBreed', { name: p.pet.name, breed: breedsOf(p.pet.kind).find((x) => x.id === b.id)?.name ?? b.name }), { kind: 'ok' });
   })));
   return box;
 }
 
 export const petsPanel = {
-  title: 'Pets',
+  title: () => t('home.pets.title'),
   icon: 'dog_house',
   size: 'wide',
   topics: ['players', 'inventory', 'overflow', 'objects', 'xp'],
@@ -142,14 +147,14 @@ export const petsPanel = {
       const v = petsView(ctx.store.state, ctx.store.pid, ctx.now());
       if (!v.open) {
         fill(body, h('div.pc-pet-locked', svgIcon('lock', 36),
-          h('p', v.live ? `Pets come to the farm at level ${v.unlock}.` : 'Pets are coming to the valley soon.')));
+          h('p', v.live ? t('home.pets.comeAt', { n: v.unlock }) : t('home.pets.soon'))));
         return;
       }
       const mine = v.pets.find((p) => p.mine);
       fill(body, h('div.pc-pets',
         mine && !mine.pet ? adoptCard(ctx, kit) : null,
         ...v.pets.filter((p) => !(p.mine && !p.pet)).map((p) => petCard(ctx, kit, p)),
-        h('p.pc-pet-note', 'Both of you pet both pets on one day: each digs up a second find. An unfed pet simply waits.')));
+        h('p.pc-pet-note', t('home.pets.note'))));
       kit.refresh();
     }
     return { update: () => { update(); kit.refresh(); } };

@@ -22,24 +22,32 @@
 //   localGoals(state, pid, now) -> [card]                (pure; tests)
 //   storyCards(state, now) -> [{ id, title, sub, icon, progress, done }]   (pure; tests)
 import {
-  CONTENT, defOf, cropOf, itemOf, pluralOf, live, liveAt, levelFromXp, xpForLevel, SAFETY,
+  CONTENT, defOf, cropOf, live, liveAt, levelFromXp, xpForLevel, SAFETY,
 } from '../../../shared/content/index.js';
 import { sortedKeys } from '../../../shared/rules/order.js';
 import * as questsR from '../../../shared/rules/actions/quests.js';
-import { goals as rulesGoalsFn, taskLabel } from '../../../shared/rules/goals.js';
+import { goals as rulesGoalsFn } from '../../../shared/rules/goals.js';
+import { taskLabelMsg } from '../../../shared/rules/goal-text.js';
 import { chainArt } from './chains.js';
+import { goalText } from './goal-text.js';
+import { t, tn, ctext, N, qty, nameEntry } from '../i18n/index.js';
 
 /** The Journal tab a quest card is listed on (rules' tabOf: 'story' | 'week' | 'together' -> the tab ids). */
 export const journalTabOf = (q) => {
   const t = q && typeof questsR.tabOf === 'function' ? questsR.tabOf(q) : 'story';
   return t === 'together' ? 'stats' : t === 'week' ? 'week' : 'story';
 };
-import { h, icon, svgIcon, fmt, fmtDuration, kv, touchPlayer } from './dom.js';
+import { h, icon, svgIcon, fmtDuration, kv, touchPlayer } from './dom.js';
 import { nextUnlocks, PHONE_Q } from './hud.js';
 import { TOOL_CONTENT } from './toolbar.js';
 import { treasures, savingOf, relicIcon } from './panels/w4b-rules.js';
 import { hasIcon } from '../render/icons.js';
 import { localSaving } from './panels/w4b.js';
+
+/** A content name for a card: the Bulgarian ref when the names table has one, else the English the code holds. */
+const nm = (id, en, family) => (nameEntry(id, family) ? N(id, family) : en);
+/** A quest's title in the language in effect. */
+const questTitle = (id, q) => ctext('quests', id, 'title', q.title);
 
 /** Panel names the rules' goal targets use for a panel registered under another name (wave 4). */
 const PANEL_ALIAS = Object.freeze({ upgrade: 'upgrades' });
@@ -70,14 +78,21 @@ function firstOf(state, pred) {
   return null;
 }
 
-const cap = (t) => (t ? t[0].toUpperCase() + t.slice(1) : t);
+const cap = (x) => (x ? x[0].toUpperCase() + x.slice(1) : x);
+/** t() under a name that the card code's local `t` (a target) never shadows. */
+const tr = (key, params) => t(key, params);
+/** A content name as text for a card line. */
+const nmText = (id, en, family) => (nameEntry(id, family) ? t('goals.tr.name', { x: N(id, family) }) : en);
 
-/** Split "A — B" / "A: B" / "Build the X (2,600). You have 3,292" texts into a short title and a sub line. */
+/**
+ * Split "A — B" / "A: B" / "Build the X (2,600). You have 3,292" texts into a short title and a sub line. Bulgarian
+ * writes the dash as " – " and runs about a quarter longer, so its title may be longer before the colon.
+ */
 function splitText(text) {
-  const dash = text.indexOf(' — ');
+  const dash = text.search(/ [—–] /);
   if (dash > 0) return [text.slice(0, dash), cap(text.slice(dash + 3))];
   const colon = text.indexOf(': ');
-  if (colon > 0 && colon < 34) return [text.slice(0, colon), cap(text.slice(colon + 2))];
+  if (colon > 0 && colon < (/[а-я]/i.test(text) ? 44 : 34)) return [text.slice(0, colon), cap(text.slice(colon + 2))];
   const stop = text.indexOf('. ');
   if (stop > 0 && stop < 40 && text.length > 40) return [text.slice(0, stop), cap(text.slice(stop + 2))];
   return [text, ''];
@@ -87,8 +102,7 @@ function splitText(text) {
 export function numbersOf(g, sub = '') {
   if (!Number.isFinite(g.have) || !Number.isFinite(g.need) || g.need <= 0) return '';
   if (/\d/.test(sub)) return '';
-  const unit = g.kind === 'level' ? ' XP' : '';
-  return `${fmt(Math.min(g.have, g.need))} / ${fmt(g.need)}${unit}`;
+  return t(g.kind === 'level' ? 'goals.tr.numbers.xp' : 'goals.tr.numbers', { have: Math.min(g.have, g.need), need: g.need });
 }
 const withNumbers = (g, sub) => {
   const n = numbersOf(g, sub);
@@ -102,11 +116,9 @@ const withNumbers = (g, sub) => {
 export function orderLine(order) {
   if (!order || !order.items) return '';
   const ids = sortedKeys(order.items);
-  const word = (id) => `${fmt(order.items[id])} ${pluralOf(itemOf(id)?.name ?? id.replace(/_/g, ' '), order.items[id])}`;
-  const words = ids.slice(0, 2).map(word);
-  const more = ids.length > 2 ? ` +${ids.length - 2} more` : '';
-  const pay = Number.isSafeInteger(order.coins) && order.coins > 0 ? ` · ${fmt(order.coins)} coins` : '';
-  return `${words.join(', ')}${more}${pay}`;
+  const words = ids.slice(0, 2).map((id) => qty(id, order.items[id], { family: 'items' })).join(', ');
+  const line = ids.length > 2 ? t('goals.tr.order.more', { list: words, n: ids.length - 2 }) : words;
+  return Number.isSafeInteger(order.coins) && order.coins > 0 ? t('goals.tr.order.pay', { line, coins: order.coins }) : line;
 }
 
 /** The Goal Tracker re-ranks at most every RANK_MS (qa2 CL-06: goals() costs 4-25 ms on an L25 farm). */
@@ -126,7 +138,7 @@ export function cardsFromGoals(res, state, pid, now) {
   for (const slot of ['now', 'soon', 'big']) {
     const g = res && res[slot];
     if (!g) continue;
-    const [title, sub0] = splitText(String(g.text || ''));
+    const [title, sub0] = splitText(g.msg ? goalText(g.msg) : String(g.text || ''));
     const card = { slot, kind: g.kind, id: g.id, title, sub: sub0, progress: Number.isFinite(g.have) && g.need ? g.have / g.need : undefined };
     // a target the rules chose (spend / land / seed basket cards) wins over the kind's default below
     const ruleTarget = g.target && typeof g.target === 'object' ? g.target : null;
@@ -139,8 +151,8 @@ export function cardsFromGoals(res, state, pid, now) {
           ?? firstOf(state, (o) => o.def !== 'plot' && Number.isSafeInteger(o.readyAt) && o.readyAt <= now);
         card.icon = t ? (t.o.crop ? t.o.crop.def : t.o.def) : 'basket';
         if (t && Number.isFinite(t.o.x)) card.target = { tile: { x: t.o.x, z: t.o.z }, ...(t && axe(t.o) ? { tool: 'axe' } : {}) };
-        card.sub = card.sub || (t && t.o.crop ? 'Drag the Sickle across them' : t && axe(t.o) ? 'Chop them with the Axe'
-          : (touchPlayer() ? 'Tap them with the Hand' : 'Click them with the Hand'));
+        card.sub = card.sub || tr(t && t.o.crop ? 'goals.tr.collect.sickle' : t && axe(t.o) ? 'goals.tr.collect.axe'
+          : (touchPlayer() ? 'goals.tr.collect.tap' : 'goals.tr.collect.click'));
         break;
       }
       case 'plant': {
@@ -148,7 +160,7 @@ export function cardsFromGoals(res, state, pid, now) {
         const fast = liveAt('crops', level).reduce((a, c) => (!a || c.growMs < a.growMs ? c : a), null);
         const t = firstOf(state, (o) => o.def === 'plot' && !o.crop);
         card.icon = fast ? fast.id : 'seed_bag';
-        card.sub = card.sub || (fast ? `${fast.name} is ready in ${fmtDuration(fast.growMs)}` : '');
+        card.sub = card.sub || (fast ? tr('goals.tr.readyIn', { crop: nm(fast.id, fast.name, 'crops'), d: fmtDuration(fast.growMs) }) : '');
         if (t) card.target = { tile: { x: t.o.x, z: t.o.z }, tool: 'seed' };
         break;
       }
@@ -165,7 +177,7 @@ export function cardsFromGoals(res, state, pid, now) {
       case 'debris': {
         const t = firstOf(state, (o) => CONTENT.debris.has(o.def) && Number.isFinite(o.x));
         card.icon = t ? t.o.def : 'axe';
-        card.sub = card.sub || 'Weeds by hand, stumps and rocks with the Axe';
+        card.sub = card.sub || tr('goals.tr.debris');
         if (t) card.target = { tile: { x: t.o.x, z: t.o.z } };
         break;
       }
@@ -174,7 +186,11 @@ export function cardsFromGoals(res, state, pid, now) {
         const task = q && q.tasks[Number(g.ref)];
         card.icon = task ? task.ref : null;
         card.glyph = 'letter';
-        if (q) { card.title = q.title; card.sub = `${task ? `${taskLabel(task)} ` : ''}${fmt(g.have ?? 0)}/${fmt(g.need ?? 0)}`; }
+        if (q) {
+          card.title = questTitle(g.id, q);
+          card.sub = task ? tr('goals.tr.quest.sub', { task: goalText(taskLabelMsg(task)), have: g.have ?? 0, need: g.need ?? 0 })
+            : tr('goals.tr.quest.n', { have: g.have ?? 0, need: g.need ?? 0 });
+        }
         // chains F / G live on "This week" and chain H on "Together" (GDD §5.3); A-E on Letters
         card.target = { panel: 'journal', args: { tab: journalTabOf(q), focus: g.id } };
         break;
@@ -182,8 +198,8 @@ export function cardsFromGoals(res, state, pid, now) {
       case 'try': {
         const r = CONTENT.recipes.get(g.id);
         card.icon = g.id;
-        card.title = 'Try a new recipe';
-        card.sub = r ? r.name : card.sub;
+        card.title = tr('goals.tr.try');
+        card.sub = r ? String(nmText(g.id, r.name, 'items')) : card.sub;
         const b = r ? firstOf(state, (o) => o.def === r.building) : null;
         card.target = b ? { panel: 'building', args: { id: b.id }, tile: Number.isFinite(b.o.x) ? { x: b.o.x, z: b.o.z } : null } : null;
         break;
@@ -193,10 +209,11 @@ export function cardsFromGoals(res, state, pid, now) {
         const bring = nextUnlocks(level, 1)[0];
         card.icon = bring && bring.level === level + 1 ? bring.id : 'xp';
         // past L40 the rules word the card as the Legacy level and what it pays (GDD §5.9 "no empty levels, ever")
-        const legacy = /^Legacy level /.test(String(g.text || ''));
-        card.title = legacy ? title : `Reach level ${level + 1}`;
-        card.sub = `${fmt(Math.max(0, (g.need ?? 0) - (g.have ?? 0)))} XP to go${legacy ? (sub0 ? ` · ${sub0}` : '')
-          : bring && bring.level === level + 1 ? ` · ${bring.name}` : ''}`;
+        const legacy = g.msg ? g.msg.key === 'goals.r.level.legacy' : /^Legacy level /.test(String(g.text || ''));
+        card.title = legacy ? title : tr('goals.tr.reach', { n: level + 1 });
+        const toGo = tr('goals.tr.xpToGo', { n: Math.max(0, (g.need ?? 0) - (g.have ?? 0)) });
+        const extra = legacy ? sub0 : bring && bring.level === level + 1 ? bring.name : '';
+        card.sub = extra ? `${toGo} · ${extra}` : toGo;
         card.target = { panel: 'journal', args: { tab: 'stats' } };
         break;
       }
@@ -204,7 +221,7 @@ export function cardsFromGoals(res, state, pid, now) {
         // "Builder · 11 of 13", "Level Up · Farm level · 12 / 13": the ribbon's name, what it counts, the numbers
         const rb = CONTENT.ribbons.get(g.id);
         card.glyph = 'ribbon';
-        if (rb) { card.title = rb.name; card.sub = rb.text; }
+        if (rb) { card.title = ctext('ribbons', rb.id, 'name', rb.name); card.sub = ctext('ribbons', rb.id, 'text', rb.text); }
         card.target = { panel: 'journal', args: { tab: 'ribbons', focus: g.id } };
         break;
       }
@@ -218,7 +235,7 @@ export function cardsFromGoals(res, state, pid, now) {
         break;
       case 'basket':
         card.icon = g.ref || 'wheat';
-        card.sub = card.sub || 'Free seeds from Grandma';
+        card.sub = card.sub || tr('goals.tr.basket');
         break;
       case 'build':
         card.icon = g.id && defOf(g.id) ? g.id : 'hammer';
@@ -302,29 +319,31 @@ export function localGoals(state, pid, now) {
   const goals = [];
   if (f.ready.length) {
     const first = f.ready[0];
-    goals.push({ slot: 'now', title: `Harvest ${fmt(f.ready.length)} ripe ${f.ready.length === 1 ? 'plot' : 'plots'}`,
-      sub: 'Drag the Sickle across them', icon: first.crop, target: { tile: { x: first.x, z: first.z } } });
+    goals.push({ slot: 'now', title: tn('goals.tr.local.harvest', f.ready.length),
+      sub: tr('goals.tr.collect.sickle'), icon: first.crop, target: { tile: { x: first.x, z: first.z } } });
   } else if (f.empty.length) {
     const first = f.empty[0];
-    goals.push({ slot: 'now', title: `Plant ${fmt(f.empty.length)} empty ${f.empty.length === 1 ? 'plot' : 'plots'}`,
-      sub: `${fastest.name} is ready in ${fmtDuration(fastest.growMs)}`, icon: fastest.id, target: { tile: { x: first.x, z: first.z }, tool: 'seed' } });
+    goals.push({ slot: 'now', title: tn('goals.tr.local.plant', f.empty.length),
+      sub: tr('goals.tr.readyIn', { crop: nm(fastest.id, fastest.name, 'crops'), d: fmtDuration(fastest.growMs) }), icon: fastest.id,
+      target: { tile: { x: first.x, z: first.z }, tool: 'seed' } });
   } else if (f.debris.length) {
     const first = f.debris[0];
-    goals.push({ slot: 'now', title: 'Tidy up the yard', sub: `${fmt(f.debris.length)} weeds, rocks and stumps to clear`, icon: first.def,
+    goals.push({ slot: 'now', title: tr('goals.tr.local.tidy'), sub: tr('goals.tr.local.tidySub', { n: f.debris.length }), icon: first.def,
       target: { tile: { x: first.x, z: first.z } } });
   } else {
     const next = f.growing.reduce((a, g) => (!a || g.readyAt < a.readyAt ? g : a), null);
-    goals.push({ slot: 'now', title: 'Everything is growing', glyph: 'sprout',
-      sub: next ? `Next ready in ${fmtDuration(next.readyAt - now)}. Tip: ${fastest.name} grows in ${fmtDuration(fastest.growMs)}.`
-        : `Tip: ${fastest.name} grows in ${fmtDuration(fastest.growMs)}.`,
+    const tip = { crop: nm(fastest.id, fastest.name, 'crops'), g: fmtDuration(fastest.growMs) };
+    goals.push({ slot: 'now', title: tr('goals.tr.local.growing'), glyph: 'sprout',
+      sub: next ? tr('goals.tr.local.nextTip', { d: fmtDuration(next.readyAt - now), ...tip }) : tr('goals.tr.local.tip', tip),
       target: next ? { tile: { x: next.x, z: next.z } } : null });
   }
   // SOON: the next level and the first thing it brings
   const from = xpForLevel(level);
   const to = xpForLevel(level + 1);
   const bring = nextUnlocks(level, 1)[0];
-  goals.push({ slot: 'soon', title: `Reach farm level ${level + 1}`,
-    sub: `${fmt(Math.max(0, to - state.farm.xp))} XP to go${bring && bring.level === level + 1 ? ` · brings ${bring.name}` : ''}`,
+  const xp = Math.max(0, to - state.farm.xp);
+  goals.push({ slot: 'soon', title: tr('goals.tr.local.reach', { n: level + 1 }),
+    sub: bring && bring.level === level + 1 ? tr('goals.tr.local.xpBrings', { xp, thing: bring.name }) : tr('goals.tr.xpToGo', { n: xp }),
     icon: bring && bring.level === level + 1 ? bring.id : 'xp', progress: (state.farm.xp - from) / Math.max(1, to - from),
     target: { panel: 'journal', args: { tab: 'stats' } } });
   // BIG: the next piece of land, else the priciest unlocked building the farm does not have yet
@@ -332,14 +351,16 @@ export function localGoals(state, pid, now) {
   const land = live('expansions').filter((e) => !owned.has(e.id) && e.cost > 0).sort((a, b) => a.k - b.k)[0];
   if (land) {
     const coins = state.farm.wallet.coins;
-    goals.push({ slot: 'big', title: `Save for ${land.name}`,
-      sub: level < land.unlock ? `Opens at level ${land.unlock} · ${fmt(land.cost)} coins` : `${fmt(Math.min(coins, land.cost))} / ${fmt(land.cost)} coins`,
+    goals.push({ slot: 'big', title: tr('goals.tr.local.save', { land: nm(land.id, land.name, 'expansions') }),
+      sub: level < land.unlock ? tr('goals.tr.local.opens', { n: land.unlock, coins: land.cost })
+        : tr('goals.tr.local.coins', { have: Math.min(coins, land.cost), need: land.cost }),
       glyph: 'hammer', progress: Math.min(1, coins / land.cost), target: { panel: 'expansion', args: { id: land.id } } });
   } else {
     const have = new Set(Object.values(state.farm.objects).map((o) => o.def));
     const b = liveAt('buildings', level).filter((x) => !have.has(x.id) && x.cost > 0).sort((a, c) => c.cost - a.cost)[0];
     if (b) {
-      goals.push({ slot: 'big', title: `Build a ${b.name}`, sub: `${fmt(Math.min(state.farm.wallet.coins, b.cost))} / ${fmt(b.cost)} coins`,
+      goals.push({ slot: 'big', title: tr('goals.tr.local.build', { b: nm(b.id, b.name) }),
+        sub: tr('goals.tr.local.coins', { have: Math.min(state.farm.wallet.coins, b.cost), need: b.cost }),
         icon: b.id, progress: Math.min(1, state.farm.wallet.coins / b.cost), target: { panel: 'market', args: { tab: 'buildings', focus: b.id } } });
     }
   }
@@ -371,10 +392,10 @@ export function storyCards(state, now) {
     if (next && typeof questsR.blockerOf === 'function') {
       try { blocker = questsR.blockerOf(state, next.t, now); } catch { blocker = null; }
     }
-    const sub = !next ? 'Done! Open the letter'
-      : blocker && blocker.text ? cap(blocker.text)
-        : `${taskLabel(next.t)} ${fmt(next.p.have)}/${fmt(next.p.need)}`;
-    out.push({ id, title: def.title, sub, icon: next ? (blocker && blocker.ref && defOf(blocker.ref) ? blocker.ref : next.t.ref) : null,
+    const sub = !next ? tr('goals.tr.story.done')
+      : blocker && blocker.text ? cap(blocker.msg ? goalText(blocker.msg) : blocker.text)
+        : tr('goals.tr.quest.sub', { task: goalText(taskLabelMsg(next.t)), have: next.p.have, need: next.p.need });
+    out.push({ id, title: questTitle(id, def), sub, icon: next ? (blocker && blocker.ref && defOf(blocker.ref) ? blocker.ref : next.t.ref) : null,
       giver: def.giver, chain: def.chain || null, progress: need ? have / need : 1, done: !next, waiting: Boolean(blocker) });
   }
   return out;
@@ -405,16 +426,19 @@ export function wishAskCard(state, pid, now) {
   for (const id of sortedKeys(list)) {
     const w = list[id];
     if (!w || w.by !== pid || !w.release || w.release.by === pid) continue;
-    const who = state.players[w.release.by]?.name ?? 'Your partner';
+    const who = state.players[w.release.by]?.name;
     const left = Math.max(0, w.release.at + SAFETY.wishlist.autoReleaseMs - now);
-    const name = defOf(w.def)?.name ?? 'a wish';
-    return { slot: 'now', kind: 'wishAsk', id, title: `${who} asks for the ${name} coins`, icon: w.def,
-      sub: `Answer in the Wishlist · ${fmtDuration(left).replace(/ 0\d?[ms]$/, '')} left`, target: { panel: 'wishlist', args: {} } };
+    const def = defOf(w.def);
+    const wish = def ? nm(w.def, def.name) : tr('goals.tr.wish.aWish');
+    return { slot: 'now', kind: 'wishAsk', id, icon: w.def,
+      title: who ? tr('goals.tr.wish.title', { who, name: wish }) : tr('goals.tr.wish.titlePartner', { name: wish }),
+      sub: tr('goals.tr.wish.sub', { d: fmtDuration(left, { cut: 'ms<10' }) }), target: { panel: 'wishlist', args: {} } };
   }
   return null;
 }
 
-const SLOT_LABEL = { now: 'NOW', soon: 'SOON', big: 'BIG', story: 'STORY', save: 'SAVE' };
+/** A card's tag (NOW / SOON / BIG / STORY / SAVE) in the language in effect. */
+const slotLabel = (slot) => (['now', 'soon', 'big', 'story', 'save'].includes(slot) ? tr(`goals.tr.slot.${slot}`) : String(slot).toUpperCase());
 
 /**
  * "Saving for the Golden Watering Can · 34 / 120 Acorns" (wave 4b, owner wish 2): the treasure this farmer picked in the
@@ -427,8 +451,9 @@ export function savingCard(state, pid, local = null) {
   if (!t || t.owned) return null;
   const have = Math.min(state.farm.wallet.acorns, t.acorns);
   const ready = have >= t.acorns;
-  return { slot: 'save', kind: 'relic', id, title: ready ? `The ${t.name} can be yours` : `Saving for the ${t.name}`,
-    sub: ready ? `${fmt(t.acorns)} Acorns: buy it in the Acorn shop` : `${fmt(have)} / ${fmt(t.acorns)} Acorns · ${fmt(t.acorns - have)} to go`,
+  const thing = ctext(null, id, 'name', t.name);   // a treasure's name (lane B: ctext(null, relicId))
+  return { slot: 'save', kind: 'relic', id, title: tr(ready ? 'goals.tr.save.ready' : 'goals.tr.save.title', { t: thing }),
+    sub: ready ? tr('goals.tr.save.readySub', { n: t.acorns }) : tr('goals.tr.save.sub', { have, n: t.acorns, left: t.acorns - have }),
     icon: relicIcon(id, hasIcon).id, glyph: 'acorn', progress: have / Math.max(1, t.acorns),
     target: { panel: 'market', args: { tab: 'acorn', focus: id } } };
 }
@@ -439,11 +464,12 @@ export function savingCard(state, pid, local = null) {
  *   rest = the cards after NOW, story = the story cards -> { segs: [{ slot, tag, icon, glyph, letters }], label }
  */
 export function restSummary(rest, story) {
-  const segs = rest.map((g) => ({ slot: g.slot, tag: SLOT_LABEL[g.slot] || String(g.slot).toUpperCase(), icon: g.icon || null,
+  const segs = rest.map((g) => ({ slot: g.slot, tag: slotLabel(g.slot), icon: g.icon || null,
     glyph: g.icon ? null : g.glyph || 'star', letters: 0 }));
   if (story.length) segs.push({ slot: 'story', tag: String(story.length), icon: null, glyph: null, letters: story.length });
-  const words = [...rest.map((g) => `${SLOT_LABEL[g.slot] || g.slot}: ${g.title}`), ...(story.length ? [`STORY: ${story.map((x) => x.title).join(', ')}`] : [])];
-  return { segs, label: `More goals. ${words.join('. ')}` };
+  const words = [...rest.map((g) => tr('goals.tr.part', { slot: slotLabel(g.slot), title: g.title })),
+    ...(story.length ? [tr('goals.tr.part', { slot: slotLabel('story'), title: story.map((x) => x.title).join(', ') })] : [])];
+  return { segs, label: tr('goals.tr.rest', { words: words.join('. ') }) };
 }
 
 export function createTracker(S) {
@@ -500,7 +526,7 @@ export function createTracker(S) {
     if (scoop && Object.hasOwn(S.controller.tool, 'spread')) S.controller.setTool(scoop.id, { spread: 'fertilizer' });
     else {
       if (S.controller.tool.id !== 'hand') S.controller.setTool('hand');
-      ui.toast(touchPlayer(S.controller) ? 'Hold a growing crop: Spread Fertilizer' : 'Click a growing crop: Spread Fertilizer', { kind: 'info', icon: 'fertilizer' });
+      ui.toast(tr(touchPlayer(S.controller) ? 'goals.tr.fert.hold' : 'goals.tr.fert.click'), { kind: 'info', icon: 'fertilizer' });
     }
   }
 
@@ -530,7 +556,7 @@ export function createTracker(S) {
   const chipMore = h('span.tc-n', { 'aria-hidden': 'true' });
   const chip = h('button.tracker-chip', { type: 'button', 'aria-expanded': 'false', 'aria-controls': 'tracker',
     on: { click: () => setDrop(!box.classList.contains('m-open')) } },
-  h('span.slot-tag', { 'aria-hidden': 'true' }, 'NOW'), chipArt, chipTitle, chipMore, h('span.chev', { 'aria-hidden': 'true' }, '▾'));
+  h('span.slot-tag', { 'aria-hidden': 'true' }), chipArt, chipTitle, chipMore, h('span.chev', { 'aria-hidden': 'true' }, '▾'));
   box.before(h('div.tracker-chip-wrap', chip));
   function setDrop(open) {
     box.classList.toggle('m-open', open);
@@ -550,11 +576,12 @@ export function createTracker(S) {
       chipArt.replaceChildren(g.icon ? icon(g.icon, { size: 26 }) : svgIcon(g.glyph || 'star', 24));
     }
     chipTitle.textContent = g.title;
+    chip.querySelector('.slot-tag').textContent = slotLabel('now');
     const n = goals.length - 1 + story.length;
     chipMore.textContent = n > 0 ? `+${n}` : '';
     chipMore.hidden = n === 0;
     chip.classList.toggle('bang', goals.some((x) => x.bang && !cardEls.get(keyOf(x))?._el._seen) || story.some((x) => x.bang));
-    chip.setAttribute('aria-label', `Goals. NOW: ${g.title}${n > 0 ? `, and ${n} more` : ''}. Show the goals`);
+    chip.setAttribute('aria-label', n > 0 ? tr('goals.tr.chip.more', { title: g.title, n }) : tr('goals.tr.chip', { title: g.title }));
   }
   const cardEls = new Map();      // key -> slot wrapper (patched in place: no re-animation, focus survives)
   const keyOf = (g) => `${g.slot}:${g.kind || ''}:${g.id || ''}:${g.icon || g.glyph || ''}`;
@@ -595,13 +622,13 @@ export function createTracker(S) {
     }
     const el = wrap._el;
     el._g = g;
-    const slotLabel = SLOT_LABEL[g.slot] || g.slot.toUpperCase();
-    el.querySelector('.slot-tag').textContent = slotLabel;
+    const tag = slotLabel(g.slot);
+    el.querySelector('.slot-tag').textContent = tag;
     el.querySelector('.gt').textContent = g.title;
     const gs = el.querySelector('.gs');
     gs.textContent = g.sub || '';
     gs.hidden = !g.sub;
-    el.setAttribute('aria-label', `${slotLabel}: ${g.title}. ${g.sub || ''}`);
+    el.setAttribute('aria-label', tr('goals.tr.card', { slot: tag, title: g.title, sub: g.sub || '' }));
     el.classList.toggle('done', Boolean(g.done));
     el.classList.toggle('waiting', Boolean(g.waiting));
     const art = el.querySelector('.art');
@@ -683,13 +710,14 @@ export function createTracker(S) {
             if (storyGroup._touch && !storyGroup.classList.contains('open')) { touchOpen?.classList.remove('open'); storyGroup.classList.add('open'); touchOpen = storyGroup; return; }
             openStory(storyGroup._first);
           } } },
-      h('span.slot-tag', { 'aria-hidden': 'true' }, 'STORY'), h('span.art'), h('span.copy', h('span.gt')), h('span.more-n')));
+      h('span.slot-tag', { 'aria-hidden': 'true' }), h('span.art'), h('span.copy', h('span.gt')), h('span.more-n')));
       storyGroup._first = first;
       sum.querySelector('.art').replaceChildren(first.icon ? icon(first.icon, { size: 22 }) : svgIcon('letter', 22));
       sum.querySelector('.gt').textContent = first.title;
       sum.querySelector('.more-n').textContent = storyEls.length > 1 ? `+${storyEls.length - 1}` : '';
       sum.querySelector('.more-n').hidden = storyEls.length < 2;
-      sum.setAttribute('aria-label', `STORY: ${story.map((x) => x.title).join(', ')}`);
+      sum.querySelector('.slot-tag').textContent = slotLabel('story');
+      sum.setAttribute('aria-label', tr('goals.tr.part', { slot: slotLabel('story'), title: story.map((x) => x.title).join(', ') }));
       sum.classList.toggle('bang', story.some((x) => x.bang));
       storyPop.replaceChildren(...storyEls);
       if (sum.parentNode !== storyGroup) storyGroup.replaceChildren(sum, storyPop);
@@ -733,10 +761,10 @@ export function createTracker(S) {
     for (const el of els) {
       if (!compact && !phone && el.dataset.slot === 'story' && el.getBoundingClientRect().bottom > limit) { el.hidden = true; hidden++; }
     }
-    more.textContent = `+${hidden} more in the Journal`;
+    more.textContent = tr('goals.tr.more', { n: hidden });
     more.hidden = hidden === 0;
-    modeBtn.setAttribute('aria-label', compact ? 'Show every goal card open' : 'Fewer: goal cards as chips');
-    modeBtn.dataset.tip = compact ? 'Show all goals' : 'Fewer';
+    modeBtn.setAttribute('aria-label', tr(compact ? 'goals.tr.mode.all' : 'goals.tr.mode.fewer'));
+    modeBtn.dataset.tip = tr(compact ? 'goals.tr.mode.allTip' : 'goals.tr.mode.fewerTip');
     modeBtn.setAttribute('aria-pressed', String(!compact));
     if (!more.hidden) box.append(foot); else foot.remove();
     renderChip(goals, story);

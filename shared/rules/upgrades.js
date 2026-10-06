@@ -18,47 +18,47 @@ const MIN = 60_000;
 /** The default upgrade table (content's `UPGRADES` replaces it target by target when present). */
 export const UPGRADES_DEFAULT = Object.freeze({
   farmhouse: {
-    name: 'Farmhouse', defs: ['farmhouse'],
+    name: 'Farmhouse', defs: ['farmhouse'], // i18n-ok: fallback tier words; the client shows them through ctext('upgrades', …) (text-b)
     tiers: [
-      { name: 'Fresh Paint & Porch', unlock: 10, coins: 6000, items: { planks: 3 }, bonus: { barnCap: 40, restedBp: 1000 },
-        text: 'Red boards, white trim and a porch bench: +40 Barn space, rested XP builds 10 % faster' },
-      { name: 'Side Wing', unlock: 20, coins: 40_000, items: { planks: 6, wooden_crate: 1 },
-        bonus: { barnCap: 80, restedBp: 2000 }, text: 'A cosy side wing: +80 Barn space, rested XP 20 % faster' },
+      { name: 'Fresh Paint & Porch', unlock: 10, coins: 6000, items: { planks: 3 }, bonus: { barnCap: 40, restedBp: 1000 }, // i18n-ok: fallback tier words; the client shows them through ctext('upgrades', …) (text-b)
+        text: 'Red boards, white trim and a porch bench: +40 Barn space, rested XP builds 10 % faster' }, // i18n-ok: fallback tier words; the client shows them through ctext('upgrades', …) (text-b)
+      { name: 'Side Wing', unlock: 20, coins: 40_000, items: { planks: 6, wooden_crate: 1 }, // i18n-ok: fallback tier words; the client shows them through ctext('upgrades', …) (text-b)
+        bonus: { barnCap: 80, restedBp: 2000 }, text: 'A cosy side wing: +80 Barn space, rested XP 20 % faster' }, // i18n-ok: fallback tier words; the client shows them through ctext('upgrades', …) (text-b)
       { name: 'Sunroom & Chimney', unlock: 30, coins: 150_000, items: { planks: 10, wooden_crate: 2 },
-        bonus: { barnCap: 120, restedBp: 3000 }, text: 'A bright sunroom: +120 Barn space, rested XP 30 % faster' },
+        bonus: { barnCap: 120, restedBp: 3000 }, text: 'A bright sunroom: +120 Barn space, rested XP 30 % faster' }, // i18n-ok: fallback tier words; the client shows them through ctext('upgrades', …) (text-b)
     ],
   },
   well: {
-    name: 'Well', defs: ['well'],
+    name: 'Well', defs: ['well'], // i18n-ok: fallback tier words; the client shows them through ctext('upgrades', …) (text-b)
     tiers: [
-      { name: 'Stone Rim', unlock: 6, coins: 1500, items: { planks: 2 }, bonus: { waterBp: 250 },
-        text: 'Watering saves 2.5 % more time' },
-      { name: 'Little Roof', unlock: 14, coins: 12_000, items: { planks: 4 }, bonus: { waterBp: 500 },
-        text: 'Watering saves 5 % more time' },
-      { name: 'Hand Pump', unlock: 24, coins: 60_000, items: { planks: 6, wooden_crate: 1 }, bonus: { waterBp: 800 },
-        text: 'Watering saves 8 % more time' },
+      { name: 'Stone Rim', unlock: 6, coins: 1500, items: { planks: 2 }, bonus: { waterBp: 250 }, // i18n-ok: fallback tier words; the client shows them through ctext('upgrades', …) (text-b)
+        text: 'Watering saves 2.5 % more time' }, // i18n-ok: fallback tier words; the client shows them through ctext('upgrades', …) (text-b)
+      { name: 'Little Roof', unlock: 14, coins: 12_000, items: { planks: 4 }, bonus: { waterBp: 500 }, // i18n-ok: fallback tier words; the client shows them through ctext('upgrades', …) (text-b)
+        text: 'Watering saves 5 % more time' }, // i18n-ok: fallback tier words; the client shows them through ctext('upgrades', …) (text-b)
+      { name: 'Hand Pump', unlock: 24, coins: 60_000, items: { planks: 6, wooden_crate: 1 }, bonus: { waterBp: 800 }, // i18n-ok: fallback tier words; the client shows them through ctext('upgrades', …) (text-b)
+        text: 'Watering saves 8 % more time' }, // i18n-ok: fallback tier words; the client shows them through ctext('upgrades', …) (text-b)
     ],
   },
   market_stand: {
-    name: 'Market Stand', defs: ['market_stand'],
+    name: 'Market Stand', defs: ['market_stand'], // i18n-ok: fallback tier words; the client shows them through ctext('upgrades', …) (text-b)
     tiers: [
-      { name: 'Striped Awning', unlock: 11, coins: 4000, items: { planks: 3 }, bonus: { demandUnits: 10 },
-        text: '+10 Market Demand units a day' },
+      { name: 'Striped Awning', unlock: 11, coins: 4000, items: { planks: 3 }, bonus: { demandUnits: 10 }, // i18n-ok: fallback tier words; the client shows them through ctext('upgrades', …) (text-b)
+        text: '+10 Market Demand units a day' }, // i18n-ok: fallback tier words; the client shows them through ctext('upgrades', …) (text-b)
       { name: 'Chalkboard & Crates', unlock: 19, coins: 30_000, items: { planks: 5, wooden_crate: 1 },
-        bonus: { demandUnits: 20, sellBp: 100 }, text: '+20 Demand units a day, everything sells for 1 % more' },
-      { name: 'Flower Boxes & Scale', unlock: 28, coins: 120_000, items: { planks: 8, wooden_crate: 2 },
-        bonus: { demandUnits: 30, sellBp: 200 }, text: '+30 Demand units a day, everything sells for 2 % more' },
+        bonus: { demandUnits: 20, sellBp: 100 }, text: '+20 Demand units a day, everything sells for 1 % more' }, // i18n-ok: fallback tier words; the client shows them through ctext('upgrades', …) (text-b)
+      { name: 'Flower Boxes & Scale', unlock: 28, coins: 120_000, items: { planks: 8, wooden_crate: 2 }, // i18n-ok: fallback tier words; the client shows them through ctext('upgrades', …) (text-b)
+        bonus: { demandUnits: 30, sellBp: 200 }, text: '+30 Demand units a day, everything sells for 2 % more' }, // i18n-ok: fallback tier words; the client shows them through ctext('upgrades', …) (text-b)
     ],
   },
   bench: {
-    name: 'Bench', defs: ['sunset_bench', 'bench_swing'],
+    name: 'Bench', defs: ['sunset_bench', 'bench_swing'], // i18n-ok: fallback tier words; the client shows them through ctext('upgrades', …) (text-b)
     tiers: [
-      { name: 'Cushions', unlock: 6, coins: 500, items: { wood: 2 }, bonus: { goldenMs: 5 * MIN },
-        text: 'A Golden Hour on this bench lasts 5 minutes longer' },
-      { name: 'Lantern', unlock: 12, coins: 4000, items: { planks: 2 }, bonus: { goldenMs: 10 * MIN },
-        text: 'A Golden Hour on this bench lasts 10 minutes longer' },
-      { name: 'Rose Canopy', unlock: 22, coins: 20_000, items: { planks: 4 }, bonus: { goldenMs: 15 * MIN },
-        text: 'A Golden Hour on this bench lasts 15 minutes longer' },
+      { name: 'Cushions', unlock: 6, coins: 500, items: { wood: 2 }, bonus: { goldenMs: 5 * MIN }, // i18n-ok: fallback tier words; the client shows them through ctext('upgrades', …) (text-b)
+        text: 'A Golden Hour on this bench lasts 5 minutes longer' }, // i18n-ok: fallback tier words; the client shows them through ctext('upgrades', …) (text-b)
+      { name: 'Lantern', unlock: 12, coins: 4000, items: { planks: 2 }, bonus: { goldenMs: 10 * MIN }, // i18n-ok: fallback tier words; the client shows them through ctext('upgrades', …) (text-b)
+        text: 'A Golden Hour on this bench lasts 10 minutes longer' }, // i18n-ok: fallback tier words; the client shows them through ctext('upgrades', …) (text-b)
+      { name: 'Rose Canopy', unlock: 22, coins: 20_000, items: { planks: 4 }, bonus: { goldenMs: 15 * MIN }, // i18n-ok: fallback tier words; the client shows them through ctext('upgrades', …) (text-b)
+        text: 'A Golden Hour on this bench lasts 15 minutes longer' }, // i18n-ok: fallback tier words; the client shows them through ctext('upgrades', …) (text-b)
     ],
   },
 });

@@ -21,6 +21,12 @@ import { SAFETY, CONTENT } from '../../../shared/content/index.js';
 import { ERR } from '../../../shared/net/protocol.js';
 import { h, icon, svgIcon } from './dom.js';
 import { LAYOUT_Q } from './layout.js';
+import { t, tn, list, N, name as cname, onLang, retell } from '../i18n/index.js';
+
+/** A text as it reads now: a string, or a function that says it (a language switch asks it again). */
+const say = (v) => (typeof v === 'function' ? v() : v);
+/** How to say a text again after a language switch: the function given, else the catalog line i18n made it from. */
+const sayer = (v) => (typeof v === 'function' ? v : retell(v));
 
 const RACE_CODES = new Set([ERR.EMPTY, ERR.OCCUPIED, ERR.NOT_FOUND, ERR.NOT_READY, ERR.ALREADY_DONE]);
 const KIND_GLYPH = { info: 'i', warn: '!', love: '♥', ok: '✓' };
@@ -38,15 +44,17 @@ export const COMPACT_KINDS = Object.freeze(new Set(['card']));
 export const compactCard = (kind, { phone = false, urgent = false } = {}) => Boolean(phone && !urgent && COMPACT_KINDS.has(kind));
 
 /** The Level-up Bloom card's headline (owner rule 2026-10-04: a new farm level finishes everything growing). */
-export const BLOOM_TITLE = 'New level! Everything on the farm is ready 🌾';
+// the English source (tests); the card shows t('toasts.bloom.title') in the language in effect
+export const BLOOM_TITLE = 'New level! Everything on the farm is ready 🌾'; // i18n-ok: = en/toasts.js 'toasts.bloom.title'
 
 /** The Bloom card's second line: "12 crops, 2 trees and 3 animals finished growing." (pure) */
 export function bloomLine({ crops = 0, trees = 0, animals = 0 } = {}) {
   const parts = [[crops, 'crop'], [trees, 'tree'], [animals, 'animal']].filter(([n]) => n > 0)
-    .map(([n, w]) => `${n} ${w}${n === 1 ? '' : 's'}`);
-  if (!parts.length) return 'Everything that was growing finished at once.';
-  const list = parts.length === 1 ? parts[0] : `${parts.slice(0, -1).join(', ')} and ${parts.at(-1)}`;
-  return `${list} finished growing.`;
+    .map(([n, w]) => tn(`toasts.bloom.${w}`, n));
+  if (!parts.length) return t('toasts.bloom.none');
+  // "a, b and c" (English without the serial comma, as always; Bulgarian "a, b и c")
+  const joined = parts.length === 1 ? parts[0] : t('toasts.bloom.and', { list: parts.slice(0, -1).join(', '), last: parts.at(-1) });
+  return tn('toasts.bloom.line', crops + trees + animals, { list: joined });
 }
 
 /** Which kind (colour + glyph) a code's toast uses. Refusals are information, never alarms. */
@@ -93,8 +101,10 @@ export function createToasts(S, errText) {
     if (pressed || focused) layer.classList.add('top');
   }
 
-  function show(text, { kind = 'info', iconId = null, ms = 3000, count = 0, action = null } = {}) {
+  function show(source, { kind = 'info', iconId = null, ms = 3000, count = 0, action = null } = {}) {
     const host = action ? snackLayer() : box;
+    const again = sayer(source);
+    const text = say(source);
     // coalesce an identical visible line: bump its count instead of stacking copies
     for (const el of host.children) {
       if (el.dataset.text === text && !el.classList.contains('leaving')) {
@@ -113,18 +123,27 @@ export function createToasts(S, errText) {
       }
     }
     const badge = iconId ? h('span.ti', icon(iconId, { size: 30 })) : h(`span.ti.${kind}`, { 'aria-hidden': 'true' }, KIND_GLYPH[kind] || 'i');
-    const el = h(`div.toast${action ? '.has-act' : ''}`, { dataset: { text, kind } }, badge, h('span.tx', text), count > 1 ? h('span.count', `×${count}`) : null);
+    const tx = h('span.tx', text);
+    const el = h(`div.toast${action ? '.has-act' : ''}`, { dataset: { text, kind } }, badge, tx, count > 1 ? h('span.count', `×${count}`) : null);
+    let actBtn = null;
     if (action) {
       el._act = action;
       // it sits over the sheet's content on a phone: a tap on the line itself (not its button) sends it away at once
       el.addEventListener('click', () => { clearTimeout(el._t); remove(el); });
-      el.append(h('button.btn.btn--sky.btn--small.toast-act', { type: 'button', on: { click: (e) => {
+      actBtn = h('button.btn.btn--sky.btn--small.toast-act', { type: 'button', on: { click: (e) => {
         e.stopPropagation();
         clearTimeout(el._t);
         remove(el);
         try { el._act.fn(); } catch (err) { console.error('toast action failed', err); }
-      } } }, action.label));
+      } } }, say(action.label));
+      el.append(actBtn);
     }
+    const actAgain = action ? sayer(action.label) : null;
+    // a language switch while it is up: the line and its button in the new words (the coalescing key follows)
+    el._relabel = () => {
+      if (again) { el.dataset.text = again(); tx.textContent = el.dataset.text; }
+      if (actBtn && actAgain) actBtn.textContent = actAgain();
+    };
     host.append(el);
     while (host.children.length > 3) host.firstElementChild.remove();
     if (action) placeSnacks(host);
@@ -159,22 +178,32 @@ export function createToasts(S, errText) {
         race.el._t = setTimeout(() => remove(race.el), 2600);
         return race.el;
       }
-      const el = show(`${other.name} got there first ♥`, { kind: 'love', ms: 2600 });
+      const el = show(() => t('toasts.race', { name: other.name }), { kind: 'love', ms: 2600 });
       race = { el, by, n: 1, t: now };
       return el;
     }
-    let text = isCode ? errText(codeOrText) : String(codeOrText);
-    if (isCode && other) text = `${text} (${other.name} was just here)`;
-    return show(text, { kind: kind || (isCode ? kindOf(codeOrText) : 'info'), iconId, ms: ms ?? 3000, action: act });
+    // a code is said from the code, so a language switch re-says it too
+    const line = !isCode ? codeOrText : other ? () => t('toasts.wasHere', { text: errText(codeOrText), name: other.name })
+      : () => errText(codeOrText);
+    return show(typeof line === 'function' ? line : String(line), { kind: kind || (isCode ? kindOf(codeOrText) : 'info'), iconId, ms: ms ?? 3000, action: act });
   }
 
   let noticeEl = null;
+  /** A longer line with OK (and an action): `text` and `action.label` may be functions that say them (a switch re-asks). */
   function notice(text, { action = null, ms = 15000 } = {}) {
     if (noticeEl) noticeEl.remove();
     const close = () => { if (noticeEl === el) noticeEl = null; el.remove(); };
-    const el = h('div.notice', { role: 'alert' }, h('span', text),
-      action ? h('button.btn.btn--sky.btn--small', { type: 'button', on: { click: () => { close(); action.fn(); } } }, action.label) : null,
-      h('button.btn.btn--paper.btn--small', { type: 'button', on: { click: close } }, 'OK'));
+    const again = sayer(text);
+    const actAgain = action ? sayer(action.label) : null;
+    const msg = h('span', say(text));
+    const act = action ? h('button.btn.btn--sky.btn--small', { type: 'button', on: { click: () => { close(); action.fn(); } } }, say(action.label)) : null;
+    const ok = h('button.btn.btn--paper.btn--small', { type: 'button', on: { click: close } }, t('common.ok'));
+    const el = h('div.notice', { role: 'alert' }, msg, act, ok);
+    el._relabel = () => {
+      if (again) msg.textContent = again();
+      if (act && actAgain) act.textContent = actAgain();
+      ok.textContent = t('common.ok');
+    };
     document.getElementById('hud').append(el);
     noticeEl = el;
     setTimeout(close, ms);
@@ -187,6 +216,20 @@ export function createToasts(S, errText) {
   const MAX_BANNERS = 2;
   const waiting = [];
   const closers = new Map();          // id -> close() of a shown card
+  // a card's words as functions, worked out when it is first asked for (a plain string is said again through i18n while
+  // its catalog line is fresh): a card that waits its turn and shows after a language switch speaks the new language
+  const toldSpecs = new WeakMap();
+  function told(spec) {
+    let w = toldSpecs.get(spec);
+    if (!w) {
+      const words = (v) => sayer(v) ?? v;
+      w = { ribbon: spec.ribbon === undefined ? () => t('toasts.new') : words(spec.ribbon), message: words(spec.message ?? ''),
+        things: (spec.things ?? []).map((x) => ({ ...x, name: words(x.name) })),
+        actions: (spec.actions ?? []).map((a) => ({ ...a, label: words(a.label) })) };
+      toldSpecs.set(spec, w);
+    }
+    return w;
+  }
   const more = h('div.banner-more', { hidden: true, 'aria-hidden': 'true' });
   banners.append(more);              // the column's last item: under the cards, wherever they end
   // rosettes (ribbons, personal titles) share the column and leave on their own after a few seconds
@@ -208,7 +251,7 @@ export function createToasts(S, errText) {
   const fits = () => banners.getBoundingClientRect().height <= room();
   function paintMore() {
     more.hidden = waiting.length === 0;
-    more.textContent = waiting.length ? `+${waiting.length} more` : '';
+    more.textContent = waiting.length ? t('toasts.more', { n: waiting.length }) : '';
     if (banners.lastElementChild !== more) banners.append(more);
   }
   function next() {
@@ -224,9 +267,15 @@ export function createToasts(S, errText) {
     if (w >= 0) { waiting.splice(w, 1); paintMore(); }
     closers.get(id)?.();
   }
+  /**
+   * A card in the right column. `ribbon`, `message`, `things[].name` and `actions[].label` may be functions that say them
+   * (a language switch re-asks them; a plain string a catalog line made is said again by i18n `retell`).
+   */
   function banner(spec = {}) {
-    const { ribbon = 'New!', things = [], message = '', actions = [], ttl = 9000, kind = 'unlock', id = null, onClose = null,
-      urgent = false, ring = 0 } = spec;
+    const { ttl = 9000, kind = 'unlock', id = null, onClose = null, urgent = false, ring = 0 } = spec;
+    const { ribbon: ribbonSrc, message: messageSrc, things, actions } = told(spec);
+    const ribbon = say(ribbonSrc);
+    const message = say(messageSrc);
     if (id) {
       banners.querySelector(`[data-id="${CSS.escape(id)}"]`)?.remove();
       closers.delete(id);
@@ -252,19 +301,42 @@ export function createToasts(S, errText) {
     const compact = compactCard(kind, { phone, urgent });
     let opened = false;
     // the chip of a compact card: its title and "Tell me"; a tap opens the whole card in place
-    const chip = compact ? h('button.card-chip', { type: 'button', 'aria-expanded': 'false', 'aria-label': `${ribbon}: show the tip`,
+    const chipTitle = h('span.card-chip-title', ribbon);
+    const chipMore = h('span.card-chip-more', t('toasts.tellMe'));
+    const chip = compact ? h('button.card-chip', { type: 'button', 'aria-expanded': 'false', 'aria-label': t('toasts.chipLabel', { ribbon }),
       on: { click: (e) => { e.stopPropagation(); setOpen(true); } } },
-    h('span.card-chip-bulb', { 'aria-hidden': 'true' }, '💡'), h('span.card-chip-title', ribbon), h('span.card-chip-more', 'Tell me')) : null;
+    h('span.card-chip-bulb', { 'aria-hidden': 'true' }, '💡'), chipTitle, chipMore) : null;
+    const ribbonText = h('span.ribbon-t', ribbon);
+    const msgEl = message ? h('p.msg', message) : null;
+    const thingEls = things.slice(0, 8).map((x) => [x, h('span', say(x.name))]);
+    const actEls = actions.map((a) => [a, h(`button.btn.btn--small${a.kind && a.kind !== 'go' ? `.btn--${a.kind}` : ''}`, {
+      type: 'button', on: { click: () => { close(); a.fn(); } },
+    }, say(a.label))]);
+    const xBtn = h('button.btn.btn--stop.btn--round.btn--small.x', { type: 'button', 'aria-label': t('toasts.dismiss'), on: { click: close } }, svgIcon('close', 18));
     const el = h(`section.unlock-banner.wood.nails${compact ? '.compact' : ''}`, { dataset: { kind, id: id || '' }, role: 'status', 'aria-label': `${ribbon}. ${message}` },
       chip,
-      h('div.ribbon', ring > 0 ? h('span.ring-timer', { 'aria-hidden': 'true', style: { '--d': `${ring}ms` } }) : null, ribbon),
-      h('button.btn.btn--stop.btn--round.btn--small.x', { type: 'button', 'aria-label': 'Dismiss', on: { click: close } }, svgIcon('close', 18)),
+      h('div.ribbon', ring > 0 ? h('span.ring-timer', { 'aria-hidden': 'true', style: { '--d': `${ring}ms` } }) : null, ribbonText),
+      xBtn,
       h('div.sheet.paper',
-        message ? h('p.msg', message) : null,
-        things.length ? h('ul.things', things.slice(0, 8).map((t) => h('li.thing', t.icon ? icon(t.icon, { size: 46, alt: '' }) : svgIcon(t.glyph || 'star', 46), h('span', t.name)))) : null,
-        actions.length ? h('div.acts', actions.map((a) => h(`button.btn.btn--small${a.kind && a.kind !== 'go' ? `.btn--${a.kind}` : ''}`, {
-          type: 'button', on: { click: () => { close(); a.fn(); } },
-        }, a.label))) : null));
+        msgEl,
+        thingEls.length ? h('ul.things', thingEls.map(([x, nameEl]) => h('li.thing', x.icon ? icon(x.icon, { size: 46, alt: '' }) : svgIcon(x.glyph || 'star', 46), nameEl))) : null,
+        actEls.length ? h('div.acts', actEls.map(([, b]) => b)) : null));
+    // a language switch while the card is up: every word of it in the new language
+    el._relabel = () => {
+      const r = say(ribbonSrc);
+      const m = say(messageSrc);
+      ribbonText.textContent = r;
+      if (msgEl) msgEl.textContent = m;
+      for (const [x, nameEl] of thingEls) nameEl.textContent = say(x.name);
+      for (const [a, b] of actEls) b.textContent = say(a.label);
+      xBtn.setAttribute('aria-label', t('toasts.dismiss'));
+      el.setAttribute('aria-label', `${r}. ${m}`);
+      if (chip) {
+        chip.setAttribute('aria-label', t('toasts.chipLabel', { ribbon: r }));
+        chipTitle.textContent = r;
+        chipMore.textContent = t('toasts.tellMe');
+      }
+    };
     banners.prepend(el);
     // no room above the dock: the card waits (unless it is the only one, or urgent)
     if (!urgent && shown() > 1 && !fits()) {
@@ -329,16 +401,16 @@ export function createToasts(S, errText) {
   /** The partner's "Cook together" press, on my screen wherever I am (QA wave 1 UI-08). */
   function duetAsk(ev, partner, { join }) {
     const r = CONTENT.recipes.get(ev.recipe);
-    const verb = { bakery: ['is baking', 'Bake'], kitchen: ['is cooking', 'Cook'] }[ev.building] ?? ['is making', 'Make'];
+    const how = { bakery: 'bake', kitchen: 'cook' }[ev.building] ?? 'make';
     // a press whose window already closed (a slow delta) is no invitation any more
     const left = Number.isFinite(ev.until) && S.store ? ev.until - S.store.now() : 3000;
     if (left < 300) return null;
     return banner({
       id: `duet-ask-${ev.id}`, kind: 'duet', urgent: true, ring: left, ttl: left + 300,
-      ribbon: `${verb[1]} together?`,
-      message: `${partner.name} ${verb[0]} ${r ? `a ${r.name}` : 'something'}. ${verb[1]} it together: normal time, more XP and a Heart each.`,
-      things: r ? [{ icon: r.id, name: r.name }] : [],
-      actions: [{ label: `${verb[1]} together ♥`, kind: 'stop', fn: join }],
+      ribbon: () => t(`toasts.duet.${how}.ask`),
+      message: () => (r ? t(`toasts.duet.${how}.what`, { name: partner.name, thing: N(r.id, 'recipes') }) : t(`toasts.duet.${how}.something`, { name: partner.name })),
+      things: r ? [{ icon: r.id, name: () => cname(r.id, { family: 'recipes' }) }] : [],
+      actions: [{ label: () => t(`toasts.duet.${how}.go`), kind: 'stop', fn: join }],
     });
   }
 
@@ -346,11 +418,27 @@ export function createToasts(S, errText) {
   function bloom(counts = {}) {
     const petal = svgIcon('flower', 46);
     petal.classList.add('petal');
-    const el = h('div.bloom-banner', { role: 'status' }, petal, h('div', h('b', BLOOM_TITLE), bloomLine(counts)));
+    const title = h('b', t('toasts.bloom.title'));
+    const line = h('span', bloomLine(counts));
+    const el = h('div.bloom-banner', { role: 'status' }, petal, h('div', title, line));
+    el._relabel = () => { title.textContent = t('toasts.bloom.title'); line.textContent = bloomLine(counts); };
     banners.prepend(el);
     setTimeout(() => { el.style.transition = 'opacity 400ms'; el.style.opacity = '0'; setTimeout(() => el.remove(), 420); }, 7000);
     return el;
   }
+
+  // A language switch mid-game: the lines, notices and cards already up say themselves again in the new language, like
+  // the panels do (a float over the farm finishes in the old one: it is gone in 2-3 s)
+  onLang(() => {
+    for (const host of [box, snacks, banners]) {
+      if (!host) continue;
+      for (const el of host.children) {
+        try { el._relabel?.(); } catch (err) { console.error('toasts: relabel failed', err); }
+      }
+    }
+    try { noticeEl?._relabel?.(); } catch (err) { console.error('toasts: relabel failed', err); }
+    paintMore();
+  });
 
   return { toast, notice, banner, bloom, show, flushBanners: next, duetAsk, closeBanner };
 }

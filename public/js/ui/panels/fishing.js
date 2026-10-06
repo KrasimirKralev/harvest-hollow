@@ -16,15 +16,20 @@ import { dayIndex, weekIndex } from '../../../../shared/rules/calendar.js';
 import { sortedKeys } from '../../../../shared/rules/order.js';
 import { levelOf } from './core.js';
 import { albumView, stickerArt } from './collections.js';
-import { h, fmt, createKit, svgIcon, playerMark, fill, ago } from './kit.js';
+import { h, fmt, createKit, svgIcon, playerMark, fill, ago, phoneTitle } from './kit.js';
 import { fishArt, pondScene, careGlyph } from './home-art.js';
+import { t, ctext, name as cname } from '../../i18n/index.js';
+import { tParts } from './kit.js';
 
 /** Words for a fishing spot: the expansion's pond ("Willow Pond") or a placed Fishing Dock. */
 export function spotName(spot) {
-  if (!spot) return 'the dock';
-  if (spot.pond) return expansionOf(spot.pond)?.name ?? 'the pond';
-  return 'the Fishing Dock';
+  if (!spot) return t('home.fish.spot.dock');
+  if (spot.pond) return expansionOf(spot.pond) ? cname(spot.pond, { family: 'expansions' }) : t('home.fish.spot.pond');
+  return t('home.fish.spot.fishingDock');
 }
+
+/** A fish's name in the language in effect (lane B: FISHING['fish.<id>'].name). */
+const fishName = (id, english) => ctext('FISHING', `fish.${id}`, 'name', english);
 
 /** A spot from its key in the rules' records (an expansion id for a pond, else a dock object id). */
 export const spotOfKey = (key) => (typeof key !== 'string' ? null : expansionOf(key) ? { pond: key } : { id: key });
@@ -47,10 +52,10 @@ export function fishingView(state, pid, now) {
   const hue = new Map((FISHING?.fish ?? []).map((f) => [f.id, f]));
   const board = (typeof fishA.trophyBoard === 'function' ? fishA.trophyBoard(state)
     : (FISHING?.fish ?? []).map((f) => ({ id: f.id, name: f.name, cm: f.cm, record: state.farm.fishing?.records?.[f.id] ?? null })))
-    .map((r) => ({ ...r, hue: hue.get(r.id)?.hue ?? '#9DA9B0', joke: Boolean(hue.get(r.id)?.joke) }));
+    .map((r) => ({ ...r, name: fishName(r.id, r.name), hue: hue.get(r.id)?.hue ?? '#9DA9B0', joke: Boolean(hue.get(r.id)?.joke) }));
   const F = state.farm.fishing ?? null;
   const week = weekIndex(dayIndex(now, state.meta.tz));
-  const best = F && F.week && F.week.n === week && F.week.best ? { ...F.week.best, name: hue.get(F.week.best.fish)?.name ?? F.week.best.fish,
+  const best = F && F.week && F.week.n === week && F.week.best ? { ...F.week.best, name: fishName(F.week.best.fish, hue.get(F.week.best.fish)?.name ?? F.week.best.fish),
     hue: hue.get(F.week.best.fish)?.hue ?? '#9DA9B0' } : null;
   let treasures = null;
   try {
@@ -81,11 +86,11 @@ function goFishing(ctx, spot) {
     const target = spot.pond ? { pond: spot.pond } : spot.id;
     let r = null;
     try { r = f.start(target); } catch (err) { console.error('fishing start failed', err); }
-    if (r && r.ok === false) { ctx.ui.toast(r.code || "Can't fish right now"); return; }
+    if (r && r.ok === false) { ctx.ui.toast(r.code || t('home.fish.cant')); return; }
     ctx.close();
     return;
   }
-  ctx.ui.toast(`Walk to ${spotName(spot)} and tap it with the Hand to cast.`);
+  ctx.ui.toast(t('home.fish.walkTo', { spot: spotName(spot) }));
 }
 
 function rodCard(ctx, kit, v) {
@@ -94,32 +99,34 @@ function rodCard(ctx, kit, v) {
   const spot = v.spots[0];
   const st = ctx.store.state;
   let status;
-  if (me.line) status = h('p.fi-status', careGlyph('fish', 26), `Your line is in the water at ${spotName(spotOfKey(me.line.spot))}.`);
-  else if (!me.ready) status = h('p.fi-status', svgIcon('sun', 24), kit.timer(h('span'), { end: me.nextAt, prefix: 'Your next cast in ', doneText: 'Your rod is ready', done: () => ctx.refreshFishing?.() }));
-  else status = h('p.fi-status.ready', careGlyph('fish', 26), 'Your rod is ready: one calm cast an hour.');
+  if (me.line) status = h('p.fi-status', careGlyph('fish', 26), t('home.fish.lineIn', { spot: spotName(spotOfKey(me.line.spot)) }));
+  else if (!me.ready) status = h('p.fi-status', svgIcon('sun', 24), kit.timer(h('span'), { end: me.nextAt, prefix: t('home.fish.nextIn'), doneText: t('home.fish.rodReady'), done: () => ctx.refreshFishing?.() }));
+  else status = h('p.fi-status.ready', careGlyph('fish', 26), t('home.fish.ready'));
   const partner = v.players.filter((p) => !p.me).map((p) => h('p.fi-partner', playerMark(p.pid, st.players[p.pid], { size: 20 }),
-    p.line ? `${p.name} has a line in the water: cast within ${v.togetherMin} s to fish together.`
-      : p.ready ? `${p.name} can cast now too.` : h('span', `${p.name}: `, kit.timer(h('span'), { end: p.nextAt, prefix: 'next cast in ' }))));
+    p.line ? t('home.fish.partnerLine', { name: p.name, n: v.togetherMin })
+      : p.ready ? t('home.fish.partnerReady', { name: p.name }) : h('span', `${p.name}: `, kit.timer(h('span'), { end: p.nextAt, prefix: t('home.fish.partnerNext') }))));
   return h('section.fi-rod',
     status, ...partner,
     spot ? h('div.fi-go', ...v.spots.slice(0, 2).map((x) => h('button.btn.btn--sky', { type: 'button', dataset: { fish: x.pond ?? x.id },
-      'aria-disabled': me.ready ? null : 'true', title: me.ready ? null : 'Your rod rests for the hour',
-      on: { click: () => { if (me.ready) goFishing(ctx, x); } } }, careGlyph('fish', 24), `Fish at ${x.name}`)))
-      : h('p.hm-note', `Buy Willow Pond (expansion 9) for its dock, or place a Fishing Dock from level ${v.dockFrom}.`),
-    h('small.fi-how', `At the dock: cast, wait for the float to dip, tap to hook. Every cast lands something, and every one is a try for the Pond Treasures.`));
+      'aria-disabled': me.ready ? null : 'true', title: me.ready ? null : t('home.fish.rests'),
+      on: { click: () => { if (me.ready) goFishing(ctx, x); } } }, careGlyph('fish', 24), t('home.fish.fishAt', { spot: x.name }))))
+      : h('p.hm-note', t('home.fish.noSpot', { n: v.dockFrom })),
+    h('small.fi-how', t('home.fish.how')));
 }
 
 function boardCard(v, st, me) {
-  return h('section.fi-board', h('h3', 'The trophy board'), h('small', `${v.caught} of ${v.board.length} kinds landed · ${fmt(v.total)} casts in all`),
+  return h('section.fi-board', h('h3', t('home.fish.board')), h('small', t('home.fish.boardSub', { caught: v.caught, n: v.board.length, total: v.total })),
     h('ul', ...v.board.map((r) => h(`li.fi-trophy${r.record ? '.got' : ''}${r.joke ? '.joke' : ''}`, { dataset: { fish: r.id } },
-      fishArt(r.id, r.hue, { size: 60, caught: Boolean(r.record), label: r.record ? `${r.name}, ${r.record.cm} cm` : `${r.name}: not caught yet` }),
+      fishArt(r.id, r.hue, { size: 60, caught: Boolean(r.record), label: r.record ? t('home.fish.sized', { name: r.name, cm: r.record.cm }) : t('home.fish.notYet', { name: r.name }) }),
       h('b', r.name),
-      r.record ? h('small', `${r.record.cm} cm · `, st.players[r.record.by] ? playerMark(r.record.by, st.players[r.record.by], { size: 14 }) : null,
-        ` ${r.record.by === me ? 'you' : st.players[r.record.by]?.name ?? 'a farmer'}`) : h('small', `${r.cm[0]}-${r.cm[1]} cm`)))));
+      r.record ? h('small', tParts('home.fish.record', { cm: r.record.cm,
+        mark: st.players[r.record.by] ? playerMark(r.record.by, st.players[r.record.by], { size: 14 }) : '',
+        who: r.record.by === me ? t('home.fish.you') : st.players[r.record.by]?.name ?? t('home.fish.aFarmer') }))
+        : h('small', t('home.fish.range', { a: r.cm[0], b: r.cm[1] }))))));
 }
 
 export const fishingPanel = {
-  title: 'Fishing Dock',
+  title: () => phoneTitle('home.fish.title', 'home.fish.titleShort'),
   icon: 'pond_dock',
   size: 'wide',
   topics: ['players', 'fishing', 'album', 'xp', 'objects', 'expansions'],
@@ -138,25 +145,26 @@ export const fishingPanel = {
       const v = fishingView(st, ctx.store.pid, ctx.now());
       if (!v.live) {
         fill(body, h('div.br-locked', careGlyph('fish', 64), h('p', FISHING && isLive(FISHING)
-          ? `The fishing spot opens with Willow Pond (level ${v.unlock}).` : 'The Fishing Dock opens with the next chapter of the valley.')));
+          ? t('home.fish.opensWith', { n: v.unlock }) : t('home.fish.nextChapter'))));
         return;
       }
       const seats = v.players.filter((p) => p.line).map((p) => ({ color: p.color, mark: (p.name || '?').slice(0, 1).toUpperCase(), line: true }));
-      const best = v.best ? h('section.fi-best', h('h3', 'This week\'s biggest'),
+      const best = v.best ? h('section.fi-best', h('h3', t('home.fish.biggest')),
         h('div.fi-best-row', fishArt(v.best.fish, v.best.hue, { size: 96, label: v.best.name }),
-          h('div', h('b', `${v.best.name}, ${v.best.cm} cm`), h('small', 'landed by ', st.players[v.best.by] ? playerMark(v.best.by, st.players[v.best.by], { size: 14 }) : null,
-            ` ${v.best.by === ctx.store.pid ? 'you' : st.players[v.best.by]?.name ?? 'a farmer'}, ${ago(ctx.now() - v.best.at)}`),
-          h('small', 'On Sunday it is offered as a photo for the Memory Book.'))))
-        : h('section.fi-best.none', h('h3', 'This week\'s biggest'), h('p', 'Nothing landed this week yet. The biggest fish of the week becomes a Memory Book photo on Sunday.'));
-      const tr = v.treasures ? h('section.fi-treasures', h('h3', v.treasures.name), h('small', `${v.treasures.found} of ${v.treasures.total} found · every cast is a try`),
-        h('ul', ...v.treasures.items.map((it) => h(`li${it.found ? '.got' : ''}`, { title: it.found ? it.name : 'Not found yet' },
+          h('div', h('b', t('home.fish.sized', { name: v.best.name, cm: v.best.cm })), h('small', tParts('home.fish.landedBy', {
+            mark: st.players[v.best.by] ? playerMark(v.best.by, st.players[v.best.by], { size: 14 }) : '',
+            who: v.best.by === ctx.store.pid ? t('home.fish.you') : st.players[v.best.by]?.name ?? t('home.fish.aFarmer'), ago: ago(ctx.now() - v.best.at) })),
+          h('small', t('home.fish.sunday')))))
+        : h('section.fi-best.none', h('h3', t('home.fish.biggest')), h('p', t('home.fish.noneYet')));
+      const tr = v.treasures ? h('section.fi-treasures', h('h3', v.treasures.name), h('small', t('home.fish.treasures', { found: v.treasures.found, total: v.treasures.total })),
+        h('ul', ...v.treasures.items.map((it) => h(`li${it.found ? '.got' : ''}`, { title: it.found ? it.name : t('home.fish.notFound') },
           stickerArt(v.treasures.id, it.id, 52), h('small', it.found ? it.name : '?')))),
-        h('button.pn-chipbtn', { type: 'button', on: { click: () => ctx.open('collections', { set: v.treasures.id }) } }, 'Open the album')) : null;
+        h('button.pn-chipbtn', { type: 'button', on: { click: () => ctx.open('collections', { set: v.treasures.id }) } }, t('farm.unlock.collections.label'))) : null;
       fill(body,
-        h('div.fi-top', h('div.fi-scene', pondScene({ seats, label: seats.length ? 'Someone is fishing at the dock' : 'The dock, quiet for now' })), rodCard(ctx, kit, v)),
+        h('div.fi-top', h('div.fi-scene', pondScene({ seats, label: seats.length ? t('home.fish.sceneBusy') : t('home.fish.sceneQuiet') })), rodCard(ctx, kit, v)),
         h('div.fi-mid', best, tr),
         boardCard(v, st, ctx.store.pid),
-        h('p.fi-together', svgIcon('heart', 22), `Fishing together: cast at the same dock within ${v.togetherMin} seconds of each other and you each get a Heart (once a day).`));
+        h('p.fi-together', svgIcon('heart', 22), t('home.fish.together', { n: v.togetherMin })));
       kit.refresh();
     }
     update(true);
