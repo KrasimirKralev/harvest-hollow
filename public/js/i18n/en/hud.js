@@ -107,4 +107,11 @@ export default {
   'hud.fert.input': '{q}',
   'hud.fert.make': 'Make Fertilizer at the Compost Bin',
   'hud.fert.makeHow': 'Make Fertilizer at the Compost Bin ({how})',
+  // wave 5: a pet's world card (hud.js petTip)
+  'hud.pet.asleep': 'Asleep 💤 till morning',
+  'hud.pet.stays': 'Stays home by its {home} 🏠',
+  'hud.pet.staysAny': 'Stays home 🏠',
+  'hud.pet.followsYou': 'Follows you about the farm 🐾',
+  'hud.pet.follows': 'Follows {name} about the farm 🐾',
+  'hud.pet.staysPorch': 'Stays home by the farmhouse 🏠',
 };

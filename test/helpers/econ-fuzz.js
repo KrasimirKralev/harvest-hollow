@@ -10,6 +10,8 @@ import { sortedKeys } from '../../shared/rules/order.js';
 import { barnCap, stockOf, overflowOf } from '../../shared/rules/economy.js';
 import { econDue } from '../../shared/rules/actions/expansions.js';
 import { crateDue, cratesOn } from '../../shared/rules/actions/crates.js';
+import { pensDue } from '../../shared/rules/actions/pen.js';
+import { landDue, liveParcels } from '../../shared/rules/land.js';
 import { RELICS } from '../../shared/content/index.js';
 import { FARM_MIN, FARM_MAX } from '../../shared/content/config.js';
 import { mulberry32, plain, run, sys, T0, coopHarness } from '../helpers.js';
@@ -39,7 +41,12 @@ export const ECON_FUZZED = new Set(['plant', 'water', 'compost', 'harvest', 'upr
   // wave 4 (the owners' wish list): tray sales, upgrades, Fertilizer, weeds, looks, pet breeds
   'sellStored', 'upgradeObject', 'fertilize', 'clearWeed', 'setAvatar', 'petBreed',
   // wave 4b: balloon crates, the Acorn shop's relics, queue reorder
-  'openCrate', 'buyRelic', 'waterAll', 'farmhand', 'turnTime', 'reorder', 'saveFor']);
+  'openCrate', 'buyRelic', 'waterAll', 'farmhand', 'turnTime', 'reorder', 'saveFor',
+  // wave 5: babies in the pen, the dog stays home
+  'pair', 'pairCancel', 'petStay']);
+
+/** The wave-5 actions (test/invariants.w5.test.js accepts every one; elsewhere they stay out of the draw). */
+export const W5_FUZZED = Object.freeze(['pair', 'pairCancel', 'petStay']);
 
 /** The wave-4b actions (test/invariants.w4b.test.js accepts every one; elsewhere they stay out of the draw). */
 export const W4B_FUZZED = Object.freeze(['openCrate', 'buyRelic', 'waterAll', 'farmhand', 'turnTime', 'reorder',
@@ -137,6 +144,12 @@ const FOLLOW_W4B = { buyRelic: ['waterAll', 'farmhand', 'turnTime', 'place', 'sa
   craft: ['craft', 'reorder', 'hurry'], reorder: ['reorder', 'hurry', 'cancel'], openCrate: ['openCrate'],
   buyAnimal: ['buyAnimal', 'upgradeHome'] };
 
+/** The wave-5 mix (test/invariants.w5.test.js): pairings (`_pen` runs when due) and petStay. Off by default. */
+let W5 = false;
+export const enableW5 = (on = true) => { W5 = on; };
+const FOLLOW_W5 = { pair: ['pairCancel', 'pair', 'tend', 'upgradeHome'], buyAnimal: ['pair', 'buyAnimal'],
+  pairCancel: ['pair'], petStay: ['petStay', 'feedPet'], upgradeHome: ['pair'] };
+
 /** One random economy action with plausible arguments drawn from the state. */
 export function randomAction(rnd, s, recent = [], now = T0, last = null) {
   const pick0 = (list) => list[Math.floor(rnd() * list.length)];
@@ -160,8 +173,8 @@ export function randomAction(rnd, s, recent = [], now = T0, last = null) {
   // the wave-2 actions join on an M1b farm (L16+: the Ledger, Masterwork, Town Projects); an L12 farm keeps the M1a mix
   const types = [...ECON_FUZZED].filter((t) => (!M1B_FUZZED.includes(t) || (WAVE2 && level >= 16))
     && (!M2_FUZZED.includes(t) || (WAVE3 && level >= 28)) && (W4 || !W4_FUZZED.includes(t))
-    && (W4B || !W4B_FUZZED.includes(t)));
-  const follows = { ...FOLLOW, ...(W4 ? FOLLOW_W4 : {}), ...(W4B ? FOLLOW_W4B : {}) };
+    && (W4B || !W4B_FUZZED.includes(t)) && (W5 || !W5_FUZZED.includes(t)));
+  const follows = { ...FOLLOW, ...(W4 ? FOLLOW_W4 : {}), ...(W4B ? FOLLOW_W4B : {}), ...(W5 ? FOLLOW_W5 : {}) };
   const follow = last && follows[last] && rnd() < 0.5 ? pick0(follows[last]) : null;
   // a Giant on the farm joins the common moves (it takes six chops to fell)
   const common = ['plant', 'harvest', 'tend', 'collectTray', 'craft', 'sell', 'place', 'water',
@@ -171,7 +184,8 @@ export function randomAction(rnd, s, recent = [], now = T0, last = null) {
     // a queue with two waiting items is the moment a player drags one: reorder gets its chance then
     : rnd() < 0.15 && k.building.some((id) => s.farm.objects[id].queue.filter((q) => q.s > now).length >= 2) ? 'reorder'
       : null;
-  const type = follow ?? w4b ?? (rnd() < 0.3 ? pick0(common) : pick0(types));
+  const w5 = W5 && rnd() < 0.1 ? pick0(W5_FUZZED) : null;
+  const type = follow ?? w4b ?? w5 ?? (rnd() < 0.3 ? pick0(common) : pick0(types));
   const blocks = blocksOf(s);
   switch (type) {
     case 'plant': {
@@ -400,6 +414,16 @@ export function randomAction(rnd, s, recent = [], now = T0, last = null) {
     }
     case 'buyRelic': return [type, { relic: rnd() < 0.95 ? pick0(RELICS).id : 'nope', ...big }];
     case 'saveFor': return [type, rnd() < 0.2 ? {} : { relic: rnd() < 0.95 ? pick0(RELICS).id : 'nope' }];
+    // ---- wave 5 ----
+    case 'pair': case 'pairCancel': {
+      const home = k.home.length ? pick(k.home) : 'none.1.0';
+      if (type === 'pairCancel' || rnd() < 0.7) return [type, { home, ...(rnd() < 0.3 ? { confirm: ['RESERVED'] } : {}) }];
+      const occ = k.animal.filter((id) => s.farm.objects[id].home === home);
+      const pa = occ.length ? pick0(occ) : 'none.1.0';
+      const pb = occ.length ? pick0(occ) : 'none.1.0';
+      return [type, { home, a: pa, b: pb, confirm: ['RESERVED'] }];
+    }
+    case 'petStay': return [type, { stay: rnd() < 0.6, ...(rnd() < 0.5 ? { owner: pick0(['p1', 'p2']) } : {}) }];
     case 'waterAll': case 'farmhand': case 'turnTime': return [type, rnd() < 0.3 ? { confirm: ['RESERVED'] } : {}];
     case 'reorder': {
       const busy = k.building.filter((id) => s.farm.objects[id].queue.filter((q) => q.s > now).length >= 2);
@@ -429,7 +453,8 @@ export function randomAction(rnd, s, recent = [], now = T0, last = null) {
  */
 export function startFarm(seed, { level = 12, m1b = false, m2 = false } = {}) {
   const s = farmAt(level, { seed, coins: 400_000, acorns: 120 });
-  s.farm.expansions = live('expansions').filter((e) => m1b || e.m === 'M1a').map((e) => e.id);
+  // whole parcels (wave 5): M1a = the first two (5 pieces, as many as the old M1a land), M1b = five (11 pieces)
+  s.farm.expansions = liveParcels().filter((p) => p.k <= (m1b ? 5 : 2)).flatMap((p) => p.pieces);
   resetGrid(s);
   const BIG = { confirm: ['BIG_SPEND'] };
   for (const def of ['coop', 'feed_mill', 'mill', 'bakery', 'dairy', 'cow_barn', 'apple_tree', 'pine', 'compost_bin']) {
@@ -569,7 +594,9 @@ export function fuzz({ seeds = [1, 2, 3, 4, 5, 6], steps = 150, start = startFar
         if (twin) assert.deepEqual(plain(twin), plain(s), `values diverge before step ${i}`);
         twin = reverseKeys(plain(s));
       }
-      const due = [...econDue(s, now), ...(W4B && crateDue(s, now) ? [{ type: '_crate', args: {} }] : [])];
+      const due = [...(landDue(s) ? [{ type: '_land', args: {} }] : []), ...econDue(s, now),
+        ...(W4B && crateDue(s, now) ? [{ type: '_crate', args: {} }] : []),
+        ...(W5 && pensDue(s, now).length ? [{ type: '_pen', args: {} }] : [])];
       for (const a of due) {
         const r = sys(s, a.type, a.args, now);
         assert.equal(r.ok, true, `${a.type} due but refused ${r.code} ${r.err?.stack ?? ''}`);

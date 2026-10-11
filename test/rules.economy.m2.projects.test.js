@@ -44,19 +44,20 @@ function finish(s, pid, last, o = {}) {
   return r;
 }
 
-test('expansions 11-15: each opens at its level with its coins, Planks, Crates and proof task', () => {
+test('the M2 parcels: each opens at its level with its coins, Planks, Crates and proof tasks (wave 5)', () => {
   const s = farm(40);
-  s.farm.expansions = content.live('expansions').filter((e) => e.k <= 10).map((e) => e.id);
+  const parcels = [...content.CONTENT.parcels.values()].sort((a, b) => a.k - b.k);
+  s.farm.expansions = parcels.filter((p) => p.m !== 'M2').flatMap((p) => p.pieces);
   resetGrid(s);
-  for (const e of content.live('expansions').filter((x) => x.k >= 11).sort((a, b) => a.k - b.k)) {
-    assert.equal(e.m, 'M2');
+  for (const e of parcels.filter((x) => x.m === 'M2')) {
     give(s, 'planks', e.planks);
     give(s, 'wooden_crate', e.crates);
     must(s, 'openExpansion', { expansion: e.id });
     assert.equal(run(s, 'expand', { expansion: e.id, ...BIG }).code, 'NOT_READY', `${e.id}: the proof first`);
     s.farm.proofs[e.id].n = Object.fromEntries(e.proof.map((t, i) => [String(i), t.qty]));
+    for (const t of e.proof) if (t.verb === 'own') for (let i = 0; i < t.qty; i++) placeDef(s, t.ref, BIG);
     const coins = s.farm.wallet.coins;
-    must(s, 'expand', { expansion: e.id, ...BIG });
+    must(s, 'expand', { expansion: e.id, ...BIG }, { now: T0 + 86_400_000 });
     assert.equal(coins - s.farm.wallet.coins, e.cost);
   }
   assert.equal(s.farm.expansions.length, content.live('expansions').length);
@@ -65,15 +66,17 @@ test('expansions 11-15: each opens at its level with its coins, Planks, Crates a
 
 test('an M2 proof counts the deed it names: Walnut harvests, Olive Oil, Maple Syrup, Gourmet Hampers', () => {
   const s = farm(39);
-  s.farm.expansions = content.live('expansions').filter((e) => e.k <= 11).map((e) => e.id);
+  // wave 5: the Olive Terrace's task is on its parcel's card, Sunset Ridge
+  s.farm.expansions = [...content.CONTENT.parcels.values()].filter((p) => p.k <= 6).flatMap((p) => p.pieces);
   resetGrid(s);
   must(s, 'openExpansion', { expansion: 'olive_terrace' });
+  const j = content.CONTENT.parcels.get('sunset_ridge').proof.findIndex((t) => t.ref === 'olive_oil');
   const press = placeDef(s, 'oil_press', BIG);
   const oil = content.recipeOf('olive_oil');
   for (const [k, n] of Object.entries(oil.inputs)) give(s, k, n * 2);
   must(s, 'craft', { id: press, recipe: 'olive_oil' });
   must(s, 'collectTray', { id: press }, { now: T0 + oil.ms * 2 });
-  assert.equal(s.farm.proofs.olive_terrace.n['0'], oil.out);
+  assert.equal(s.farm.proofs.sunset_ridge.n[String(j)], oil.out);
 });
 
 test('barn upgrades 8-10 at L27 / 30 / 33, +120 each, to 1,400', () => {

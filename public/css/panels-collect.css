@@ -485,3 +485,7 @@ body.hud-hidden .pc-meter { display: none; }
   :lang(bg) .pc-mw-next small { text-align: left; }
   :lang(bg) .pc-mw-copy > .pn-act { margin-left: auto; }
 }
+
+/* wave 5: where a pet is by day (following its farmer, or staying home) and the "Stay home" / "Come with me" button */
+.pc-pet-where { margin: 0; padding: 6px 10px; border-radius: 10px; background: #FFF1DA; font: 700 .875rem/1.3 var(--font-ui); color: #5A3A1A; }
+.pc-pet-where[data-stay="home"] { background: #E6F2FF; color: #1C4A73; }

@@ -22,6 +22,7 @@ import * as calendar from '../../../../shared/rules/calendar.js';
 import * as boostsA from '../../../../shared/rules/actions/boosts.js';
 import * as marketA from '../../../../shared/rules/actions/market.js';
 import { t, t as tr, N, Q, name as cname, ctext, list as listOf, fmtNum, getters, lang } from '../../i18n/index.js';
+import { landUnits, unitOwned, landFamily, parcelPlots, parcelArea } from './w5-rules.js';
 
 const own = (o, k) => (o && Object.hasOwn(o, k) ? o[k] : 0);
 const sum = (a) => a.reduce((s, v) => s + v, 0);
@@ -469,7 +470,12 @@ export function blockerText(state, blockers) {
     const o = Object.hasOwn(state.farm.objects, id) ? state.farm.objects[id] : null;
     return o ? (state.farm.names?.[id]?.name ?? (defOf(o.def) ? cname(o.def, { form: lang() === 'bg' ? 'lc' : 'label' }) : null) ?? t('market.blocker.something')) : t('market.blocker.something');
   };
-  const names = [...new Set(ids.map(nameOf))];
+  // several pieces of one thing (a fence run) say its plural: "Picket Fences are in the way", never "Picket Fence are"
+  const count = new Map();
+  for (const id of ids) { const k = nameOf(id); count.set(k, (count.get(k) ?? 0) + 1); }
+  const defOfName = new Map(ids.map((id) => [nameOf(id), state.farm.objects[id]?.def]));
+  const names = [...count.keys()].map((k) => (count.get(k) > 1 && defOfName.get(k) && defOf(defOfName.get(k)) && !state.farm.names?.[ids.find((id) => nameOf(id) === k)]
+    ? cname(defOfName.get(k), { form: 'pl' }) : k));
   const who = names.length > 2 ? t('market.blocker.andMore', { a: names[0], b: names[1], n: names.length - 2 }) : listOf(names);
   return t(ids.length > 1 ? 'market.blocker.many' : 'market.blocker.one', { list: who });
 }
@@ -503,13 +509,15 @@ export function goldenSeedsOf(state) {
 
 // ---- land -------------------------------------------------------------------------------------------------------
 
-/** Proof-task progress of an expansion when the rules track it: [{ verb, ref, qty, have }]. */
+/** Proof-task progress of a land unit (a parcel, or an expansion row) when the rules track it: [{ verb, ref, qty, have }]. */
 export function proofOf(state, exp, now) {
   const opened = Boolean(state.farm.proofs && Object.hasOwn(state.farm.proofs, exp.id));
-  return exp.proof.map((t, i) => {
-    let have;
-    if (typeof expansionsA.proofProgress === 'function') have = expansionsA.proofProgress(state, exp.id, i, now).have;
-    else have = t.verb === 'own' ? placedOf(state, t.ref).length : state.farm.proofs?.[exp.id]?.n?.[String(i)] ?? 0;
+  return (exp.proof ?? []).map((t, i) => {
+    let have = null;
+    if (typeof expansionsA.proofProgress === 'function') {
+      try { have = expansionsA.proofProgress(state, exp.id, i, now)?.have ?? null; } catch { have = null; }
+    }
+    if (!Number.isFinite(have)) have = t.verb === 'own' ? placedOf(state, t.ref).length : state.farm.proofs?.[exp.id]?.n?.[String(i)] ?? 0;
     return { ...t, have: Math.min(have, t.qty), started: opened || t.verb === 'own' };
   });
 }
@@ -517,33 +525,44 @@ export function proofOf(state, exp, now) {
 /** True once either player opened the expansion's card (its proof tasks count from then, GDD §3.9). */
 export const proofOpened = (state, expId) => Boolean(state.farm.proofs && Object.hasOwn(state.farm.proofs, expId));
 
-/** Expansion cards in purchase order (k = 1 ..), with what each one still needs. */
+/** A land unit's text field in the language in effect (the parcels' own, else the expansions' family). */
+const landText = (id, field, english) => ctext(landFamily(), id, field, english);
+
+/**
+ * Land cards in purchase order (k = 1 ..), with what each one still needs. Wave 5 (fewer, bigger expansions): a card is
+ * a PARCEL (content's CONTENT.parcels, several old pieces bought together) in a build that sells parcels, else an
+ * expansion row; `pieces` are the pieces it gives, `plots` the plot cap it adds, `area` its tiles.
+ */
 export function landCards(state, env = {}) {
   const level = levelOf(state);
-  const ownedSet = new Set(state.farm.expansions);
-  const exps = live('expansions').filter((e) => e.k > 0).sort((a, b) => a.k - b.k);
-  const nextK = Math.min(...exps.filter((e) => !ownedSet.has(e.id)).map((e) => e.k));
+  const exps = landUnits().filter((e) => e.k > 0 && isLive(e));
+  const owned = (e) => unitOwned(state, e);
+  const nextK = Math.min(...exps.filter((e) => !owned(e)).map((e) => e.k));
   return exps.map((e) => {
-    const owned = ownedSet.has(e.id);
+    const mine = owned(e);
     const needs = [];
     if (e.planks) needs.push({ item: 'planks', n: e.planks, have: available(state, 'planks') });
     if (e.crates) needs.push({ item: 'wooden_crate', n: e.crates, have: available(state, 'wooden_crate') });
     // `now`: "own 2 Apple Trees" counts settled trees only (RC-05), as the Buy button's rules do
     const proof = proofOf(state, e, env.now);
+    let rulesCode = null;
+    if (!mine && e.k === nextK && level >= e.unlock && typeof expansionsA.expandCode === 'function') {
+      try { rulesCode = expansionsA.expandCode(state, e.id, env.now); } catch { rulesCode = null; }
+    }
     let gate;
-    if (owned) gate = { code: 'ALREADY_DONE', hint: { done: t('market.land.ours') } };
+    if (mine) gate = { code: 'ALREADY_DONE', hint: { done: t('market.land.ours') } };
     else if (e.k !== nextK) gate = { code: 'LOCKED', hint: { text: t('market.land.before') } };
     else if (level < e.unlock) gate = { code: 'LOCKED', hint: { unlock: e.unlock } };
     else {
       const miss = needs.filter((x) => x.have < x.n).map((x) => ({ item: x.item, n: x.n - x.have }));
-      const rulesCode = typeof expansionsA.expandCode === 'function' ? expansionsA.expandCode(state, e.id, env.now) : null;
       if (proof.some((p) => p.have < p.qty) || rulesCode === 'NOT_READY') gate = { code: 'NOT_READY', hint: { what: 'The proof task', text: t('market.land.proofNotReady') } }; // i18n-ok: `what` is the old field, the text shows
       else if (miss.length || rulesCode === 'NO_ITEMS') gate = { code: 'NO_ITEMS', hint: { missing: miss } };
       else gate = gateOf(state, { coins: e.cost });
     }
-    return { id: e.id, k: e.k, icon: 'plot', kind: 'land', name: cname(e.id, { family: 'expansions' }), unlock: e.unlock, opened: proofOpened(state, e.id),
-      price: { coins: e.cost, acorns: 0 }, needs, proof, proofText: e.proofText ? ctext('expansions', e.id, 'proofText', e.proofText) : null, reveals: ctext('expansions', e.id, 'reveals', e.reveals), rects: e.rects,
-      owned, isNext: e.k === nextK, ...gate, big: !owned && bigSpend(state, e.cost, 0, env), isNew: isNewAt(e.unlock, level) };
+    return { id: e.id, k: e.k, icon: 'plot', kind: 'land', name: cname(e.id, { family: landFamily() }), unlock: e.unlock, opened: proofOpened(state, e.id),
+      price: { coins: e.cost, acorns: 0 }, needs, proof, proofText: e.proofText ? landText(e.id, 'proofText', e.proofText) : null,
+      reveals: landText(e.id, 'reveals', e.reveals ?? ''), rects: e.rects, pieces: e.pieces, plots: parcelPlots(e), area: parcelArea(e),
+      owned: mine, isNext: e.k === nextK, ...gate, big: !mine && bigSpend(state, e.cost, 0, env), isNew: isNewAt(e.unlock, level) };
   });
 }
 

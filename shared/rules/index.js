@@ -79,6 +79,9 @@ import * as avatar from './actions/avatar.js';
 // wave 4b (the owners' wish list of 2026-10-05): the balloon's crates (+ `_crate`), the Acorn shop's relics
 import * as crates from './actions/crates.js';
 import * as relics from './actions/relics.js';
+// wave 5 (the owners' wish list): babies in the pen (+ `_pen`), the one-time land migration (`_land`)
+import * as pen from './actions/pen.js';
+import * as land from './actions/land.js';
 import { SYSTEM_ACTIONS } from './system.js';
 
 // rules-goals owns the block between `// >>> goals actions` and `// <<< goals actions`: import its action
@@ -122,7 +125,7 @@ function registry(...families) {
 
 /** Null-prototype frozen registry: ACTIONS['constructor'] is undefined. */
 export const ACTIONS = registry(farming, trees, animals, crafting, market, storage, decor, boosts, expansions,
-  beauty, restoration, town, pets, breeding, fishing, interior, upgrades, weeds, avatar, crates, relics,
+  beauty, restoration, town, pets, breeding, fishing, interior, upgrades, weeds, avatar, crates, relics, pen, land,
   ...GOALS_FAMILIES, SYSTEM_ACTIONS);
 
 /** Server-side readiness grace; the client passes 0. */

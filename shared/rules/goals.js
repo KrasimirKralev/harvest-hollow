@@ -40,6 +40,10 @@ import { masteryDef, starsOf } from './progress.js';
 import { buyPrice } from './actions/decor.js';
 import { slotPrice } from './actions/crafting.js';
 import { nextExpansion, proofProgress } from './actions/expansions.js';
+import { hasParcels } from './land.js';
+
+/** The names family of the land card's row (wave 5: parcels; a build without them names expansion rows). */
+const LAND_FAMILY = () => (hasParcels() ? 'parcels' : 'expansions');
 import { basketCode } from './actions/farming.js';
 import { enterable, fairStanding, openFair, medalRank } from './actions/fair.js';
 import { dockedBarge, bargeView } from './actions/barge.js';
@@ -721,7 +725,7 @@ function spendList(state, now, push, add) {
       const left = { ...t, qty: p.need - p.have, ref: Array.isArray(t.ref) ? t.ref[0] : t.ref };
       // a task with several goods names every one ("Make 3 more Cotton Totes or Wool Pillows"), as the Land card does
       const alts = Array.isArray(t.ref) ? t.ref.slice(1).map((r) => noun(r, left.qty, nameOf(r))) : [];
-      const lm = msg(alts.length ? 'goals.r.land.taskOr' : 'goals.r.land.task', { land: name(land.id, land.name, 'expansions'),
+      const lm = msg(alts.length ? 'goals.r.land.taskOr' : 'goals.r.land.task', { land: name(land.id, land.name, LAND_FAMILY()),
         task: sub(moreMsg(left)), ...(alts.length ? { alts: join(alts, 'or') } : {}) });
       push({ slot: 'now', kind: 'land', id: land.id, ref: String(i), ...said(lm),
         have: p.have, need: p.need, domain: verbDomain(t.verb), target: { panel: 'expansion', args: { id: land.id } } },
@@ -739,19 +743,19 @@ function spendList(state, now, push, add) {
       const owned = maker ? (objectsByDef(state).get(maker) ?? []).length > 0 : true;
       if (need && owned) {
         push({ slot: 'now', kind: 'land', id: land.id, ref: need.ref,
-          ...said(msg('goals.r.land.task', { land: name(land.id, land.name, 'expansions'), task: sub(moreMsg(need)) })),
+          ...said(msg('goals.r.land.task', { land: name(land.id, land.name, LAND_FAMILY()), task: sub(moreMsg(need)) })),
           domain: 'workshop', target }, 5.5);
       } else if (need) {
         const p = buyPrice(state, maker);
         if (!p.code && !(p.acorns > 0) && p.coins <= coins && hasSpot(state, maker)) {
           push({ slot: 'now', kind: 'build', id: maker, ...said(msg('goals.r.land.needBuild', {
-            land: name(land.id, land.name, 'expansions'), q: qtyRef(need.ref, need.qty, nameOf(need.ref)),
+            land: name(land.id, land.name, LAND_FAMILY()), q: qtyRef(need.ref, need.qty, nameOf(need.ref)),
             b: name(maker, CONTENT.buildings.get(maker).name), c: p.coins })), domain: 'workshop', need: p.coins,
           target: { panel: 'market', args: { tab: 'buildings', focus: maker } } }, 5.5);
         }
       } else if (land.cost <= coins) {
         push({ slot: 'now', kind: 'land', id: land.id, ref: 'buy',
-          ...said(msg('goals.r.land.buy', { land: name(land.id, land.name, 'expansions'), c: land.cost })),
+          ...said(msg('goals.r.land.buy', { land: name(land.id, land.name, LAND_FAMILY()), c: land.cost })),
           domain: 'market', need: land.cost, target }, 7);
       }
     }

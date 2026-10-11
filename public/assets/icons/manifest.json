@@ -1,6 +1,6 @@
 {
  "version": 1,
- "hash": "23de24b468",
+ "hash": "88ad3ece3c",
  "size": [
   128,
   64
@@ -115,6 +115,24 @@
    "kind": "decor"
   },
   "bird_house": {
+   "kind": "item"
+  },
+  "bison": {
+   "kind": "animal"
+  },
+  "bison_blanket": {
+   "kind": "item"
+  },
+  "bison_down": {
+   "kind": "item"
+  },
+  "bison_range": {
+   "kind": "home"
+  },
+  "bison_wool": {
+   "kind": "item"
+  },
+  "bison_yarn": {
    "kind": "item"
   },
   "black_tomato_tin": {
@@ -259,6 +277,9 @@
   "chicken_feed": {
    "kind": "item"
   },
+  "chili": {
+   "kind": "item"
+  },
   "chocolate": {
    "kind": "item"
   },
@@ -270,6 +291,15 @@
   },
   "chocolatier": {
    "kind": "building"
+  },
+  "cinnamon": {
+   "kind": "item"
+  },
+  "cinnamon_rolls": {
+   "kind": "item"
+  },
+  "cinnamon_tree": {
+   "kind": "tree"
   },
   "clock_square_souvenir": {
    "kind": "decor"
@@ -364,6 +394,9 @@
   "cuckoo_clock": {
    "kind": "furniture"
   },
+  "cumin": {
+   "kind": "item"
+  },
   "custard": {
    "kind": "item"
   },
@@ -435,6 +468,9 @@
   },
   "feed_scoop": {
    "kind": "tool"
+  },
+  "felt_slippers": {
+   "kind": "item"
   },
   "fern_fossil": {
    "kind": "find"
@@ -622,6 +658,15 @@
   "grenadine": {
    "kind": "item"
   },
+  "grill_spice": {
+   "kind": "item"
+  },
+  "ground_cinnamon": {
+   "kind": "item"
+  },
+  "ground_paprika": {
+   "kind": "item"
+  },
   "growth_totem": {
    "kind": "decor"
   },
@@ -787,6 +832,9 @@
   "lucky_horseshoe": {
    "kind": "decor"
   },
+  "lyutenitsa": {
+   "kind": "item"
+  },
   "mabel_stall": {
    "kind": "decor"
   },
@@ -840,6 +888,9 @@
   },
   "millpond_bridge_souvenir": {
    "kind": "decor"
+  },
+  "mini_quiche": {
+   "kind": "item"
   },
   "monarch": {
    "kind": "find"
@@ -929,6 +980,9 @@
    "kind": "home"
   },
   "pancakes": {
+   "kind": "item"
+  },
+  "paprika": {
    "kind": "item"
   },
   "pasture": {
@@ -1072,6 +1126,9 @@
   "potato_gratin": {
    "kind": "item"
   },
+  "prairie_hay": {
+   "kind": "item"
+  },
   "preserves": {
    "kind": "building"
   },
@@ -1095,6 +1152,18 @@
   },
   "purple_rosette": {
    "kind": "find"
+  },
+  "quail": {
+   "kind": "animal"
+  },
+  "quail_canapes": {
+   "kind": "item"
+  },
+  "quail_coop": {
+   "kind": "home"
+  },
+  "quail_egg": {
+   "kind": "item"
   },
   "quilt": {
    "kind": "item"
@@ -1207,7 +1276,13 @@
   "saddle_rack": {
    "kind": "decor"
   },
+  "salted_bread": {
+   "kind": "item"
+  },
   "sauerkraut": {
+   "kind": "item"
+  },
+  "savory": {
    "kind": "item"
   },
   "sawmill": {
@@ -1242,6 +1317,9 @@
   },
   "sewing": {
    "kind": "building"
+  },
+  "sharena_sol": {
+   "kind": "item"
   },
   "shark_tooth": {
    "kind": "find"
@@ -1291,8 +1369,17 @@
   "spa_basket": {
    "kind": "item"
   },
+  "speckled_egg": {
+   "kind": "item"
+  },
   "speckled_feather": {
    "kind": "find"
+  },
+  "spice_mill": {
+   "kind": "building"
+  },
+  "spiced_cider": {
+   "kind": "item"
   },
   "sprinkler": {
    "kind": "decor"
@@ -1413,6 +1500,9 @@
   },
   "village_green_souvenir": {
    "kind": "decor"
+  },
+  "village_potatoes": {
+   "kind": "item"
   },
   "walnut": {
    "kind": "item"

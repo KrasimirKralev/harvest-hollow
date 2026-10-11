@@ -23,6 +23,7 @@
 //   - music scene: Golden Hour (rules coop.goldenHourBp), rain (view.stats().weather), the animals on the farm
 //   - the partner moves or stores MY things (pinned by me, or a building / decor / home / tree I placed; not plots):
 //     a notice with a one-click "Move it back" (GDD §6.3 "You moved my building", TRIAGE CL-05)
+import { landRef } from '../ui/panels/w5-rules.js';
 import { defOf, itemOf, COOP, SAFETY, CONTENT, FAIR, isLive } from '../../../shared/content/index.js';
 import { acornsToday } from '../../../shared/rules/economy.js';
 import { SOFT, ERR } from '../../../shared/net/protocol.js';
@@ -42,7 +43,9 @@ const CHOPS = ['chop1', 'chop2', 'chop3'];
 export const SPECIES_SOUND = Object.freeze({ cluck: 'cluck', moo: 'moo', baa: 'baa', oink: 'oink', quack: 'quack', bleat: 'bleat',
   neigh: 'neigh', buzz: 'buzz', hum: 'hum',
   // wave 4 (wish 3): the rabbit's hind-foot thump and its sniff and nibble (content animals.js `sound: 'thump'`)
-  thump: 'bunny', nibble: 'bunny', sniff: 'bunny' });
+  thump: 'bunny', nibble: 'bunny', sniff: 'bunny',
+  // wave 5 (bison, quail): whatever call content gives them borrows the nearest sample (a deep low, a small cluck)
+  grunt: 'moo', snort: 'moo', bellow: 'moo', low: 'moo', chirp: 'cluck', peep: 'cluck', coo: 'cluck', whistle: 'cluck' });
 /** The Nursery's care steps (GDD §3.4): feed with the bottle, play with a squeaky toy, groom with a brush. */
 export const STEP_SOUND = Object.freeze({ feed: [['water', { gain: 0.5 }], ['hop', { gain: 0.6 }]], play: [['squeak', { gain: 0.8 }]],
   groom: [['brush', { gain: 0.9 }]] });
@@ -70,7 +73,8 @@ export function rainLevel(stats) {
 export function soundsOf(ev, state) {
   const animalSound = () => {
     const o = ev.id && state.farm.objects[ev.id];
-    const d = defOf(ev.animal || (o && o.def));
+    // wave 5: a pair's event names its species
+    const d = defOf(ev.animal || (o && o.def) || ev.species);
     return d && SPECIES_SOUND[d.sound] ? [[SPECIES_SOUND[d.sound], { gain: 0.8 }]] : [];
   };
   switch (ev.e) {
@@ -193,6 +197,13 @@ export function soundsOf(ev, state) {
     // 3: a home grew a room step with its flock (a bigger footprint: the hammer twice)
     case 'homeGrew': return ev.grows ? [['build'], ['build', { gain: 0.6, rate: 1.1, at: 0.22 }], ['register', { gain: 0.4 }]]
       : [['build'], ['register', { gain: 0.4 }]];
+    // ---- wave 5 (the owners' wish list of 2026-10-05) ----------------------------------------------------------
+    // list 1, wish 1: two animals paired in their pen (a soft heart chime and their own call); the baby arrives
+    case 'paired': return [['thanks', { gain: 0.55 }], ...animalSound()];
+    case 'pairCancelled': return [['close']];
+    case 'penBorn': return [['hop'], ['find', { gain: 0.6 }], ...animalSound()];
+    // list 2, wish 3: the dog told to stay home or to come along: its own woof (a cat's meow), softer for "stay"
+    case 'petStay': return [[ev.kind === 'cat' ? 'meow' : 'woof', { gain: ev.stay === true ? 0.5 : 0.75 }]];
     case 'furnished': return [['furnish']];
     case 'furnishMoved': return [['furnish', { gain: 0.6, rate: 1.1 }]];
     case 'furnishStored': return [['close']];
@@ -302,7 +313,9 @@ export function bigSpendLine(events, state, by, now) {
   else if (has('homeUpgraded')) text = def ? t('game.spend.home', { who, thing: N(def.id), price }) : t('game.spend.homeAny', { who, price });
   else if (has('barnUpgraded')) text = t('game.spend.barn', { who, price });
   else if (has('expanded')) {
-    text = CONTENT.expansions?.get(what)?.name ? t('game.spend.landNamed', { who, land: N(what, 'expansions'), price }) : t('game.spend.land', { who, price });
+    // wave 5: the land is a parcel (several old pieces) where the build sells parcels
+    const land = landRef(what);
+    text = land ? t('game.spend.landNamed', { who, land: N(what, land.family), price }) : t('game.spend.land', { who, price });
   } else {
     const tool = what ? CONTENT.tools.get(what) : null;
     const item = what && !def && !tool ? itemOf(what) : null;

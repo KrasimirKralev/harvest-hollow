@@ -36,7 +36,8 @@ import * as weeds from '../shared/rules/actions/weeds.js';
 import * as avatar from '../shared/rules/actions/avatar.js';
 import * as crates from '../shared/rules/actions/crates.js';
 import * as relics from '../shared/rules/actions/relics.js';
-import { ECON_FUZZED, M1B_FUZZED, M2_FUZZED, W4_FUZZED, W4B_FUZZED, fuzz, converge, reverseKeys } from
+import * as pen from '../shared/rules/actions/pen.js';
+import { ECON_FUZZED, M1B_FUZZED, M2_FUZZED, W4_FUZZED, W4B_FUZZED, W5_FUZZED, fuzz, converge, reverseKeys } from
   './helpers/econ-fuzz.js';
 
 // rules-goals runs its own actions through the same key-reversed-twin fuzz in test/goals.fuzz.test.js and lists
@@ -58,14 +59,15 @@ test('fuzz: key order, classified events, round trips, validity and the economy 
   // are refused while their milestone is not live (test/invariants.m1b.test.js accepts them)
   // (they join only on an L16+ farm: the L12 farm here keeps the M1a mix)
   // wave 4: test/invariants.w4.test.js accepts every one (Fertilizer and pet breeds need their levels)
-  // wave 4b: test/invariants.w4b.test.js accepts every one
-  const hard = new Set(['seedBasket', 'expand', ...M1B_FUZZED, ...M2_FUZZED, ...W4_FUZZED, ...W4B_FUZZED]);
+  // wave 4b: test/invariants.w4b.test.js accepts every one; wave 5: test/invariants.w5.test.js
+  const hard = new Set(['seedBasket', 'expand', ...M1B_FUZZED, ...M2_FUZZED, ...W4_FUZZED, ...W4B_FUZZED,
+    ...W5_FUZZED]);
   assert.ok(never.filter((t) => !hard.has(t)).length <= 1, `never accepted: ${never.join(', ')}`);
 });
 
 test('every registered action is exercised by the fuzzer or is a system action', () => {
   const econ = [farming, trees, animals, crafting, market, storage, decor, boosts, expansions, beauty, restoration,
-    town, pets, upgrades, weeds, avatar, crates, relics].flatMap((fam) => Object.entries(fam)
+    town, pets, upgrades, weeds, avatar, crates, relics, pen].flatMap((fam) => Object.entries(fam)
     .filter(([k, v]) => v && typeof v === 'object'
     && typeof v.apply === 'function' && !k.startsWith('_')).map(([k]) => k));
   assert.deepEqual(econ.filter((type) => !ECON_FUZZED.has(type)), [], 'add these to randomAction()');

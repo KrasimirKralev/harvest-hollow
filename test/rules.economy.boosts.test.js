@@ -153,44 +153,48 @@ test('tools: brush upgrades are bought once for the farm at their level', () => 
   assert.equal(run(s, 'buyTool', { tool: 'big_watering_can' }).code, ERR.ALREADY_DONE);
 });
 
-test('expansions: in order; proof tasks count from the card\'s first opening; land, objects and debris arrive', () => {
+test('land by parcel (wave 5): in order; proof tasks count from the card\'s first opening; pieces, objects and debris arrive', () => {
   const s = farmAt(5, { coins: 100_000 });
-  const e = expansionOf('creekside');
-  assert.equal(run(s, 'expand', { expansion: 'old_orchard' }).code, ERR.LOCKED, 'out of order');
-  assert.equal(run(s, 'expand', { expansion: 'creekside' }).code, ERR.NOT_READY, 'the card was never opened');
+  const e = CONTENT.parcels.get('creek_hill');
+  assert.equal(run(s, 'expand', { expansion: 'orchard_lane' }).code, ERR.LOCKED, 'out of order');
+  assert.equal(run(s, 'expand', { expansion: 'creek_hill' }).code, ERR.NOT_READY, 'the card was never opened');
   must(s, 'plant', { ids: Array.from({ length: 16 }, (_, i) => `home.0.${i}`), crop: 'wheat' }, { now: T0 });
   must(s, 'harvest', { ids: Array.from({ length: 16 }, (_, i) => `home.0.${i}`) }, { now: T0 + HOUR });
-  assert.equal(proofProgress(s, 'creekside', 0).have, 0, 'harvests before the opening do not count');
-  must(s, 'openExpansion', { expansion: 'creekside' }, { pid: 'p2' });
-  assert.equal(run(s, 'openExpansion', { expansion: 'creekside' }).code, ERR.ALREADY_DONE);
+  assert.equal(proofProgress(s, 'creek_hill', 0).have, 0, 'harvests before the opening do not count');
+  must(s, 'openExpansion', { expansion: 'creek_hill' }, { pid: 'p2' });
+  assert.equal(run(s, 'openExpansion', { expansion: 'creekside' }).code, ERR.ALREADY_DONE, 'a piece names its parcel');
   must(s, 'plant', { ids: Array.from({ length: 16 }, (_, i) => `home.0.${i}`), crop: 'wheat' }, { now: T0 + HOUR });
   must(s, 'harvest', { ids: Array.from({ length: 16 }, (_, i) => `home.0.${i}`) }, { now: T0 + 2 * HOUR });
-  assert.deepEqual(proofProgress(s, 'creekside', 0), { have: 30, need: 30, done: true }, 'capped at the target');
-  assert.equal(run(s, 'expand', { expansion: 'creekside' }).code, ERR.NOT_READY, 'eggs still missing');
-  s.farm.proofs.creekside.n['1'] = 10;
-  const r = must(s, 'expand', { expansion: 'creekside', confirm: ['BIG_SPEND'] }, { now: T0 + 3 * HOUR });
-  assert.deepEqual(s.farm.expansions, ['home', 'creekside']);
-  assert.deepEqual(evs(r, 'expanded')[0], { e: 'expanded', expansion: 'creekside', by: 'p1', coins: e.cost, planks: 0, crates: 0 });
-  for (const x of expansionObjects('creekside')) assert.ok(s.farm.objects[x.id], x.id);
+  assert.deepEqual(proofProgress(s, 'creek_hill', 0), { have: 30, need: 30, done: true }, 'capped at the target');
+  assert.equal(run(s, 'expand', { expansion: 'creek_hill' }).code, ERR.NOT_READY, 'eggs still missing');
+  s.farm.proofs.creek_hill.n['1'] = 10;
+  const r = must(s, 'expand', { expansion: 'creek_hill', confirm: ['BIG_SPEND'] }, { now: T0 + 3 * HOUR });
+  assert.deepEqual(s.farm.expansions, ['home', ...e.pieces]);
+  assert.deepEqual(evs(r, 'expanded')[0], { e: 'expanded', expansion: 'creek_hill', pieces: e.pieces, by: 'p1',
+    coins: e.cost, planks: e.planks, crates: e.crates });
+  for (const piece of e.pieces) for (const x of expansionObjects(piece)) assert.ok(s.farm.objects[x.id], x.id);
   const pine = expansionObjects('creekside').find((x) => x.def === 'pine');
   assert.equal(s.farm.objects[pine.id].free, true);
   assert.equal(s.farm.objects[pine.id].readyAt, T0 + 3 * HOUR, 'a wild, mature Pine: ripe at once');
-  assert.ok(Object.values(s.farm.objects).filter((o) => o.origin === 'expansion').length >= 10);
-  assert.equal(Object.hasOwn(s.farm.proofs, 'creekside'), false);
+  assert.ok(Object.values(s.farm.objects).filter((o) => o.origin === 'expansion').length >= 20, 'both pieces\' debris');
+  assert.equal(Object.hasOwn(s.farm.proofs, 'creek_hill'), false);
   assert.deepEqual(validateState(s), []);
-  // old_orchard needs Planks and an 'own' task read from the farm
-  s.farm.xp = xpForLevel(7);
-  must(s, 'openExpansion', { expansion: 'old_orchard' });
-  s.farm.proofs.old_orchard.n['1'] = 3;
-  assert.equal(run(s, 'expand', { expansion: 'old_orchard' }).code, ERR.NOT_READY, 'own 2 apple trees');
+  // Orchard Lane needs Planks, Crates and an 'own' task read from the farm
+  const lane = CONTENT.parcels.get('orchard_lane');
+  s.farm.xp = xpForLevel(lane.unlock);
+  must(s, 'openExpansion', { expansion: 'orchard_lane' });
+  lane.proof.forEach((t, i) => { if (t.verb !== 'own') s.farm.proofs.orchard_lane.n[String(i)] = t.qty; });
+  assert.equal(run(s, 'expand', { expansion: 'orchard_lane' }).code, ERR.NOT_READY, 'own 2 apple trees');
   placeDef(s, 'apple_tree', { confirm: ['BIG_SPEND'] });
   placeDef(s, 'apple_tree', { confirm: ['BIG_SPEND'] });
-  assert.equal(run(s, 'expand', { expansion: 'old_orchard' }).code, ERR.NOT_READY,
+  assert.equal(run(s, 'expand', { expansion: 'orchard_lane' }).code, ERR.NOT_READY,
     'trees inside their 100 % undo window do not count yet (RC-05)');
   const later = T0 + SAFETY.undoMs;
-  assert.equal(run(s, 'expand', { expansion: 'old_orchard' }, { now: later }).code, ERR.NO_ITEMS, 'planks');
-  give(s, 'planks', 2);
-  must(s, 'expand', { expansion: 'old_orchard', confirm: ['BIG_SPEND'] }, { now: later });
+  assert.equal(run(s, 'expand', { expansion: 'orchard_lane' }, { now: later }).code, ERR.NO_ITEMS, 'planks');
+  give(s, 'planks', lane.planks);
+  give(s, 'wooden_crate', lane.crates);
+  s.farm.wallet.coins = lane.cost * 2;
+  must(s, 'expand', { expansion: 'orchard_lane', confirm: ['BIG_SPEND'] }, { now: later });
   assert.equal(available(s, 'planks'), 0);
   assert.deepEqual(validateState(s), []);
 });

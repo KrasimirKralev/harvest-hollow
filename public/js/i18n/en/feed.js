@@ -185,4 +185,8 @@ export default {
   'feed.key.new': '{actor} made a new key for {name}. Their old devices are signed out.',
   'feed.key.newMe': '{actor} made you a new key. Your old devices are signed out.',
   'feed.key.back': '{actor} came back with a new key',
+  // wave 5: babies in the pen, the dog that stays home, the bigger land
+  'feed.land.merged': 'The land now comes in {n} big parcels; everything you owned is still yours',
+  'feed.pen': '{actor} welcomed a newborn {noun} 🍼',
+  'feed.pen.home': '{actor} welcomed a newborn {noun} in the {home} 🍼',
 };

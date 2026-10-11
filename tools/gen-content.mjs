@@ -296,12 +296,35 @@ const levels = M.levels.map((l) => {
 const expansions = [{ id: 'home', name: 'Homestead', m: 'M1a', k: 0, unlock: 1, cost: 0, planks: 0, crates: 0,
   rects: [[16, 24, 24,
     16]], proof: [], reveals: 'The farmhouse, the barn and Grandma\'s old field', free: [], feature: null }];
-for (const e of M.expansions) {
+// Owner wish (wave 5): the land is bought by PARCEL (parcels.js); the 15 pieces stay as the land a save lists. A
+// piece takes its parcel's level and milestone and is never bought alone (cost 0, no proof); `k` keeps the piece's
+// original number: it is the namespace of its debris object ids (`exp<k>.<i>`), so no id ever collides.
+const parcelOfPiece = new Map(M.parcels.flatMap((p) => p.pieces.map((id) => [id, p])));
+const pieceRow = (e) => {
   const land = A.EXPANSION_LAND[e.id] ?? fail(`no land for expansion ${e.id}`);
-  expansions.push({
-    id: e.id, name: e.name, m: msOfLevel(e.level), k: e.k, unlock: e.level, cost: e.coins, planks: e.planks,
-    crates: e.crates, rects: land.rects, proof: land.proof.map(([verb, ref, qty]) => ({ verb, ref, qty })),
-    proofText: e.proof, reveals: e.reveals, free: land.free, feature: land.feature ?? null,
+  const p = parcelOfPiece.get(e.id) ?? fail(`no parcel for expansion ${e.id}`);
+  return {
+    id: e.id, name: e.name, m: msOfLevel(p.level), k: e.k, parcel: p.id, unlock: p.level, cost: 0, planks: 0,
+    crates: 0, rects: land.rects, proof: [], reveals: e.reveals, free: land.free, feature: land.feature ?? null,
+  };
+};
+for (const p of M.parcels) for (const id of p.pieces) expansions.push(pieceRow(M.expansions.find((e) => e.id === id)));
+const sameTask = (a, b) => a.verb === b.verb && JSON.stringify(a.ref) === JSON.stringify(b.ref) && a.qty === b.qty;
+const parcels = [{ id: 'home', name: 'Homestead', m: 'M1a', k: 0, unlock: 1, cost: 0, planks: 0, crates: 0,
+  pieces: ['home'], rects: expansions[0].rects, proof: [], proofFrom: {}, reveals: expansions[0].reveals }];
+for (const p of M.parcels) {
+  const land = A.PARCEL_LAND[p.id] ?? fail(`no land for parcel ${p.id}`);
+  const proof = land.proof.map(([verb, ref, qty]) => ({ verb, ref, qty }));
+  // where a piece's proof progress lands in the parcel's tasks (-1: that task is not asked any more)
+  const proofFrom = {};
+  for (const id of p.pieces) {
+    const old = A.EXPANSION_LAND[id].proof.map(([verb, ref, qty]) => ({ verb, ref, qty }));
+    proofFrom[id] = old.map((t) => proof.findIndex((x) => sameTask(x, t)));
+  }
+  parcels.push({
+    id: p.id, name: p.name, m: msOfLevel(p.level), k: p.k, unlock: p.level, cost: p.coins, planks: p.planks,
+    crates: p.crates, pieces: p.pieces, rects: p.pieces.flatMap((id) => A.EXPANSION_LAND[id].rects), proof,
+    proofText: p.proof, proofFrom, reveals: p.reveals,
   });
 }
 
@@ -402,11 +425,12 @@ for (const p of Object.values(A.SPAWN)) homeBlocked.add(`${Math.floor(p.x)},${Ma
 // the Homestead is small and overgrown (GDD §2.3): pieces may touch each other and the land edge there
 const homeDebris = placeDebris(20261002, expansions[0].rects, homeBlocked, A.HOME_DEBRIS_MIX, { spread: false });
 const expansionDebris = {};
-for (const e of expansions.slice(1)) {
+for (const e of expansions.slice(1).sort((a, b) => a.k - b.k)) {
   const blocked = new Set();
   for (const f of e.free) blockRect(blocked, f.x, f.z, ...sizeOfDef(f.def));
-  // the M2 land is old woodland with one Big Stump (authored.js EXPANSION_DEBRIS_MIX_M2); earlier land is unchanged
-  const mix = e.m === 'M2' ? A.EXPANSION_DEBRIS_MIX_M2 : A.EXPANSION_DEBRIS_MIX;
+  // the old M2 land (pieces 11-15) is woodland with one Big Stump (authored.js EXPANSION_DEBRIS_MIX_M2); keyed on the
+  // piece, not its parcel's milestone, so no piece's debris moved when the land was regrouped (wave 5)
+  const mix = e.k >= 11 ? A.EXPANSION_DEBRIS_MIX_M2 : A.EXPANSION_DEBRIS_MIX;
   expansionDebris[e.id] = placeDebris(20261002 + e.k, e.rects, blocked, mix);
 }
 
@@ -524,8 +548,13 @@ table('plots.js', 'Plots (GDD §3.10). The first `free` plots cost nothing; pric
   + 'coins], ...]; refundBp on removal.', 'PLOTS', plots);
 table('levels.js', 'Farm levels (GDD §4.6). xp = cumulative XP at the level; plotCap = the base cap (add 6 per owned '
   + 'expansion: plotCapOf()); E = income target in coins per play-hour.', 'LEVELS', levels);
-table('expansions.js', 'Land (GDD §2.2, §3.9). rects = [x, z, w, d] tiles; proof = tasks counted from the first '
-  + 'opening of the card; free = objects that arrive with the land.', 'EXPANSIONS', expansions);
+table('expansions.js', 'Land pieces (GDD §2.2): the 16 parcels of v2, still what farm.expansions lists. Since wave 5 '
+  + 'they are bought by parcel (parcels.js): unlock and m are the parcel\'s, cost 0, no proof; k is the debris id '
+  + 'namespace (exp<k>.<i>). rects = [x, z, w, d] tiles; free = objects that arrive with the land.', 'EXPANSIONS',
+  expansions);
+table('parcels.js', 'Land parcels (owner wish 2026-10-06, wave 5: fewer, bigger expansions). A parcel is bought whole: '
+  + 'its pieces (expansions.js) join farm.expansions; proofFrom[piece][i] = the parcel task a piece\'s old proof task i '
+  + 'counts toward (-1 = not asked).', 'PARCELS', parcels);
 table('barn.js', 'Barn upgrades (GDD §3.6): capacity after the upgrade; cost in coins plus Planks and Wooden Crates.',
   'BARN_UPGRADES', barn);
 table('quests.js',

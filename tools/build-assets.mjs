@@ -837,8 +837,19 @@ const CROPS = {
   raspberry: { arch: 'bush', proc: 'raspberry', h: [0.3, 0.68, 0.84], layout: 'tri3', chunk: 1.1, leafHex: '#4E9A3E', berry: '#C21E48', crease: 70, cover: 1.15 },
   rose: { arch: 'flower', proc: 'rose', h: [0.26, 0.52, 0.66], layout: 'tri3', chunk: 1.1, leafHex: '#2F7A3A', bloom: '#D8243F', crease: 70, cover: 1.1 },
   coffee: { arch: 'bush', proc: 'coffee', h: [0.32, 0.72, 0.92], layout: 'tri3', chunk: 1.05, leafHex: '#2E6E36', cherry: '#C0262E', crease: 70, cover: 1.05 },
+  // wave 5 (owner wish list 2 #1, the spices; section 19): Bulgarian red peppers (long kapia pods hanging under glossy
+  // leaves, green while growing, deep red when ripe), a mound of savory (чубрица) whose spikes flower lilac, small upright
+  // chilies in a bushy crown, and cumin's feathery stems under white umbels that turn to tan seed heads
+  paprika: { arch: 'bush', proc: 'paprika', h: [0.3, 0.64, 0.78], layout: 'tri3', chunk: 1.08, leafHex: '#3E8A38', pod: '#C8281E', crease: 70, cover: 1.12 },
+  savory: { arch: 'flower', proc: 'savory', h: [0.2, 0.38, 0.48], layout: 'grid9', chunk: 1.2, leafHex: '#6E9A48', bloom: '#C9A8E0', crease: 72, cover: 1.15 },
+  chili: { arch: 'bush', proc: 'chili', h: [0.26, 0.5, 0.6], layout: 'grid4', chunk: 1.1, leafHex: '#3F8F3A', pod: '#D62A1E', crease: 70, cover: 1.1 },
+  cumin: { arch: 'tall', proc: 'cumin', h: [0.3, 0.62, 0.78], layout: 'grid9', chunk: 1.1, leafHex: '#7FAE58', umbel: '#F4F1E6', seed: '#B08A4E', crease: 60, cover: 1.1 },
 };
 export const CROP_IDS = Object.keys(CROPS);
+/** Wave 5: the new content's models sit in files of their own (`<id>-w5.glb`): no member of their family's boot pack
+ *  (server/static.js packs only names without a '-'), so a farm downloads them only once it shows one. */
+const W5_OWN = new Set(['paprika', 'savory', 'chili', 'cumin', 'cinnamon_tree', 'bison_range', 'quail_coop', 'spice_mill']);
+const w5File = (dir, id) => (W5_OWN.has(id) ? `${dir}/${id}-w5.glb` : `${dir}/${id}.glb`);
 const SWAY_AMP = [0.3, 0.7, 1.6];
 /** Triangle budgets per plot (performance-03) and the canopy share of the plot per growing stage (visual-04). */
 // RD-04 (QA wave 2): a ripe plot may spend 640 (was 500) so mature crops read full: broad leaves, round berries and
@@ -1377,6 +1388,10 @@ async function cropPlant(id, s, r, opts = {}) {
   else if (c.proc === 'raspberry') g = raspberryPlant(s, r, opts);
   else if (c.proc === 'rose') g = rosePlant(s, r);
   else if (c.proc === 'coffee') g = coffeePlant(s, r, opts);
+  else if (c.proc === 'paprika') g = paprikaPlant(s, r, opts);
+  else if (c.proc === 'chili') g = chiliPlant(s, r, opts);
+  else if (c.proc === 'savory') g = savoryPlant(s, r, opts);
+  else if (c.proc === 'cumin') g = cuminPlant(s, r, opts);
   else if (c.proc === 'gourd') g = await gourdPlant(id, s, r);
   else {
     g = sizePlant(await bakeStatic(QC(c.src[s]), { recolor: { ...GREEN, ...c.recolor }, sat: 0.2 }), c.h[s], c.wide && c.wide[s]);
@@ -1543,15 +1558,16 @@ async function farCluster(id, s) {
 }
 
 for (const id of CROP_IDS) {
-  job(`crop:${id}:0`, `crops/${id}.glb`, { family: 'crop', def: id, footprint: [1, 1], sway: 0, soil: PLOT_TOP },
+  const file = w5File('crops', id);
+  job(`crop:${id}:0`, file, { family: 'crop', def: id, footprint: [1, 1], sway: 0, soil: PLOT_TOP },
     async () => sway(seededCluster(id, rng(`${id}:seed`)), { rigid: true }));
   for (let s = 0; s < 3; s++) {
-    job(`crop:${id}:${s + 1}`, `crops/${id}.glb`, { family: 'crop', def: id, footprint: [1, 1], sway: SWAY_AMP[s], soil: PLOT_TOP, doubleSided: true },
+    job(`crop:${id}:${s + 1}`, file, { family: 'crop', def: id, footprint: [1, 1], sway: SWAY_AMP[s], soil: PLOT_TOP, doubleSided: true },
       async () => cropCluster(id, s));
   }
   // far-band twins of the tall stages (objects-view swaps them in at the far zoom band); no `def`: not a stage
   for (const s of [1, 2]) {
-    job(`crop:${id}:${s + 1}:far`, `crops/${id}.glb`, { family: 'crop', footprint: [1, 1], sway: SWAY_AMP[s], soil: PLOT_TOP, doubleSided: true, part: true },
+    job(`crop:${id}:${s + 1}:far`, file, { family: 'crop', footprint: [1, 1], sway: SWAY_AMP[s], soil: PLOT_TOP, doubleSided: true, part: true },
       async () => farCluster(id, s));
   }
 }
@@ -1687,6 +1703,11 @@ const GIANTS = {
   rose: { build: () => I.rose(), size: 3.8, widen: 1.3 },
   coffee: { build: () => mergeAll([...Array.from({ length: 7 }, (_, i) => ball(0.16, i % 3 ? '#C0262E' : '#D8452E', { x: Math.cos(i * 0.9) * 0.2 * (i ? 1 : 0), y: 0.18 + (i > 3 ? 0.18 : 0), z: Math.sin(i * 0.9) * 0.2 * (i ? 1 : 0) }, 1)),
     ...[0, 1, 2].map((i) => xform(leaf(0.45, 0.2, '#2E6E36', { bend: 0.2 }), { ry: i * 2.1, rx: 1.2, y: 0.1 }))]), size: 3.0 },
+  // wave 5 (section 19): a giant red pepper lying on its side, a chili standing on its tip, a savory bush, a cumin umbel
+  paprika: { build: () => kapiaPod('#C8281E', 1), size: 3.8, rz: 1.35, ry: 0.5 },
+  chili: { build: () => chiliPod('#D62A1E', 1), size: 3.6, rz: 0.25 },
+  savory: { build: () => I.savory(), size: 3.4, widen: 1.3 },
+  cumin: { build: () => cuminBunch(), size: 3.8, widen: 1.3 },
 };
 for (const id of CROP_IDS) {
   const build = async (ripe) => {
@@ -1711,8 +1732,8 @@ for (const id of CROP_IDS) {
     if (tris(g) > GIANT_BUDGET) g = await simplify(g, GIANT_BUDGET / tris(g), { error: 0.02, deg: 45 });
     return g;
   };
-  job(`crop:${id}:giant`, `giants/${id}.glb`, { family: 'crop', footprint: [3, 3], sway: 0.4, soil: PLOT_TOP, giant: true, part: true }, () => build(true));
-  job(`crop:${id}:giant:2`, `giants/${id}.glb`, { family: 'crop', footprint: [3, 3], sway: 0.4, soil: PLOT_TOP, giant: true, part: true }, () => build(false));
+  job(`crop:${id}:giant`, w5File('giants', id), { family: 'crop', footprint: [3, 3], sway: 0.4, soil: PLOT_TOP, giant: true, part: true }, () => build(true));
+  job(`crop:${id}:giant:2`, w5File('giants', id), { family: 'crop', footprint: [3, 3], sway: 0.4, soil: PLOT_TOP, giant: true, part: true }, () => build(false));
 }
 
 // ---------------------------------------------------------------------------------------------------
@@ -1747,6 +1768,10 @@ const TREES = {
   // crowned with a little calyx (fruitGeo `crown`)
   pomegranate_tree: { leaf: '#3B7F36', fruit: '#C4233A', fruitR: 0.17, fruitN: 13, canopy: [1.08, 0.9, 1.08], trunk: 0.9, lean: 0.07, blobs: 5, dense: true,
     crown: true, fruitCols: ['#C4233A', '#D2353F', '#AE1C33'] },
+  // wave 5 (owner wish list 2 #1): a tall, glossy evergreen on a smooth cinnamon-brown trunk; ripe, bundles of rolled
+  // bark (cinnamon quills tied with red string) hang among the leaves, and the young leaves flush red at the top
+  cinnamon_tree: { leaf: '#3D7A3A', fruit: '#9C5A2E', fruitR: 0.15, fruitN: 12, canopy: [0.92, 1.25, 0.92], trunk: 1.15, lean: 0.03, blobs: 5, oval: true, dense: true,
+    bark: '#9C5A2E', quills: true, flush: '#E0603F', fruitCols: ['#C8823E', '#B86E36', '#D4924A'] },
 };
 const TREE_STATES = ['sapling', 'young', 'mature', 'ready'];
 
@@ -1904,6 +1929,13 @@ function fruitGeo(t, r, ripe, i = 0) {
   if (t.cluster) return mergeAll(Array.from({ length: t.cluster }, (_, k) => xform(P(new THREE.OctahedronGeometry(R, 0), t.fruitCols && ripe ? t.fruitCols[(i + k) % t.fruitCols.length] : hex, { creaseDeg: 80 }),
     { x: Math.cos(k * 2.1) * R * 1.1, y: -k * R * 0.6, z: Math.sin(k * 2.1) * R * 1.1, sy: 1.3 })));
   if (t.pear) return mergeAll([ball(R, hex, { sy: 1.05 }, 0), ball(R * 0.62, hex, { y: R * 0.85 }, 0)]);
+  // cinnamon quills (wave 5): three rolled sticks of bark hanging in a bundle, tied with a red string (green bark while
+  // the tree is not ready: the bark is cut and rolled when it is)
+  if (t.quills) {
+    const sticks = [0, 1, 2].map((k) => xform(P(new THREE.CylinderGeometry(R * 0.26, R * 0.26, R * 2.6, 5, 1, true), ripe ? hex : '#7E9A4A', { creaseDeg: 0 }),
+      { x: Math.cos(k * 2.1) * R * 0.3, y: -R * 1.3, z: Math.sin(k * 2.1) * R * 0.3, rz: (k - 1) * 0.08 }));
+    return mergeAll([...sticks, ...(ripe ? [torus(R * 0.46, R * 0.09, '#E8413A', { y: -R * 0.9, rx: Math.PI / 2 }, 3, 6)] : [])]);
+  }
   // a pomegranate (wave 4): a round globe with its five-pointed calyx crown on top
   if (t.crown) {
     const g = ball(R, hex, { sy: 0.94 }, 0);
@@ -1977,13 +2009,14 @@ function fruitTree(id, state, heirloom = false) {
   const trunk = heirloom || t.gnarly ? gnarledTrunk(trunkOpts) : trunkGeo(trunkOpts);
   const ribbon = heirloom ? heirloomRibbon(0.6, trunk.r * 0.86, trunk.bend(0.6)) : null;
   // the crown gets what the 1,200-triangle tree budget leaves after the trunk (and ribbon) and a full crop of fruit
-  const fruitTris = t.fruitR ? t.fruitN * (t.pairs ? 2 : 1) * (t.pear ? 40 : t.pods ? 55 : t.fig ? 40 : t.cluster ? 8 * t.cluster : 20) : 0;
+  const fruitTris = t.fruitR ? t.fruitN * (t.pairs ? 2 : 1) * (t.pear ? 40 : t.pods ? 55 : t.fig ? 40 : t.quills ? 66 : t.cluster ? 8 * t.cluster : 20) : 0;
   // wave 3: the maple's two sap pails and a ripe walnut's windfalls come out of the crown's share too
   const extras = (t.sapBucket ? 230 : 0) + (t.windfall ? t.windfall * 20 : 0);
   const crownMax = Math.max(heirloom ? 180 : 300, Math.min(540, 1150 - tris(trunk.geo) - (ribbon ? tris(ribbon) : 0) - fruitTris - extras - 80));
   const can = canopyGeo({ R, scale: t.canopy, hex: t.leaf, blobs: size < 0.5 ? 2 : t.blobs, seed, oval: t.oval, dense: t.dense, bark: t.bark || '#8A5A35',
     target: size < 0.5 ? 180 : size < 0.8 ? 380 : crownMax });
   const cy = trunk.top.y + R * t.canopy[1] * (size > 0.5 ? 0.7 : 0.62);
+  if (t.flush && size > 0.5) flushCrown(can.geo, t.flush, seed);              // wave 5: the cinnamon's red new leaves
   xform(can.geo, { x: trunk.top.x, y: cy, z: trunk.top.z });
   sway(can.geo, { y0: cy - R * t.canopy[1], y1: cy + R * t.canopy[1] * 1.4, weight: 1 });
   sway(trunk.geo, { rigid: true });
@@ -2002,7 +2035,8 @@ function fruitTree(id, state, heirloom = false) {
     const cn = can.geo.getAttribute('normal');
     const v = new THREE.Vector3();
     const cand = [];
-    for (let i = 0; i < cp.count; i++) { const ny = cn.getY(i); if (ny > -0.3 && ny < 0.97) cand.push(i); }
+    // (wave 5: cinnamon quills hang from the crown's lower rim, below the leaves, where they show)
+    for (let i = 0; i < cp.count; i++) { const ny = cn.getY(i); if (t.quills ? ny < 0.1 && ny > -0.75 : ny > -0.3 && ny < 0.97) cand.push(i); }
     cand.sort(() => r() - 0.5);
     const spots = [];
     const minD = t.fruitR * 3.2;
@@ -2120,11 +2154,11 @@ function pineTree(state, heirloom = false) {
 
 for (const id of Object.keys(TREES)) {
   for (const st of TREE_STATES) {
-    job(`tree:${id}:${st}`, `trees/${id}.glb`, { family: 'tree', def: id, footprint: [2, 2], sway: 0.35 }, async () => fruitTree(id, st));
+    job(`tree:${id}:${st}`, w5File('trees', id), { family: 'tree', def: id, footprint: [2, 2], sway: 0.35 }, async () => fruitTree(id, st));
   }
   // Heirloom trees (isHeirloom(o), rules trees.js): the grown states get the old-tree look, `<state>:heirloom`
   for (const st of ['mature', 'ready']) {
-    job(`tree:${id}:${st}:heirloom`, `trees/${id}.glb`, { family: 'tree', def: id, footprint: [2, 2], sway: 0.35, heirloom: true }, async () => fruitTree(id, st, true));
+    job(`tree:${id}:${st}:heirloom`, w5File('trees', id), { family: 'tree', def: id, footprint: [2, 2], sway: 0.35, heirloom: true }, async () => fruitTree(id, st, true));
   }
 }
 for (const st of [...TREE_STATES, 'stump']) {
@@ -2748,11 +2782,13 @@ building('packing', [3, 2], async () => {
 building('oil_press', [3, 3], async () => oilPress());
 building('sugar_shack', [3, 3], async () => sugarShack());
 building('chocolatier', [3, 3], async () => chocolatier());
+// wave 5 (owner wish list 2 #1; section 19): the Spice Mill, whitewashed, a red pepper garland under its eaves
+building('spice_mill', [2, 2], async () => spiceMill());
 
 for (const bd of BUILD) {
   const key = bd.id.includes(':') ? `building:${bd.id}` : `building:${bd.id}`;
   const def = bd.extra.def || bd.id;
-  job(key, `buildings/${def}.glb`, { family: 'building', def, footprint: bd.size }, async () => {
+  job(key, w5File('buildings', def), { family: 'building', def, footprint: bd.size }, async () => {
     let g = await bd.build();
     const anchors = g.anchors || null;
     if (tris(g) > BUILDING_TRIS * 1.04) {
@@ -2773,7 +2809,7 @@ for (const bd of BUILD) {
     return sway(g, { rigid: true });
   });
   // the far-band twin (render-world swaps it in at the far LOD band like crop:*:far): ~2k triangles, details gone
-  job(`${key}:far`, `buildings/${def}.glb`, { family: 'building', footprint: bd.size, part: true, far: true }, async () => {
+  job(`${key}:far`, w5File('buildings', def), { family: 'building', footprint: bd.size, part: true, far: true }, async () => {
     const src = await bd.build();
     let g = src;
     for (const error of [0.05, 0.1, 0.2, 0.4]) {
@@ -2871,7 +2907,9 @@ home('coop', [3, 3], async () => {
   const coop = dropComponents(await srcFit(FB('ChickenCoop'), { w: 3.4, d: 3.0, fill: 1, sat: 0.2 }),
     (b, n) => n > 40 && b.max.y < 0.9 && (b.min.x > 0.8 || b.max.x < -0.8));
   return { geo: mergeAll([yardGround(5.6, 5.6, '#C9B57A'), penFence(5.8, 5.8, { pickets: true, h: 0.7 }), xform(coop, { x: -1.0, z: -1.1 }),
-    xform(trough(1.2, '#E9D36A'), { x: 1.5, z: 1.6 })]), yard: [-2.6, 0.6, 2.6, 2.6], avoid: [[1.5, 1.6, 0.85], [-1.0, 0.55, 0.65]] };
+    xform(trough(1.2, '#E9D36A'), { x: 1.5, z: 1.6 })]), yard: [-2.6, 0.6, 2.6, 2.6], avoid: [[1.5, 1.6, 0.85], [-1.0, 0.55, 0.65]],
+  // wave 5 (owner wish: hungry hens wait inside): the foot of the front ramp, its top at the door sill, a point in the house
+  door: [-1.0, 0.48, -1.0, 0.8, -0.3, -1.0, -0.85] };
 });
 home('cow_barn', [4, 3], async () => {
   const shed = await srcFit(FB('OpenBarn'), { w: 4.4, d: 3.0, fill: 1, sat: 0.2 });
@@ -2962,11 +3000,15 @@ home('paddock', [4, 4], async () => {
     xform(knoll, { x: -2.35, z: 1.45 }), xform(feeder, { x: 0.55, z: -2.95 }), xform(trough(1.4), { x: 2.75, z: 2.5, ry: Math.PI / 2 })]),
   yard: [-3.5, -1.6, 3.5, 3.5], dust: [1.85, -1.65, 0.95], perches: [[-2.35, 1.45, 0.7, 0.28]], avoid: [[2.75, 2.5, 0.85], [0.55, -2.95, 0.8]] };
 });
+// wave 5 (owner wish list 1 #2, list 2 #2; section 19): the Bison Range's log-fenced prairie and the Quail Coop
+home('bison_range', [5, 4], async () => bisonRange());
+home('quail_coop', [2, 2], async () => quailCoop());
 for (const h of HOMES) {
-  job(`home:${h.id}`, `homes/${h.id}.glb`, { family: 'home', def: h.id, footprint: h.size }, async () => {
-    const { geo, yard, water, mud, perches, hive, avoid, dust } = await h.build();
+  job(`home:${h.id}`, w5File('homes', h.id), { family: 'home', def: h.id, footprint: h.size }, async () => {
+    const { geo, yard, water, mud, perches, hive, avoid, dust, door } = await h.build();
     const meta = JOBS.find((j) => j.key === `home:${h.id}`).meta;
     meta.yard = yard;
+    if (door) meta.door = door;                 // wave 5: [footX, footZ, sillX, sillY, sillZ, inX, inZ] (hungry hens go in)
     // behaviour anchors for animals-view (model metres): the duck pond's water disc [x, z, r], the pig pen's mud
     // [x, z, r], the goat yard's perches [[x, z, r, top y]], the hive mouth [x, y, z]
     if (water) meta.water = water;
@@ -2979,7 +3021,7 @@ for (const h of HOMES) {
   });
   // RD-13 (QA wave 2): a ~1.8k far-band twin for the heavy homes (the stable is 8k): the far LOD band and the static
   // shadow map (render/index.js renderShadows) draw it instead
-  job(`home:${h.id}:far`, `homes/${h.id}.glb`, { family: 'home', footprint: h.size, part: true, far: true }, async () => {
+  job(`home:${h.id}:far`, w5File('homes', h.id), { family: 'home', footprint: h.size, part: true, far: true }, async () => {
     const { geo } = await h.build();
     let g = geo;
     for (const error of [0.05, 0.1, 0.2, 0.4]) {
@@ -4480,7 +4522,7 @@ function saddlePaint(list, { mat, hex, from = 0.6, band = 0.06 }, rot) {
   }
 }
 
-async function mergeSkinned(doc, { keepMaterials = false, recolor = {}, sat = 0.18, creaseDeg = 45, tintMat = null, patches = null, lobes = null, attach = null, shrink = null, coat = null, saddle = null, parts = null } = {}) {
+async function mergeSkinned(doc, { keepMaterials = false, recolor = {}, sat = 0.18, creaseDeg = 45, tintMat = null, patches = null, lobes = null, attach = null, shrink = null, coat = null, saddle = null, parts = null, front = null } = {}) {
   const root = doc.getRoot();
   const buffer = root.listBuffers()[0];
   const skinned = root.listNodes().filter((n) => n.getMesh() && n.getSkin());
@@ -4527,6 +4569,7 @@ async function mergeSkinned(doc, { keepMaterials = false, recolor = {}, sat = 0.
     for (const [key, list] of groups) {
       if (patches) for (const g of list) if (patches.mat.test(g.userData.material)) cowPatches(g, patches);
       if (saddle) saddlePaint(list, saddle, new THREE.Matrix4().extractRotation(new THREE.Matrix4().fromArray(nodes[0].getWorldMatrix())));
+      if (front) frontPaint(list, front, new THREE.Matrix4().extractRotation(new THREE.Matrix4().fromArray(nodes[0].getWorldMatrix())));   // wave 5: the bison
       if (lobes) {
         const host = list.find((g) => lobes.mat.test(g.userData.material));
         const face = lobes.head ? list.find((g) => lobes.head.test(g.userData.material)) : null;
@@ -4535,10 +4578,11 @@ async function mergeSkinned(doc, { keepMaterials = false, recolor = {}, sat = 0.
         if (host) list.push(woolLobes(host, { ...lobes, head, rot }));
       }
       if (shrink) shrinkBones(list, nodes[0].getSkin(), shrink);
-      if (attach) {
+      // (wave 5: several attachments, one per bone: the bison's hump, mane and head)
+      for (const at of attach ? [].concat(attach) : []) {
         const skin = nodes[0].getSkin();
-        const j = skin.listJoints().findIndex((n) => n.getName() === attach.bone);
-        if (j >= 0) list.push(...boneParts(list, j, attach.build).map((g) => { g.userData.material = attach.material || ''; return g; }));
+        const j = skin.listJoints().findIndex((n) => n.getName() === at.bone);
+        if (j >= 0) list.push(...boneParts(list, j, at.build).map((g) => { g.userData.material = at.material || ''; return g; }));
       }
       if (coat) coatMask(list, coat);
       const merged = mergeGeometries(list.map((g) => (g.index ? g.toNonIndexed() : g)), false);
@@ -4608,8 +4652,8 @@ function bakePose(gltf, clipName, { boneScale = null } = {}) {
 const SKIN = [];
 /** A skinned model: rel source, target height (m), clips to keep {srcName: newName}, options. */
 function skinnedJob(key, file, rel, { height, clips, keepMaterials = false, recolor = {}, sat = 0.18, rigid = true, idle = 'Idle', meta = {}, postBake,
-  tintMat = null, patches = null, lobes = null, attach = null, shrink = null, yaw = 0, coat = null, baby = null, saddle = null, parts = null } = {}) {
-  SKIN.push({ key, file, rel, height, clips, keepMaterials, recolor, sat, rigid, idle, meta, postBake, tintMat, patches, lobes, attach, shrink, yaw, coat, baby, saddle, parts });
+  tintMat = null, patches = null, lobes = null, attach = null, shrink = null, yaw = 0, coat = null, baby = null, saddle = null, parts = null, front = null } = {}) {
+  SKIN.push({ key, file, rel, height, clips, keepMaterials, recolor, sat, rigid, idle, meta, postBake, tintMat, patches, lobes, attach, shrink, yaw, coat, baby, saddle, parts, front });
 }
 
 async function buildSkinned(sk) {
@@ -4622,7 +4666,7 @@ async function buildSkinned(sk) {
     const base = anim.getName().replace(/^.*\|/, '');
     if (!Object.hasOwn(sk.clips, base)) anim.dispose(); else anim.setName(sk.clips[base]);
   }
-  await mergeSkinned(doc, { keepMaterials: sk.keepMaterials, recolor: sk.recolor, sat: sk.sat, tintMat: sk.tintMat, patches: sk.patches, lobes: sk.lobes, attach: sk.attach, shrink: sk.shrink, coat: sk.coat, saddle: sk.saddle, parts: sk.parts });
+  await mergeSkinned(doc, { keepMaterials: sk.keepMaterials, recolor: sk.recolor, sat: sk.sat, tintMat: sk.tintMat, patches: sk.patches, lobes: sk.lobes, attach: sk.attach, shrink: sk.shrink, coat: sk.coat, saddle: sk.saddle, parts: sk.parts, front: sk.front });
   await doc.transform(t.fns.prune(), t.fns.resample(), t.fns.dedup());
   // measure (posed at the idle clip) and normalise: feet on y = 0, centred on x/z, target height
   const g1 = await parseThree(doc);
@@ -7893,6 +7937,7 @@ async function grownHome(build, size, t) {
   const out = { geo: mergeAll([geo, ...extras]), yard: r.yard && [r.yard[0] - t, r.yard[1] - t, r.yard[2] + t, r.yard[3] + t], avoid };
   for (const k of ['water', 'mud', 'dust']) if (r[k]) out[k] = sh(r[k]);
   if (r.perches) out.perches = r.perches.map(sh);
+  if (r.door) out.door = r.door.map((v, i) => (i === 3 ? v : r3(v - t)));   // wave 5: every x and z moves, the sill's height stays
   return out;
 }
 for (const h of [...HOMES, { id: 'hutch', size: [3, 2], build: async () => rabbitHutch() }]) {
@@ -7901,7 +7946,7 @@ for (const h of [...HOMES, { id: 'hutch', size: [3, 2], build: async () => rabbi
     job(key, file, { family: 'home', footprint: fp, grown: t }, async () => {
       const g = await grownHome(h.build, h.size, t);
       const meta = JOBS.find((j) => j.key === key).meta;
-      for (const k of ['yard', 'water', 'mud', 'perches', 'avoid', 'dust']) if (g[k]) meta[k] = g[k];
+      for (const k of ['yard', 'water', 'mud', 'perches', 'avoid', 'dust', 'door']) if (g[k]) meta[k] = g[k];
       return sway(g.geo, { rigid: true });
     });
     job(`${key}:far`, file, { family: 'home', footprint: fp, part: true, far: true }, async () => {
@@ -7912,6 +7957,477 @@ for (const h of [...HOMES, { id: 'hutch', size: [3, 2], build: async () => rabbi
     });
   }
 }
+
+// ---------------------------------------------------------------------------------------------------
+// 19. Wave 5 (the owners' wish lists of 2026-10-05; render lane): the spices (list 2 #1: paprika, savory, chili, cumin,
+//     the Cinnamon Tree and the Spice Mill), the bison (list 1 #2) and the quail (list 2 #2) with their homes, and the item
+//     models of their goods and recipes. Every new file is `<id>-w5.glb` (W5_OWN): no boot-pack member, it loads only
+//     once a farm shows it. The builders are function declarations (hoisted), so the registrations above can name them.
+const SP = Object.freeze({ red: '#C8281E', redD: '#9E1C16', chili: '#D62A1E', orange: '#E8652A', leaf: '#3E8A38', leafL: '#58A445', stem: '#5E8A34',
+  savory: '#6E9A48', savoryL: '#86B05A', lilac: '#C9A8E0', lilacL: '#EADCF4', umbel: '#F4F1E6', cumin: '#B08A4E', cuminD: '#8E6A38',
+  wall: '#F6F0E2', salt: '#F4EFE6' });
+
+/** A Bulgarian red pepper (kapia): a long, tapering, gently curved pod hanging from its green calyx and stem; `s` scales
+ *  it (1 = the 0.36 m crop pod; the item and the giant scale it up). Tip down, the stem at y = 0. */
+function kapiaPod(hex = SP.red, s = 1) {
+  const L = 0.36 * s; const R = 0.052 * s;
+  const g = lathe([[0, 0], [R * 0.75, L * 0.05], [R, L * 0.2], [R * 0.92, L * 0.5], [R * 0.6, L * 0.78], [R * 0.22, L * 0.96], [0, L]], 7, hex, 55);
+  // the curve: the pod bends away as it hangs (a kapia is never straight)
+  const p = g.getAttribute('position');
+  for (let i = 0; i < p.count; i++) { const t = p.getY(i) / L; p.setX(i, p.getX(i) + t * t * L * 0.22); }
+  g.computeVertexNormals();
+  shade(g, { bottom: 1.15, top: 0.82 });
+  xform(g, { rx: Math.PI });                                              // tip down
+  const calyx = xform(P(new THREE.CylinderGeometry(R * 0.85, R * 0.55, R * 0.45, 6, 1), '#4E8A30', { creaseDeg: 50 }), { y: -R * 0.1 });
+  const stem = xform(cyl(R * 0.16, R * 0.2, L * 0.16, 4, SP.stem, {}, 0), { y: -0.01 });
+  return mergeAll([g, calyx, stem]);
+}
+/** A chili: small, slender and pointed, standing up from its calyx (they grow upright on the bush). */
+function chiliPod(hex = SP.chili, s = 1) {
+  const L = 0.16 * s; const R = 0.022 * s;
+  const g = lathe([[0, 0], [R, L * 0.1], [R * 0.95, L * 0.45], [R * 0.55, L * 0.8], [0, L]], 6, hex, 55);
+  const p = g.getAttribute('position');
+  for (let i = 0; i < p.count; i++) { const t = p.getY(i) / L; p.setZ(i, p.getZ(i) + t * t * L * 0.25); }
+  g.computeVertexNormals();
+  return mergeAll([g, xform(P(new THREE.CylinderGeometry(R * 1.05, R * 0.7, R * 0.6, 5, 1), '#4E8A30', { creaseDeg: 50 }), { y: -R * 0.2 })]);
+}
+/** Paprika (wave 5): a bushy, glossy pepper plant; the long kapia pods hang on its outside, green while growing (a white
+ *  flower or two), deep red when ripe with one still turning orange. */
+function paprikaPlant(s, r, { far = false } = {}) {
+  const c = CROPS.paprika; const h = c.h[s];
+  if (s === 0) return mergeAll(fan(4, 0.18, 0.09, [SP.leaf, SP.leafL], r, { seg: 1, bend: 0.8 }));
+  const parts = [stalk(0.022, 0.015, h * 0.55, SP.stem, 3), lump(h * 0.26, SP.leaf, { y: h * 0.64, blob: { sy: 0.95, amp: 0.15 } }, 3 + Math.floor(r() * 9))];
+  const nl = far ? 3 : s === 1 ? 6 : 8;
+  for (let i = 0; i < nl; i++) {
+    const lf = leaf(h * 0.55, 0.15, i % 2 ? SP.leafL : SP.leaf, { bend: 0.9, seg: 1 });
+    xform(lf, { rx: 0.5 + r() * 0.2 });
+    xform(lf, { ry: (i / nl) * Math.PI * 2 + r() * 0.3, y: h * (0.3 + (i % 2) * 0.16) });
+    parts.push(lf);
+  }
+  const n = s === 1 ? 2 : 4;
+  const a0 = r() * Math.PI * 2;
+  for (let i = 0; i < n; i++) {
+    const a = a0 + (i / n) * Math.PI * 2; const rad = h * 0.3;
+    const hex = s === 2 ? (i === 3 ? SP.orange : i % 2 ? SP.redD : SP.red) : '#5FA83A';
+    parts.push(xform(kapiaPod(hex, s === 2 ? 0.95 : 0.6), { x: Math.cos(a) * rad, y: h * (0.62 + (i % 2) * 0.08), z: Math.sin(a) * rad, ry: -a + Math.PI / 2, rz: (r() - 0.5) * 0.2 }));
+  }
+  if (s === 1 && !far) for (let i = 0; i < 2; i++) parts.push(xform(flatFlower('#FFFDF4', 0.04), { x: (r() - 0.5) * h * 0.4, y: h * 0.92, z: (r() - 0.5) * h * 0.4 }));
+  return mergeAll(parts);
+}
+/** Chili (wave 5): a compact, leafy crown with small pods standing up all over it, green, then red with a few orange. */
+function chiliPlant(s, r, { far = false } = {}) {
+  const c = CROPS.chili; const h = c.h[s];
+  if (s === 0) return mergeAll(fan(4, 0.15, 0.07, [SP.leaf, SP.leafL], r, { seg: 1, bend: 0.9 }));
+  const crown = xform(blob(h * 0.34, c.leafHex, { seed: Math.floor(r() * 99), amp: 0.2, freq: 2.4, detail: far ? 0 : 1, sy: 0.85, flatBottom: 0.5 }), { y: h * 0.42 });
+  shade(crown, { bottom: 0.74, top: 1.2 });
+  const parts = [stalk(0.018, 0.012, h * 0.4, SP.stem, 3), crown];
+  const b = bounds(crown);
+  const n = far ? 3 : s === 1 ? 4 : 7;
+  for (let i = 0; i < n; i++) {
+    const u = (i / n) * Math.PI * 2 + r() * 0.5; const v = 0.45 + r() * 0.45;
+    const rx = (b.max.x - b.min.x) * 0.5; const rz = (b.max.z - b.min.z) * 0.5; const k = Math.sin(Math.PI * (0.25 + v * 0.55));
+    const hex = s === 2 ? (i % 4 === 3 ? SP.orange : SP.chili) : '#6DB040';
+    parts.push(xform(chiliPod(hex, s === 2 ? 1 : 0.7), { x: Math.cos(u) * rx * k * 0.9, y: b.min.y + (b.max.y - b.min.y) * v, z: Math.sin(u) * rz * k * 0.9, rx: (r() - 0.5) * 0.5, rz: (r() - 0.5) * 0.5 }));
+  }
+  return mergeAll(parts);
+}
+/** Savory (чубрица, wave 5): a low, rounded mound of fine grey-green leaves with spikes standing out of it; ripe, the
+ *  spikes are dotted with pale lilac flowers (the herb is cut in flower). */
+function savoryPlant(s, r, { far = false } = {}) {
+  const c = CROPS.savory; const h = c.h[s];
+  if (s === 0) return mergeAll(fan(5, 0.1, 0.035, [SP.savory, SP.savoryL], r, { seg: 1, bend: 0.5 }));
+  // (cheap: nine a plot inside the 640-triangle ripe budget; ~60 triangles a plant)
+  const mound = xform(blob(h * 0.42, SP.savory, { seed: Math.floor(r() * 99), amp: 0.28, freq: 3.2, detail: 0, sy: 0.7, flatBottom: 0.5 }), { y: h * 0.26 });
+  shade(mound, { bottom: 0.78, top: 1.18 });
+  const parts = [mound];
+  const n = far ? 2 : 3;
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * Math.PI * 2 + r() * 0.6; const lean = 0.2 + r() * 0.25; const hh = h * (0.75 + r() * 0.3);
+    const sp = stalk(0.008, 0.006, hh, SP.savoryL, 3);
+    xform(sp, { rx: Math.sin(a) * lean, rz: -Math.cos(a) * lean });
+    parts.push(sp);
+    const tip = new THREE.Vector3(0, hh, 0).applyEuler(new THREE.Euler(Math.sin(a) * lean, 0, -Math.cos(a) * lean, 'YXZ'));
+    // the flower spike: an elongated lilac bud (ripe) or a green one (growing)
+    parts.push(xform(P(new THREE.OctahedronGeometry(s === 2 ? 0.04 : 0.025, 0), s === 2 ? (i % 2 ? SP.lilac : SP.lilacL) : SP.savoryL, { creaseDeg: 80 }),
+      { x: tip.x * 0.94, y: tip.y * 0.94, z: tip.z * 0.94, sy: 1.8, rx: Math.sin(a) * lean, rz: -Math.cos(a) * lean }));
+  }
+  return mergeAll(parts);
+}
+/** Cumin (wave 5): slender, feathery stems; small white umbels while growing, flat umbels of tan seed heads when ripe. */
+function cuminPlant(s, r, { far = false } = {}) {
+  const c = CROPS.cumin; const h = c.h[s] * (0.9 + r() * 0.2);
+  if (s === 0) return mergeAll(fan(5, 0.14, 0.03, [c.leafHex, '#93C26A'], r, { seg: 1, bend: 0.4 }));
+  const parts = [];
+  // (cheap: nine a plot; ~20 triangles a growing plant, ~70 a ripe one)
+  // fine, thread-like leaves low down (a few narrow blades)
+  const nl = far || s === 1 ? 3 : 4;
+  for (let i = 0; i < nl; i++) parts.push(xform(leaf(h * 0.4, 0.03, i % 2 ? c.leafHex : '#93C26A', { bend: 0.6, seg: 1 }), { ry: (i / nl) * Math.PI * 2 + r(), rx: 0.4 }));
+  const stems = far || s === 1 ? 1 : 2;
+  for (let k = 0; k < stems; k++) {
+    const a = (k / stems) * Math.PI * 2 + r(); const lean = 0.1 + r() * 0.18; const hh = h * (0.8 + r() * 0.25);
+    const st = stalk(0.009, 0.006, hh, s === 2 ? '#A8A05A' : '#7FAE58', 3);
+    xform(st, { rx: Math.sin(a) * lean, rz: -Math.cos(a) * lean });
+    parts.push(st);
+    const tip = new THREE.Vector3(0, hh, 0).applyEuler(new THREE.Euler(Math.sin(a) * lean, 0, -Math.cos(a) * lean, 'YXZ'));
+    // the umbel: a flat little dome of florets (white) or seed clusters (tan) on short rays (octahedra: 8 triangles each)
+    const col = s === 2 ? (k % 2 ? c.seed : SP.cuminD) : c.umbel;
+    const oct = (rr, o) => xform(P(new THREE.OctahedronGeometry(rr, 0), col, { creaseDeg: 80 }), o);
+    const um = [oct(0.055, { y: 0.02, sy: 0.45 })];
+    if (s === 2 && !far) for (let q = 0; q < 3; q++) { const qa = (q / 3) * Math.PI * 2 + k; um.push(oct(0.026, { x: Math.cos(qa) * 0.06, y: 0.015, z: Math.sin(qa) * 0.06 })); }
+    parts.push(xform(mergeAll(um), { x: tip.x, y: tip.y, z: tip.z }));
+  }
+  return mergeAll(parts);
+}
+
+/** The cinnamon tree's flush (wave 5): its newest leaves come out red; the crown's top third takes the hue in patches. */
+function flushCrown(g, hex, seed) {
+  const p = g.getAttribute('position'); const c = g.getAttribute('color');
+  if (!c) return g;
+  const b = bounds(g); const t = lin(hex); const col = new THREE.Color();
+  for (let i = 0; i < p.count; i++) {
+    const y = (p.getY(i) - b.min.y) / Math.max(1e-6, b.max.y - b.min.y);
+    const n = noise3(p.getX(i) * 2.6 + seed, p.getY(i) * 2.6, p.getZ(i) * 2.6, seed + 11) * 0.5 + 0.5;
+    const k = Math.max(0, Math.min(1, (y - 0.7) * 3.4)) * Math.max(0, Math.min(1, (n - 0.4) * 3)) * 0.85;
+    if (k <= 0) continue;
+    col.setRGB(c.getX(i), c.getY(i), c.getZ(i)).lerp(t, k);
+    c.setXYZ(i, col.r, col.g, col.b);
+  }
+  return g;
+}
+
+// ---- The Bison Range (bison_range, 5 x 4 tiles = 10 x 8 m): a rustic split-log fence round a prairie paddock, a big
+//      three-sided log shelter at the back with a sod roof, a round bale in a ring feeder, a stone water trough, a rubbing
+//      boulder and a dusty wallow the bison roll in (animals-view: the `dust` anchor, like the alpacas), golden prairie
+//      grass in the corners. `yard` is where they graze.
+const BISON = Object.freeze({ log: '#8A6440', logD: '#6E4E30', logL: '#A47A50', sod: '#7E9A4A', ring: '#5E6670', grass: '#C9B45A', grassD: '#A8963E' });
+function prairieTuft(r, h = 0.6, cols = [BISON.grass, BISON.grassD, '#B8C46A']) {
+  const parts = [];
+  for (let i = 0; i < 7; i++) parts.push(xform(leaf(h * (0.7 + r() * 0.5), 0.05, cols[i % cols.length], { bend: 0.5 + r() * 0.4, seg: 1 }), { ry: (i / 7) * Math.PI * 2 + r(), rx: 0.18 + r() * 0.2 }));
+  return mergeAll(parts);
+}
+function bisonRange() {
+  const W = 9.6; const D = 7.6; const parts = [];
+  parts.push(yardGround(W, D, '#B5C068', { worn: '#B59A6A', bedding: '#D8C690', gateZ: 1 }));
+  parts.push(penFence(W + 0.2, D + 0.2, { h: 1.05, hex: BISON.logL, post: BISON.logD }));
+  // the log shelter at the back left: three log walls, an open front, a sod roof with grass on its ridge
+  const sx = -2.3; const sz = -2.35; const sw = 4.2; const sd = 2.3; const sh = 2.0;
+  const wall = (len, alongX) => {
+    const out = [];
+    for (let k = 0; k < 6; k++) {
+      const y = 0.17 + k * 0.34;
+      // (a log stands on y = 0 before it is laid down: rz turns it to -x, rx to +z; centre it on the wall)
+      const g = xform(cyl(0.17, 0.17, len, 7, k % 2 ? BISON.log : BISON.logD, {}, 50), alongX ? { rz: Math.PI / 2, x: len / 2, y } : { rx: Math.PI / 2, z: -len / 2, y });
+      out.push(g);
+    }
+    return mergeAll(out);
+  };
+  parts.push(xform(wall(sw, true), { x: sx, z: sz - sd / 2 }));
+  parts.push(xform(wall(sd, false), { x: sx - sw / 2, z: sz }), xform(wall(sd, false), { x: sx + sw / 2, z: sz }));
+  for (const x of [-1, 1]) parts.push(cyl(0.16, 0.18, sh + 0.1, 7, BISON.logD, { x: sx + x * (sw / 2 - 0.05), z: sz + sd / 2 - 0.1 }, 50));
+  // (the ridge runs along the shelter's long side: built along z, turned to x)
+  const roof = pitchedRoof(sd + 0.2, sw + 0.2, 0.9, '#6E8A40', { oh: 0.35, gableHex: BISON.log, trim: BISON.logD, bands: 5 });
+  parts.push(xform(roof, { x: sx, y: sh, z: sz, ry: Math.PI / 2 }));
+  // sod: grass tufts along the ridge and the eaves, a little hay on the floor inside
+  const rr = rng('bisonsod');
+  for (let i = 0; i < 6; i++) parts.push(xform(prairieTuft(rr, 0.35, ['#7FA84A', '#6E9A3E', '#93B85A']), { x: sx - sw / 2 + 0.4 + i * (sw - 0.8) / 5, y: sh + 0.85, z: sz }));
+  parts.push(xform(blob(1.1, '#E3C25E', { seed: 21, sy: 0.1, sx: 1.4, flatBottom: 0.2, detail: 1 }), { x: sx, y: 0.04, z: sz }));
+  // the ring feeder with a round bale (the bison's prairie hay)
+  const feeder = [xform(P(new THREE.CylinderGeometry(0.75, 0.75, 1.2, 14), '#D9B850', { creaseDeg: 40 }), { y: 0.6 }), xform(P(new THREE.CylinderGeometry(0.68, 0.68, 1.22, 14), '#C9A845', { creaseDeg: 40 }), { y: 0.6 })];
+  for (const y of [0.25, 0.85]) feeder.push(xform(torus(0.95, 0.04, BISON.ring, {}, 4, 18), { y, rx: Math.PI / 2 }));
+  for (let i = 0; i < 8; i++) { const a = (i / 8) * Math.PI * 2; feeder.push(box(0.05, 0.95, 0.05, BISON.ring, { x: Math.cos(a) * 0.95, y: 0.0, z: Math.sin(a) * 0.95 })); }
+  feeder.push(xform(blob(0.9, '#E3C25E', { seed: 22, sy: 0.08, flatBottom: 0.2, detail: 1 }), { y: 0.03 }));
+  parts.push(xform(mergeAll(feeder), { x: 2.6, z: -2.4 }));
+  // a stone water trough, the rubbing boulder, the wallow
+  const stoneTrough = mergeAll([box(1.9, 0.45, 0.75, '#A9A296', { y: 0 }), box(1.7, 0.04, 0.55, '#6FB4D0', { y: 0.43 }),
+    box(1.95, 0.08, 0.1, '#BDB6AA', { y: 0.44, z: 0.34 }), box(1.95, 0.08, 0.1, '#BDB6AA', { y: 0.44, z: -0.34 }), box(0.1, 0.08, 0.6, '#BDB6AA', { y: 0.44, x: 0.92 }), box(0.1, 0.08, 0.6, '#BDB6AA', { y: 0.44, x: -0.92 })]);
+  parts.push(xform(stoneTrough, { x: 3.5, z: 2.6, ry: Math.PI / 2 }));
+  parts.push(xform(mottle(blob(0.7, '#9C958A', { seed: 33, sy: 0.75, amp: 0.2, detail: 1, flatBottom: 0.3 }), { seed: 4 }), { x: -3.6, y: 0.2, z: 2.3 }));
+  const wallow = mergeAll([xform(blob(1.3, '#C9AE80', { seed: 41, sy: 0.03, amp: 0.15, detail: 2 }), { y: 0.018 }), xform(blob(1.1, '#B89A6A', { seed: 42, sy: 0.03, amp: 0.12, detail: 2 }), { y: 0.026 })]);
+  parts.push(xform(wallow, { x: 0.9, z: 0.6 }));
+  // golden prairie grass along the fence (outside the yard's walk)
+  const gr = rng('prairie');
+  for (const [x, z] of [[-4.2, 3.2], [-4.2, 1.0], [4.2, 0.4], [-1.0, 3.3], [1.6, -3.3], [4.2, -1.0], [-4.2, -0.6]]) parts.push(xform(prairieTuft(gr, 0.5), { x, z }));
+  return { geo: mergeAll(parts), yard: [-4.4, -1.0, 4.4, 3.4], dust: [0.9, 0.6, 1.15], avoid: [[2.6, -2.4, 1.15], [3.5, 2.6, 1.1], [-3.6, 2.3, 0.85]] };
+}
+
+// ---- The Quail Coop (quail_coop, 2 x 2 tiles = 4 x 4 m): a little A-frame coop on legs at the back with a wire run,
+//      a tiny ramp to its door (hungry quail wait inside: the `door` anchor, like the hens), a sand patch for their
+//      dust baths, a feeder and a water dish, a low picket fence and a sunflower.
+function quailCoop() {
+  const W = 3.6; const D = 3.6; const parts = [];
+  parts.push(yardGround(W, D, '#B9BE72', { worn: '#B59A6A', bedding: '#D8C690', gateZ: 1 }));
+  parts.push(penFence(W + 0.2, D + 0.2, { h: 0.55, pickets: true }));
+  // the coop: a raised floor on four legs, a pitched A-frame body, a round door with a ramp, a heart on the gable
+  const cx = -0.55; const cz = -0.85; const cw = 1.9; const cd = 1.15; const fy = 0.42;
+  for (const [x, z] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) parts.push(box(0.08, fy, 0.08, WOOD_D, { x: cx + x * (cw / 2 - 0.06), z: cz + z * (cd / 2 - 0.06) }));
+  parts.push(box(cw, 0.07, cd, WOOD_D, { x: cx, y: fy, z: cz }), box(cw - 0.1, 0.55, cd - 0.1, '#E9C79A', { x: cx, y: fy + 0.07, z: cz }));
+  // (the ridge along the coop's long side: built along z across its depth, turned to x)
+  parts.push(xform(pitchedRoof(cd - 0.1, cw - 0.1, 0.62, '#B5543F', { oh: 0.16, gableHex: '#E9C79A', trim: '#FFF8EC', bands: 4 }), { x: cx, y: fy + 0.62, z: cz, ry: Math.PI / 2 }));
+  parts.push(xform(heartGeo(0.2, '#C8473A'), { x: cx - 0.35, y: fy + 0.36, z: cz + (cd - 0.1) / 2 + 0.005 }));
+  // the door (a dark round opening) and the ramp down to the run
+  parts.push(xform(P(new THREE.CircleGeometry(0.16, 10), '#3A2A1A'), { x: cx + 0.45, y: fy + 0.27, z: cz + cd / 2 - 0.04 }));
+  parts.push(xform(torus(0.17, 0.025, '#FFF8EC', {}, 3, 12), { x: cx + 0.45, y: fy + 0.27, z: cz + cd / 2 - 0.035 }));
+  parts.push(xform(box(0.3, 0.03, 0.75, WOOD), { x: cx + 0.45, y: fy * 0.5, z: cz + cd / 2 + 0.3, rx: -0.6 }));
+  for (let i = 0; i < 3; i++) parts.push(xform(box(0.3, 0.02, 0.02, WOOD_D), { x: cx + 0.45, y: fy - 0.1 - i * 0.12, z: cz + cd / 2 + 0.1 + i * 0.18, rx: -0.6 }));
+  // the wire run on the right side of the coop: a frame with mesh slats
+  const rx0 = cx + cw / 2; const rw = 1.0; const rh = 0.6;
+  for (const [x, z] of [[0, -1], [1, -1], [1, 1], [0, 1]]) parts.push(box(0.05, rh, 0.05, WOOD_D, { x: rx0 + x * rw, z: cz + z * (cd / 2) }));
+  parts.push(box(rw, 0.04, cd, WOOD, { x: rx0 + rw / 2, y: rh, z: cz }));
+  for (let i = 1; i < 6; i++) parts.push(box(0.015, rh, 0.015, '#B9BEC2', { x: rx0 + (i * rw) / 6, z: cz + cd / 2 }));
+  for (let j = 1; j < 3; j++) parts.push(box(rw, 0.015, 0.015, '#B9BEC2', { x: rx0 + rw / 2, y: (j * rh) / 3, z: cz + cd / 2 }));
+  // the dust-bath sand patch, a feeder (a little hopper on a dish), a water dish, a sunflower in the corner
+  parts.push(xform(blob(0.5, '#E6D4AC', { seed: 51, sy: 0.04, amp: 0.15, detail: 1 }), { x: 1.05, y: 0.02, z: 0.75 }));
+  parts.push(xform(mergeAll([cyl(0.22, 0.22, 0.05, 10, '#C9CED3'), cyl(0.1, 0.13, 0.3, 8, '#E8B84A', { y: 0.05 }), cyl(0.12, 0.12, 0.04, 8, '#C9CED3', { y: 0.35 })]), { x: -1.25, z: 0.55 }));
+  parts.push(xform(mergeAll([cyl(0.2, 0.18, 0.06, 10, '#7FB8D8'), cyl(0.17, 0.17, 0.02, 10, '#A9DDF2', { y: 0.05 })]), { x: -0.55, z: 1.15 }));
+  parts.push(xform(mergeAll([stalk(0.02, 0.015, 1.0, '#4E9A3A', 4), xform(roundLeaf(0.26, 0.22, '#5CB04B', { cup: 0.3, n: 4 }), { y: 0.45, rx: 0.9 }),
+    xform(flatFlower('#FFD21F', 0.16), { y: 1.02, rx: 0.6 }), xform(P(new THREE.CircleGeometry(0.07, 8), '#6B4422'), { y: 1.04, z: 0.03, rx: 0.6 - Math.PI / 2 })]), { x: 1.45, z: -1.45 }));
+  return { geo: mergeAll(parts), yard: [-1.55, 0.1, 1.55, 1.55], avoid: [[-1.25, 0.55, 0.35], [-0.55, 1.15, 0.3], [cx + 0.45, cz + cd / 2 + 0.3, 0.3]],
+    door: [r3(cx + 0.45), r3(cz + cd / 2 + 0.7), r3(cx + 0.45), r3(fy + 0.1), r3(cz + cd / 2 - 0.02), r3(cx + 0.45), r3(cz - 0.1)] };
+}
+
+// ---- The Spice Mill (spice_mill, 2 x 2 tiles = 4 x 4 m): a whitewashed Bulgarian house on a stone plinth under a
+//      terracotta roof; under its eaves hangs a long garland of red peppers (низ), the stone hand mill (a quern) sits on a
+//      bench by the door, sacks of red paprika stand open, a rack of colourful-salt jars, savory drying in bunches.
+//      Night: its window glows (the window anchor), its chimney smokes.
+function pepperGarland(n = 9, len = 1.6) {
+  // (the string: cyl() lifts a part by half its height after turning it, so a lying one is lowered by as much)
+  const parts = [cyl(0.008, 0.008, len, 3, '#C9A26A', { rz: Math.PI / 2, y: -len / 2 }, 0)];
+  for (let i = 0; i < n; i++) {
+    const x = -len / 2 + (i + 0.5) * (len / n);
+    const sag = Math.sin(((i + 0.5) / n) * Math.PI) * 0.1;
+    parts.push(xform(kapiaPod(i % 3 === 1 ? SP.redD : SP.red, 0.7), { x, y: -sag, rz: (i % 2 - 0.5) * 0.25 }));
+  }
+  return mergeAll(parts);
+}
+function spiceMill() {
+  const W = 2.5; const D = 1.9; const H = 1.75; const P0 = 0.22; const parts = [];
+  parts.push(box(3.8, 0.1, 3.8, '#D9C7A8'));
+  for (let i = 0; i < 10; i++) parts.push(xform(blob(0.16 + (i % 3) * 0.04, '#C9B49A', { seed: 70 + i, sy: 0.15, detail: 0 }), { x: -1.6 + (i % 5) * 0.8, y: 0.08, z: 0.9 + Math.floor(i / 5) * 0.7 }));
+  const hx = -0.3; const hz = -0.55;
+  parts.push(box(W + 0.14, P0, D + 0.14, K.stoneD, { x: hx, y: 0.1, z: hz }), box(W, H, D, SP.wall, { x: hx, y: 0.1 + P0, z: hz }));
+  // dark timber corners and a girt, Bulgarian style
+  for (const [x, z] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) parts.push(box(0.12, H, 0.12, K.timber, { x: hx + x * W / 2, y: 0.1 + P0, z: hz + z * D / 2 }));
+  parts.push(box(W + 0.04, 0.1, 0.05, K.timber, { x: hx, y: 0.1 + P0 + H - 0.1, z: hz + D / 2 + 0.02 }));
+  const RY = 0.1 + P0 + H;
+  parts.push(xform(pitchedRoof(W, D, 0.95, TERRACOTTA, { oh: 0.3, gableHex: SP.wall, trim: K.trim, bands: 7 }), { x: hx, y: RY, z: hz }));
+  parts.push(xform(stack(0.9, 0.36), { x: hx + 0.75, y: RY + 0.15, z: hz - 0.35 }));
+  // the door, a window with blue shutters and a flower box, a sign with a red pepper
+  parts.push(xform(doorBox(0.7, 1.4, '#5A3A26'), { x: hx - 0.65, y: 0.1 + P0, z: hz + D / 2 + 0.03 }));
+  parts.push(xform(windowBox(0.55, 0.55, { shutters: '#3F6E9A' }), { x: hx + 0.55, y: 0.1 + P0 + 0.75, z: hz + D / 2 + 0.03 }));
+  parts.push(xform(flowerBox(0.6, ['#E8443A', '#FFFFFF', '#FFD21F']), { x: hx + 0.55, y: 0.1 + P0 + 0.55, z: hz + D / 2 + 0.13 }));
+  // the pepper garland under the front eaves (the mill's signature: reads from the far zoom) and a second down the corner
+  parts.push(xform(pepperGarland(11, W + 0.2), { x: hx, y: RY - 0.08, z: hz + D / 2 + 0.24 }));
+  parts.push(xform(mergeAll(Array.from({ length: 6 }, (_, i) => xform(kapiaPod(i % 2 ? SP.redD : SP.red, 0.7), { y: -i * 0.17, ry: i * 1.3 }))), { x: hx + W / 2 + 0.16, y: RY - 0.1, z: hz + D / 2 + 0.16 }));
+  // the quern on its bench by the door: two round millstones with a wooden handle
+  const quern = mergeAll([box(0.9, 0.06, 0.45, WOOD, { y: 0.42 }), box(0.07, 0.42, 0.4, WOOD_D, { x: -0.38 }), box(0.07, 0.42, 0.4, WOOD_D, { x: 0.38 }),
+    cyl(0.2, 0.21, 0.1, 12, '#A9A296', { y: 0.48 }, 35), cyl(0.19, 0.2, 0.09, 12, '#BDB6AA', { y: 0.58 }, 35), cyl(0.025, 0.025, 0.18, 5, K.timber, { x: 0.12, y: 0.67 }, 0),
+    xform(blob(0.07, SP.red, { seed: 3, sy: 0.4, detail: 0 }), { x: -0.2, y: 0.5, z: 0.12 })]);
+  parts.push(xform(quern, { x: hx + 0.35, y: 0.1, z: hz + D / 2 + 0.55 }));
+  // open sacks of ground paprika (red tops), of cumin (tan), a crate of chilies
+  for (const [x, z, top, ry] of [[1.45, 0.4, SP.red, 0.2], [1.65, 0.95, SP.cumin, -0.4], [1.15, 1.25, SP.redD, 0.6]]) {
+    parts.push(xform(mergeAll([sack('#E3CFA0'), xform(blob(0.12, top, { seed: 5, sy: 0.35, detail: 0 }), { y: 0.42 })]), { x, y: 0.1, z, ry }));
+  }
+  parts.push(xform(mergeAll([crate(0.5), ...Array.from({ length: 8 }, (_, i) => xform(chiliPod(i % 3 ? SP.chili : SP.orange, 1.1), { x: (i % 4 - 1.5) * 0.1, y: 0.5, z: (Math.floor(i / 4) - 0.5) * 0.14, rz: Math.PI / 2 + (i % 2) * 0.3 }))]), { x: -1.55, y: 0.1, z: 1.0, ry: 0.3 }));
+  // the colourful-salt rack: a little shelf of striped jars (red, green, yellow layers)
+  const rack = [box(0.8, 0.05, 0.25, WOOD_D, { y: 0.5 }), box(0.05, 0.55, 0.22, WOOD_D, { x: -0.38 }), box(0.05, 0.55, 0.22, WOOD_D, { x: 0.38 })];
+  for (let i = 0; i < 4; i++) rack.push(xform(mergeAll([cyl(0.07, 0.07, 0.05, 8, '#C8473A'), cyl(0.07, 0.07, 0.05, 8, '#7FAE4A', { y: 0.05 }), cyl(0.07, 0.07, 0.04, 8, '#E8B84A', { y: 0.1 }),
+    cyl(0.072, 0.072, 0.04, 8, '#D7EEF2', { y: 0.14 })]), { x: -0.27 + i * 0.18, y: 0.55 }));
+  parts.push(xform(mergeAll(rack), { x: -1.45, y: 0.1, z: hz + D / 2 + 0.25 }));
+  // savory drying in bunches on the side wall
+  for (let i = 0; i < 3; i++) parts.push(xform(mergeAll([cyl(0.04, 0.02, 0.28, 5, SP.savory, {}, 0), ...[0, 1, 2].map((q) => xform(flatFlower(SP.lilac, 0.03), { x: (q - 1) * 0.03, y: 0.02, z: 0.03 }))]), { x: hx - W / 2 - 0.05, y: RY - 0.5, z: hz - 0.5 + i * 0.4, rx: Math.PI }));
+  return withAnchors(mergeAll(parts), { chimney: [r3(hx + 0.75), r3(RY + 1.15), r3(hz - 0.35)], windows: [[r3(hx + 0.55), r3(0.1 + P0 + 1.02), r3(hz + D / 2 + 0.07)]],
+    counter: [r3(hx + 0.35), 1.2, r3(hz + D / 2 + 0.55)] });
+}
+
+// ---- The bison (wave 5, owner wish list 1 #2): the UAA Bull reshaped: a big shaggy hump over the shoulders, a dark
+//      mane down the neck and forelegs, a beard and a woolly cap between short black horns, a lighter brown back half.
+//      Skinned like the cow (same rig and clips: graze, eat, walk, the pen's dust wallow); a calf of its own proportions.
+function bisonHump({ box: hb, body, fwd }) {
+  const bs = body.getSize(new THREE.Vector3()); const hc = hb.getCenter(new THREE.Vector3());
+  const H = bs.y; const top = hb.max.y;
+  const c = hc.clone().addScaledVector(fwd, -H * 0.04); c.y = top + H * 0.02;
+  const R = H * 0.2;
+  return [xform(mottle(blob(R, '#4A2E1C', { seed: 61, amp: 0.22, detail: 1, sy: 0.82, sx: 0.95 }), { freq: 5, lo: 0.85, hi: 1.12, seed: 3 }), { x: c.x, y: c.y, z: c.z }),
+    xform(mottle(blob(R * 0.8, '#55341F', { seed: 62, amp: 0.25, detail: 1, sy: 0.9 }), { freq: 5, seed: 4 }), { x: c.x + fwd.x * R * 0.55, y: c.y - R * 0.35, z: c.z + fwd.z * R * 0.55 })];
+}
+function bisonHead({ box: hb, fwd }) {
+  const hs = hb.getSize(new THREE.Vector3()); const hc = hb.getCenter(new THREE.Vector3());
+  const k = Math.max(hs.x, hs.z);
+  const cap = hc.clone().addScaledVector(fwd, -k * 0.12); cap.y = hb.max.y - hs.y * 0.22;
+  const beard = hc.clone().addScaledVector(fwd, k * 0.02); beard.y = hb.min.y + hs.y * 0.05;
+  return [xform(mottle(blob(k * 0.36, '#3E2616', { seed: 63, amp: 0.3, detail: 1, sy: 0.75 }), { freq: 6, seed: 5 }), { x: cap.x, y: cap.y, z: cap.z }),
+    xform(mottle(blob(k * 0.22, '#3A2414', { seed: 64, amp: 0.3, detail: 1, sy: 1.5 }), { freq: 6, seed: 6 }), { x: beard.x, y: beard.y, z: beard.z })];
+}
+function bisonMane({ box: hb }) {
+  const hs = hb.getSize(new THREE.Vector3()); const hc = hb.getCenter(new THREE.Vector3());
+  const k = Math.max(hs.x, hs.y, hs.z);
+  return [xform(mottle(blob(k * 0.42, '#4A2E1C', { seed: 65, amp: 0.25, detail: 1, sy: 1.1 }), { freq: 5, seed: 7 }), { x: hc.x, y: hc.y + hs.y * 0.15, z: hc.z })];
+}
+/** A darker front (wave 5, the bison): the `mat` parts in front of `from` of the body's length (along +z, upright) take
+ *  `hex`, blended over a short band (the shaggy forequarters vs the lighter back half). */
+function frontPaint(list, { mat, hex, from = 0.55, band = 0.08 }, rot) {
+  const t = lin(hex); const v = new THREE.Vector3();
+  let z0 = Infinity; let z1 = -Infinity;
+  for (const g of list) { const p = g.getAttribute('position'); for (let i = 0; i < p.count; i++) { v.fromBufferAttribute(p, i).applyMatrix4(rot); z0 = Math.min(z0, v.z); z1 = Math.max(z1, v.z); } }
+  const L = Math.max(1e-6, z1 - z0);
+  for (const g of list) {
+    if (!mat.test(g.userData.material)) continue;
+    const p = g.getAttribute('position'); const c = g.getAttribute('color');
+    for (let i = 0; i < p.count; i++) {
+      v.fromBufferAttribute(p, i).applyMatrix4(rot);
+      const k = Math.min(1, Math.max(0, ((v.z - z0) / L - from) / band));
+      if (k > 0) c.setXYZ(i, c.getX(i) + (t.r - c.getX(i)) * k, c.getY(i) + (t.g - c.getY(i)) * k, c.getZ(i) + (t.b - c.getZ(i)) * k);
+    }
+  }
+}
+skinnedJob('animal:bison', 'animals/bison-w5.glb', 'quaternius-ultimate-animated-animals/glTF/Bull.gltf', { height: 1.62, clips: UAA_CLIPS,
+  recolor: { Main: '#94643A', Main_Light: '#7A5030', Hooves: '#2A2420', Muzzle: '#2E2420', Horns: '#2E2A26' },
+  front: { mat: /^Main/, hex: '#45291A', from: 0.48, band: 0.12 },
+  attach: [{ bone: 'Torso3', build: bisonHump, material: 'Main' }, { bone: 'Neck1', build: bisonMane, material: 'Main' }, { bone: 'Head', build: bisonHead, material: 'Main' }],
+  coat: { mat: /^Main/, share: 0.3, seed: 19 }, baby: UAA_BABY,
+  meta: { family: 'animal', def: 'bison', headBone: 'Head', speed: 0.55, product: 'bison_wool' } });
+
+// ---- The quail (wave 5, owner wish list 2 #2): a plump little ground bird, buff and brown with dark scallops, a cream
+//      brow stripe and a jaunty teardrop topknot (so it reads as a quail beside the hens), short legs; rigid like the
+//      rabbit (animals-view bobs, pecks and waddles it). The chick is a striped yellow-brown fluffball.
+function quailGeo() {
+  const BODY = '#A88A62'; const DARK = '#6E5A44'; const BREAST = '#C9B08A';
+  const fluff = (g) => { const n = g.getAttribute('position').count; const a = new Float32Array(n * 3); for (let i = 0; i < n; i++) { a[i * 3] = 1; a[i * 3 + 2] = 0.5; } g.setAttribute('coat', new THREE.BufferAttribute(a, 3)); return g; };
+  const bare = (g) => { const n = g.getAttribute('position').count; const a = new Float32Array(n * 3); for (let i = 0; i < n; i++) a[i * 3 + 2] = 0.5; g.setAttribute('coat', new THREE.BufferAttribute(a, 3)); return g; };
+  const body = xform(blob(0.14, BODY, { seed: 71, amp: 0.06, sy: 0.82, sz: 1.18, detail: 1 }), { y: 0.13 });
+  // dark scallops on the back: patches of the body darkened by noise (the quail's speckled plumage)
+  const p = body.getAttribute('position'); const c = body.getAttribute('color'); const col = new THREE.Color(); const dk = lin(DARK); const br = lin(BREAST);
+  for (let i = 0; i < p.count; i++) {
+    const up = p.getY(i) - 0.13; const n = noise3(p.getX(i) * 22, p.getY(i) * 22, p.getZ(i) * 22, 9);
+    col.setRGB(c.getX(i), c.getY(i), c.getZ(i));
+    if (up < -0.02 && p.getZ(i) > -0.02) col.lerp(br, 0.7);
+    else if (n > 0.25) col.lerp(dk, 0.65);
+    c.setXYZ(i, col.r, col.g, col.b);
+  }
+  const parts = [fluff(body),
+    fluff(xform(blob(0.085, BODY, { seed: 72, amp: 0.05, detail: 1 }), { y: 0.25, z: 0.1 })),
+    bare(xform(blob(0.03, '#F2E6CC', { seed: 73, detail: 0, sx: 1.6, sy: 0.4 }), { y: 0.275, z: 0.15 })),      // the cream brow
+    bare(xform(P(new THREE.ConeGeometry(0.02, 0.05, 5), '#3A3028'), { rx: Math.PI / 2, y: 0.24, z: 0.2 })),     // the beak
+    bare(ball(0.014, '#1E1612', { x: -0.05, y: 0.26, z: 0.16 }, 0)), bare(ball(0.014, '#1E1612', { x: 0.05, y: 0.26, z: 0.16 }, 0)),
+    bare(ball(0.005, '#FFFFFF', { x: -0.055, y: 0.267, z: 0.172 }, 0)), bare(ball(0.005, '#FFFFFF', { x: 0.055, y: 0.267, z: 0.172 }, 0)),
+    // the topknot: a teardrop plume curling forward on a fine stalk
+    bare(xform(cyl(0.004, 0.006, 0.07, 3, '#2E2620', {}, 0), { y: 0.31, z: 0.12, rx: 0.5 })),
+    bare(xform(blob(0.022, '#2E2620', { seed: 74, detail: 0, sy: 1.5, sz: 0.6 }), { y: 0.37, z: 0.16, rx: 0.7 })),
+    // the wings folded on the sides, a short tail, two short legs
+    ...[-1, 1].map((sd) => fluff(xform(blob(0.07, DARK, { seed: 75 + sd, sx: 0.45, sz: 1.3, amp: 0.1 }), { x: sd * 0.12, y: 0.15, z: -0.02 }))),
+    fluff(xform(blob(0.04, DARK, { seed: 77, sy: 0.4, sz: 1.2 }), { y: 0.17, z: -0.17 })),
+    bare(cyl(0.008, 0.01, 0.05, 4, '#C9905A', { x: -0.04 }, 0)), bare(cyl(0.008, 0.01, 0.05, 4, '#C9905A', { x: 0.04 }, 0))];
+  const g = mergeAll(parts);
+  const m = g.getAttribute('coat');
+  return coatAttribute(g, { isCoat: (i) => m.getX(i) > 0.5, share: 0.3, freq: 6, seed: 37 });
+}
+job('animal:quail', 'animals/quail-w5.glb', { family: 'animal', def: 'quail', kind: 'rigid', speed: 0.45, product: 'quail_egg', footprint: [1, 1] },
+  async () => sway(quailGeo(), { rigid: true }));
+job('animal:quail:baby', 'animals/quail-w5.glb', { family: 'animal', def: 'quail', kind: 'rigid', speed: 0.5, baby: true, footprint: [1, 1] },
+  async () => sway(xform(chick('#E8C878', '#B8945E'), { s: 0.82 }), { rigid: true }));
+
+/** The giant cumin (wave 5): three tall stems under big flat umbels of tan seed heads, fine leaves at their feet. */
+function cuminBunch() {
+  const parts = [];
+  for (let k = 0; k < 3; k++) {
+    const a = (k / 3) * Math.PI * 2; const lean = 0.18; const hh = 1.0 + (k % 2) * 0.15;
+    const st = stalk(0.03, 0.02, hh, '#A8A05A', 5);
+    xform(st, { rx: Math.sin(a) * lean, rz: -Math.cos(a) * lean });
+    parts.push(st);
+    const tip = new THREE.Vector3(0, hh, 0).applyEuler(new THREE.Euler(Math.sin(a) * lean, 0, -Math.cos(a) * lean, 'YXZ'));
+    const um = [xform(blob(0.16, SP.cuminD, { seed: k + 13, detail: 1, sy: 0.4, amp: 0.25 }), { y: 0.04 })];
+    for (let q = 0; q < 7; q++) { const qa = (q / 7) * Math.PI * 2; um.push(ball(0.06, q % 2 ? SP.cumin : SP.cuminD, { x: Math.cos(qa) * 0.17, y: 0.03, z: Math.sin(qa) * 0.17 }, 1)); }
+    parts.push(xform(mergeAll(um), { x: tip.x, y: tip.y, z: tip.z }));
+  }
+  for (let i = 0; i < 6; i++) parts.push(xform(leaf(0.45, 0.06, i % 2 ? '#7FAE58' : '#93C26A', { bend: 0.6, seg: 1 }), { ry: (i / 6) * Math.PI * 2, rx: 0.5 }));
+  return mergeAll(parts);
+}
+
+// ---- Items (wave 5): the spices and their mill's goods, the quail's eggs, the bison's wool and what is made of it
+const speckledEgg = (base, spot, s = 1) => {
+  const g = xform(ball(0.3 * s, base, {}, 2), { y: 0.36 * s, sy: 1.25 });
+  const p = g.getAttribute('position'); const c = g.getAttribute('color'); const sp = lin(spot); const col = new THREE.Color();
+  for (let i = 0; i < p.count; i++) {
+    const n = noise3(p.getX(i) * 9 / s, p.getY(i) * 9 / s, p.getZ(i) * 9 / s, 31);
+    if (n > 0.32) { col.setRGB(c.getX(i), c.getY(i), c.getZ(i)).lerp(sp, 0.85); c.setXYZ(i, col.r, col.g, col.b); }
+  }
+  return g;
+};
+/** A small paper spice sachet: a kraft pouch, folded top, a coloured label, its spice heaped in front. */
+const sachet = (label, heap) => () => mergeAll([xform(box(0.55, 0.75, 0.3, '#D9B98A'), { y: 0 }), box(0.57, 0.1, 0.32, '#C9A26A', { y: 0.72 }),
+  box(0.4, 0.28, 0.02, label, { y: 0.25, z: 0.155 }), xform(blob(0.2, heap, { seed: 8, sy: 0.4, amp: 0.2, detail: 1 }), { x: 0.3, y: 0.04, z: 0.32 })]);
+item('paprika', () => mergeAll([xform(kapiaPod(SP.red, 2.4), { rz: 1.35, ry: 0.3, y: 0.18 }), xform(kapiaPod(SP.redD, 2.1), { rz: 1.2, ry: -0.5, x: 0.15, y: 0.15, z: 0.28 })]));
+item('chili', () => mergeAll([0, 1, 2].map((i) => xform(chiliPod(i === 1 ? SP.orange : SP.chili, 3.6), { rz: Math.PI / 2 + (i - 1) * 0.2, x: 0.25, y: 0.08 + i * 0.02, z: (i - 1) * 0.18, ry: (i - 1) * 0.3 }))));
+item('savory', () => {
+  const parts = [];
+  for (let i = 0; i < 9; i++) {
+    const a = (i - 4) * 0.09;
+    parts.push(xform(mergeAll([cyl(0.012, 0.014, 0.9, 4, SP.savory, {}, 0), ...[0, 1, 2, 3].map((q) => xform(flatFlower(q % 2 ? SP.lilac : SP.lilacL, 0.05), { y: 0.62 + q * 0.08, rx: 0.4 })),
+      ...[0, 1, 2].map((q) => xform(leaf(0.12, 0.03, SP.savoryL, { bend: 0.2, seg: 1 }), { y: 0.3 + q * 0.12, ry: q * 2.1, rx: 0.8 }))]), { rz: a, x: Math.sin(a) * 0.3 }));
+  }
+  parts.push(xform(torus(0.07, 0.025, '#C8473A', {}, 4, 10), { y: 0.25, rx: Math.PI / 2 }));
+  return mergeAll(parts);
+}, { pitch: 18 });
+item('cumin', () => mergeAll([sackOf('#E3CFA0', SP.cumin)(), ...Array.from({ length: 9 }, (_, i) => xform(P(new THREE.CapsuleGeometry(0.03, 0.09, 2, 5), i % 2 ? SP.cumin : SP.cuminD, { creaseDeg: 60 }),
+  { x: -0.3 + (i % 5) * 0.14, y: 0.04, z: 0.45 + Math.floor(i / 5) * 0.1, rz: Math.PI / 2, ry: i * 0.7 }))]));
+item('cinnamon', () => mergeAll([...[0, 1, 2, 3, 4].map((i) => xform(mergeAll([cyl(0.11, 0.11, 1.0, 7, i % 2 ? '#A65E2E' : '#8E4A22', {}, 0), cyl(0.07, 0.07, 1.01, 7, '#6E3A1A', {}, 0)]), { rz: Math.PI / 2, x: 0.5, y: 0.12 + (i > 2 ? 0.2 : 0), z: (i % 3 - 1) * 0.22 + (i > 2 ? 0.11 : 0) })),
+  xform(torus(0.3, 0.04, '#D23A2E', {}, 4, 14), { y: 0.25, ry: Math.PI / 2 })]));
+item('prairie_hay', () => mergeAll([hayBale(), torus(0.46, 0.03, '#8A6A40', { x: -0.2, y: 0.45, ry: Math.PI / 2 }, 3, 16), torus(0.46, 0.03, '#8A6A40', { x: 0.2, y: 0.45, ry: Math.PI / 2 }, 3, 16),
+  xform(prairieTuft(rng('ph'), 0.5), { x: 0.55, z: 0.4 })]));
+item('quail_egg', () => mergeAll([xform(speckledEgg('#EDE3CF', '#5A4636', 0.8), { x: -0.18 }), xform(speckledEgg('#E8DCC4', '#4E3C2E', 0.7), { x: 0.24, z: 0.15, rz: 0.4 }), xform(speckledEgg('#EFE6D4', '#5A4636', 0.62), { x: 0.05, z: -0.3, rx: 0.3 })]));
+item('speckled_egg', () => mergeAll([speckledEgg('#F2E2C0', '#2E7FB8', 1), torus(0.3, 0.035, '#E9B13A', { y: 0.12, rx: Math.PI / 2 }, 4, 16), xform(P(new THREE.OctahedronGeometry(0.09, 0), '#FFE27A'), { x: 0.32, y: 0.78 })]));
+item('bison_wool', () => mergeAll([fluff('#7A5A3E')(), xform(blob(0.14, '#9A7650', { seed: 9, amp: 0.25 }), { x: 0.32, y: 0.48 })]));
+item('bison_down', () => mergeAll([fluff('#B8987A')(), torus(0.3, 0.035, '#E9B13A', { y: 0.3, rx: Math.PI / 2 }, 4, 18), xform(P(new THREE.OctahedronGeometry(0.1, 0), '#FFE27A'), { x: 0.36, y: 0.76 })]));
+/** A little clay bowl heaped with a ground spice (wave 5: the mill's powders), a wooden scoop in it. */
+const spiceBowl = (powder, bowl = TERRACOTTA) => [lathe([[0, 0], [0.26, 0], [0.42, 0.16], [0.48, 0.32], [0.43, 0.34], [0.28, 0.12], [0, 0.12]], 16, bowl),
+  xform(blob(0.4, powder, { seed: 17, sy: 0.38, amp: 0.12, detail: 1 }), { y: 0.3 }), xform(mergeAll([cyl(0.02, 0.025, 0.5, 5, WOOD, {}, 0), xform(ball(0.07, WOOD, { sy: 0.45 }, 0), { y: 0.5 })]), { x: 0.2, y: 0.32, rz: -1.1 })];
+/** A jar painted in its contents' colour with a gingham cloth over the lid (wave 5: lyutenitsa, the way grandmothers keep it). */
+const clothJar = (fill, check = '#E8413A') => () => {
+  const parts = [lathe([[0, 0], [0.3, 0], [0.34, 0.1], [0.34, 0.62], [0.26, 0.72], [0, 0.72]], 16, fill), cyl(0.345, 0.345, 0.22, 16, '#FFF8EC', { y: 0.24 }),
+    xform(blob(0.4, '#FFFFFF', { seed: 9, sy: 0.22, amp: 0.1, detail: 1 }), { y: 0.76 }), torus(0.28, 0.02, '#C9A26A', { y: 0.7, rx: Math.PI / 2 }, 3, 14)];
+  for (let i = 0; i < 6; i++) { const a = (i / 6) * Math.PI * 2; parts.push(xform(box(0.14, 0.03, 0.14, check), { x: Math.cos(a) * 0.24, y: 0.8, z: Math.sin(a) * 0.24, ry: a })); }
+  parts.push(xform(kapiaPod(SP.red, 0.55), { x: 0.0, y: 0.38, z: 0.36, rz: Math.PI / 2, rx: 0.1 }));
+  return mergeAll(parts);
+};
+item('ground_paprika', () => mergeAll([...spiceBowl(SP.red), xform(kapiaPod(SP.red, 1.1), { x: -0.45, y: 0.06, z: 0.25, rz: 1.5, ry: 0.4 })]));
+item('sharena_sol', () => {
+  // шарена сол: a clay bowl of colourful salt: a red paprika band, a green savory band, a white salt crown
+  const parts = [lathe([[0, 0], [0.28, 0], [0.48, 0.2], [0.55, 0.36], [0.5, 0.38], [0.3, 0.14], [0, 0.14]], 18, TERRACOTTA)];
+  parts.push(xform(blob(0.46, SP.salt, { seed: 11, sy: 0.32, amp: 0.15, detail: 1 }), { y: 0.34 }));
+  for (let i = 0; i < 8; i++) { const a = (i / 8) * Math.PI * 2; parts.push(xform(blob(0.14, i % 2 ? '#C8281E' : '#6E9A48', { seed: 20 + i, sy: 0.35, detail: 0 }), { x: Math.cos(a) * 0.3, y: 0.42, z: Math.sin(a) * 0.3 })); }
+  parts.push(xform(blob(0.12, '#E8B84A', { seed: 30, sy: 0.4, detail: 0 }), { y: 0.5 }));
+  return mergeAll(parts);
+});
+item('grill_spice', sachet('#3A3A3A', '#9A4A22'));
+item('ground_cinnamon', () => mergeAll([...spiceBowl('#9C5A2E', '#E8DCC2'), ...[0, 1].map((i) => xform(mergeAll([cyl(0.05, 0.05, 0.6, 6, i ? '#A65E2E' : '#8E4A22', {}, 0), cyl(0.03, 0.03, 0.61, 6, '#6E3A1A', {}, 0)]),
+  { x: 0.25, y: 0.05 + i * 0.09, z: 0.38, rz: Math.PI / 2, ry: 0.2 + i * 0.25 }))]));
+item('lyutenitsa', clothJar('#B5321E'));
+item('salted_bread', () => mergeAll([xform(blob(0.5, '#D9A15B', { seed: 14, sy: 0.45, amp: 0.08, detail: 2 }), { y: 0.22 }), xform(blob(0.4, '#C48A48', { seed: 15, sy: 0.12, detail: 1 }), { y: 0.42 }),
+  ...Array.from({ length: 10 }, (_, i) => ball(0.04, ['#C8281E', '#6E9A48', '#F4EFE6'][i % 3], { x: Math.cos(i * 2.4) * 0.25 * (i % 3 ? 1 : 0.5), y: 0.47, z: Math.sin(i * 2.4) * 0.25 * (i % 3 ? 1 : 0.5), sy: 0.5 }, 0))]));
+item('village_potatoes', () => mergeAll([lathe([[0, 0], [0.55, 0], [0.6, 0.2], [0.56, 0.22], [0.5, 0.06], [0, 0.06]], 16, '#4A4642'),
+  ...Array.from({ length: 9 }, (_, i) => xform(blob(0.13, '#D9A85A', { seed: 40 + i, sy: 0.75, detail: 0 }), { x: Math.cos(i * 2.2) * 0.3 * (i ? 1 : 0), y: 0.2, z: Math.sin(i * 2.2) * 0.3 * (i ? 1 : 0) })),
+  ...Array.from({ length: 8 }, (_, i) => ball(0.03, i % 2 ? '#C8281E' : '#6E9A48', { x: Math.cos(i) * 0.22, y: 0.32, z: Math.sin(i) * 0.22, sy: 0.5 }, 0))]));
+item('quail_canapes', plate([() => mergeAll([0, 1, 2].map((i) => xform(mergeAll([box(0.24, 0.06, 0.24, '#E0A858', { y: 0.1 }), xform(ball(0.08, '#FFFFFF', { sy: 0.7 }, 1), { y: 0.18 }), xform(ball(0.04, '#F2C230', {}, 1), { y: 0.22 }),
+  ball(0.012, SP.red, { x: 0.03, y: 0.25 }, 0)]), { x: (i - 1) * 0.3, ry: i * 0.5 })))]));
+item('cinnamon_rolls', () => mergeAll([0, 1, 2].map((i) => xform(mergeAll([...[0, 1, 2].map((k) => xform(torus(0.1 + k * 0.06, 0.05, k % 2 ? '#C48A48' : '#D9A15B', {}, 5, 14), { rx: Math.PI / 2, y: 0.08 })),
+  xform(blob(0.2, '#FFF8EC', { seed: 50 + i, sy: 0.15, detail: 0 }), { y: 0.14 })]), { x: (i - 1) * 0.42, z: i === 1 ? -0.2 : 0.1 }))));
+item('spiced_cider', juiceGlass('#C8862E', () => [xform(mergeAll([cyl(0.03, 0.03, 0.5, 6, '#A65E2E', {}, 0), cyl(0.03, 0.03, 0.5, 6, '#8E4A22', { x: 0.06 }, 0)]), { x: 0.1, y: 0.7, rz: 0.3 }),
+  ...appleWedge()]));
+item('mini_quiche', () => mergeAll([0, 1, 2, 3].map((i) => xform(mergeAll([lathe([[0, 0], [0.2, 0], [0.23, 0.1], [0, 0.1]], 12, '#E0A858'), cyl(0.19, 0.19, 0.03, 12, '#F2D27A', { y: 0.08 }),
+  ball(0.03, '#6E9A48', { y: 0.11, x: 0.05 }, 0), ball(0.03, SP.red, { y: 0.11, x: -0.05 }, 0)]), { x: (i % 2 - 0.5) * 0.5, z: (Math.floor(i / 2) - 0.5) * 0.5 }))));
+item('bison_yarn', yarnBall('#7A5A3E'));
+item('bison_blanket', () => {
+  // a folded, chunky wool blanket in bison browns with a cream band and fringes
+  const parts = [0, 1, 2].map((i) => box(1.0, 0.13, 0.75, i % 2 ? '#8A6A48' : '#6E4E32', { y: i * 0.14 }));
+  parts.push(box(1.02, 0.43, 0.12, '#F2E6CC', { z: -0.2 }));
+  for (let i = 0; i < 9; i++) parts.push(box(0.03, 0.12, 0.03, '#F2E6CC', { x: -0.45 + i * 0.11, y: -0.08, z: 0.38 }));
+  return mergeAll(parts);
+});
+item('felt_slippers', () => {
+  const slipper = (hex) => mergeAll([xform(blob(0.22, hex, { seed: 3, sy: 0.45, sz: 2.0, amp: 0.05, detail: 1 }), { y: 0.1 }), xform(blob(0.16, '#F2E6CC', { seed: 4, sy: 0.5, sx: 1.2, amp: 0.2, detail: 1 }), { y: 0.18, z: -0.18 }),
+    xform(heartGeo(0.14, '#C8473A'), { y: 0.2, z: 0.3, rx: -0.6 })]);
+  return mergeAll([xform(slipper('#8A6A48'), { x: -0.2, ry: 0.15 }), xform(slipper('#8A6A48'), { x: 0.22, z: -0.1, ry: -0.15 })]);
+});
 
 // ---------------------------------------------------------------------------------------------------
 // 99. Main

@@ -28,7 +28,7 @@
 // acceptance (E10 at L38 after a quick Grandma's Farmhouse: nothing could ever count for it again). Completing
 // GRANDMA_VISIT.quest brings Grandma for her visit (grandma.js).
 import {
-  CONTENT, questOf, isLive, levelFromXp, animalOf, STORY_BEATS, itemOf, expansionOf,
+  CONTENT, questOf, isLive, levelFromXp, animalOf, STORY_BEATS, itemOf,
   TOWNSFOLK, GRANDMA_VISIT, BREEDING,
 } from '../../content/index.js';
 import { ERR } from '../../net/protocol.js';
@@ -49,6 +49,7 @@ import { blocked, msg, name, int, ms, noun, sub, moreMsg, enText } from '../goal
 import { grandmaArrive } from './grandma.js';
 import { giveFurniture } from './interior.js';
 import { leagueUnlocked, LEAGUE } from './league.js';
+import { landRow, landTarget } from '../land.js';
 
 /** Story-card slots (chains A-E). Chains F/G ("This week") and H ("Together") have their own tabs (SIDE_CHAINS). */
 export const STORY_SLOTS = 3;
@@ -206,8 +207,9 @@ export function blockerOf(state, t, now) {
       return blocked('home', a.homes[0], buildFirst(a.homes[0]));
     }
     case 'expand': {
-      const e = expansionOf(t.ref);
-      if (!e || state.farm.expansions.includes(e.id)) return null;
+      // wave 5: a piece of land is bought with its parcel: the parcel's level and proof tasks block it
+      const e = landRow(landTarget(t.ref));
+      if (!e || state.farm.expansions.includes(t.ref)) return null;
       if (levelFromXp(state.farm.xp) < e.unlock) {
         return blocked('level', e.id, msg('goals.r.block.level', { n: int(e.unlock) }));
       }

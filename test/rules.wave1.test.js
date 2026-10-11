@@ -14,12 +14,15 @@ import { buyPrice } from '../shared/rules/actions/decor.js';
 import { runDue, credit } from './helpers/rules-goals.js';
 
 test('RC-05: an "own 2 Apple Trees" land proof does not count a tree inside its undo window', () => {
-  const s = farmAt(7, { coins: 100_000 });
+  // wave 5: the Old Orchard is bought with its parcel, Orchard Lane (its card holds the apple-tree task)
+  const lane = CONTENT.parcels.get('orchard_lane');
+  const s = farmAt(lane.unlock, { coins: 1_000_000 });
   must(s, 'openExpansion', { expansion: 'old_orchard' }, { now: T0 });
-  s.farm.proofs.old_orchard.n['1'] = 3;
-  give(s, 'planks', 2);
+  lane.proof.forEach((t, i) => { if (t.verb !== 'own') s.farm.proofs.orchard_lane.n[String(i)] = t.qty; });
+  give(s, 'planks', lane.planks);
+  give(s, 'wooden_crate', lane.crates);
   allLand(s);
-  s.farm.expansions = ['home', 'creekside'];
+  s.farm.expansions = ['home', 'creekside', 'cow_hill'];
   placeDef(s, 'apple_tree', { now: T0 });
   placeDef(s, 'apple_tree', { now: T0 });
   assert.equal(run(s, 'expand', { expansion: 'old_orchard', confirm: ['BIG_SPEND'] }, { now: T0 + 1000 }).code,
@@ -71,7 +74,7 @@ test('RC-10: a waiting story card says what it waits for (Dairy, Cow Barn, land 
   // e1: the land card's first open proof task
   const t = farmAt(5);
   must(t, 'openExpansion', { expansion: 'creekside' }, { now: T0 });
-  t.farm.proofs.creekside.n['0'] = 18;
+  t.farm.proofs.creek_hill.n['0'] = 18;                  // wave 5: Creekside's card is its parcel's, Creek Hill
   const e1 = questOf('e1');
   assert.equal(blockerOf(t, e1.tasks[0], T0).text, 'first harvest 12 more Wheat');
   assert.equal(blockerOf(t, { verb: 'make', ref: 'flour', qty: 1 }, T0).text, 'build the Windmill first');

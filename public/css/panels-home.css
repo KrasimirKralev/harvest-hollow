@@ -520,3 +520,6 @@
 :lang(bg) .hg-strip { flex-wrap: wrap; row-gap: 6px; }
 :lang(bg) .hg-strip-text { min-width: 10rem; }
 :lang(bg) .hg-strip > .btn { margin-left: auto; }
+
+/* wave 5: a parcel made of the old small pieces is one field with one outline (its rects join) */
+.ha-parcel .ha-edge-path { stroke-linecap: square; }

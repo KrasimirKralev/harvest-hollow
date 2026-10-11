@@ -46,6 +46,47 @@ export function setLivePredicate(fn) { liveGate = typeof fn === 'function' ? fn 
 /** The milestone gate the world draws with (content's isLive unless a look-dev preview is on). */
 export const liveNow = (def) => liveGate(def);
 
+// ---------------------------------------------------------------------------------------------------
+// Wave 5 (owner wish L2-4: "fewer, bigger expansions"): content keeps the 16 old pieces as land rows (their ids live on in
+// saves, journals and the features drawn for them: Willow Pond's dock, the Riverbank jetty, the paddock's oval), each naming
+// the big parcel it is sold in (`parcel`); a parcel is bought whole. The world groups a parcel's pieces (one sign, one set
+// of corner stakes), never offers a `retired` row (none today; kept so a later table can retire one), and an old piece's
+// features show once ALL of its land is owned, whichever rows own it (by geometry).
+/** A land row the world offers (for sale, signed, overgrown): live and not retired. Pure. */
+export const isLandRow = (e) => Boolean(e) && e.retired !== true && liveNow(e);
+const N_TILES = 64;
+const ownedCache = new WeakMap();
+/**
+ * Every expansion id (old or new) whose land is owned in full by the rows in `expansions` (a state or its
+ * `farm.expansions` array): the owned rows themselves plus every row lying wholly inside owned land. Cached per array
+ * (the Tx writes `farm.expansions` whole). Pure.
+ */
+export function ownedLand(stateOrIds) {
+  const ids = Array.isArray(stateOrIds) ? stateOrIds : stateOrIds?.farm?.expansions;
+  if (!Array.isArray(ids)) return new Set();
+  const hit = ownedCache.get(ids);
+  if (hit) return hit;
+  const tiles = new Uint8Array(N_TILES * N_TILES);
+  const rects = (e) => (Array.isArray(e?.rects) ? e.rects : []);
+  for (const id of ids) {
+    for (const [x, z, w, d] of rects(CONTENT.expansions.get(id))) {
+      for (let j = Math.max(0, z); j < Math.min(N_TILES, z + d); j++) for (let i = Math.max(0, x); i < Math.min(N_TILES, x + w); i++) tiles[j * N_TILES + i] = 1;
+    }
+  }
+  const out = new Set(ids);
+  for (const e of CONTENT.expansions.values()) {
+    if (out.has(e.id) || !rects(e).length) continue;
+    let all = true;
+    for (const [x, z, w, d] of rects(e)) {
+      for (let j = z; j < z + d && all; j++) for (let i = x; i < x + w; i++) if (i < 0 || j < 0 || i >= N_TILES || j >= N_TILES || !tiles[j * N_TILES + i]) { all = false; break; }
+      if (!all) break;
+    }
+    if (all) out.add(e.id);
+  }
+  ownedCache.set(ids, out);
+  return out;
+}
+
 /** The farm's level from its XP. */
 export function farmLevel(state) {
   return state && state.farm && Number.isFinite(state.farm.xp) ? levelFromXp(state.farm.xp) : 1;
@@ -116,7 +157,7 @@ export function bargeView(state, now) {
     }
   }
   const rows = Number.isFinite(b?.rows) ? b.rows : crates.length ? Math.ceil(crates.length / 3) : 0;
-  const upgraded = Array.isArray(state?.farm?.expansions) && state.farm.expansions.includes('riverbank');
+  const upgraded = ownedLand(state).has('riverbank');                   // wave 5: the Riverbank's land, whichever row owns it
   return { live, phase: at.phase, k: at.k, rows, crates, upgraded };
 }
 

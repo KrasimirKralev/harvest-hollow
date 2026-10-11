@@ -501,6 +501,7 @@ export function landCard(c, ctx, kit, selected = false) {
   return h(`article.pn-landcard${selected ? '.sel' : ''}${c.owned ? '.owned' : ''}`, { dataset: { exp: c.id } },
     h('header', h('h4', `${c.k}. ${c.name}`), status),
     h('p.pn-land-reveals', c.reveals),
+    landFacts(c),
     reqs,
     c.owned ? null : h('p.pn-land-note', c.proof.length ? (c.opened ? t('market.land.counting') : t('market.land.startsCounting')) : ''),
     c.owned ? null : h('div.pn-card-foot', price(c.price, { big: c.big && c.code === null }),
@@ -509,6 +510,17 @@ export function landCard(c, ctx, kit, selected = false) {
           const f = cardsOf(ctx, 'land').find((x) => x.id === c.id);
           return f && f.code ? { code: f.code, hint: f.hint } : null;
         } })));
+}
+
+/**
+ * What a parcel brings (wave 5, fewer and bigger expansions): the plot cap it adds and, for a parcel made of the old
+ * small pieces, their names ("Creekside Meadow and Cow Hill"), so the owners recognise their land on the new cards.
+ */
+export function landFacts(c) {
+  const pieces = Array.isArray(c.pieces) && c.pieces.length > 1 && c.pieces[0] !== c.id
+    ? list(c.pieces.map((id) => cname(id, { family: 'expansions' }))) : null;
+  return h('p.pn-land-facts', icon('plot', { size: 20, alt: '' }),
+    h('span', pieces ? t('market.land.factsPieces', { n: c.plots, list: pieces }) : t('market.land.facts', { n: c.plots })));
 }
 
 const VERB = { harvest: 'Harvest', collect: 'Collect', make: 'Make', own: 'Own', fill: 'Fill' };

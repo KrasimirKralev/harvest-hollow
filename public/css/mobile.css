@@ -581,3 +581,14 @@
 @media (hover: none) {
   .seg button { min-height: 44px; padding: 6px 14px; }
 }
+
+/* wave 5: the ❤ card of a home on a phone: the chips scroll sideways, the "Pair them" button takes the full width;
+   a pet's world card keeps its command reachable for a thumb */
+@media (max-width: 600px), (max-height: 500px) {
+  .pn-pair { padding: 10px 10px 12px; }
+  .pn-pair-foot .pn-act:has(> .pn-pair-go) { margin-left: 0; flex: 1 1 100%; }
+  .pn-pair-foot .pn-pair-go { width: 100%; min-height: 48px; }
+  .pn-pair-couple .ic { width: 30px; height: 30px; }
+  .pc-pet-acts > .pn-act:has(> .pc-stay) { flex: 1 1 100%; }
+  .pc-pet-acts .pc-stay { width: 100%; min-height: 44px; }
+}

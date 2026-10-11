@@ -26,6 +26,7 @@ import { installLeague } from './league.js';
 import installHome from './home.js';
 import installW4 from './w4.js';
 import installW4b from './w4b.js';
+import installW5 from './w5.js';
 import { PETS } from '../../../../shared/content/index.js';
 import { ensureStylesheet } from '../dom.js';
 import { t } from '../../i18n/index.js';
@@ -72,6 +73,8 @@ export default function install(ui, deps = {}) {
   off.push(installW4(ui, { store }));
   // wave 4b (owner wishes 2026-10-05): the balloon crates' loot card and lines, the treasures' "saving for"
   off.push(installW4b(ui, { store }));
+  // wave 5 (the owners' wish list of 2026-10-05): babies in the pen, the dog that stays home, the bigger land's word
+  off.push(installW5(ui, { store }));
   if (store) off.push(startBadges(ui, store));
   else {
     // no store handed over: start the badges with the first panel that opens (its ctx carries the store)

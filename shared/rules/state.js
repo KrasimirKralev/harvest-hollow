@@ -332,7 +332,7 @@ const FIELDS = {
   tree: new Set([...COMMON, 'cycle', 'matureAt', 'startedAt', 'readyAt', 'cut', 'water', 'tend', 'compost']),
   animal: new Set(['def', 'home', 'placedAt', 'by', 'paid', 'rcpt', 'free', 'adultAt', 'fedAt', 'readyAt', 'cycle',
     'cut', 'pet', 'baby', 'bot', 'pb', 'nurse', 'pers', 'spec', 'coat', 'bcoat', 'cardBy']),
-  home: new Set([...COMMON, 'up']),
+  home: new Set([...COMMON, 'up', 'pair']),
   building: new Set([...COMMON, 'slots', 'queue', 'made', 'qn', 'joint', 'pts', 'ready', 'xs']),
   decor: new Set([...COMMON, 'mw', 'up']),
   landmark: new Set([...COMMON, 'up']),
@@ -358,7 +358,7 @@ const isMoney = (v) => isObj(v) && isCount(v.coins) && isCount(v.acorns) && Obje
  *   tree      cycle (harvests), matureAt, startedAt, readyAt, cut, water?, tend?, compost?
  *   animal    {def, home, placedAt, by, adultAt, fedAt|null, readyAt|null, cycle (collections), cut, pet? {day, by},
  *             bot? {pid: at} (each player's last Baby Bottle for this baby)}
- *   home      up? (capacity upgrades bought)
+ *   home      up? (capacity upgrades bought), pair? (wave 5: a pairing in the pen, actions/pen.js)
  *   building  slots, queue [{r, s, e, by, in: {item: n}, k?, slow?, duet?, pair? [pid, pid]}], made (crafts
  *             collected), qn? (the next queue key; k < qn and unique), joint? {by, at, r} (a pending duet press),
  *             pts?/ready? (Compost Bin points and Compost waiting)
@@ -456,6 +456,7 @@ export function objectProblems(o, def, horizon = Infinity) {
       break;
     case 'home':
       if (!optCount(o.up)) bad('.up');
+      if (o.pair !== undefined && !pairOk(o.pair)) bad('.pair');
       break;
     case 'building': {
       if (!optCount(o.xs)) bad('.xs');
@@ -570,7 +571,9 @@ function validateEconomy(f, bad) {
   if (!isObj(f.tools) || !Object.entries(f.tools).every(([k, v]) => CONTENT.tools.has(k) && v === 1)) bad('farm.tools');
   if (!positiveMap(f.seeds, (k) => Boolean(cropOf(k)))) bad('farm.seeds');
   if (!isCount(f.golden)) bad('farm.golden');
-  if (!isObj(f.proofs) || !Object.entries(f.proofs).every(([k, v]) => CONTENT.expansions.has(k) && isObj(v)
+  // land cards: keyed by parcel (wave 5), or by an old piece until the `_land` migration turns it into its parcel's
+  if (!isObj(f.proofs) || !Object.entries(f.proofs).every(([k, v]) => (CONTENT.expansions.has(k)
+    || (CONTENT.parcels instanceof Map && CONTENT.parcels.has(k))) && isObj(v)
     && isCount(v.at) && isObj(v.n) && Object.values(v.n).every(isCount))) bad('farm.proofs');
   if (!isObj(f.noFeed) || !Object.entries(f.noFeed).every(([k, v]) => itemOf(k) && v === true)) bad('farm.noFeed');
   if (!isObj(f.regrow) || !isCount(f.regrow.at)) bad('farm.regrow');
@@ -615,18 +618,31 @@ function validateW4b(f, bad) {
  *            Town Projects built so far and the one Ollie has posted (actions/town.js)
  */
 /**
- * A player's pet: null or { kind, name, at, fed: day | null, pets: { day, by } | null, treasure: day | null, breed? }
+ * A home's pairing (wave 5, actions/pen.js): { sp, a, b, at, readyAt, by, cost: { item, qty } }. The parents are not
+ * required to still exist (the baby comes anyway).
+ */
+function pairOk(p) {
+  return isObj(p) && Object.keys(p).length === 7 && Boolean(CONTENT.animals.get(p.sp)) && typeof p.a === 'string'
+    && typeof p.b === 'string' && p.a !== p.b && isCount(p.at) && isCount(p.readyAt) && p.readyAt >= p.at && isPid(p.by)
+    && isObj(p.cost) && Object.keys(p.cost).length === 2 && typeof p.cost.item === 'string'
+    && Boolean(CONTENT.items.get(p.cost.item)) && Number.isSafeInteger(p.cost.qty) && p.cost.qty > 0;
+}
+
+/**
+ * A player's pet: null or { kind, name, at, fed: day | null, pets: { day, by } | null, treasure: day | null, breed?,
+ * stay? } (stay: wave 5, true while it stays home)
  * (breed: wave 4, one of the kind's breeds).
  */
 function petOk(pet) {
   if (pet === null) return true;
   if (isObj(pet) && pet.breed !== undefined && !breedOk(pet.kind, pet.breed)) return false;
+  if (isObj(pet) && pet.stay !== undefined && pet.stay !== true) return false;     // wave 5: stays home
   const dayOrNull = (v) => v === null || isCount(v);
   return isObj(pet) && PETS.kinds.some((k) => k.id === pet.kind) && typeof pet.name === 'string' && pet.name.length > 0
     && pet.name.length <= 16 && isCount(pet.at) && dayOrNull(pet.fed) && dayOrNull(pet.treasure)
     && (pet.pets === null || (isObj(pet.pets) && isCount(pet.pets.day) && Array.isArray(pet.pets.by)
       && pet.pets.by.length >= 1 && pet.pets.by.every(isPid) && new Set(pet.pets.by).size === pet.pets.by.length))
-    && Object.keys(pet).length === (pet.breed === undefined ? 6 : 7);
+    && Object.keys(pet).length === 6 + (pet.breed === undefined ? 0 : 1) + (pet.stay === undefined ? 0 : 1);
 }
 
 function validateM1b(f, bad) {

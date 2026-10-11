@@ -22,7 +22,7 @@
 //   localGoals(state, pid, now) -> [card]                (pure; tests)
 //   storyCards(state, now) -> [{ id, title, sub, icon, progress, done }]   (pure; tests)
 import {
-  CONTENT, defOf, cropOf, live, liveAt, levelFromXp, xpForLevel, SAFETY,
+  CONTENT, defOf, cropOf, liveAt, levelFromXp, xpForLevel, SAFETY, isLive,
 } from '../../../shared/content/index.js';
 import { sortedKeys } from '../../../shared/rules/order.js';
 import * as questsR from '../../../shared/rules/actions/quests.js';
@@ -41,6 +41,7 @@ import { h, icon, svgIcon, fmtDuration, kv, touchPlayer } from './dom.js';
 import { nextUnlocks, PHONE_Q } from './hud.js';
 import { TOOL_CONTENT } from './toolbar.js';
 import { treasures, savingOf, relicIcon } from './panels/w4b-rules.js';
+import { landUnits, unitOwned, landFamily } from './panels/w5-rules.js';
 import { hasIcon } from '../render/icons.js';
 import { localSaving } from './panels/w4b.js';
 
@@ -347,11 +348,11 @@ export function localGoals(state, pid, now) {
     icon: bring && bring.level === level + 1 ? bring.id : 'xp', progress: (state.farm.xp - from) / Math.max(1, to - from),
     target: { panel: 'journal', args: { tab: 'stats' } } });
   // BIG: the next piece of land, else the priciest unlocked building the farm does not have yet
-  const owned = new Set(state.farm.expansions || []);
-  const land = live('expansions').filter((e) => !owned.has(e.id) && e.cost > 0).sort((a, b) => a.k - b.k)[0];
+  // wave 5: land is bought by parcel (several old pieces together) where the build sells parcels
+  const land = landUnits().filter((e) => e.k > 0 && isLive(e) && !unitOwned(state, e) && e.cost > 0)[0];
   if (land) {
     const coins = state.farm.wallet.coins;
-    goals.push({ slot: 'big', title: tr('goals.tr.local.save', { land: nm(land.id, land.name, 'expansions') }),
+    goals.push({ slot: 'big', title: tr('goals.tr.local.save', { land: nm(land.id, land.name, landFamily()) }),
       sub: level < land.unlock ? tr('goals.tr.local.opens', { n: land.unlock, coins: land.cost })
         : tr('goals.tr.local.coins', { have: Math.min(coins, land.cost), need: land.cost }),
       glyph: 'hammer', progress: Math.min(1, coins / land.cost), target: { panel: 'expansion', args: { id: land.id } } });

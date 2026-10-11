@@ -6,6 +6,8 @@
 //   feedText(row, state, me) -> { actor, text, icon }   one ring row as a sentence (pure; tests)
 //   foldGiants(list, rowOf?, withRow?) -> list          a Giant's nine plots leave the harvest line (pure; tests)
 //   createFeed(S) -> { push({ text, by?, icon?, glyph? }), render() }
+import { landRef } from './panels/w5-rules.js';
+import { babyNoun } from './panels/nursery.js';
 import { CONTENT, FEED, FAIR, itemOf, defOf, pluralOf } from '../../../shared/content/index.js';
 import * as CONTENT_ALL from '../../../shared/content/index.js';
 import { ACTIONS } from '../../../shared/rules/index.js';
@@ -19,12 +21,14 @@ const nm = (id, en, family) => (nameEntry(id, family) ? N(id, family) : en);
 /** An item's quantity ref ("12 Carrots" / "12 моркова"); an unknown id says "things". */
 const qOf = (id, q) => (itemOf(id) ? Q(id, q, 'items') : `${fmtNum(q)} ${pluralOf(id || t('feed.things'), q)}`);
 /** The English name of a def or a piece of land (the old wording), or null. */
-const nameOfDef = (id) => (id ? (defOf(id)?.name) || CONTENT.expansions.get(id)?.name || String(id).replace(/_/g, ' ') : null);
+const nameOfDef = (id) => (id ? (defOf(id)?.name) || landRef(id)?.en || String(id).replace(/_/g, ' ') : null);
 /** A def as a sentence ref ({b}), or null. */
 const defRef = (id) => {
   const en = nameOfDef(id);
-  return en === null ? null : nm(id, en, CONTENT.expansions.has(id) && !defOf(id) ? 'expansions' : undefined);
+  return en === null ? null : nm(id, en, landRef(id) && !defOf(id) ? landRef(id).family : undefined);
 };
+/** An animal species def, or null (an id the content no longer has). */
+const animalOfSafe = (id) => { try { return CONTENT_ALL.animalOf(id) ?? null; } catch { return null; } };
 /** "a" / "an" before an English name (English-only grammar: Bulgarian has no article). */
 const an = (en) => (/^[aeiou]/i.test(String(en)) ? 'an' : 'a');
 /** Fair points in tenths: "4.5" / "4,5" (always one decimal, as the feed always said). */
@@ -263,6 +267,19 @@ export function feedText(row, state, me) {
       const en = rel?.name ?? nameOfDef(row.def);
       const r = en ? nm(row.def, en) : t('feed.aTreasure');
       return out(row.a ? 'feed.relic.a' : 'feed.relic', { r, ...(row.a ? { n: row.a } : {}) }, { icon: 'acorns' });
+    }
+    // wave 5 (the owners' wish list of 2026-10-05): babies in the pen, the dog that stays home, the bigger land
+    case 'pen': {
+      // a baby in the pen (rules progress: the pairing farmer's line): "Mia welcomed a newborn calf in the Cow Barn 🍼"
+      const sp = typeof row.def === 'string' && animalOfSafe(row.def) ? row.def : null;
+      const home = row.id && state?.farm?.objects?.[row.id]?.home;
+      const hd = home && state.farm.objects[home] ? state.farm.objects[home].def : null;
+      const p = { noun: sp ? babyNoun(sp) : t('farm.pair.baby') };
+      return out(hd && defOf(hd) ? 'feed.pen.home' : 'feed.pen', hd && defOf(hd) ? { ...p, home: N(hd) } : p, { icon: sp, glyph: sp ? undefined : 'heart' });
+    }
+    case 'land': {
+      const units = CONTENT.parcels instanceof Map ? [...CONTENT.parcels.values()] : [...CONTENT.expansions.values()];
+      return { actor: null, ...line('feed.land.merged', { n: units.filter((e) => e.k > 0 && e.retired !== true).length }, { icon: 'plot', sys: true }) };
     }
     // multi-farm hosting: a farmer's new key (a lost phone), and their way back with it
     case 'key':

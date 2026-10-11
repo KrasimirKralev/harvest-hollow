@@ -5,6 +5,7 @@
 // this build lacks it: the probe then answers UNKNOWN_ACTION and the button says "Not open yet" instead of failing.
 import { ACTIONS } from '../../../../shared/rules/index.js';
 import { pick } from './core.js';
+import { expandIntent, openLandIntent } from './w5-rules.js';
 import { t } from '../../i18n/index.js';
 
 const first = (...names) => pick(...names) ?? names[0];
@@ -33,8 +34,9 @@ export const I = {
   goldenSeeds: () => ({ type: first('buyGoldenSeeds'), args: {} }),
   buyTool: (tool) => ({ type: first('buyTool'), args: { tool } }),
   hurry: (id) => ({ type: first('hurry'), args: { id } }),
-  openExpansion: (expansion) => ({ type: first('openExpansion'), args: { expansion } }),
-  expand: (expansion) => ({ type: first('expand'), args: { expansion } }),
+  // wave 5: a parcel (several old pieces) is bought by its id under whichever key the rules name (w5-rules.js)
+  openExpansion: (expansion) => openLandIntent(expansion),
+  expand: (expansion) => expandIntent(expansion),
   // objects (decor.js)
   sellObject: (id) => ({ type: first('sellObject'), args: { id } }),
   refund: (id) => ({ type: first('refund'), args: { id } }),

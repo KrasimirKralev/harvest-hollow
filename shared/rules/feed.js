@@ -42,6 +42,9 @@
 //                                            by itself (by 'sys')
 //   relic     def, a? | def, q               an Acorn shop relic bought (a = Acorns), or a once-a-day relic used: def
 //                                            'farmhand' (q animals tended) / 'time_turner' (q queue items finished)
+//   pen       def (species), id               wave 5: a baby appeared in the pen (by = who paired the parents)
+//   land      q (pieces given)                wave 5: the land was redrawn into bigger parcels (by 'sys'): the
+//                                            parcels owned in part were completed with q pieces
 //   key       what ('new' | 'back'), pid      multi-farm hosting (`_key`): `by` made a new key for farmer `pid`, or
 //                                            `pid` came back with it (by = pid)
 // Optional: ty = pid who said thanks (one thanks per line, from someone other than the actor).

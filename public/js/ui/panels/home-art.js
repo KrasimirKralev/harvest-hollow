@@ -3,6 +3,7 @@
 // language as panels/art.js (visual-ux-juice.md §5.4): flat fills, one highlight, one shade, ink outlines, light from
 // the upper left. Built with createElementNS from content data only, never from player strings (names are set as
 // text nodes by the panels, outside the SVG).
+import { vignettesOf, outlinePath, mainRect, rectsPath } from './w5-rules.js';
 import { s } from './art.js';
 import { t, fmtNum, name as cname } from '../../i18n/index.js';
 
@@ -358,17 +359,22 @@ export function atlasSvg(parcels, { selected = null, onPick = null, label = t('h
   for (const p of parcels) {
     const g = s('g', { class: `ha-parcel ha-${p.status}${selected === p.id ? ' sel' : ''}`, 'data-exp': p.id });
     const ours = p.status === 'home' || p.status === 'ours' || p.status === 'meadow-ours';
-    for (const r of p.rects) {
-      const [x, z, w, d] = r;
-      g.append(s('rect', { x: x + 0.12, y: z + 0.12, width: w - 0.24, height: d - 0.24, rx: 0.9, class: 'ha-ground',
-        fill: ours ? `url(#ha-mow-${id})` : `url(#ha-wild-${id})` }));
-      const art = s('g', { class: 'ha-art' }, ...terrainOf(p.id, r));
-      if (!ours) art.setAttribute('opacity', p.status === 'sale' ? '0.92' : '0.6');
-      g.append(art);
-      if (!ours && p.status !== 'sale') g.append(s('rect', { x: x + 0.12, y: z + 0.12, width: w - 0.24, height: d - 0.24, rx: 0.9, class: 'ha-veil' }));
-      g.append(s('rect', { x: x + 0.12, y: z + 0.12, width: w - 0.24, height: d - 0.24, rx: 0.9, class: 'ha-edge' }));
-    }
-    const [x, z, w, d] = p.rects[0];
+    // a parcel of several rects (wave 5: the old small pieces bought together) reads as ONE field: its rects join
+    // without the inset and one outline runs round the whole; each old piece keeps its own painting where it was
+    const multi = p.rects.length > 1;
+    const inset = multi ? 0 : 0.12;
+    const box = (r, cls, fill) => s('rect', { x: r[0] + inset, y: r[1] + inset, width: r[2] - inset * 2, height: r[3] - inset * 2,
+      rx: multi ? 0 : 0.9, class: cls, ...(fill ? { fill } : {}) });
+    const fillOf = ours ? `url(#ha-mow-${id})` : `url(#ha-wild-${id})`;
+    if (multi) g.append(s('path', { d: rectsPath(p.rects), class: 'ha-ground', fill: fillOf }));
+    else g.append(box(p.rects[0], 'ha-ground', fillOf));
+    const art = s('g', { class: 'ha-art' }, ...vignettesOf(p, (x) => Object.hasOwn(TERRAIN, x)).flatMap((v) => terrainOf(v.id, v.rect)));
+    if (!ours) art.setAttribute('opacity', p.status === 'sale' ? '0.92' : '0.6');
+    g.append(art);
+    if (!ours && p.status !== 'sale') g.append(multi ? s('path', { d: rectsPath(p.rects), class: 'ha-veil' }) : box(p.rects[0], 'ha-veil'));
+    if (multi) g.append(s('path', { d: outlinePath(p.rects), class: 'ha-edge ha-edge-path', fill: 'none' }));
+    else g.append(box(p.rects[0], 'ha-edge'));
+    const [x, z, w, d] = mainRect(p);
     const cx = x + w / 2;
     const cz = z + d / 2;
     if (p.status === 'sale') {

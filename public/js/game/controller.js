@@ -758,6 +758,7 @@ export function createController({
           audio?.play('snore', { gain: 0.6 });
           toast(i18n.t(type === 'feedPet' ? 'game.pet.sleepyTreat' : 'game.pet.sleepyPat', { name: petName }), {});
         }
+        if (res.ok) petCard(p, owner);
         return res;
       }
       if (code !== ERR.ALREADY_DONE) refusal ??= { type, args, code };
@@ -774,11 +775,23 @@ export function createController({
       return null;
     }
     const treat = refusal && refusal.code === ERR.NO_ITEMS;
+    // my own pet with a mouse (wave 5): its card says the day's cuddle is done and holds "Stay home" / "Come with me"
+    if (!treat && petCard(p, owner)) return null;
     toast(treat ? i18n.t('game.pet.wantsTreat', { name })
       : refusal && refusal.code === ERR.NOT_READY ? i18n.t('game.pet.busy', { name })
         : i18n.t('game.pet.doneToday', { name }), {});
     invalid(null, null);
     return null;
+  }
+
+  /**
+   * The Hand clicked my own pet with a mouse (wave 5, the dog's "Stay home"): the ui pins its card where it was clicked,
+   * with the command (a finger's long press shows the same card). True when the card was asked for.
+   */
+  function petCard(p, owner) {
+    if (input === 'touch' || owner !== me() || !store.state?.players?.[owner]?.pet) return false;
+    emit('hover', { ...p, kind: 'pet', owner, card: true });
+    return true;
   }
 
   /** A click that started no stroke: open a panel, sit, or explain why nothing happened. */

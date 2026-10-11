@@ -178,7 +178,9 @@ test('land: owned, for sale and later land per tile; the boundary is closed; one
   const count = (v) => t.reduce((n, x) => n + (x === v ? 1 : 0), 0);
   const home = CONTENT.expansions.get('home');
   assert.equal(count(1), home.rects.reduce((n, r) => n + r[2] * r[3], 0));
-  const liveForSale = [...CONTENT.expansions.values()].filter((e) => isLive(e) && !owned.includes(e.id));
+  // (wave 5: a retired small row is sold as part of a big one; a parcel's pieces share one sign)
+  const liveForSale = [...CONTENT.expansions.values()].filter((e) => isLive(e) && e.retired !== true && !owned.includes(e.id));
+  const groupOf = (e) => (typeof e.parcel === 'string' ? `p:${e.parcel}` : e.id);
   assert.equal(count(2), liveForSale.reduce((n, e) => n + e.rects.reduce((m, r) => m + r[2] * r[3], 0), 0));
   assert.equal(count(1) + count(2) + count(3), (FARM_MAX - FARM_MIN) ** 2, 'every farmable tile is classified');
   // the fence: every corner of the boundary has an even degree (a closed loop around the owned land)
@@ -189,7 +191,7 @@ test('land: owned, for sale and later land per tile; the boundary is closed; one
   for (const [k, d] of deg) assert.equal(d % 2, 0, `corner ${k}`);
   // signs
   const signs = saleSigns(owned);
-  assert.deepEqual(signs.map((s) => s.id).sort(), liveForSale.map((e) => e.id).sort());
+  assert.deepEqual(signs.map((s) => groupOf(CONTENT.expansions.get(s.id))).sort(), [...new Set(liveForSale.map(groupOf))].sort(), 'one sign per parcel for sale');
   for (const s of signs) {
     const e = CONTENT.expansions.get(s.id);
     assert.ok(e.rects.some(([x, z, w, d]) => s.x > x && s.z > z && s.x < x + w && s.z < z + d), `${s.id} sign stands on its parcel`);
@@ -198,6 +200,8 @@ test('land: owned, for sale and later land per tile; the boundary is closed; one
   const t2 = landTiles(['home', 'creekside']);
   assert.equal(t2.reduce((n, x) => n + (x === 1 ? 1 : 0), 0), count(1) + 8 * 16);
   assert.ok(!saleSigns(['home', 'creekside']).some((s) => s.id === 'creekside'));
+  // wave 5: a sign stands on its parcel's land and names it (the pieces of a parcel group)
+  for (const s of signs) if (s.parcel) assert.equal(CONTENT.expansions.get(s.id).parcel, s.parcel);
 });
 
 // ---------------------------------------------------------------------------------------------------

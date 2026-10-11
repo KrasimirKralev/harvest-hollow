@@ -50,8 +50,17 @@ test('the content equals the model JSON, number for number', () => {
     assert.deepEqual([row.xp, row.E, row.minutes], [l.cumAt, l.E, l.minutes], `L${l.L}`);
     if (l.L > 1) assert.deepEqual([row.coins, row.acorns], [l.coins, l.acorns], `L${l.L} rewards`);
   }
-  for (const e of M.expansions) assert.deepEqual([CONTENT.expansions.get(e.id).cost,
-    CONTENT.expansions.get(e.id).unlock], [e.coins, e.level], e.id);
+  // wave 5: the land is sold by parcel; every piece takes its parcel's level and is never sold alone
+  for (const p of M.parcels) {
+    const d = CONTENT.parcels.get(p.id);
+    assert.deepEqual([d.k, d.unlock, d.cost, d.planks, d.crates, d.pieces, d.proofText, d.reveals], [p.k, p.level,
+      p.coins, p.planks, p.crates, p.pieces, p.proof, p.reveals], p.id);
+    for (const id of p.pieces) {
+      const e = CONTENT.expansions.get(id);
+      assert.deepEqual([e.parcel, e.unlock, e.cost], [p.id, p.level, 0], id);
+    }
+  }
+  for (const e of M.expansions) assert.equal(CONTENT.expansions.get(e.id).k, e.k, `${e.id} keeps its number`);
   for (const b of M.barnUpgrades) assert.deepEqual([CONTENT.barn[b.n - 1].cost, CONTENT.barn[b.n - 1].capacity],
     [b.coins, b.cap]);
   for (const q of M.quests) assert.deepEqual([CONTENT.quests.get(q.id).coins, CONTENT.quests.get(q.id).xp], [q.coins,

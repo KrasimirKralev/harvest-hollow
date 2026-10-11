@@ -23,7 +23,7 @@
 import * as THREE from 'three';
 import { TILE_M } from '../../../shared/content/config.js';
 import { tileOwner } from '../../../shared/rules/grid.js';
-import { defOf } from '../../../shared/content/index.js';
+import { defOf, CONTENT } from '../../../shared/content/index.js';
 import { objFootprint } from './objects-view.js';
 
 const hitV = new THREE.Vector3();
@@ -105,7 +105,12 @@ export function createPicker(camera, { proxies = () => [], animals = () => [], g
       // wave 4 (owner wish F): an owned tile with wild tufts the Hand can pull (rules clearWeed { x, z })
       if (l === 1 && typeof ground.weedAt === 'function' && ground.weedAt(x, z)) out.weed = true;
       const e = l === 2 ? ground.expansionAt(x, z) : null;
-      if (e) out.expansion = e;
+      if (e) {
+        out.expansion = e;
+        // wave 5: land sold by the big parcel: the parcel this piece belongs to (content rows with `parcel`)
+        const row = CONTENT.expansions.get(e);
+        if (row && typeof row.parcel === 'string') out.parcel = row.parcel;
+      }
     }
     return out;
   };

@@ -7,6 +7,7 @@
 //                                        same action with args.confirm += [code] on "yes" (prediction as usual)
 //   dryCost(state, type, args, pid, now) -> { coins, acorns } | null   what an action would spend (a dry run on a
 //                                        clone with the soft code confirmed); used to show the real price
+import { landRef } from './panels/w5-rules.js';
 import { runAction, makeCtx } from '../../../shared/rules/index.js';
 import { keptOf, acornsToday } from '../../../shared/rules/economy.js';
 import { inputsFor, recipeDef, FEED_VALUABLE_MUL } from '../../../shared/rules/actions/crafting.js';
@@ -43,7 +44,7 @@ export function partnerHeadsUp(ev, state, who) {
   const big = (coins > SAFETY.bigSpend.minCoins && coins * 10000 > before * SAFETY.bigSpend.shareBp) || acorns >= SAFETY.bigSpend.acorns;
   if (!big) return null;
   const what = ev.def ? (defOf(ev.def) ? cname(ev.def) : ev.def)
-    : ev.expansion ? (CONTENT.expansions.get(ev.expansion) ? cname(ev.expansion, { family: 'expansions' }) : t('toasts.dlg.newLand'))
+    : ev.expansion ? (landRef(ev.expansion) ? cname(ev.expansion, { family: landRef(ev.expansion).family }) : t('toasts.dlg.newLand'))
       : ev.tool ? (CONTENT.tools.get(ev.tool) ? cname(ev.tool, { family: 'tools' }) : t('toasts.dlg.aTool')) : t('toasts.dlg.barnUpgrade');
   return t('toasts.dlg.headsUp', { who, what, price: coins ? tn('toasts.dlg.coins', coins) : tn('toasts.dlg.acorns', acorns) });
 }

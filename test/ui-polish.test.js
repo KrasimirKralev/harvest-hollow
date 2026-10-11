@@ -150,7 +150,7 @@ test('market: a full home that cannot grow names what is in the way, once, and o
   for (const adult of [false, true]) {
     const card = model.storeCards(s, 'animals').find((c) => c.kind === 'animal' && c.id === 'chicken' && c.adult === adult);
     assert.equal(card.code, 'CAP');
-    assert.match(card.hint.text, /no room to grow: Picket Fence (is|are) in the way/);
+    assert.match(card.hint.text, /no room to grow: Picket Fences are in the way/);
     assert.deepEqual(card.blocked, { home: coop, name: 'Chicken Coop', why: model.blockerText(s, g.blockers) });
   }
   // the panel: the reason once under both rows, and a button to the Chicken Coop's own panel
@@ -161,7 +161,7 @@ test('market: a full home that cannot grow names what is in the way, once, and o
   assert.ok(card, 'the Chicken card');
   const note = card.querySelector('.pn-card-room');
   assert.ok(note, 'the card says why and offers a way forward');
-  assert.match(textOf(note), /The Chicken Coop is full and has no room to grow: Picket Fence (is|are) in the way\./);
+  assert.match(textOf(note), /The Chicken Coop is full and has no room to grow: Picket Fences are in the way\./);
   const go = note.querySelector('[data-gohome]');
   assert.equal(textOf(go).trim(), 'Make room');
   go.click();

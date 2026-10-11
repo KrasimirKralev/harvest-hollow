@@ -112,7 +112,7 @@
 //   view.pick(ndc).weed                     wish F: an owned tile whose wild tufts (weeds) the Hand can pull; view.weedAt(x, z)
 //   view.pick(ndc).asleep                   wish 4: a pet pick while it sleeps (late dusk to dawn, at its Dog House /
 //        Cat Basket, else the farmhouse steps, with a 💤)
-//   view.stats() adds { rain, rainStrength, wet, puddle, rainbow, nightLights }   the shower (0..1; strength: a drizzle
+//   view.stats() adds { rain, rainStrength, wet, puddle, rainbow, nightLights } (wave 5: and frogs { frogs, visible, puddles })   the shower (0..1; strength: a drizzle
 //        ~0.45, a downpour 1, gusting), the ground's wetness and puddles, a rainbow after some showers; the lamps lit
 //   view.setWeather('rainbow')              look-dev: the sky just after a shower, with its rainbow
 //   upgrade tiers (wish E, objects[id].up) draw `<key>:<tier>`; pet breeds (wish 6, players[pid].pet.breed) their own
@@ -129,6 +129,13 @@
 //        Barn's cupola; wateredAll / farmhandDone gather the per-crop / per-animal events of their moment into one wave;
 //        timeTurned swirls over each workshop; a blue ribbon while the farm owns the Lucky Clover adds its clover
 //   bird baths (wish 6): visitors come now and then, sip, bathe, shake and fly off (render/birdbath-view.js)
+// Wave 5 (the owners' wish lists of 2026-10-05; render lane, all additive):
+//   frogs (list 1 #3): frogs by the river, the Willow Pond, duck ponds, bird baths and koi ponds, more at dusk, in the
+//        lawn's puddles after a rain; one instanced draw, the motion in the shader (render/frogs-view.js); never picked
+//   hungry hens wait in the coop (list 1 #4, animals-view INDOOR); a pet told to stay home keeps to its Dog House (list 2
+//        #3, avatars-view stayAt, rules `players[pid].pet.stay`); land sold by the big parcel (list 2 #4): one sign per
+//        parcel, `view.pick()` adds `parcel` on a piece of a parcel for sale, an old parcel's features show once its
+//        land is owned (world-state ownedLand); bison, quail, the spices and the Spice Mill: models and icons
 //   view.portrait(spec) -> Promise<url|null>   (hud lane, render/portrait.js): a farmer's portrait drawn with this renderer
 import * as THREE from 'three';
 import { TILE_M } from '../../../shared/content/config.js';
@@ -168,6 +175,7 @@ import { createGrandmaVisit } from './grandma-view.js';
 import * as worldState from './world-state.js';
 import { createBirdBaths } from './birdbath-view.js';
 import { createCrates } from './crates-view.js';
+import { createFrogs } from './frogs-view.js';
 import { drawPortrait } from './portrait.js';
 
 // The rules own the weather (rain waters crops, GDD §5.10): the sky draws exactly what the rules decide, including a
@@ -292,6 +300,8 @@ export const view = {
     const fx = createFx(layers.fx, overlay, toScreenM);
     // wave 4 (owner wish 10): the bird baths' water ripples and their visitors (one instanced draw for all of them)
     const baths = createBirdBaths({ layer: layers.fx, fx });
+    // wave 5 (owner wish list 1 #3): frogs at the water and, after a rain, in the lawn's puddles (one instanced draw)
+    const frogs = createFrogs({ layer: layers.animals, ground });
     objects.setFx(fx);
     ground.setFx(fx);
     // wave 4: roofs and canopies near the view drip in the rain (the picking proxies are their boxes)
@@ -310,6 +320,7 @@ export const view = {
     call(avatars, 'setFx', fx);
     call(fx, 'setQuality', q0.particles);
     call(life, 'setQuality', q0.life);
+    call(frogs, 'setQuality', q0.life);
     call(animals, 'setSkinnedMax', q0.skinned);
     call(avatars, 'setTargetLocator', (id) => {
       const p = objects.worldPosOf(id) || call(animals, 'positionOf', id);
@@ -354,7 +365,7 @@ export const view = {
     const auto = gpuTimer ? createAutoTier(tier) : createIntervalTier(tier);
     const motionPref = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches ? 'reduced' : 'full';
     R = {
-      renderer, scene, layers, sun, hemi, sky, fireflies, cam, ground, scenery, sceneryFar, objects, avatars, animals, fx, ghost, badges, pick, world, dyn, worldState, land, baths, crates,
+      renderer, scene, layers, sun, hemi, sky, fireflies, cam, ground, scenery, sceneryFar, objects, avatars, animals, fx, ghost, badges, pick, world, dyn, worldState, land, baths, crates, frogs,
       daynight, weather, lod, auto, gpuTimer, life, canvas, now, state: null, me: null, fps: 0, frames: 0, fpsAt: 0, lastFed: 0, calm: 1,
       lastCam: null, cullDirty: true, duets: new Map(), staticBatches: [scenery, sceneryMid, sceneryFar, objects.batches.trees, objects.batches.statics, objects.batches.smalls],
       tier, tierMode: QUALITY[quality] ? 'fixed' : 'auto', motion: motionPref, dayMode: 'cycle', clockOverride: null,
@@ -450,7 +461,7 @@ export const view = {
     try {
       call(fx, 'warmup', true);
       const hold = call(ghost, 'warmup', true);
-      const extra = [call(R.avatars, 'warmup'), call(R.animals, 'warmup'), call(R.life, 'warmup'), call(R.baths, 'warmup'), call(R.crates, 'warmup')].flat().filter(Boolean);
+      const extra = [call(R.avatars, 'warmup'), call(R.animals, 'warmup'), call(R.life, 'warmup'), call(R.baths, 'warmup'), call(R.crates, 'warmup'), call(R.frogs, 'warmup')].flat().filter(Boolean);
       if (typeof renderer.compileAsync === 'function') await renderer.compileAsync(scene, cam.camera);
       for (const o of extra) if (o && o.removeFromParent) o.removeFromParent();
       void hold;
@@ -522,6 +533,17 @@ export const view = {
   _bathOpts(c, wx) {
     const o = R.bathOpts || (R.bathOpts = { night: 0, rain: 0, motion: 'full', focus: { x: 0, z: 0 } });
     o.night = R.sky0 ? R.sky0.night : 0; o.rain = wx.rain; o.motion = R.motion; o.focus.x = c.tx; o.focus.z = c.tz;
+    return o;
+  },
+
+  /** The frogs' per-tick options (wave 5; one reused object): dusk-ness (dusk into night), the wet lawn, the season. */
+  _frogOpts(c, wx) {
+    const o = R.frogOpts || (R.frogOpts = { dusk: 0, wet: 0, season: 'summer', motion: 'full', focus: { x: 0, z: 0, dist: 55 } });
+    const s = R.sky0;
+    o.dusk = s ? Math.max(s.night || 0, s.phase === 'dusk' ? s.k : 0) : 0;
+    o.wet = R.season === 'winter' ? 0 : Math.max(wx.rain || 0, wx.puddle || 0);
+    o.season = R.season || 'summer'; o.motion = R.motion;
+    o.focus.x = c.tx; o.focus.z = c.tz; o.focus.dist = c.dist;
     return o;
   },
 
@@ -644,6 +666,7 @@ export const view = {
       ...R.world.map((m) => m.update(dt, now, { motion: R.motion }) || 0),
       call(R.fx, 'update', dt) || 0,
       R.inside ? 0 : call(R.baths, 'update', dt, now, this._bathOpts(c, wx)) || 0,
+      R.inside ? 0 : call(R.frogs, 'update', dt, now, this._frogOpts(c, wx)) || 0,
       R.inside ? 0 : R.crates.update(dt, R.now(), this._crateOpts()),
       R.inside ? R.interior.update(dt, now, R.sky0, { motion: R.motion }) : 0,
       R.ghost.tick(dt) ? 2 : 0,
@@ -755,6 +778,7 @@ export const view = {
     call(R.avatars, 'setSeats', state.farm.coop?.bench || {}, state);
     call(R.life, 'setState', state);
     call(R.baths, 'setState', state);
+    call(R.frogs, 'setState', state);
     R.crates.setState(state, R.now());
     call(R.fx, 'setMe', R.me);
     const wnow = R.clockOverride ?? R.now();
@@ -780,6 +804,7 @@ export const view = {
     if (topics.has('coop') || topics.has('objects') || topics.has('duel') || topics.has('*')) call(R.avatars, 'setSeats', R.state.farm.coop?.bench || {}, R.state);
     call(R.life, 'sync', ids, topics, R.state);
     call(R.baths, 'sync', ids, topics, R.state);
+    call(R.frogs, 'sync', ids, topics, R.state);
     R.crates.sync(ids, topics, R.state, R.now());
     const wnow = R.clockOverride ?? R.now();
     for (const m of R.world) m.sync(ids, topics, R.state, wnow);
@@ -1030,6 +1055,7 @@ export const view = {
     R.ground.setQuality(R.q.tufts);
     call(R.fx, 'setQuality', R.q.particles);
     call(R.life, 'setQuality', R.q.life);
+    call(R.frogs, 'setQuality', R.q.life);
     call(R.animals, 'setSkinnedMax', R.q.skinned);
     R.lod = createLod();                         // the zoom band is re-read with the tier's LOD scale next tick
     R.skyAt = 0;                                 // blob shadows follow the shadow map's switch
@@ -1335,6 +1361,7 @@ export const view = {
       rain: R.wx ? +(R.wx.rain || 0).toFixed(3) : 0, wet: R.wx ? +(R.wx.wet || 0).toFixed(3) : 0,
       rainStrength: R.wx ? +((R.wx.rain || 0) * (R.wx.strength ?? 1)).toFixed(3) : 0, puddle: R.wx ? +(R.wx.puddle || 0).toFixed(3) : 0, rainbow: R.wx ? +(R.wx.rainbow || 0).toFixed(3) : 0,
       nightLights: { lit: R.lamps ? R.lamps.n : 0, sources: R.objects.lampSources ? R.objects.lampSources().length : 0, k: +LOOK.uLampK.value.toFixed(2), glow: +LOOK.uGlow.value.toFixed(2) },
+      frogs: call(R.frogs, 'stats') || null,                                       // wave 5: { frogs, visible, puddles }
     };
   },
 };

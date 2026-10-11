@@ -1,6 +1,7 @@
 // Achievements, "Ribbons" (GDD §5.4). Hand-authored from the GDD table; every tier value is the GDD's.
 // Owner wave 4 (2026-10-04): the "every one of a family" Gold tiers follow the new crops, the Pomegranate Tree, the
-// Rabbit and the twelve new recipes (Rainbow Harvest and Crop Master 21, Orchardist 14, Full Barnyard 10, Recipe Box 117).
+// Rabbit and the twelve new recipes; wave 5 (2026-10-06) the four spices, the Cinnamon Tree, Quail, Bison and fourteen
+// recipes (Rainbow Harvest and Crop Master 25, Orchardist 15, Full Barnyard 12, Recipe Box 131).
 //
 // Ribbon shape:
 //   { id, n, name, m, scope, stat, mode, tiers: [bronze, silver, gold], text, title, bound?, scale?, hidden? }
@@ -26,7 +27,7 @@ export const RIBBONS = [
     'Harvest plots', 'Harvest Royalty'),
   r(2, 'green_thumb', 'Green Thumb', 'M1a', 'P', 'plantingsHarvested', 'sum', [300, 3000, 12_000],
     'Your plantings harvested (by anyone)', 'Green Thumb'),
-  r(3, 'rainbow_harvest', 'Rainbow Harvest', 'M1a', 'F', 'harvest.*', 'distinct', [6, 12, 21],
+  r(3, 'rainbow_harvest', 'Rainbow Harvest', 'M1a', 'F', 'harvest.*', 'distinct', [6, 12, 25],
     'Different crops harvested', 'Keepers of the Rainbow', { bound: { family: 'crops' } }),
   r(4, 'night_shift', 'Night Shift', 'M1a', 'F', 'harvestLong', 'sum', [25, 250, 1500],
     'Harvest crops of 8 h or longer', 'Night Shift Legends'),
@@ -40,7 +41,7 @@ export const RIBBONS = [
     'Seasons with 100+ in-season harvests', 'Farmers for All Seasons'),
   r(9, 'knock_on_wood', 'Knock on Wood', 'M1a', 'F', 'treesHarvested', 'sum', [50, 500, 2500], 'Tree harvests',
     'Orchard Hands'),
-  r(10, 'orchardist', 'Orchardist', 'M1a', 'F', 'treeSpecies', 'state', [3, 7, 14], 'Tree species owned',
+  r(10, 'orchardist', 'Orchardist', 'M1a', 'F', 'treeSpecies', 'state', [3, 7, 15], 'Tree species owned',
     'Master Orchardists', { bound: { family: 'trees' } }),
   r(11, 'grove_keeper', 'Grove Keeper', 'M1a', 'F', 'grovesFormed', 'state', [1, 4, 10],
     'Same-species groves formed', 'Grove Keepers'),
@@ -53,7 +54,7 @@ export const RIBBONS = [
     'Nursery Nannies'),
   r(16, 'blue_ribbon', 'Blue Ribbon', 'M1a', 'F', 'prizedAnimals', 'state', [1, 5, 15], 'Blue-ribbon animals',
     'Blue-Ribbon Breeders'),
-  r(17, 'full_barnyard', 'Full Barnyard', 'M1a', 'F', 'animalSpecies', 'state', [3, 6, 10], 'Animal species owned',
+  r(17, 'full_barnyard', 'Full Barnyard', 'M1a', 'F', 'animalSpecies', 'state', [3, 6, 12], 'Animal species owned',
     'Noah\'s Farm', { bound: { family: 'animals' } }),
   r(18, 'name_game', 'Name Game', 'M1a', 'P', 'animalsNamed', 'sum', [3, 15, 40], 'Animals you named',
     'Namer of Names'),
@@ -63,7 +64,7 @@ export const RIBBONS = [
     'Best Friend'),
   r(21, 'home_cooking', 'Home Cooking', 'M1a', 'F', 'goodsCrafted', 'sum', [50, 500, 2500], 'Goods crafted',
     'Home Cooks'),
-  r(22, 'recipe_box', 'Recipe Box', 'M1a', 'F', 'craft.*', 'distinct', [10, 50, 117], 'Different recipes made',
+  r(22, 'recipe_box', 'Recipe Box', 'M1a', 'F', 'craft.*', 'distinct', [10, 50, 131], 'Different recipes made',
     'Keepers of the Recipe Box', { bound: { family: 'recipes' } }),
   r(23, 'master_chef', 'Master Chef', 'M1a', 'F', 'recipesStar3', 'state', [1, 5, 15], 'Recipes at ★3', 'Master Chefs'),
   r(24, 'mill_runner', 'Mill Runner', 'M1a', 'F', 'feedMade', 'sum', [100, 1000, 5000], 'Feed made', 'Millers'),
@@ -100,7 +101,7 @@ export const RIBBONS = [
     'Restorers', { bound: 24 }),
   r(40, 'hollow_reborn', 'Hollow Reborn', 'M1b', 'F', 'projectsDone', 'sum', [1, 3, 6],
     'Restoration projects completed', 'Heart of the Hollow', { bound: 6 }),
-  r(41, 'crop_master', 'Crop Master', 'M1a', 'F', 'cropsStar3', 'state', [1, 6, 21], 'Crops at ★3', 'Crop Masters',
+  r(41, 'crop_master', 'Crop Master', 'M1a', 'F', 'cropsStar3', 'state', [1, 6, 25], 'Crops at ★3', 'Crop Masters',
     { bound: { family: 'crops' } }),
   r(42, 'golden_touch', 'Golden Touch', 'M2', 'F', 'goldStars', 'state', [1, 5, 15], 'Items at Gold ★', 'Golden Touch'),
   r(43, 'fair_contender', 'Fair Contender', 'M1b', 'F', 'bestMedal', 'state', [1, 7, 10],

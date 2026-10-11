@@ -35,7 +35,7 @@ export const FEATURES = [
   f('golden_hour', 'Golden Hour', 4, 'M1a', { title: 'Golden Hour',
     text: 'Sit on the Sunset Bench together for 10 seconds: for 30 minutes everything you start grows 10 % faster.' }),
   f('expansions', 'Land expansions', 5, 'M1a', { title: 'More land',
-    text: 'Each expansion adds six plots to your cap and a new corner to explore. Look for the "For sale" signs.' }),
+    text: 'Each parcel of land adds 12 or more plots to your cap and new corners to explore. Look for the "For sale" signs.' }),
   f('hurry', 'Hurry', 5, 'M1a', { title: 'In a hurry?',
     text: 'Acorns finish any timer: 1 Acorn per started hour left.' }),
   f('mabel_meter', 'Mabel\'s weekly meter', 5, 'M1a', { title: 'Mabel\'s week',
@@ -209,4 +209,15 @@ export const FEATURES = [
   f('acorn_shop', 'Acorn treasures', 8, 'M1a', { title: 'Worth saving for',
     text: 'The Acorn shop has eight treasures, one of each per farm, like the Golden Barn and the Farmhand. Pick one '
       + 'to save for.' }),
+  // The owners' wish list of 2026-10-06 (wave 5): babies in the pen, the dog that stays home, the spices. Each on a
+  // level that already unlocks something, drip-fed like the others.
+  f('pen_babies', 'Babies in the pen', 8, 'M1a', { title: 'Babies in the pen',
+    text: 'Two grown animals of a kind in one home? Press ❤ on its card: for one Baby Bottle (feed for birds and '
+      + 'bunnies), a baby soon arrives.' }),
+  f('dog_stay', 'Stay home', 10, 'M1b', { title: 'Stay, good dog',
+    text: 'Press "Stay home" on your dog\'s card or in the pet panel and it waits by its Dog House. "Come with me" and it '
+      + 'follows.' }),
+  f('spices', 'Spices', 16, 'M1b', { title: 'A pinch of spice',
+    text: 'Grow paprika and savory, grind them at the Spice Mill and mix Colourful Salt for warm bread, the way Grandma '
+      + 'did.' }),
 ];

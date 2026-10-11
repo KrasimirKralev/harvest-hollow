@@ -99,7 +99,8 @@ export const ECON_EVENTS = Object.freeze({
   surplusUndone: 'coins, rows [{item, qty}], by  (the last "Sell surplus" bought back inside its 10 minutes)',
   toolBought: 'tool, by, coins',
   expansionOpened: 'expansion, by  (proof tasks count from now)',
-  expanded: 'expansion, by, coins, planks, crates',
+  expanded: 'expansion, pieces, by, coins, planks, crates  (wave 5: expansion = the parcel bought; pieces = the land '
+    + 'pieces it added to farm.expansions)',
 
   // ---- wave 2 (M1b) --------------------------------------------------------------------------------------------
   // giant crops (actions/giant.js; GDD §6.2 #8). The nine plots of a Giant keep their crops; `id` is the anchor plot
@@ -197,6 +198,20 @@ export const ECON_EVENTS = Object.freeze({
   treeAged: 'id, tree, stage, years, by',
   // the waiting items of a production queue in a new order (actions/crafting.js reorder); keys = that order
   reordered: 'id, building, keys, by',
+
+  // ---- wave 5 (the owners' wish list) ----------------------------------------------------------------------------
+  // babies in the pen (actions/pen.js): two adults of one species paired in their home (❤); the bottle item came back
+  // on a cancel; the baby appeared (system `_pen`, by 'sys'; pid = who paired them; progress writes the feed line)
+  paired: 'home, species, a, b, readyAt, item, qty, by',
+  pairCancelled: 'home, species, item, qty, by',
+  penBorn: 'id, species, home, parents: [a, b], pid, by',
+  // a pet told to stay home (stay: true; it walks to its bed: home = the Dog House / Cat Basket id, null = the porch)
+  // or to come along again (actions/pets.js petStay); pid = the pet's owner
+  petStay: 'pid, kind, stay, home, by',
+  // the one-time land migration (system `_land`, actions/land.js, by 'sys'): from / to = farm.expansions (pieces)
+  // before / after; added = the pieces given to complete the parcels the farm owned in part; objects = the free
+  // objects that came with them (wild trees, decor; never debris)
+  landRedrawn: 'from, to, added, objects, by',
 });
 
 /** The event names, for progress.FX_EVENTS (rules-goals spreads this into its set). */

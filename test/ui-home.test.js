@@ -38,8 +38,12 @@ function farm(level, o = {}) {
   s.players.p2.name = 'Mia';
   return s;
 }
+// wave 5: land is bought by parcel (content's CONTENT.parcels: several old pieces together); `upTo` = the last parcel k
+// owned, and the farm owns every piece of each (farm.expansions lists pieces)
+const W5 = await import('../public/js/ui/panels/w5-rules.js');
+const UNITS = W5.landUnits().filter((u) => content.isLive(u));
 const allLand = (s, upTo = Infinity) => {
-  s.farm.expansions = content.live('expansions').filter((e) => e.k <= upTo).map((e) => e.id);
+  s.farm.expansions = UNITS.filter((u) => u.k <= upTo).flatMap((u) => u.pieces);
   resetGrid(s);
 };
 const done = (s, id, at = T0 - HOUR) => {
@@ -73,18 +77,21 @@ function mount(spec, s, o) {
 // ---- the farm atlas ------------------------------------------------------------------------------------------------
 
 test('atlas: every parcel has a status, the next one is for sale, and the plot cap equals the rules\' own cap', () => {
-  const s = farm(33);
-  allLand(s, 12);
+  const total = UNITS.filter((u) => u.k > 0).length;
+  const last = UNITS.at(-1);
+  const sale = UNITS.at(-2);
+  const s = farm(Math.max(33, sale.unlock));
+  allLand(s, sale.k - 1);
   let v = atlas.atlasView(s, { now: T0, pid: 'p1' });
-  assert.equal(v.total, 15);
-  assert.equal(v.bought, 12);
+  assert.equal(v.total, total);
+  assert.equal(v.bought, sale.k - 1);
   assert.equal(v.parcels.find((p) => p.id === 'home').status, 'home');
-  assert.equal(v.parcels.find((p) => p.k === 12).status, 'ours');
-  assert.equal(v.parcels.find((p) => p.k === 13).status, 'sale', 'Olive Terrace opens at 33');
-  assert.equal(v.parcels.find((p) => p.k === 14).status, 'later');
-  assert.equal(v.next.id, 'olive_terrace');
+  assert.equal(v.parcels.find((p) => p.k === sale.k - 1).status, 'ours');
+  assert.equal(v.parcels.find((p) => p.k === sale.k).status, 'sale', `${sale.id} opens at ${sale.unlock}`);
+  if (last.unlock > content.levelFromXp(s.farm.xp)) assert.equal(v.parcels.find((p) => p.k === last.k).status, 'later');
+  assert.equal(v.next.id, sale.id);
   assert.equal(v.plots.cap, decor.ownCap(s, content.defOf('plot')), 'the cap the rules enforce');
-  assert.equal(v.plots.fromLand, 12 * 6);
+  assert.equal(v.plots.fromLand, UNITS.filter((u) => u.k > 0 && u.k < sale.k).reduce((n, u) => n + W5.parcelPlots(u), 0));
   // the Hollow Meadow follows the Stone Bridge: +6 on the cap the rules count too
   assert.equal(v.parcels.find((p) => p.id === 'hollow_meadow').status, 'meadow-later');
   done(s, 'stone_bridge');
@@ -95,22 +102,24 @@ test('atlas: every parcel has a status, the next one is for sale, and the plot c
   assert.equal(v.plots.cap, decor.ownCap(s, content.defOf('plot')));
   assert.equal(v.plots.base + v.plots.fromLevels + v.plots.fromLand + v.plots.fromMeadow, v.plots.cap);
   // below the next parcel's level it is 'soon', never for sale
-  const low = farm(32);
-  allLand(low, 12);
+  const low = farm(sale.unlock - 1);
+  allLand(low, sale.k - 1);
   const w = atlas.atlasView(low, { now: T0, pid: 'p1' });
-  assert.equal(w.parcels.find((p) => p.k === 13).status, 'soon');
-  assert.equal(w.upcoming.id, 'olive_terrace');
+  assert.equal(w.parcels.find((p) => p.k === sale.k).status, 'soon');
+  assert.equal(w.upcoming.id, sale.id);
   assert.equal(atlas.featureText({ goldenHourBonusMs: 600_000 }), 'Golden Hour lasts 10 min longer up here');
   assert.equal(atlas.featureText(null), null);
 });
 
 test('atlas panel: renders, opens the next card\'s proof, and buying goes through the rules', () => {
+  const total = UNITS.filter((u) => u.k > 0).length;
+  const next = UNITS.find((u) => u.k > 0 && u.proof?.length && u.unlock <= 33 && UNITS.some((x) => x.k === u.k - 1));
   const s = farm(33);
-  allLand(s, 12);
+  allLand(s, next.k - 1);
   const { text, ctx } = mount(atlas.landmapPanel, s, { name: 'landmap' });
-  assert.match(text, /Olive Terrace/);
-  assert.match(text, /12 of 15/);
-  assert.ok(ctx.acts.some((a) => a.type === 'openExpansion' && a.args.expansion === 'olive_terrace'), 'showing the card starts its proof');
+  assert.match(text, new RegExp(content.CONTENT.parcels ? content.CONTENT.parcels.get(next.id).name : next.name));
+  assert.match(text, new RegExp(`${next.k - 1} of ${total}`));
+  assert.ok(ctx.acts.some((a) => a.type === 'openExpansion' && a.args.expansion === next.id), 'showing the card starts its proof');
 });
 
 // ---- the Barn's upgrade ladder -------------------------------------------------------------------------------------

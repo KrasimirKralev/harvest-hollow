@@ -80,7 +80,13 @@ const CROPS_RAW = [
   ['blueberry', 'Blueberry', 14, 180, 3, ['fruit'], '#4D5BD6', 'bush'],
   ['cotton', 'Cotton', 16, 600, 2, ['fibre'], '#FFFFFF', 'bush'],
   ['coffee', 'Coffee Beans', 16, 300, 3, ['bean'], '#A3262A', 'bush'],
+  // owner wish list 2026-10-06 (wave 5, list 2 #1): a small spice family for a Bulgarian kitchen, kept out of E(L)
+  // (OWNER5 below): paprika (червен пипер), savory (чубрица), chili and cumin; the Cinnamon Tree is a tree
+  ['paprika', 'Paprika', 16, 150, 2, ['spice'], '#C8281E', 'bush'],
+  ['savory', 'Savory', 17, 40, 3, ['spice'], '#7A9A48', 'flower'],
   ['lavender', 'Lavender', 18, 120, 2, ['flower'], '#A98BE0', 'flower'],
+  ['chili', 'Chili Pepper', 18, 60, 2, ['spice'], '#D62A1E', 'bush'],
+  ['cumin', 'Cumin', 19, 420, 2, ['spice'], '#B08A4E', 'tall'],
   ['onion', 'Onion', 24, 90, 3, ['root', 'veg'], '#E7C8A0', 'root'],
   ['watermelon', 'Watermelon', 27, 960, 2, ['fruit'], '#3E8E3A', 'ground'],
   ['pepper', 'Bell Pepper', 31, 300, 3, ['veg'], '#E03C2E', 'bush'],
@@ -97,6 +103,7 @@ const TREES_RAW = [
   ['lemon_tree', 'Lemon Tree', 15, 480, 6, 'lemon', 'Lemon', true],
   ['peach_tree', 'Peach Tree', 17, 180, 4, 'peach', 'Peach', true],
   ['pear_tree', 'Pear Tree', 19, 600, 6, 'pear', 'Pear', true],
+  ['cinnamon_tree', 'Cinnamon Tree', 19, 540, 5, 'cinnamon', 'Cinnamon', true],               // owner wish (wave 5)
   ['plum_tree', 'Plum Tree', 23, 420, 5, 'plum', 'Plum', true],
   ['walnut_tree', 'Walnut Tree', 26, 720, 6, 'walnut', 'Walnut', false],
   ['olive_tree', 'Olive Tree', 30, 720, 6, 'olive', 'Olive', true],
@@ -113,6 +120,8 @@ const FEEDS_RAW = [
   // owner wish 3 (wave 4): rabbits eat carrots and greens
   ['rabbit_greens', 'Rabbit Greens', 14, 10, 6, [['root', 2], ['veg', 1]]],
   ['pig_slop', 'Pig Slop', 17, 10, 6, [['produce', 2]]],
+  // owner wish (wave 5, list 1 #2): bison graze on hay of grain and greens
+  ['prairie_hay', 'Prairie Hay', 17, 10, 6, [['grain', 3], ['veg', 1]]],
 ];
 
 // [id, name, unlock, home, capStart, capMax, feedId|null, feedQty, cycleMin, productId, productName, outQty,
@@ -124,7 +133,10 @@ const ANIMALS_RAW = [
   ['bee', 'Bee Colony', 13, 'beehive', 1, 1, null, 0, 360, 'honey', 'Honey', 1, 0, 25, 'royal_jelly', 'Royal Jelly'],
   // owner wish 3 (2026-10-04, wave 4): rabbits in a hutch, angora wool
   ['rabbit', 'Rabbit', 14, 'hutch', 4, 8, 'rabbit_greens', 1, 120, 'angora_wool', 'Angora Wool', 1, 90, 40, 'cloud_angora', 'Cloud Angora'],
+  // owner wishes (2026-10-06, wave 5): quail in a small coop (list 2 #2), bison on a big range (list 1 #2)
+  ['quail', 'Quail', 15, 'quail_coop', 6, 12, 'chicken_feed', 1, 40, 'quail_egg', 'Quail Egg', 2, 30, 60, 'speckled_egg', 'Speckled Egg'],
   ['pig', 'Pig', 17, 'pig_pen', 4, 8, 'pig_slop', 1, 240, 'truffle', 'Truffle', 1, 240, 25, 'black_truffle', 'Black Truffle'],
+  ['bison', 'Bison', 17, 'bison_range', 2, 6, 'prairie_hay', 2, 480, 'bison_wool', 'Bison Wool', 2, 480, 20, 'bison_down', 'Bison Down'],
   ['duck', 'Duck', 19, 'duck_pond', 4, 8, 'chicken_feed', 1, 90, 'duck_egg', 'Duck Egg', 1, 60, 40, 'golden_feather', 'Golden Feather'],
   ['goat', 'Goat', 22, 'goat_yard', 4, 8, 'livestock_feed', 2, 180, 'goat_milk', 'Goat Milk', 1, 240, 25, 'aged_goat_cheese', 'Aged Goat Cheese'],
   ['horse', 'Horse', 25, 'stable', 2, 4, 'livestock_feed', 2, 360, 'manure', 'Manure', 2, 480, 20, 'show_ribbon', 'Show Ribbon'],
@@ -146,6 +158,7 @@ const BUILDINGS_RAW = [
   ['pie_oven', 'Pie Oven', 15, 2, 6, [3, 2], 0.7],
   ['juice_press', 'Juice Press', 6, 2, 6, [2, 2], 0.6],
   ['chandlery', 'Chandlery', 16, 2, 5, [3, 3], 0.7],
+  ['spice_mill', 'Spice Mill', 16, 2, 5, [2, 2], 0.6],                 // owner wish (wave 5, list 2 #1)
   ['packing', 'Packing Table', 20, 2, 4, [3, 2], 0.8],
   ['oil_press', 'Oil Press', 30, 2, 5, [3, 3], 0.8],
   ['sugar_shack', 'Sugar Shack', 34, 2, 4, [3, 3], 0.8],
@@ -295,6 +308,24 @@ const RECIPES_RAW = [
   ['angora_yarn', 'Angora Yarn', 'weaver', 14, 35, 1, { angora_wool: 1 }, 'T2'],
   ['angora_mittens', 'Angora Mittens', 'sewing', 14, 75, 1, { angora_yarn: 2 }, 'T3'],
   ['bunny_slippers', 'Bunny Slippers', 'sewing', 16, 100, 1, { angora_wool: 2, cotton_cloth: 1 }, 'T3'],
+  // Owner wish list 2026-10-06 (wave 5). Spices (list 2 #1): the Spice Mill grinds them; "шарена сол" (colourful salt:
+  // savory + ground paprika) goes on bread, lyutenitsa is the roasted-pepper relish; every raw spice has two uses
+  ['ground_paprika', 'Ground Paprika', 'spice_mill', 16, 15, 1, { paprika: 3 }, 'T2'],
+  ['sharena_sol', 'Colourful Salt', 'spice_mill', 17, 30, 1, { savory: 2, ground_paprika: 1 }, 'T3'],
+  ['grill_spice', 'Grill Spice', 'spice_mill', 19, 45, 1, { cumin: 2, chili: 1 }, 'T3'],
+  ['ground_cinnamon', 'Ground Cinnamon', 'spice_mill', 19, 20, 1, { cinnamon: 2 }, 'T2'],
+  ['lyutenitsa', 'Lyutenitsa', 'preserves', 18, 100, 1, { paprika: 3, tomato: 2, chili: 1 }, 'T3'],
+  ['salted_bread', 'Bread with Colourful Salt', 'kitchen', 17, 35, 1, { bread: 1, sharena_sol: 1 }, 'T3'],
+  ['village_potatoes', 'Village Potatoes', 'kitchen', 19, 50, 1, { potato: 2, savory: 1, cumin: 1 }, 'T3'],
+  ['cinnamon_rolls', 'Cinnamon Rolls', 'bakery', 19, 55, 1, { flour: 1, ground_cinnamon: 1, butter: 1, egg: 1 }, 'T3'],
+  ['spiced_cider', 'Spiced Apple Juice', 'juice_press', 19, 40, 1, { apple: 3, cinnamon: 1 }, 'T3'],
+  // Quail (list 2 #2): tiny eggs for canapés and mini quiches
+  ['quail_canapes', 'Quail Egg Canapés', 'kitchen', 15, 25, 1, { quail_egg: 3, bread: 1, butter: 1 }, 'T3'],
+  ['mini_quiche', 'Mini Quiches', 'bakery', 15, 90, 1, { flour: 1, quail_egg: 4, cheese: 1 }, 'T3'],
+  // Bison (list 1 #2): bison wool spun to yarn for a warm blanket, or felted into slippers
+  ['bison_yarn', 'Bison Yarn', 'weaver', 17, 45, 1, { bison_wool: 1 }, 'T2'],
+  ['bison_blanket', 'Warm Bison Blanket', 'sewing', 17, 200, 1, { bison_yarn: 2, cotton_cloth: 1 }, 'T3'],
+  ['felt_slippers', 'Felt Slippers', 'sewing', 17, 110, 1, { bison_wool: 2 }, 'T3'],
 ];
 // The owners' wave-4 additions (2026-10-04). E(L) is the design income model the level table and every E-hour price
 // were fitted to on a farm that is already live; these defs are left out of it so no threshold, price or quest
@@ -302,7 +333,12 @@ const RECIPES_RAW = [
 export const OWNER4 = new Set(['raspberry', 'rose', 'coffee', 'pomegranate_tree', 'rabbit', 'fertilizer',
   'raspberry_jam', 'raspberry_tart', 'rose_jelly', 'rose_candle', 'pomegranate_juice', 'grenadine', 'farm_coffee',
   'coffee_cake', 'angora_yarn', 'angora_mittens', 'bunny_slippers']);
-const inE = (x) => !OWNER4.has(x.id);
+// The owners' wave-5 additions (2026-10-06): the same rule, the same reason (the couple is at L17 on a live farm).
+export const OWNER5 = new Set(['paprika', 'savory', 'chili', 'cumin', 'cinnamon_tree', 'spice_mill', 'quail', 'bison',
+  'prairie_hay', 'ground_paprika', 'sharena_sol', 'grill_spice', 'ground_cinnamon', 'lyutenitsa', 'salted_bread',
+  'village_potatoes', 'cinnamon_rolls', 'spiced_cider', 'quail_canapes', 'mini_quiche', 'bison_yarn', 'bison_blanket',
+  'felt_slippers']);
+const inE = (x) => !OWNER4.has(x.id) && !OWNER5.has(x.id);
 
 // ---------------------------------------------------------------------------------------------
 // 3. Derivation
@@ -535,7 +571,9 @@ const buildings = [...bld.values()].map((b) => ({ ...b, cost: FREE_BUILDINGS.has
   slotCost: (k) => nice(EL(b.unlock) * 0.25 * 1.6 ** (k - 1)) }));
 const HOMES = {
   coop: ['Chicken Coop', 1, [3, 3]], cow_barn: ['Cow Barn', 7, [4, 3]], pasture: ['Sheep Pasture', 12, [4, 4]],
-  beehive: ['Beehive', 13, [1, 1]], hutch: ['Rabbit Hutch', 14, [3, 2]] /* owner wish 3 */, pig_pen: ['Pig Pen', 17, [4, 3]],
+  beehive: ['Beehive', 13, [1, 1]], hutch: ['Rabbit Hutch', 14, [3, 2]] /* owner wish 3 */,
+  quail_coop: ['Quail Coop', 15, [2, 2]] /* owner wish (wave 5) */, pig_pen: ['Pig Pen', 17, [4, 3]],
+  bison_range: ['Bison Range', 17, [5, 4]] /* owner wish (wave 5): a big paddock */,
   duck_pond: ['Duck Pond', 19, [4, 4]], goat_yard: ['Goat Yard', 22, [4, 4]], stable: ['Stable', 25, [4, 3]],
   paddock: ['Alpaca Paddock', 33, [4, 4]],
 };
@@ -576,6 +614,49 @@ const expansions = EXPANSIONS_RAW.map(([id, name, level, proof, reveals], i) => 
   check(level === EXP_LEVELS[i], `expansion ${id}: level ${level} differs from EXP_LEVELS`);
   return { k, id, name, level, proof, reveals, coins: nice(EL(level) * (0.6 + 0.2 * k)), planks: EXP_PLANKS[i], crates: EXP_CRATES[i] };
 });
+
+// Owner wish list 2026-10-06 (wave 5, list 2 #4): FEWER, BIGGER expansions. The 15 pieces above keep their ids,
+// rectangles, debris and features (a save lists the pieces it owns, so a migrated farm never loses land and nothing
+// placed ever leaves it); a PARCEL is what is bought now: two neighbouring pieces (the hilltop row three), each
+// touching land owned before it. The design schedule above (EXP_LEVELS) still feeds E(L), so no level threshold or
+// E-hour price of the live farm moves; the parcels never put a farm behind it (checked below).
+// Price: the same land costs the same hours of income, bought at the parcel's level: E(level) x the sum over its
+// pieces of (0.6 + 0.2 slot), slot = the piece's place in the new purchase order. Planks/Crates: those of its last
+// slot (none for the first parcel, which arrives before the Sawmill), so materials still pace nothing (R14).
+// [id, name, level, pieces, proof text, reveals]
+const PARCELS_RAW = [
+  ['creek_hill', 'Creek Hill', 5, ['creekside', 'cow_hill'], 'Harvest 30 Wheat and collect 10 Eggs',
+    'a creek bank with reeds and a wild Pine, and a gentle hill with a dry-stone wall and wildflowers (bee forage)'],
+  ['orchard_lane', 'Orchard Lane', 9, ['old_orchard', 'fair_lane'], 'Own 2 Apple Trees, press 3 Apple Juice and fill 10 orders',
+    '2 wild Apple Trees (free, mature), old stumps for Wood and the road to the County Fair grounds'],
+  ['sunny_glade', 'Sunflower Glade', 13, ['sunflower_rise', 'bee_glade'], 'Make 3 Strawberry Jam, spin 4 Yarn and own 1 Sheep Pasture',
+    "Grandma's old fence line and scarecrow (free decor), a clover glade (bee forage x2) and a wild hive (1 free Bee Colony)"],
+  ['riverside_woods', 'Riverside Woods', 17, ['riverbank', 'pig_woods'], 'Make 3 Cotton Tote or Wool Pillow and dig up 5 Truffles',
+    'the River Barge jetty upgrade (row bonuses +25 %), willows and an oak edge where pigs dig 10 % faster'],
+  ['willow_meadow', 'Willow Meadow', 21, ['willow_pond', 'stable_paddock'], 'Collect 8 Duck Eggs',
+    'a large pond with a fishing dock and lily pads, and a riding track with the horse-show ring'],
+  ['rocky_grove', 'Rocky Grove', 27, ['goat_rocks', 'walnut_grove'], 'Make 3 Goat Cheese and harvest 30 Walnuts',
+    'a rocky outcrop goats climb, a stone bench and old walnut trees (2 free) around a picnic clearing'],
+  ['sunset_ridge', 'Sunset Ridge', 33, ['olive_terrace', 'maple_ridge', 'sunset_hill'], 'Press 4 Olive Oil',
+    'terraced olive slopes, a red-maple ridge and the hilltop gazebo (Golden Hour +10 min there)'],
+];
+let slot = 0;
+const parcels = PARCELS_RAW.map(([id, name, level, pieces, proof, reveals], i) => {
+  const slots = pieces.map(() => ++slot);
+  const hours = slots.reduce((s, n) => s + 0.6 + 0.2 * n, 0);
+  return { k: i + 1, id, name, level, pieces, proof, reveals, hours: round(hours * 100) / 100,
+    coins: nice(EL(level) * hours), planks: i === 0 ? 0 : EXP_PLANKS[slots.at(-1) - 1],
+    crates: i === 0 ? 0 : EXP_CRATES[slots.at(-1) - 1] };
+});
+{
+  const seen = parcels.flatMap((p) => p.pieces);
+  check(seen.length === expansions.length && new Set(seen).size === seen.length
+    && expansions.every((e) => seen.includes(e.id)), 'parcels: every land piece belongs to exactly one parcel');
+  parcels.forEach((p, i) => check(i === 0 || p.level > parcels[i - 1].level, `parcel ${p.id}: out of level order`));
+  // a farm that buys each parcel on time owns at least the land the E(L) model assumes, at every level
+  const piecesAt = (L) => parcels.filter((p) => p.level <= L).reduce((s, p) => s + p.pieces.length, 0);
+  for (let L = 1; L <= MAX_LEVEL; L++) check(piecesAt(L) >= expOwnedAt(L), `parcels: L${L} owns less land than E(L) assumes`);
+}
 
 // Barn (storage) upgrades: n = 1..10, +120 capacity each (v2: plots grow with land, so the Barn grows faster)
 const barnUpgrades = Array.from({ length: 10 }, (_, i) => {
@@ -766,12 +847,11 @@ const FEATURES = {
   30: 'Gold mastery tier',
   31: 'Second Feed Mill allowed',
   32: 'Hampers score double at the Fair',
-  33: 'Second Pie Oven allowed',
+  33: 'Second Pie Oven allowed; the Sunset Ridge gazebo (Golden Hour +10 min, owner wish wave 5: was L39)',
   34: 'Restoration project 6 (Grandma\'s Farmhouse)',
   35: '9th order slot',
   37: 'Gourmet orders (one T4 good, 1.7 × V)',
   38: 'Showcase beauty beyond 5 stars',
-  39: 'Sunset Hill gazebo (Golden Hour +10 min)',
   40: 'Legacy levels',
 };
 const unlocksAt = (L) => {
@@ -784,7 +864,7 @@ const unlocksAt = (L) => {
   if (rs.length) u.push(`recipes ${rs.join(', ')}`);
   for (const d of decor) if (d.unlock === L) u.push(`decor ${d.name}`);
   for (const d of grandDecor) if (d.unlock === L) u.push(`grand decor ${d.name}`);
-  for (const x of expansions) if (x.level === L) u.push(`expansion ${x.name}`);
+  for (const x of parcels) if (x.level === L) u.push(`land ${x.name}`);
   for (const b of barnUpgrades) if (b.gate === L) u.push(`barn upgrade ${b.n}`);
   if (FEATURES[L]) u.push(`feature: ${FEATURES[L]}`);
   return u;
@@ -891,8 +971,12 @@ if (ARGS.has('--md')) {
   const PLOT_COLS = [17, 20, 30, 40, 60, 80, 100, 120, 140, 164];
   out.push(table(['Plot #', ...PLOT_COLS.map(String)], [['Price', ...PLOT_COLS.map(plotPrice)]]));
   out.push('### expansions');
-  out.push(table(['#', 'Id', 'Expansion', 'Lvl', 'Coins', 'Planks', 'Crates', 'Proof task', 'Reveals'],
-    expansions.map((x) => [x.k, `\`${x.id}\``, x.name, x.level, x.coins, x.planks, x.crates, x.proof, x.reveals])));
+  out.push(table(['#', 'Id', 'Land', 'Lvl', 'Pieces', 'Coins', 'E-hours', 'Planks', 'Crates', 'Proof task', 'Reveals'],
+    parcels.map((x) => [x.k, `\`${x.id}\``, x.name, x.level, x.pieces.map((id) => `\`${id}\``).join(' + '), x.coins, x.hours,
+      x.planks, x.crates, x.proof, x.reveals])));
+  out.push('### land-pieces');
+  out.push(table(['Piece', 'Id', 'Name', 'Parcel', 'Design lvl (E model)', 'Reveals'],
+    expansions.map((x) => [x.k, `\`${x.id}\``, x.name, `\`${parcels.find((p) => p.pieces.includes(x.id)).id}\``, x.level, x.reveals])));
   out.push('### barn');
   out.push(table(['Upgrade', 'From lvl', 'Capacity after', 'Coins', 'Planks', 'Crates'],
     [['Start', 1, 200, 0, 0, 0], ...barnUpgrades.map((b) => [b.n, b.gate, b.cap, b.coins, b.planks, b.crates])]));
@@ -914,7 +998,7 @@ if (ARGS.has('--md')) {
   console.log(out.join('\n\n'));
 } else if (ARGS.has('--json')) {
   console.log(JSON.stringify({ C, crops, trees: treePrices, feeds, animals, recipes, buildings: buildings.map(({ slotCost, ...b }) => b), homes, levels,
-    expansions, barnUpgrades, quests, grandDecor, owner4: [...OWNER4], secondCopies: SECOND_COPIES, expLevels: EXP_LEVELS, kAnchors: K_ANCHORS, xAnchors: X_ANCHORS,
+    expansions, parcels, barnUpgrades, quests, grandDecor, owner4: [...OWNER4], owner5: [...OWNER5], secondCopies: SECOND_COPIES, expLevels: EXP_LEVELS, kAnchors: K_ANCHORS, xAnchors: X_ANCHORS,
     targetMin: Array.from({ length: MAX_LEVEL }, (_, i) => targetMin(i + 1)) }, null, 2));
 } else {
   console.log(`items ${V.size}, crops ${crops.length}, trees ${trees.length}, animals ${animals.length}, recipes ${recipes.length}, buildings ${buildings.length}`);

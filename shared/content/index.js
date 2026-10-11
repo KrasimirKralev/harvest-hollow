@@ -92,6 +92,19 @@
 //                            (`shop: false`, `relic: true`, `rainbow: true`), landmark-family loot_crate (kind 'crate')
 //   Decor effect keys gain `grow` { radius, bp } (crops planted near grow faster) and `water.trees` (trees too)
 //
+// Added in wave 5 (content lane, additive; the owners' wish list of 2026-10-06):
+//   CONTENT.parcels, parcelOf(id)   the land is bought by PARCEL now (fewer, bigger expansions): 7 parcels + the
+//                            Homestead, each { k, unlock, cost, planks, crates, pieces, rects, proof, proofText,
+//                            proofFrom, reveals }; farm.expansions still lists the PIECES (CONTENT.expansions rows,
+//                            ids unchanged, now with `parcel`; never bought alone: cost 0, no proof)
+//   LAND_MIGRATION           { pieceId: parcelId } (the old -> new map); parcelOfPiece(pieceId)
+//   landAfterMigration(expansions) / proofAfterMigration(proofs) / parcelsOwned(expansions) / nextParcel(expansions)
+//                            pure helpers: a parcel with any owned piece is owned whole (in the player's favour)
+//   PEN_BABIES               babies in the pen (wishes5.js); HOME_GROWTH gains quail_coop and bison_range
+//   New defs, kept out of E(L) by the model's OWNER5: crops paprika savory chili cumin (class 'spice'), tree
+//                            cinnamon_tree, building spice_mill, animals quail (quail_coop) and bison (bison_range), feed
+//                            prairie_hay, 14 recipes; unlocksAt lists parcels (not pieces)
+//
 // Rules for content data: plain objects, no functions, no Math.random, no Date, integer math only (percentages in
 // basis points, durations in ms). Ids match ID_RE. Generated tables (header "GENERATED") come from
 // tools/gen-content.mjs; never edit them by hand.
@@ -108,6 +121,7 @@ import { DECOR } from './decor.js';
 import { PLOTS } from './plots.js';
 import { LEVELS } from './levels.js';
 import { EXPANSIONS } from './expansions.js';
+import { PARCELS } from './parcels.js';
 import { BARN_UPGRADES } from './barn.js';
 import { QUESTS } from './quests.js';
 import { EXPANSION_DEBRIS } from './layout.js';
@@ -127,6 +141,7 @@ import { UPGRADES, WEEDS, AVATAR_LOOKS } from './upgrades.js';
 import {
   CRATES, CRATE_DEF, RELICS, RELIC_DECOR, RELIC_TREES, HOME_GROWTH, TREE_AGE, QUEUE_FINISH,
 } from './wishes4b.js';
+import { PEN_BABIES } from './wishes5.js';
 import { NPCS, PORTRAIT_STYLES } from './npcs.js';
 import { QUEST_VERBS, SPECIAL_REFS, LETTER_ART, QUEST_STORY, STORY_BEATS } from './story.js';
 import { RIBBONS, HIDDEN_RIBBONS, MEDAL_RANKS, RIBBON_REWARDS, RIBBON_WALL } from './ribbons.js';
@@ -191,7 +206,7 @@ const TABLES = {
   recipes: RECIPES,
   items: ITEMS, decor: [...DECOR.map(playerText), ...TROPHIES, ...COLLECTION_DISPLAYS,
     ...TOWN_SOUVENIRS, ...RELIC_DECOR], plots: PLOTS, landmarks: [...LANDMARKS, CRATE_DEF],
-  debris: DEBRIS, expansions: EXPANSIONS, levels: LEVELS, barn: BARN_UPGRADES, quests: QUEST_DEFS,
+  debris: DEBRIS, expansions: EXPANSIONS, parcels: PARCELS, levels: LEVELS, barn: BARN_UPGRADES, quests: QUEST_DEFS,
   ribbons: [...RIBBONS, ...HIDDEN_RIBBONS], npcs: NPCS, tools: TOOLS, features: FEATURES, titles: TITLES,
   collections: COLLECTIONS, expansionDebris: EXPANSION_DEBRIS, restoration: RESTORATION, townProjects: TOWN_PROJECTS,
   decorSets: DECOR_SETS, festivals: FESTIVALS, furniture: FURNITURE,
@@ -203,6 +218,7 @@ const TABLES = {
     RIBBON_REWARDS, RIBBON_WALL, MEDAL_RANKS, COLLECTION_RULES, COLLECTION_SOURCES, MODEL,
     UPGRADES, WEEDS, AVATAR_LOOKS,
     CRATES, RELICS, HOME_GROWTH, TREE_AGE, QUEUE_FINISH,
+    PEN_BABIES,
   },
 };
 deepFreeze(TABLES);
@@ -212,7 +228,7 @@ const PLACEABLE_FAMILIES = ['plots', 'trees', 'animals', 'homes', 'buildings', '
 /** Families exposed as Maps on CONTENT (and as ['content', kind] for action schemas). */
 const MAP_FAMILIES = ['crops', 'plots', 'items', 'expansions', 'trees', 'feeds', 'animals', 'homes', 'buildings',
   'recipes', 'decor', 'landmarks', 'debris', 'quests', 'ribbons', 'npcs', 'tools', 'features', 'collections',
-  'restoration', 'townProjects', 'decorSets', 'festivals', 'furniture'];
+  'restoration', 'townProjects', 'decorSets', 'festivals', 'furniture', 'parcels'];
 
 // ---- validation ----------------------------------------------------------------------------------------------
 const isPosInt = (n) => Number.isSafeInteger(n) && n > 0;
@@ -830,6 +846,63 @@ export function validateContent(t = TABLES) {
   const farmTiles = (CONFIG.FARM_MAX - CONFIG.FARM_MIN) * (CONFIG.FARM_MAX - CONFIG.FARM_MIN);
   if (exps.length
     && area.tiles.size !== farmTiles) bad(`expansions cover ${area.tiles.size} tiles, the farm has ${farmTiles}`);
+  // land parcels (wave 5): the purchase units over the pieces above. Every piece in exactly one parcel and pointing
+  // back at it; the Homestead first (k 0); levels and k in order; each parcel's land in one piece and touching land
+  // owned before it; its proof valid at its level; proofFrom maps every old task of its pieces to a task or -1
+  {
+    const pars = list('parcels');
+    const seen = new Map();
+    pars.forEach((p, i) => {
+      if (p.k !== i || !inLevels(p.unlock) || !isNonNegInt(p.cost) || !isNonNegInt(p.planks)
+        || !isNonNegInt(p.crates)) bad(`parcels.${p.id}: k/unlock/price`);
+      if (i > 0 && !(p.unlock > pars[i - 1].unlock && p.cost > 0)) bad(`parcels.${p.id}: out of order or free`);
+      if (!Array.isArray(p.pieces) || !p.pieces.length) { bad(`parcels.${p.id}: no pieces`); return; }
+      const rects = [];
+      for (const id of p.pieces) {
+        const e = maps.expansions.get(id);
+        if (!e) { bad(`parcels.${p.id}: unknown piece ${id}`); continue; }
+        if (seen.has(id)) bad(`parcels: piece ${id} in ${seen.get(id)} and ${p.id}`);
+        seen.set(id, p.id);
+        if (i > 0 && (e.parcel !== p.id || e.unlock !== p.unlock || e.m !== p.m || e.cost !== 0
+          || (e.proof ?? []).length)) bad(`expansions.${id}: not a piece of ${p.id}`);
+        rects.push(...e.rects);
+      }
+      if (JSON.stringify(rects) !== JSON.stringify(p.rects)) bad(`parcels.${p.id}.rects are not its pieces'`);
+      // one connected piece of land: its rectangles chain edge to edge (that the parcel touches the land owned before it
+      // is the pieces' own check above: they are listed in parcel order)
+      const edge = ([ax, az, aw, ad], [bx, bz, bw, bd]) => ((ax + aw === bx || bx + bw === ax)
+        && az < bz + bd && bz < az + ad) || ((az + ad === bz || bz + bd === az) && ax < bx + bw && bx < ax + aw);
+      const joined = new Set([0]);
+      for (let grew = true; grew;) {
+        grew = false;
+        rects.forEach((r, j) => {
+          if (!joined.has(j) && [...joined].some((q) => edge(rects[q], r))) { joined.add(j); grew = true; }
+        });
+      }
+      if (rects.length && joined.size !== rects.length) bad(`parcels.${p.id}: its land is not one piece`);
+      checkTasks(`parcels.${p.id}.proof`, p.proof ?? [], p.unlock, p.m);
+      for (const id of p.pieces) {
+        const from = p.proofFrom?.[id];
+        if (i > 0 && (!Array.isArray(from) || from.some((n) => !Number.isSafeInteger(n) || n < -1
+          || n >= p.proof.length))) bad(`parcels.${p.id}.proofFrom.${id}`);
+      }
+    });
+    if (pars.length && (pars[0].id !== 'home' || pars[0].k !== 0)) bad('parcels: the Homestead comes first');
+    for (const e of exps) if (!seen.has(e.id)) bad(`expansions.${e.id}: in no parcel`);
+  }
+  // babies in the pen (wave 5): every listed species has babies and a baby food, the price is a real item
+  {
+    const P = t.rules?.PEN_BABIES;
+    if (P) {
+      if (!inLevels(P.unlock) || !msOk(P.m) || !isPosInt(P.qty) || !isBp(P.timeBp) || !isNonNegInt(P.minMs)
+        || !isPosInt(P.perHome) || !['bottle', 'feed'].includes(P.cost)) bad('PEN_BABIES: shape');
+      for (const sp of P.species ?? []) {
+        const a = maps.animals.get(sp);
+        const food = a && (P.cost === 'feed' ? a.feed : a.bottle);
+        if (!a || !a.baby || !food || !maps.items.has(food)) bad(`PEN_BABIES.species: ${sp} cannot have babies in a pen`);
+      }
+    }
+  }
   // the starter farm
   const home = exps[0];
   const inHome = (x, z) => (home?.rects ?? []).some(([rx, rz, rw, rd]) => x >= rx && z >= rz && x < rx + rw
@@ -1043,6 +1116,7 @@ export const questOf = getter('quests');
 export const ribbonOf = getter('ribbons');
 export const npcOf = getter('npcs');
 export const expansionOf = getter('expansions');
+export const parcelOf = getter('parcels');
 export const toolOf = getter('tools');
 export const featureOf = getter('features');
 export const collectionOf = getter('collections');
@@ -1068,7 +1142,7 @@ export const liveAt = (family, level) => live(family).filter((d) => (d.unlock ??
 export function unlocksAt(level) {
   const out = [];
   for (const fam of ['crops', 'trees', 'animals', 'homes', 'buildings', 'recipes', 'feeds', 'decor', 'tools',
-    'expansions', 'features']) {
+    'parcels', 'features']) {
     for (const d of live(fam)) if (d.unlock === level && d.shop !== false && d.k !== 0) out.push({ family: fam,
       id: d.id });
   }
@@ -1107,8 +1181,10 @@ const MASS_NOUNS = new Set(['Wheat', 'Corn', 'Wood', 'Milk', 'Wool', 'Flour', 'C
   'Cotton', 'Lavender', 'Rice', 'Sap', 'Slop', 'Honey', 'Jelly', 'Manure', 'Fibre', 'Pasta', 'Risotto', 'Custard',
   'Marmalade', 'Cloth', 'Dye', 'Lemonade', 'Nectar', 'Beeswax', 'Soap', 'Oil', 'Syrup', 'Chocolate', 'Fudge',
   'Cocoa', 'Plush',
+  // wave 5 goods ("12 Paprika", "3 Colourful Salt", "6 Prairie Hay", "2 Bison Down")
+  'Paprika', 'Savory', 'Cumin', 'Cinnamon', 'Salt', 'Spice', 'Lyutenitsa', 'Hay', 'Down',
   // animals whose plural is the singular ("Buy 2 Sheep")
-  'Sheep', 'Fish']);
+  'Sheep', 'Fish', 'Quail', 'Bison']);
 /** An item or def name for `n` of it: "1 Egg", "3 Eggs", "2 Strawberries", "4 Potatoes", "32 Wheat", "2 Peaches". */
 export function pluralOf(name, n) {
   if (n === 1 || typeof name !== 'string' || !name) return name;
@@ -1239,6 +1315,74 @@ export function expansionObjects(expansionId) {
   return all.map((o, i) => ({ id: `exp${e.k}.${i}`, rot: 0, ...o }));
 }
 
+// ---- land parcels (wave 5) ---------------------------------------------------------------------------------
+/** The old -> new land map: every land piece (an id `farm.expansions` lists) -> the parcel it is sold in. */
+export const LAND_MIGRATION = Object.freeze(Object.fromEntries(
+  [...CONTENT.parcels.values()].flatMap((p) => p.pieces.map((id) => [id, p.id]))));
+/** The parcel a land piece belongs to (the Homestead's for 'home'), or undefined. */
+export const parcelOfPiece = (pieceId) => (Object.hasOwn(LAND_MIGRATION, pieceId)
+  ? CONTENT.parcels.get(LAND_MIGRATION[pieceId]) : undefined);
+const PARCELS_BY_K = Object.freeze([...CONTENT.parcels.values()].sort((a, b) => a.k - b.k));
+
+/**
+ * The land pieces a save owns once the land is sold by parcel: every parcel with ANY owned piece is owned whole
+ * (partial ownership resolves in the player's favour). Owned pieces keep their order; the gifted ones follow in
+ * parcel order. Never drops a piece (an unknown id stays, for the server's own checks), `home` stays first.
+ * @param {string[]} expansions  state.farm.expansions
+ * @returns {string[]}
+ */
+export function landAfterMigration(expansions) {
+  const out = [...expansions];
+  const have = new Set(out);
+  if (!have.has('home')) { out.unshift('home'); have.add('home'); }
+  for (const p of PARCELS_BY_K) {
+    if (!p.pieces.some((id) => have.has(id))) continue;
+    for (const id of p.pieces) if (!have.has(id)) { out.push(id); have.add(id); }
+  }
+  return out;
+}
+
+/** Parcel ids whose every piece is owned, in k order (the Homestead included). */
+export function parcelsOwned(expansions) {
+  const have = new Set(expansions);
+  return PARCELS_BY_K.filter((p) => p.pieces.every((id) => have.has(id))).map((p) => p.id);
+}
+
+/** The next parcel to buy: the first (by k) not wholly owned, or null when the farm owns all its land. */
+export function nextParcel(expansions) {
+  const have = new Set(expansions);
+  return PARCELS_BY_K.find((p) => p.k > 0 && isLive(p) && !p.pieces.every((id) => have.has(id))) ?? null;
+}
+
+/**
+ * Proof progress after the change: a piece's opened card `{ at, n: { [i]: count } }` lands on its parcel's tasks
+ * through `proofFrom` (a task the parcel no longer asks for is dropped); two pieces of one parcel merge (the earliest
+ * `at`, the larger count). Proofs of parcels the save will own whole (`expansions` AFTER migration) are dropped, as a
+ * purchase drops its proof. Keys that are already parcel ids pass through.
+ * @param {Record<string, {at: number, n: Record<string, number>}>} proofs  state.farm.proofs
+ * @param {string[]} expansions  the migrated pieces list (landAfterMigration)
+ */
+export function proofAfterMigration(proofs, expansions) {
+  const owned = new Set(parcelsOwned(expansions));
+  const out = {};
+  const keys = Object.keys(proofs ?? {}).sort();
+  for (const key of keys) {
+    const row = proofs[key];
+    const p = CONTENT.parcels.get(key) ?? parcelOfPiece(key);
+    if (!p || p.k === 0 || owned.has(p.id) || !row || typeof row !== 'object') continue;
+    const map = CONTENT.parcels.has(key) ? null : p.proofFrom[key] ?? [];
+    const cur = out[p.id] ?? { at: row.at, n: {} };
+    cur.at = Math.min(cur.at, row.at);
+    for (const [i, v] of Object.entries(row.n ?? {}).sort(([a], [b]) => Number(a) - Number(b))) {
+      const to = map ? map[Number(i)] ?? -1 : Number(i);
+      if (to < 0) continue;
+      cur.n[String(to)] = Math.max(cur.n[String(to)] ?? 0, v);
+    }
+    out[p.id] = cur;
+  }
+  return out;
+}
+
 // ---- hash -------------------------------------------------------------------------------------------------
 function canonical(v) {
   if (Array.isArray(v)) return `[${v.map(canonical).join(',')}]`;
@@ -1266,4 +1410,5 @@ export {
   MEDAL_RANKS, COLLECTION_RULES, COLLECTION_SOURCES, MODEL, FAIR, BARGE, TOWNSFOLK, TOWN_PROJECT_RULES, FARM_BEAUTY,
   MASTERWORK, SEASONAL_TRACK, LEGACY, HEARTS_SHOP, PERKS, PETS, NURSERY, BREEDING, RESTED, FISHING, DUEL, INTERIOR,
   GRANDMA_VISIT, FESTIVAL_PAVILION, UPGRADES, WEEDS, AVATAR_LOOKS, CRATES, RELICS, HOME_GROWTH, TREE_AGE, QUEUE_FINISH,
+  PEN_BABIES,
 };

@@ -20,7 +20,7 @@ import { t, tn, N, name as cname, ctext, list, retell } from '../i18n/index.js';
 /** A word that can be said again after a language switch: its catalog line (i18n retell), else the text as given. */
 const told = (v) => retell(v) ?? (() => v);
 
-const SHOWN_FAMILIES = ['crops', 'trees', 'animals', 'homes', 'buildings', 'recipes', 'feeds', 'tools', 'decor', 'expansions', 'barn'];
+const SHOWN_FAMILIES = ['crops', 'trees', 'animals', 'homes', 'buildings', 'recipes', 'feeds', 'tools', 'decor', 'expansions', 'parcels', 'barn'];
 
 /** What a level brings: things (with icons) in display order, and the system names (features). Pure. */
 export function unlocksFor(level) {
@@ -68,7 +68,7 @@ export function showMeTarget(row, state = null) {
     case 'buildings': return { panel: 'market', args: { tab: 'buildings', focus: row.id } };
     case 'decor': return { panel: 'market', args: { tab: 'decor', focus: row.id } };
     case 'tools': return { panel: 'market', args: { tab: 'tools', focus: row.id } };
-    case 'expansions': return { panel: 'expansion', args: { id: row.id } };
+    case 'expansions': case 'parcels': return { panel: 'expansion', args: { id: row.id } };
     case 'barn': return { panel: 'barn', args: {} };
     case 'recipes': case 'feeds': {
       const b = makerOf(row.id);

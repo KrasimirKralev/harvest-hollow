@@ -13,6 +13,7 @@ import { h, svgIcon, fmt, createKit, fill, hintable } from './kit.js';
 import { levelOf, available } from './core.js';
 import { actFor, canAct, takesArg, breedsOf, breedOf, breedName } from './w4-rules.js';
 import { petFace } from './pet-art.js';
+import { stayOf, stayIntent, can5, stayForOthers, stayLine } from './w5-rules.js';
 import { t, lang, list, ctext, name as cname } from '../../i18n/index.js';
 
 /** A pet kind's name ("Dog" / "Куче"; lane B: PETS['kind.<id>'].name). */
@@ -39,6 +40,8 @@ export function petsView(state, me, now) {
       treat, treats: treat ? available(state, treat) : 0, treatName: treat ? (itemOf(treat) ? cname(treat) : treat) : null,
       home: kind ? kind.home : null, homePlaced: Boolean(kind && homes.has(kind.home)),
       breed: pet ? breedOf(pet) : null, breedName: pet ? breedName(pet.kind, breedOf(pet)) : null,
+      // wave 5: "Stay home" (it waits at its doghouse) or following its farmer
+      stay: stayOf(pet),
     };
   });
   return { open, unlock: PETS.unlock, level, kinds: PETS.kinds, pets, live: isLive(PETS) };
@@ -100,6 +103,8 @@ function petCard(ctx, kit, p) {
   ];
   if (!p.homePlaced && p.home) lines.push(t('home.pets.homeHint', { home: defOf(p.home) ? cname(p.home) : p.home }));
   else if (p.home) lines.push(t('home.pets.sleeps', { home: defOf(p.home) ? cname(p.home) : t('home.pets.homeWord') }));
+  // wave 5 (owners' list 2, wish 3): where it is by day, for both farmers
+  const where = p.stay ? stayLine(st, p.pid) : p.mine ? t('hud.pet.followsYou') : t('hud.pet.follows', { name: p.owner });
   const change = p.mine && canAct('petBreed') && breedsOf(p.pet.kind).length > 1;
   const picker = change ? breedPicker(ctx, p) : null;
   return h(`article.pc-pet${p.mine ? '.mine' : ''}`, { style: { '--who': p.color }, dataset: { owner: p.pid } },
@@ -109,9 +114,13 @@ function petCard(ctx, kit, p) {
       change ? h('button.btn.btn--paper.pn-xs.pc-breed-toggle', { type: 'button', 'aria-expanded': 'false',
         on: { click: (e) => { const open = picker.hidden; picker.hidden = !open; e.currentTarget.setAttribute('aria-expanded', String(open)); } } }, t('home.pets.change')) : null),
     picker,
+    h('p.pc-pet-where', { dataset: { stay: p.stay ? 'home' : 'follow' } }, where),
     // the treat line names what it wants: hovering or holding it says where Dog Biscuits and Cat Treats come from
     h('ul.pc-pet-lines', ...lines.map((l, i) => (i === 0 && !p.fedToday && p.treat ? hintable(h('li', l), p.treat) : h('li', l)))),
     h('div.pc-pet-acts',
+      (p.mine || stayForOthers()) && can5('petStay') ? kit.button({ label: p.stay ? t('home.pets.come') : t('home.pets.stay'), cls: `pn-sm pc-stay${p.stay ? ' btn--sky' : ' btn--paper'}`,
+        type: stayIntent(!p.stay, p.pid, ctx.store.pid).type, args: stayIntent(!p.stay, p.pid, ctx.store.pid).args, data: { stay: p.stay ? 'come' : 'stay' }, key: `pet-stay-${p.pid}`,
+        title: p.stay ? t('home.pets.comeTip') : t('home.pets.stayTip') }) : null,
       kit.button({ label: t('home.pets.give', { treat: p.treatName }), icon: p.treat, cls: 'pn-sm', type: 'feedPet', args: { owner: p.pid },
         quiet: ['ALREADY_DONE'], hint: p.treat ? { missing: [{ item: p.treat, n: 1 }] } : {} }),
       kit.button({ label: p.pettedByMe ? t('home.pets.petted') : t('home.pets.pet'), glyph: 'heart', cls: 'pn-sm btn--paper', type: 'petPet',
@@ -138,7 +147,7 @@ export const petsPanel = {
     const kit = createKit(ctx);
     const sig = () => {
       const v = petsView(ctx.store.state, ctx.store.pid, ctx.now());
-      return [v.open, v.pets.map((p) => [p.pid, p.pet?.name, p.fedToday, p.pettedBy.join(), p.treats, p.homePlaced, p.breed])];
+      return [v.open, v.pets.map((p) => [p.pid, p.pet?.name, p.fedToday, p.pettedBy.join(), p.treats, p.homePlaced, p.breed, p.stay])];
     };
     const update = kit.memo(body, sig, render);
     ctx.every(60_000, () => update());

@@ -179,4 +179,8 @@ export default {
   'feed.key.new': '{actor} направи нов ключ за {name}. Старите устройства вече нямат достъп.',
   'feed.key.newMe': '{actor} ти направи нов ключ. Старите ти устройства вече нямат достъп.',
   'feed.key.back': '{actor} се върна с нов ключ',
+  // wave 5: babies in the pen, the dog that stays home, the bigger land
+  'feed.land.merged': { one: 'Земята вече е в {n} голям парцел; всичко ваше си остава ваше', other: 'Земята вече е в {n} големи парцела; всичко ваше си остава ваше' },
+  'feed.pen': '{actor} посрещна новородено {noun} 🍼',
+  'feed.pen.home': '{actor} посрещна новородено {noun} в {home:defObj} 🍼',
 };

@@ -104,17 +104,20 @@ test('the Oil Press, Sugar Shack and Chocolatier and the 29 M2 recipes are GDD �
   }
 });
 
-test('expansions 11-15, Barn upgrades 8-10 and Gold mastery are GDD §3.9 / §3.6 / §4.8', () => {
-  const E = { stable_paddock: [11, 27, 560_000, 11, 2, 'make picnic_basket 2'],
-    walnut_grove: [12, 30, 660_000, 12, 2, 'harvest walnut 30'], olive_terrace: [13, 33, 800_000, 13, 2,
-      'make olive_oil 4'], maple_ridge: [14, 36, 950_000, 14, 2, 'make maple_syrup 3'],
-    sunset_hill: [15, 39, 1_200_000, 15, 3, 'make gourmet_hamper 2'] };
-  assert.deepEqual(m2('expansions').map((e) => e.id), Object.keys(E));
-  for (const [id, [k, L, cost, planks, crates, proof]] of Object.entries(E)) {
-    const e = CONTENT.expansions.get(id);
-    assert.deepEqual([e.k, e.unlock, e.cost, e.planks, e.crates, e.proof.map((t) => `${t.verb} ${t.ref} ${t.qty}`)
-      .join('; ')], [k, L, cost, planks, crates, proof], id);
+test('the M2 land (Rocky Grove, Sunset Ridge), Barn upgrades 8-10 and Gold mastery are GDD §3.9 / §3.6 / §4.8', () => {
+  // wave 5 (owner wish: fewer, bigger expansions): the M2 pieces are sold as two parcels; each piece keeps its number
+  // (k: its debris ids), its features and its free objects
+  const P = { rocky_grove: [6, 27, 1_200_000, 12, 2, ['goat_rocks', 'walnut_grove'],
+    'make goat_cheese 3; harvest walnut 30'],
+  sunset_ridge: [7, 33, 2_600_000, 15, 3, ['olive_terrace', 'maple_ridge', 'sunset_hill'], 'make olive_oil 4'] };
+  assert.deepEqual(m2('parcels').map((p) => p.id), Object.keys(P));
+  for (const [id, [k, L, cost, planks, crates, pieces, proof]] of Object.entries(P)) {
+    const p = CONTENT.parcels.get(id);
+    assert.deepEqual([p.k, p.unlock, p.cost, p.planks, p.crates, p.pieces, p.proof.map((t) => `${t.verb} ${t.ref} `
+      + `${t.qty}`).join('; ')], [k, L, cost, planks, crates, pieces, proof], id);
   }
+  assert.deepEqual(m2('expansions').map((e) => [e.id, e.k]), [['goat_rocks', 10], ['walnut_grove', 12],
+    ['olive_terrace', 13], ['maple_ridge', 14], ['sunset_hill', 15]]);
   assert.deepEqual(CONTENT.expansions.get('walnut_grove').free.map((f) => [f.def, f.mature]),
     [['walnut_tree', true], ['walnut_tree', true]]);
   assert.equal(CONTENT.expansions.get('sunset_hill').feature.goldenHourBonusMs, 600_000, 'Golden Hour +10 min');
@@ -479,10 +482,11 @@ test('flip gate: every M2 system has an entry here, and once M2 is live the rule
 });
 
 test('the M2 coin sinks hold through L40: land, buildings, Grand decor, projects and the room are hours of income', () => {
-  // GDD §5.9 / Appendix E: the late game's coin sinks (Town Projects ~10-17 E-hours each, expansions 2.6-3.6 E-hours,
-  // the three buildings ~1 E-hour, Grand decor 0.5-4, the furniture catalog ~1.4 at L34) — sized against E(L)
-  const ex = m2('expansions').map((e) => e.cost / levelRow(e.unlock).E);
-  for (const h of ex) assert.ok(h >= 2 && h <= 4, `expansion ${h.toFixed(2)} E-hours`);
+  // GDD §5.9 / Appendix E: the late game's coin sinks (Town Projects ~10-17 E-hours each, land 5.8-10.2 E-hours since
+  // wave 5's bigger parcels, the three buildings ~1 E-hour, Grand decor 0.5-4, the furniture catalog ~1.4 at L34)
+  const ex = m2('parcels').map((e) => e.cost / levelRow(e.unlock).E);
+  assert.equal(ex.length, 2);
+  for (const h of ex) assert.ok(h >= 5 && h <= 11, `land ${h.toFixed(2)} E-hours`);
   for (const b of m2('buildings')) {
     const h = b.cost / levelRow(b.unlock).E;
     assert.ok(h >= 0.6 && h <= 1.2, `${b.id}: ${h.toFixed(2)} E-hours`);

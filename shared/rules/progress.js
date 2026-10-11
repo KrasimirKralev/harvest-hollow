@@ -732,6 +732,17 @@ function handle(tx, ctx, run, ev) {
     case 'timeTurned':
       feedAdd(tx, { ...ctx, pid: by }, { k: 'relic', def: 'time_turner', q: ev.n ?? 0 });
       break;
+    // ---- wave 5 (the owners' wish list) -----------------------------------------------------------------------
+    case 'penBorn':
+      // a baby in the pen (system `_pen`): the line is the pairing player's ("Деси's hens had a chick")
+      bumpStat(tx, run, null, 'penBabies');
+      feedAdd(tx, { ...ctx, pid: hasPlayer(tx.state, ev.pid) ? ev.pid : by }, { k: 'pen', def: ev.species, id: ev.id });
+      break;
+    case 'landRedrawn': {
+      // the one-time land migration (system `_land`): one line for both players
+      feedAdd(tx, ctx, { k: 'land', q: ev.added.length });
+      break;
+    }
     case 'barnUpgraded':
       bigPurchase(tx, ctx, by, { ...ev, def: 'barn' });
       deed(tx, ctx, run, { verb: 'upgrade', ref: 'barn', n: 1, by });

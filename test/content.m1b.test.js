@@ -188,8 +188,9 @@ test('townsfolk board and Friendship (GDD §5.3, L21): every townsperson pays a 
 });
 
 test('M1b production: the 4 buildings, both duets, second copies and giant crops (GDD §3.5, §6.2 #7-#8)', () => {
+  // + the Spice Mill (owner wish list 2026-10-06, wave 5)
   assert.deepEqual(m1b('buildings').map((b) => [b.id, b.unlock]), [['sewing', 14], ['pie_oven', 15],
-    ['chandlery', 16], ['packing', 20]]);
+    ['chandlery', 16], ['spice_mill', 16], ['packing', 20]]);
   for (const b of m1b('buildings')) assert.ok(m1b('recipes').some((r) => r.building === b.id), `${b.id} has recipes`);
   for (const [id, L] of [['harvest_feast', 15], ['wedding_cake', 25]]) {
     const r = recipeOf(id);
@@ -308,6 +309,9 @@ const SUPPORT = {
   heirloom_fruit: ['harvestTree'],
   // GDD §6.2 #3 / L23: "Need help" flags on Restoration bundle slots (rules-economy, asked in w2-content.md)
   bundle_flags: ['donate', 'restoreFlag'],
+  // wave 5 (owner wish list 2026-10-06): the dog that stays home (rules lane, w5-rules.md); the spices' Spice Mill
+  dog_stay: ['petStay'],
+  spices: ['place'],
 };
 
 test('flip gate: every M1b system has an entry here, and once M1b is live the rules register its actions', async () => {

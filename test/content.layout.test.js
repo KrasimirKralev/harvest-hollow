@@ -43,8 +43,9 @@ test('every expansion brings 15 debris pieces = 68 XP, 340 coins, 12 Wood (GDD �
     const debris = expansionObjects(e.id).filter((o) => o.origin === 'expansion');
     assert.equal(debris.length, 15, e.id);
     const xp = debris.reduce((s, o) => s + debrisDef(o.def).xp.expansion, 0);
-    // wave 3: the M2 woodland (expansions 11-15) trades one stump for a Big Stump, a together chop (§6.2 #8)
-    const m2 = e.m === 'M2';
+    // wave 3: the M2 woodland (expansions 11-15) trades one stump for a Big Stump, a together chop (§6.2 #8); since
+    // wave 5 a piece keeps its debris whatever its parcel's milestone (the Stable Paddock is Willow Meadow's, L21)
+    const m2 = e.k >= 11;
     assert.equal(debris.filter((o) => o.def === 'big_stump').length, m2 ? 1 : 0, e.id);
     assert.equal(xp, m2 ? 90 : 68, e.id);
     assert.equal(xp * DEBRIS_RULES.coinsPerXp, m2 ? 450 : 340, e.id);

@@ -31,7 +31,8 @@ function refOk(verb, ref) {
 
 test('RC-01: every live expansion proof task names a verb some rule counts and a ref that rule can produce', () => {
   const bad = [];
-  for (const e of CONTENT.expansions.values()) {
+  // wave 5: the purchase rows are the parcels (the pieces carry no proof of their own)
+  for (const e of [...CONTENT.expansions.values(), ...(CONTENT.parcels?.values() ?? [])]) {
     if (!isLive(e)) continue;
     for (const t of e.proof) {
       if (t.verb !== 'own' && !source.includes(`proofDeed(tx, '${t.verb}'`)) {
@@ -47,20 +48,21 @@ test('RC-01: every live expansion proof task names a verb some rule counts and a
 
 test('RC-01: a proof task whose ref is a list counts any of its items', () => {
   const s = farmAt(22);
-  s.farm.proofs.riverbank = { at: T0, n: {} };
+  s.farm.proofs.riverside_woods = { at: T0, n: {} };      // wave 5: Riverbank's task is on its parcel's card
+  const i = CONTENT.parcels.get('riverside_woods').proof.findIndex((t) => Array.isArray(t.ref));
   const tx = new Tx(s);
   proofDeed(tx, 'make', 'cotton_tote', 2);
   proofDeed(tx, 'make', 'wool_pillow', 1);
-  assert.deepEqual(proofProgress(s, 'riverbank', 0, T0), { have: 3, need: 3, done: true });
+  assert.deepEqual(proofProgress(s, 'riverside_woods', i, T0), { have: 3, need: 3, done: true });
 });
 
 test('RC-01: every filled order (a simple one too) counts toward "fill 10 orders"', () => {
   const s = farmAt(17);
-  s.farm.expansions = ['home', 'creekside', 'old_orchard', 'cow_hill', 'sunflower_rise', 'bee_glade'];
+  s.farm.expansions = ['home', 'creekside', 'cow_hill'];      // wave 5: "fill 10 orders" is Orchard Lane's
   let now = T0 + MIN;
   runDue(s, now);
   actOk(s, 'openExpansion', { expansion: 'fair_lane' }, { now });
-  const i = CONTENT.expansions.get('fair_lane').proof.findIndex((t) => t.verb === 'fill');
+  const i = CONTENT.parcels.get('orchard_lane').proof.findIndex((t) => t.verb === 'fill');
   let filled = 0;
   for (let k = 0; k < 40 && filled < 4; k++) {
     for (const [slot, o] of Object.entries(s.farm.orders.slots)) {
@@ -73,5 +75,5 @@ test('RC-01: every filled order (a simple one too) counts toward "fill 10 orders
     runDue(s, now);
   }
   assert.ok(filled >= 4, `only ${filled} orders came up`);
-  assert.equal(proofProgress(s, 'fair_lane', i, now).have, Math.min(10, filled));
+  assert.equal(proofProgress(s, 'orchard_lane', i, now).have, Math.min(10, filled));
 });

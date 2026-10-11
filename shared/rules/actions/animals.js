@@ -317,7 +317,7 @@ export function homeGrowth(state, id) {
 }
 
 /** Take home `id` one room step on (`plan` = homeGrowth now): `up` + 1 and, when it grows, its new anchor. */
-function growHome(tx, ctx, id, plan) {
+export function growHome(tx, ctx, id, plan) {
   const o = tx.get(['farm', 'objects', id]);
   const up = (o.up ?? 0) + 1;
   tx.set(['farm', 'objects', id, 'up'], up);

@@ -25,6 +25,11 @@
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
+// the hand-authored numbers the model does not carry (plain data modules, no game code): the animals' baby food and
+// the babies-in-the-pen rule of wave 5
+import { ANIMAL_EXTRAS } from '../shared/content/authored.js';
+import { PEN_BABIES } from '../shared/content/wishes5.js';
+import { UPGRADES } from '../shared/content/upgrades.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ARGV = process.argv.slice(2);
@@ -64,6 +69,18 @@ const MODEL = JSON.parse(execFileSync(process.execPath, [path.join(HERE, 'econom
 // expansion reveals and the brush tools (§3.7) are listed here.
 const EXP_FREE = { creekside: { tree: ['pine', 1] }, old_orchard: { tree: ['apple_tree', 2] }, bee_glade: { bee: 1 },
   riverbank: { rowBonus: 0.25 }, walnut_grove: { tree: ['walnut_tree', 2] } };
+// Wave 5 (owner wish 2026-10-06): the land is bought by PARCEL (two or three of the old pieces at once); what a parcel
+// brings is what its pieces brought
+const parcelFree = (pieces) => {
+  const out = {};
+  for (const id of pieces) {
+    const f = EXP_FREE[id] ?? {};
+    if (f.tree) (out.trees ??= []).push(f.tree);
+    if (f.bee) out.bee = (out.bee ?? 0) + f.bee;
+    if (f.rowBonus) out.rowBonus = f.rowBonus;
+  }
+  return out;
+};
 // §3.7 brush tools (they only change how much attention a stroke costs)
 const TOOLS = [['big_can', 10, 4000], ['wide_sickle', 12, 6000], ['spreader', 14, 9000], ['grand_sickle', 26, 20000]];
 // Quest extras the simulator models (gifts, Acorns, Compost). Quest tasks themselves come from the model.
@@ -128,8 +145,10 @@ function derive(model, V = {}) {
   // E(L) — GDD §4.4, same as the model; the plot cap counts the expansions unlocked by L
   const expOwnedAt = (L) => model.expLevels.filter((x) => x <= L).length;
   const plotsCap = (L) => plotCapOf(L, expOwnedAt(L));
-  // the owners' wave-4 additions (model.owner4) stay out of E(L), as in the model: the live level table never moves
-  const inE = (x) => !(model.owner4 ?? []).includes(x.id);
+  // the owners' wave-4 and wave-5 additions (model.owner4, owner5) stay out of E(L), as in the model: the live level
+  // table never moves
+  const outOfE = new Set([...(model.owner4 ?? []), ...(model.owner5 ?? [])]);
+  const inE = (x) => !outOfE.has(x.id);
   const E = (L) => {
     const sess = crops.filter((c) => inE(c) && c.unlock <= L && c.min <= 60);
     const perPlotHour = sess.reduce((s, c) => s + ((c.gross - c.seed) * 60) / c.min, 0) / sess.length;
@@ -201,7 +220,10 @@ function index(d) {
   const EL = (L) => d.levels[clamp(L, 1, 40) - 1].E;
   // §3.9: expansion k costs E(level) x (0.6 + 0.2k) hours; §4.3: barn upgrade n = 0.3 h x 1.15^(n-1) at its gate;
   // §5.3: quest coins = E(L) x minutes / 60 x 0.5, XP = coins / 8 — so all three follow the derived E
-  X.expansions = MODEL.expansions.map((e) => ({ ...e, coins: nice(EL(e.level) * (0.6 + 0.2 * e.k)), free: EXP_FREE[e.id] ?? {} }));
+  // wave 5: a parcel costs E(level) x the sum over its pieces of (0.6 + 0.2 slot), slot = the piece's place in the order
+  let slot = 0;
+  X.expansions = MODEL.parcels.map((e) => ({ ...e, coins: nice(EL(e.level) * e.pieces.reduce((h) => h + 0.6 + 0.2 * ++slot, 0)),
+    free: parcelFree(e.pieces) }));
   X.barn = MODEL.barnUpgrades.map((b) => ({ ...b, level: b.gate, coins: nice(EL(b.gate) * 0.3 * 1.15 ** (b.n - 1)) }));
   X.quests = MODEL.quests.map((q) => { const coins = nice((EL(q.level) * q.minutes) / 60 * 0.5);
     return { ...q, coins, xp: nice(coins / d.C.XP_DIV), extra: QUEST_EXTRA[q.id] ?? {} }; });
@@ -264,7 +286,7 @@ function checkPort(X) {
   for (const r of MODEL.recipes) { const s = X.recipe.get(r.id); cmp(s.v, r.v, `${r.id}.v`); cmp(s.xp, r.xp, `${r.id}.xp`); }
   for (const l of MODEL.levels) { const s = X.levels[l.L - 1]; cmp(s.E, l.E, `E(${l.L})`); cmp(s.toNext, l.toNext, `xp(${l.L})`); cmp(s.plots, l.plots, `plots(${l.L})`); }
   for (const b of MODEL.buildings) cmp(X.building.get(b.id).cost, b.cost, `${b.id}.cost`);
-  MODEL.expansions.forEach((e, i) => cmp(X.expansions[i].coins, e.coins, `${e.id}.coins`));
+  MODEL.parcels.forEach((e, i) => cmp(X.expansions[i].coins, e.coins, `${e.id}.coins`));
   MODEL.barnUpgrades.forEach((b, i) => cmp(X.barn[i].coins, b.coins, `barn${b.n}.coins`));
   MODEL.quests.forEach((q, i) => cmp(X.quests[i].coins, q.coins, `${q.id}.coins`));
   return bad;
@@ -325,7 +347,10 @@ class Farm {
     this.inv = new Map(); this.cap = 200; this.barnN = 0;
     this.plots = Array.from({ length: 16 }, () => ({ crop: null, readyAt: 0, compost: false }));
     this.trees = []; this.animals = new Map(); this.homes = new Map(); this.bld = new Map();
-    this.tools = new Set(); this.expansions = 0;
+    // expansions = land PIECES owned (the plot cap and the room count pieces); parcelN = parcels bought (wave 5)
+    this.tools = new Set(); this.expansions = 0; this.parcelN = 0; this.pens = new Map();
+    // the Farmhouse's upgrade tiers (wave 4, content UPGRADES.farmhouse) add Barn room: the pantry and the cellar
+    this.fhN = 0; this.pantry = 0;
     this.orders = []; this.recentOrderItems = []; this.questsDone = new Set(); this.questActive = new Map();
     this.mastery = new Map(); this.compostPoints = 0;
     this.day = -1; this.week = -1; this.fair = null; this.barge = null;
@@ -342,6 +367,7 @@ class Farm {
       idlePlotMin: 0, plotMin: 0, bldIdleMin: 0, bldMin: 0, hungryMin: 0, animalMin: 0, feedBought: 0,
       feedMillBusy: 0, feedMillMin: 0, overflowMin: 0, blocked: 0, maxFill: 0, attnShort: 0, activeMin: 0,
       questBlockedMin: 0, emergencyFeedCoins: 0, decorSpend: 0, perLevel: {}, planted: new Map(), overflowInv: new Map(),
+      penBabies: 0,
     };
     this.lastMade = new Map(); this.weekPlay = 0;
     this.soldUnits = new Map(); this.composted = 0; this.slotsBought = 0; this.delivered = new Map(); this.everOrdered = new Set();
@@ -667,6 +693,13 @@ class Farm {
         }
       }
     }
+    // babies in the pen (wave 5, content PEN_BABIES): a paired home's baby arrives after the species' baby time, once
+    // there is room (the pairing itself is a shop decision, startPen)
+    for (const [sp, due] of this.pens) {
+      if (due <= now && (this.animals.get(sp) ?? []).length < this.homeCap(sp)) {
+        this.addAnimal(sp, false, true); this.pens.delete(sp); this.S.penBabies++;
+      }
+    }
     // empty the compost bin
     if (this.binTray) { const got = this.addInv('compost', this.binTray); this.bump(this.S.made, 'compost', got); this.binTray -= got; }
   }
@@ -824,8 +857,14 @@ class Farm {
       if (r) keepInputs(r.id);
     }
     for (const [i, q] of this.orderNeed) this.reserved.set(i, Math.min(q + (this.reserved.get(i) ?? 0), this.stock(i)));
+    // babies in the pen: one baby food on hand for each home the pen is filling (wave 5)
+    if (this.level >= PEN_BABIES.unlock) {
+      for (const [sp, list] of this.animals) {
+        if (this.penFills(sp) && !this.pens.has(sp) && list.length < this.homeCap(sp)) add(this.penFood(sp), PEN_BABIES.qty);
+      }
+    }
     // construction: planks and crates for the next expansion and the next barn upgrade
-    const exp = this.X.expansions[this.expansions];
+    const exp = this.X.expansions[this.parcelN];
     const barn = this.X.barn[this.barnN];
     let planks = 0, crates = 0;
     if (exp && exp.level <= this.level + 2) { planks += exp.planks; crates += exp.crates; }
@@ -1086,7 +1125,7 @@ class Farm {
       const rowC = this.barge.crates.slice(row * 3, row * 3 + 3);
       if (this.barge.rowsPaid[row] || rowC.length < 3 || !rowC.every((c) => c.loaded)) continue;
       this.barge.rowsPaid[row] = true; this.S.barge.rows++; this.rowsDone = (this.rowsDone ?? 0) + 1;
-      this.gainCoins(this.E() * 0.25 * (this.expansions >= 7 ? 1.25 : 1), 'barge'); this.acorns++;
+      this.gainCoins(this.E() * 0.25 * (this.riverbank ? 1.25 : 1), 'barge'); this.acorns++;
       // the Captain's chest pays per completed row: a third of (1 + t) Acorns
       this.acornFrac = (this.acornFrac ?? 0) + (1 + this.barge.tier) / 3;
       while (this.acornFrac >= 1) { this.acornFrac--; this.acorns++; }
@@ -1303,6 +1342,18 @@ class Farm {
     const grow = 2 * def.cycle * (1 - (this.couple() ? 0.25 : 0.2) / 2);
     this.trees.push({ species, matureAt: mature ? this.now : this.now + grow, readyAt: mature ? this.now : this.now + grow, harvests: 0, planted: this.now });
   }
+  // the pen fills this home (wave 5, PEN_BABIES): two adults to pair and the level for it
+  penFills(sp) {
+    return this.level >= PEN_BABIES.unlock && PEN_BABIES.species.includes(sp)
+      && (this.animals.get(sp) ?? []).filter((x) => x.adultAt <= this.now).length >= 2;
+  }
+  // what a pairing costs (PEN_BABIES.cost): 'feed' = the species' own feed, 'bottle' = its baby food
+  penFood(sp) { return PEN_BABIES.cost === 'feed' ? this.X.animal.get(sp).feed : ANIMAL_EXTRAS[sp].bottle; }
+  startPen(sp) {
+    const def = this.X.animal.get(sp);
+    this.take(this.penFood(sp), PEN_BABIES.qty);
+    this.pens.set(sp, this.now + Math.max(PEN_BABIES.minMs / 60_000, (def.babyMin * PEN_BABIES.timeBp) / 10_000));
+  }
   homeCap(sp) {
     const def = this.X.animal.get(sp);
     if (sp === 'bee') return Math.min(8, 2 + Math.floor((this.level - 13) / 3));
@@ -1386,18 +1437,21 @@ class Farm {
       }
       if (bought) continue;
       // 5. the next expansion (the couple's saving goal) once planks/crates are ready
-      const exp = X.expansions[this.expansions];
+      const exp = X.expansions[this.parcelN];
       if (exp && exp.level <= L) {
         this.markWait(`expansion:${exp.k}`, exp.level);
         if (can(exp.coins) && (this.stock('planks') < exp.planks || this.stock('wooden_crate') < exp.crates)) this.matBlocked = true;
         if (can(exp.coins) && this.stock('wooden_crate') < exp.crates) this.crateNext = true;
         if (this.stock('planks') >= exp.planks && this.stock('wooden_crate') >= exp.crates && can(exp.coins)) {
           this.buy(`expansion:${exp.k}`, exp.coins, () => {
-            this.take('planks', exp.planks); this.take('wooden_crate', exp.crates); this.expansions++;
-            // §3.9: 15 debris pieces (6 weeds, 4 rocks, 3 stumps, 2 logs) at the §4.5 values: 68 XP, 340 coins, 12 Wood
-            this.gainXp(68, 'debris'); this.gainCoins(340, 'debris'); this.addInv('wood', 12);
-            if (exp.free.tree) for (let i = 0; i < exp.free.tree[1]; i++) this.addTree(exp.free.tree[0], true);
-            if (exp.free.bee) this.addAnimal('bee', true);
+            const n = exp.pieces.length;
+            this.take('planks', exp.planks); this.take('wooden_crate', exp.crates); this.expansions += n; this.parcelN++;
+            // §3.9: 15 debris pieces a land piece (6 weeds, 4 rocks, 3 stumps, 2 logs) at the §4.5 values: 68 XP, 340
+            // coins, 12 Wood
+            this.gainXp(68 * n, 'debris'); this.gainCoins(340 * n, 'debris'); this.addInv('wood', 12 * n);
+            for (const [sp, k] of exp.free.trees ?? []) for (let i = 0; i < k; i++) this.addTree(sp, true);
+            for (let i = 0; i < (exp.free.bee ?? 0); i++) this.addAnimal('bee', true);
+            if (exp.free.rowBonus) this.riverbank = true;
           });
           this.clearWait(`expansion:${exp.k}`);
           continue;
@@ -1410,8 +1464,21 @@ class Farm {
         if (can(bn.coins) && (this.stock('planks') < bn.planks || this.stock('wooden_crate') < bn.crates)) this.matBlocked = true;
         if (can(bn.coins) && this.stock('wooden_crate') < bn.crates) this.crateNext = true;
         if (this.stock('planks') >= bn.planks && this.stock('wooden_crate') >= bn.crates && can(bn.coins)) {
-          this.buy(`barn:${bn.n}`, bn.coins, () => { this.take('planks', bn.planks); this.take('wooden_crate', bn.crates); this.cap = bn.cap; this.barnN++; });
+          this.buy(`barn:${bn.n}`, bn.coins, () => { this.take('planks', bn.planks); this.take('wooden_crate', bn.crates); this.cap = bn.cap + this.pantry; this.barnN++; });
           this.clearWait(`barn:${bn.n}`);
+          continue;
+        }
+      }
+      // 6b. the Farmhouse's next tier when the barn is getting full (wave 4: its pantry adds Barn room; modelled since
+      // wave 5, when the new goods made the barn the tight spot)
+      const fh = UPGRADES.farmhouse.tiers[this.fhN];
+      if (fh && fh.unlock <= L && this.total() > 0.5 * this.cap) {
+        const planksNeed = fh.items.planks ?? 0, cratesNeed = fh.items.wooden_crate ?? 0;
+        if (this.stock('planks') >= planksNeed && this.stock('wooden_crate') >= cratesNeed && can(fh.coins)) {
+          this.buy(`farmhouse:${this.fhN + 1}`, fh.coins, () => {
+            this.take('planks', planksNeed); this.take('wooden_crate', cratesNeed);
+            this.cap += fh.bonus.barnCap - this.pantry; this.pantry = fh.bonus.barnCap; this.fhN++;
+          });
           continue;
         }
       }
@@ -1423,6 +1490,15 @@ class Farm {
         const perDay = this.perDay(a.cycle) * a.net * (1 + (this.couple() ? 0.2 : 0.1));
         if (owned < this.homeCap(a.id)) {
           const cost = this.animalCost(a);
+          // babies in the pen (wave 5): when one more animal is worth having, a couple with two grown ones pairs them
+          // for one baby food instead of buying (one pairing per home at a time; no food on hand = make it first)
+          if (this.penFills(a.id)) {
+            const food = this.penFood(a.id);
+            if (!this.pens.has(a.id) && this.stock(food) >= PEN_BABIES.qty) {
+              opts.push({ what: `pen:${a.id}`, cost: 0, days: cost / perDay, apply: () => this.startPen(a.id) });
+            }
+            continue;
+          }
           opts.push({ what: `animal:${a.id}`, cost, days: cost / perDay, apply: () => this.addAnimal(a.id, a.id === 'bee') });
         } else if (a.id !== 'bee' && this.homes.get(a.home) < a.capMax) {
           const cost = X.home.get(a.home).upgrade + 2 * nice(a.baby * 1.1 ** owned);
@@ -1693,7 +1769,7 @@ function summarize(f) {
     idlePlots: S.idlePlotMin / Math.max(1, S.plotMin), idleBld: S.bldIdleMin / Math.max(1, S.bldMin),
     hungry: S.hungryMin / Math.max(1, S.animalMin), feedMill: S.feedMillBusy / Math.max(1, S.feedMillMin), emergencyFeed: S.emergencyFeedCoins,
     overflow: S.overflowMin / Math.max(1, S.activeMin), blocked: S.blocked, maxFill: S.maxFill, attnShort: S.attnShort / Math.max(1, S.activeMin),
-    questBlocked: S.questBlockedMin, questsDone: f.questsDone.size, questsStuck: [...f.questActive.keys()], expansions: f.expansions, barn: f.barnN,
+    questBlocked: S.questBlockedMin, questsDone: f.questsDone.size, questsStuck: [...f.questActive.keys()], expansions: f.expansions, parcels: f.parcelN, penBabies: S.penBabies, barn: f.barnN,
     acorns: f.acorns, mastery: [...f.mastery].filter(([, m]) => m.stars >= 1).length,
     perLevel: Object.entries(S.perLevel).map(([L, a]) => ({ L: +L, ...a, E: f.X.levels[L - 1].E })),
     townsfolk: S.townsfolk, projects: S.projects, grand: S.grand, golden: ord.golden, duetOrders: ord.duet,
@@ -1824,7 +1900,7 @@ function numbersReport(X, md) {
   p('');
   p(mdTable(['Building', 'Cost old → new', 'Slot 1 old → new'], X.buildings.map((b) => { const o = B.building.get(b.id); return [b.id, chg(o.cost, b.cost), chg(o.slotCost(1), b.slotCost(1))]; })));
   p('');
-  p(mdTable(['Expansion', 'Lvl', 'Coins old → new'], X.expansions.map((e, i) => [e.id, e.level, chg(B.expansions[i].coins, e.coins)])));
+  p(mdTable(['Land parcel', 'Lvl', 'Coins old → new'], X.expansions.map((e, i) => [e.id, e.level, chg(B.expansions[i].coins, e.coins)])));
   p('');
   p(mdTable(['Barn upgrade', 'Lvl', 'Coins old → new'], X.barn.map((b, i) => [b.n, b.level, chg(B.barn[i].coins, b.coins)])));
   return L.join('\n');

@@ -56,8 +56,9 @@ export const DEBRIS = [
   { id: 'boulder', name: 'Boulder', m: 'M1a', kind: 'debris', layer: 'object', size: [2, 2], shop: false,
     movable: false, tool: 'axe', hp: 60, teamwork: true, xp: { home: 5, expansion: 20, regrow: 0 }, wood: 0,
     regrows: false, model: 'debris/boulder' },
-  // ASSUMPTION (GDD §4.5 gives only its XP): a big stump yields twice a stump's Wood
-  { id: 'big_stump', name: 'Big Stump', m: 'M2', kind: 'debris', layer: 'object', size: [2, 2], shop: false,
+  // ASSUMPTION (GDD §4.5 gives only its XP): a big stump yields twice a stump's Wood. M1b since wave 5: the Stable
+  // Paddock's woodland (one Big Stump) now arrives with Willow Meadow at L21
+  { id: 'big_stump', name: 'Big Stump', m: 'M1b', kind: 'debris', layer: 'object', size: [2, 2], shop: false,
     movable: false, tool: 'axe', hp: 60, teamwork: true, xp: { home: 30, expansion: 30, regrow: 0 }, wood: 4,
     regrows: false, model: 'debris/big_stump' },
 ];

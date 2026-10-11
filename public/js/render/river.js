@@ -12,7 +12,7 @@
 import * as THREE from 'three';
 import { PLACES, riverZ, riverHalf, heightAt, WATER_Y } from './ground.js';
 import { box, cyl, ball, flag, merge, modelKey, geoPart } from './world-kit.js';
-import { featureLive } from './world-state.js';
+import { featureLive, ownedLand } from './world-state.js';
 import { models } from './models.js';
 
 const J = PLACES.jetty;
@@ -202,7 +202,7 @@ export function createRiver({ scenery, glows = null } = {}) {
 
   let lastUp = null;
   function apply(state) {
-    const up = Array.isArray(state?.farm?.expansions) && state.farm.expansions.includes('riverbank');
+    const up = ownedLand(state).has('riverbank');                     // wave 5: the Riverbank's land, whichever row owns it
     liveNow = featureLive(state, 'barge');
     if (up !== lastUp) { lastUp = up; key = up ? 'up' : 'base'; build(up); return true; }
     return false;

@@ -26,6 +26,7 @@ import { hash32 } from './rng.js';
 import { goldenHourBp } from './coop.js';
 import { upgradeBonus } from './upgrades.js';
 import { relicBarnCap } from './relics.js';
+import { landRow } from './land.js';
 import { V } from './schema.js';
 import { ERR } from '../net/protocol.js';
 
@@ -561,7 +562,7 @@ export function proofDeed(tx, verb, ref, n) {
   const proofs = tx.state.farm.proofs;
   if (!(n > 0) || !proofs) return;
   for (const exp of sortedKeys(proofs)) {
-    const tasks = expansionOf(exp)?.proof ?? [];
+    const tasks = landRow(exp)?.proof ?? [];          // wave 5: cards are keyed by parcel (land.js)
     tasks.forEach((t, i) => {
       // a task's ref may be a list of alternatives ("Make 3 Cotton Tote or Wool Pillow", wave-2 QA RC-01)
       if (t.verb !== verb || !(Array.isArray(t.ref) ? t.ref.includes(ref) : t.ref === ref)) return;

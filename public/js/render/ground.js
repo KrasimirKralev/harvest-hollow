@@ -39,7 +39,7 @@ import { footprint } from '../../../shared/rules/grid.js';
 import * as grid from '../../../shared/rules/grid.js';
 import { models, addShaderPatch, LOOK, LAMPS_PARS, LAMPS_FRAG } from './models.js';
 import { WORLD, addSway, addFoliageTint } from './world-uniforms.js';
-import { rewardLandRects, liveNow } from './world-state.js';
+import { rewardLandRects, liveNow, isLandRow, ownedLand } from './world-state.js';
 
 export const WATER_Y = -0.45;
 const W = WORLD_TILES * TILE_M;                 // 128 m
@@ -248,7 +248,8 @@ export function landTiles(expansionIds, live = (e) => liveNow(e), extraRects = [
   const t = new Uint8Array(N * N);
   fill(t, [[FARM_MIN, FARM_MIN, FARM_MAX - FARM_MIN, FARM_MAX - FARM_MIN]], 3);
   const owned = new Set(expansionIds);
-  for (const e of CONTENT.expansions.values()) if (!owned.has(e.id) && live(e)) fill(t, e.rects, 2);
+  // (wave 5: a retired small parcel is never for sale itself: its land is sold as part of a big row)
+  for (const e of CONTENT.expansions.values()) if (!owned.has(e.id) && e.retired !== true && live(e)) fill(t, e.rects, 2);
   for (const id of owned) { const e = CONTENT.expansions.get(id); if (e) fill(t, e.rects, 1); }
   if (extraRects && extraRects.length) fill(t, extraRects, 1);
   return t;
@@ -272,7 +273,9 @@ export function boundaryEdges(tiles) {
 
 /**
  * One "For sale" signpost per live, unowned expansion, on its tile nearest the owned land's centre, facing it.
- * Returns tiles (float centre) and a rotation in quarter turns.
+ * Returns tiles (float centre) and a rotation in quarter turns. Wave 5 ("fewer, bigger expansions"): land is sold by
+ * the big parcel, so the pieces of one parcel (rows with the same `parcel`) share ONE sign (`id` = the piece it stands
+ * on, `parcel` = the parcel), and a retired small row never gets one.
  */
 export function saleSigns(expansionIds) {
   const owned = new Set(expansionIds);
@@ -287,28 +290,85 @@ export function saleSigns(expansionIds) {
   if (!n) return [];
   cx /= n; cz /= n;
   const out = [];
+  const ownedAll = ownedLand(expansionIds);
+  const groups = new Map();
   for (const e of CONTENT.expansions.values()) {
-    if (owned.has(e.id) || !liveNow(e)) continue;
+    // wave 5: never a retired small parcel's sign, nor one for land that is already the farm's; a parcel's pieces group
+    if (owned.has(e.id) || !isLandRow(e) || ownedAll.has(e.id)) continue;
+    const g = typeof e.parcel === 'string' ? `p:${e.parcel}` : e.id;
+    if (!groups.has(g)) groups.set(g, []);
+    groups.get(g).push(e);
+  }
+  for (const rows of groups.values()) {
     let best = null;
-    for (const [x, z, w, d] of e.rects) {
-      // the tile of the rect closest to the owned centre, kept one tile inside the rect
-      const tx = Math.min(x + w - 2, Math.max(x + 1, Math.floor(cx)));
-      const tz = Math.min(z + d - 2, Math.max(z + 1, Math.floor(cz)));
-      const dd = (tx + 0.5 - cx) ** 2 + (tz + 0.5 - cz) ** 2;
-      if (!best || dd < best.dd) best = { x: tx + 0.5, z: tz + 0.5, dd };
+    for (const e of rows) {
+      for (const [x, z, w, d] of e.rects) {
+        // the tile of the rect closest to the owned centre, kept one tile inside the rect
+        const tx = Math.min(x + w - 2, Math.max(x + 1, Math.floor(cx)));
+        const tz = Math.min(z + d - 2, Math.max(z + 1, Math.floor(cz)));
+        const dd = (tx + 0.5 - cx) ** 2 + (tz + 0.5 - cz) ** 2;
+        if (!best || dd < best.dd) best = { x: tx + 0.5, z: tz + 0.5, dd, id: e.id };
+      }
     }
     if (!best) continue;
     const ang = Math.atan2(cx - best.x, cz - best.z);                 // face the farm
-    out.push({ id: e.id, x: best.x, z: best.z, rot: ((Math.round(ang / (Math.PI / 2)) % 4) + 4) % 4, yaw: ang });
+    out.push({ id: best.id, parcel: typeof rows[0].parcel === 'string' ? rows[0].parcel : null, x: best.x, z: best.z,
+      rot: ((Math.round(ang / (Math.PI / 2)) % 4) + 4) % 4, yaw: ang });
   }
   return out;
+}
+
+/**
+ * Wave 5 ("fewer, bigger expansions"): the corners of every parcel for sale, where a survey stake stands, so the owners
+ * see how far one parcel reaches. A parcel is the rows sharing a `parcel` (else a row alone); its outline is the union
+ * of their tiles; a corner is a tile vertex where 1 or 3 of the 4 tiles round it are the parcel's. Pure:
+ * [{ x, z, group }] in tiles (vertices).
+ */
+export function parcelCorners(expansionIds) {
+  const owned = new Set(expansionIds);
+  const ownedAll = ownedLand(expansionIds);
+  const groups = new Map();
+  for (const e of CONTENT.expansions.values()) {
+    if (owned.has(e.id) || !isLandRow(e) || ownedAll.has(e.id)) continue;
+    const g = typeof e.parcel === 'string' ? `p:${e.parcel}` : e.id;
+    if (!groups.has(g)) groups.set(g, new Set());
+    for (const [x, z, w, d] of e.rects) for (let j = z; j < z + d; j++) for (let i = x; i < x + w; i++) groups.get(g).add(j * N + i);
+  }
+  const out = [];
+  for (const [g, tiles] of groups) {
+    const inG = (i, j) => i >= 0 && j >= 0 && i < N && j < N && tiles.has(j * N + i);
+    const seen = new Set();
+    for (const t of tiles) {
+      const ti = t % N; const tj = Math.floor(t / N);
+      for (const [vi, vj] of [[ti, tj], [ti + 1, tj], [ti, tj + 1], [ti + 1, tj + 1]]) {
+        const k = vj * (N + 1) + vi;
+        if (seen.has(k)) continue;
+        seen.add(k);
+        const n = (inG(vi - 1, vj - 1) ? 1 : 0) + (inG(vi, vj - 1) ? 1 : 0) + (inG(vi - 1, vj) ? 1 : 0) + (inG(vi, vj) ? 1 : 0);
+        // a diagonal pair (2 tiles touching only at this vertex) is a corner too
+        const diag = n === 2 && inG(vi - 1, vj - 1) === inG(vi, vj);
+        if (n === 1 || n === 3 || diag) out.push({ x: vi, z: vj, group: g });
+      }
+    }
+  }
+  return out;
+}
+
+/** A survey stake (wave 5): a pale peg with an orange ribbon tied on, the tail swaying. */
+function stakeGeometry() {
+  const ribbon = {
+    pos: [0.05, 0.62, 0.03, 0.42, 0.5, 0.05, 0.05, 0.5, 0.03, 0.05, 0.62, -0.03, 0.4, 0.46, -0.05, 0.05, 0.5, -0.03],
+    nor: [0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, -1, 0, 0, -1, 0, 0, -1], idx: [0, 1, 2, 3, 5, 4],
+    colAt: () => lin('#FF7A1F'), swayAt: (i) => (i === 1 || i === 4 ? 1.4 : 0),
+  };
+  return partsGeometry([boxPart(0.09, 0.8, 0.09, 0, 0.4, 0, '#E8D3A8', 0.95), boxPart(0.13, 0.06, 0.13, 0, 0.56, 0, '#FF7A1F'), ribbon]);
 }
 
 /** Live expansion rects (owned or for sale) in metres [x0, z0, x1, z1]. */
 export function liveRects(live = (e) => liveNow(e)) {
   const out = [];
   for (const e of CONTENT.expansions.values()) {
-    if (!live(e)) continue;
+    if (!live(e) || e.retired === true) continue;
     for (const [x, z, w, d] of e.rects) out.push([x * TILE_M, z * TILE_M, (x + w) * TILE_M, (z + d) * TILE_M]);
   }
   return out;
@@ -485,6 +545,55 @@ function makeNoiseTexture() {
   t.generateMipmaps = true;
   t.needsUpdate = true;
   return t;
+}
+
+/** Bilinear sample of channel `c` of an RGBA8 texture (S x S) at uv, as the GPU's LinearFilter does (repeat or clamp). */
+function texel(data, S, u, v, c, repeat) {
+  let x = u * S - 0.5; let y = v * S - 0.5;
+  const x0 = Math.floor(x); const y0 = Math.floor(y); const fx = x - x0; const fy = y - y0;
+  const at = (i, j) => {
+    if (repeat) { i = ((i % S) + S) % S; j = ((j % S) + S) % S; } else { i = Math.min(S - 1, Math.max(0, i)); j = Math.min(S - 1, Math.max(0, j)); }
+    return data[(j * S + i) * 4 + c] / 255;
+  };
+  const a = at(x0, y0); const b = at(x0 + 1, y0); const cc = at(x0, y0 + 1); const d = at(x0 + 1, y0 + 1);
+  return a + (b - a) * fx + (cc - a) * fy + (a - b - cc + d) * fx * fy;
+}
+/**
+ * Wave 5 (frogs after rain): the ground shader's puddle field in JS (GROUND_FRAG: the domain warp, the two rotated noise
+ * scales, the path boost; `low` = the HH_GROUND_LOW twin), on a 1 m grid where `owned(x, z)`, off the paths and every
+ * footprint; local peaks above the deep-puddle level, the deepest first, at least `gap` m apart. Pure (given the data).
+ */
+export function findPuddles(noise, gm, GMS, low, owned, max = 6, gap = 8) {
+  const NS = 256;
+  const cand = [];
+  for (let z = FARM_MIN * TILE_M + 0.5; z < FARM_MAX * TILE_M; z += 1) {
+    for (let x = FARM_MIN * TILE_M + 0.5; x < FARM_MAX * TILE_M; x += 1) {
+      if (!owned(x, z)) continue;
+      const gu = x / W; const gv = z / W;
+      const gr = texel(gm, GMS, gu, gv, 0, false); const gg = texel(gm, GMS, gu, gv, 1, false);
+      if (gr > 0.05 || gg > 0.3) continue;
+      let qx = x; let qz = z;
+      if (!low) {
+        const wu = x * 0.0066 + 0.57; const wv = z * 0.0071 + 0.57;
+        qx += (texel(noise, NS, wu, wv, 1, true) - 0.5) * 18; qz += (texel(noise, NS, wu, wv, 3, true) - 0.5) * 18;
+      }
+      // mat2( a, b, c, d ) is column-major in GLSL: M * v = ( a vx + c vy, b vx + d vy )
+      const nu = (0.891 * qx - 0.454 * qz) / 72; const nv = (0.454 * qx + 0.891 * qz) / 72;
+      const nzB = texel(noise, NS, nu, nv, 2, true);
+      const n2B = low ? texel(noise, NS, nu, nv, 3, true)
+        : texel(noise, NS, (0.485 * qx - 0.875 * qz) / 23 + 0.31, (0.875 * qx + 0.485 * qz) / 23 + 0.31, 2, true);
+      const v = n2B * 0.55 + nzB * 0.45 + gg * 0.16;
+      if (v > 0.785) cand.push({ x, z, v });
+    }
+  }
+  cand.sort((a, b) => b.v - a.v || a.x - b.x || a.z - b.z);
+  const out = [];
+  for (const c of cand) {
+    if (out.length >= max) break;
+    if (out.some((o) => Math.hypot(o.x - c.x, o.z - c.z) < gap)) continue;
+    out.push({ x: c.x, z: c.z, v: +c.v.toFixed(3) });
+  }
+  return out;
 }
 
 // ---------------------------------------------------------------------------------------------------
@@ -1088,14 +1197,15 @@ export const PARCEL_GROUND = Object.freeze({
 const PARCEL_GROUND_LIST = Object.keys(PARCEL_GROUND).map((k) => PARCEL_GROUND[k]);
 const PARCEL_GROUND_IDS = Object.keys(PARCEL_GROUND);
 
-/** Per tile of the world: 1 + the PARCEL_GROUND index of the OWNED parcel covering it, else 0 (pure). */
+/** Per tile of the world: 1 + the PARCEL_GROUND index of the OWNED parcel covering it, else 0 (pure). Wave 5: the
+ *  characters belong to the old small parcels; each keeps its ground once its land is owned, whichever row owns it. */
 export function parcelGround(expansionIds) {
   const t = new Uint8Array(N * N);
-  for (const id of expansionIds || []) {
-    const k = PARCEL_GROUND_IDS.indexOf(id);
+  const owned = ownedLand(expansionIds || []);
+  for (const id of PARCEL_GROUND_IDS) {
     const e = CONTENT.expansions.get(id);
-    if (k < 0 || !e) continue;
-    fill(t, e.rects, k + 1);
+    if (!e || !owned.has(id)) continue;
+    fill(t, e.rects, PARCEL_GROUND_IDS.indexOf(id) + 1);
   }
   return t;
 }
@@ -1212,6 +1322,8 @@ export function createGround(layers, { scenery = null, quality = 'high' } = {}) 
   }
 
   let land = null;
+  let gmStamp = 0;                                // wave 5: bumps whenever the ground map's footprints / paths change
+  let puddleCache = null;                         // wave 5: the frogs' puddles (puddleSpots), per land, tier and map
   let mown = [];                                  // owned shader-only mown pads (MOWN_PADS): fewer wild tufts there
   let mownSig = '';
   let charOf = null;                              // per tile: 1 + the PARCEL_GROUND_LIST index of an owned parcel, or 0
@@ -1285,7 +1397,7 @@ export function createGround(layers, { scenery = null, quality = 'high' } = {}) 
     const one = new THREE.Vector3(1, 1, 1);
     const posts = new Set();
     const edges = boundaryEdges(land);
-    const dockGap = expansions.includes('willow_pond');
+    const dockGap = ownedLand(expansions).has('willow_pond');           // wave 5: its land, whichever row owns it
     for (const [x0, z0, x1, z1] of edges) {
       const horiz = z0 === z1;
       // the fishing dock leaves the farm through a gap in the fence (wave 3)
@@ -1312,6 +1424,17 @@ export function createGround(layers, { scenery = null, quality = 'high' } = {}) 
       m4.compose(new THREE.Vector3(s.x * TILE_M, 0, s.z * TILE_M), q, new THREE.Vector3(1.7, 1.7, 1.7));
       built.signs.push(scenery.add('prop:signpost_sale', m4));
     }
+    // wave 5: survey stakes at the corners of each parcel for sale (a parcel is bigger now: the stakes show how far it
+    // goes); a corner on the farm's own fence is left to the fence post
+    scenery.define('hh:survey_stake', stakeGeometry());
+    for (const c of parcelCorners(expansions)) {
+      let fence = false;
+      for (const [di, dj] of [[-1, -1], [0, -1], [-1, 0], [0, 0]]) { const i = c.x + di; const j = c.z + dj; if (i >= 0 && j >= 0 && i < N && j < N && land[j * N + i] === 1) fence = true; }
+      if (fence) continue;
+      q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), hash2(c.x, c.z) * Math.PI * 2);
+      m4.compose(new THREE.Vector3(c.x * TILE_M, 0, c.z * TILE_M), q, one);
+      built.signs.push(scenery.add('hh:survey_stake', m4));
+    }
     // Land for sale is overgrown: young pines, round trees, bushes and the odd rock at ~0.6 of the forest's
     // density (FV2's unbought land). Buying the parcel clears it with a puff of dust per tree (visual-01).
     const list = wildOnSale(land, signs, (tx, tz) => expansionOfTile(tx, tz));
@@ -1335,7 +1458,7 @@ export function createGround(layers, { scenery = null, quality = 'high' } = {}) 
   /** The live expansion (owned or not) covering a tile. */
   function expansionOfTile(x, z) {
     for (const e of CONTENT.expansions.values()) {
-      if (!liveNow(e)) continue;
+      if (!isLandRow(e)) continue;
       for (const [rx, rz, rw, rd] of e.rects) if (x >= rx && z >= rz && x < rx + rw && z < rz + rd) return e.id;
     }
     return null;
@@ -1435,6 +1558,7 @@ export function createGround(layers, { scenery = null, quality = 'high' } = {}) 
         gmData[(j * GM + i) * 4 + 1] = Math.round((s / 9) * 255);
       }
     }
+    gmStamp++;
     groundMap.needsUpdate = true;
     dirtyTufts = true;
   }
@@ -1700,11 +1824,26 @@ export function createGround(layers, { scenery = null, quality = 'high' } = {}) 
         && weedShown[z * N + x] && !weedCleared[z * N + x]);
     },
     landAt(x, z) { return land && x >= 0 && z >= 0 && x < N && z < N ? land[z * N + x] : 0; },
+    /**
+     * Wave 5 (frogs after rain): where the rain leaves puddles on the farm's own lawn, the deepest first: the ground
+     * shader's puddle field (its noise and the ground map, the same formula and tier) evaluated in JS on a 1 m grid
+     * over owned land, off paths and footprints; peaks at least `gap` m apart. [{ x, z, v }] (metres). Cached per land
+     * and tier: a few ms once per change.
+     */
+    puddleSpots(max = 6, gap = 8) {
+      const low = Boolean(mat.defines && 'HH_GROUND_LOW' in mat.defines);
+      const key = `${low}|${max}|${gap}|${land ? land.reduce((a, v, i) => (v === 1 ? (a * 31 + i) >>> 0 : a), 7) : 0}|${gmStamp}`;
+      if (puddleCache && puddleCache.key === key) return puddleCache.spots;
+      const spots = land ? findPuddles(tex.noise.image.data, gmData, GM, low, (x, z) => land[Math.floor(z / TILE_M) * N + Math.floor(x / TILE_M)] === 1, max, gap) : [];
+      puddleCache = { key, spots };
+      return spots;
+    },
     /** The live expansion for sale that covers tile (x, z), or null. */
     expansionAt(x, z) {
       if (!land || this.landAt(x, z) !== 2) return null;
       for (const e of CONTENT.expansions.values()) {
-        if (!liveNow(e) || (state && state.farm.expansions.includes(e.id))) continue;
+        // wave 5: the big row on sale (never a retired small parcel: the card buys the row its land belongs to)
+        if (!isLandRow(e) || (state && state.farm.expansions.includes(e.id))) continue;
         for (const [rx, rz, rw, rd] of e.rects) if (x >= rx && z >= rz && x < rx + rw && z < rz + rd) return e.id;
       }
       return null;

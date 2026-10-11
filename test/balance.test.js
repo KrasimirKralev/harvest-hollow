@@ -41,11 +41,14 @@ test('the first evening works from the start values: 16 plots of Wheat cost less
   assert.equal(CONTENT.buildings.get('mill').cost, 0, "Grandma's Windmill is free (quest A5)");
 });
 
-test('expansions are saving goals of a few evenings (0.8-3.6 hours of income at the gate, nice-rounded)', () => {
-  for (const e of CONTENT.expansions.values()) {
-    if (e.k === 0) continue;
-    const hours = e.cost / E(e.unlock);
-    assert.ok(hours >= 0.75 && hours <= 3.8, `${e.id}: ${hours.toFixed(2)} h`);
+test('land parcels are real milestones (1.8-10.2 hours of income at the gate, climbing, nice-rounded)', () => {
+  // wave 5 (owner wish: fewer, bigger expansions): the same land costs the same hours of income as the old pieces
+  let prev = 0;
+  for (const p of [...CONTENT.parcels.values()].sort((a, b) => a.k - b.k)) {
+    if (p.k === 0) continue;
+    const hours = p.cost / E(p.unlock);
+    assert.ok(hours >= 1.7 && hours <= 10.5 && hours > prev, `${p.id}: ${hours.toFixed(2)} h`);
+    prev = hours;
   }
 });
 

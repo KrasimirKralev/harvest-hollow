@@ -14,6 +14,8 @@ export const SEASONS = Object.freeze({
   wheat: 'winter', sugarcane: 'winter', cabbage: 'winter',
   // owner wish list 2026-10-04: raspberries ripen in summer, roses bloom in late spring, coffee is picked in winter
   raspberry: 'summer', rose: 'spring', coffee: 'winter',
+  // wave 5 spices: red peppers ripen and dry in autumn garlands, savory and chili in summer, cumin is a spring sowing
+  paprika: 'autumn', savory: 'summer', chili: 'summer', cumin: 'spring',
 });
 
 /**
@@ -47,6 +49,9 @@ export const TREE_LOOKS = Object.freeze({
   // owner wish #7: a small, rounded, slightly leaning tree with glossy dark leaves and red fruit
   pomegranate_tree: { shape: { canopy: [1.1, 0.9, 1.1], trunk: 0.8, lean: 0.05 },
     hue: '#C0213A', leaf: '#3F7F36', tool: 'basket' },
+  // wave 5: a tall, glossy evergreen; the "fruit" is rolled bark (cinnamon sticks), warm brown
+  cinnamon_tree: { shape: { canopy: [0.95, 1.2, 0.95], trunk: 1.05, lean: 0.03 },
+    hue: '#9C5A2E', leaf: '#3D7A3A', tool: 'basket' },
 });
 
 /**
@@ -65,6 +70,9 @@ export const ANIMAL_EXTRAS = Object.freeze({
   alpaca: { bottle: 'baby_bottle', sound: 'hum' },
   // owner wish #3: kits nibble Rabbit Greens to grow faster; a rabbit "says" a soft hind-foot thump
   rabbit: { bottle: 'rabbit_greens', sound: 'thump' },
+  // wave 5: quail chicks peck Chicken Feed like chicks do; a bison calf takes a Baby Bottle
+  quail: { bottle: 'chicken_feed', sound: 'chirp' },
+  bison: { bottle: 'baby_bottle', sound: 'snort' },
 });
 
 /**
@@ -172,6 +180,21 @@ export const EXPANSION_LAND = Object.freeze({
   maple_ridge: { rects: [[24, 8, 16, 8]], proof: [['make', 'maple_syrup', 3]], free: [] },
   sunset_hill: { rects: [[40, 8, 16, 8]], proof: [['make', 'gourmet_hamper', 2]],
     free: [{ def: 'gazebo', x: 47, z: 10 }], feature: { goldenHourBonusMs: 600_000 } },
+});
+
+/**
+ * Land parcels (owner wish 2026-10-06, wave 5: fewer, bigger expansions; the pieces and prices are in
+ * tools/economy-model.mjs PARCELS_RAW). `proof` is the parcel's proof task list: the tasks of its pieces that exist
+ * by the parcel's level, in piece order, so a piece's proof progress carries over (parcels.js `proofFrom`).
+ */
+export const PARCEL_LAND = Object.freeze({
+  creek_hill: { proof: [['harvest', 'wheat', 30], ['collect', 'egg', 10]] },
+  orchard_lane: { proof: [['own', 'apple_tree', 2], ['make', 'apple_juice', 3], ['fill', 'order', 10]] },
+  sunny_glade: { proof: [['make', 'strawberry_jam', 3], ['make', 'yarn', 4], ['own', 'pasture', 1]] },
+  riverside_woods: { proof: [['make', ['cotton_tote', 'wool_pillow'], 3], ['collect', 'truffle', 5]] },
+  willow_meadow: { proof: [['collect', 'duck_egg', 8]] },
+  rocky_grove: { proof: [['make', 'goat_cheese', 3], ['harvest', 'walnut', 30]] },
+  sunset_ridge: { proof: [['make', 'olive_oil', 4]] },
 });
 
 /** Debris mix of every purchased expansion (GDD §2.3: 6 weeds, 4 rocks, 3 stumps, 2 logs = 68 XP, 12 Wood). */

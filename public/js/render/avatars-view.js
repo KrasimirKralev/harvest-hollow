@@ -190,7 +190,25 @@ export function petsAsleep(phase, k = 0, was = false) {
   if (phase === 'dusk') return was ? k > 0.35 : k > 0.55;
   return false;
 }
-const PET_EVENTS = new Set(['petAdopted', 'petPetted', 'petFed', 'petFind', 'petTreasure', 'petBreed']);
+const PET_EVENTS = new Set(['petAdopted', 'petPetted', 'petFed', 'petFind', 'petTreasure', 'petBreed', 'petStay']);
+
+/** Wave 5 (owner wish L2-3, "Stay home" / "Come with me"; rules `players[pid].pet.stay === true`): what a pet that stays
+ *  home does, from server time so both screens agree: `greet` while its farmer is within STAY.greet m (stands, faces them,
+ *  wags), else per 9 s spell `mat` (sits on its mat, a slow wag now and then), `nap` (lies down, 💤) or `sniff` (pads about
+ *  in front of its house: `at` = metres from the bed, a turn `a`). Pure. */
+export const STAY = Object.freeze({ spell: 9000, greet: 6.5, sniff: 1.7 });
+export function stayActivity(pid, t, farmerDist = Infinity) {
+  if (farmerDist < STAY.greet) return { act: 'greet' };
+  const seg = Math.floor(t / STAY.spell);
+  const h = hash32(`${pid}:stay`, seg);
+  const r = h % 10;
+  if (r < 4) return { act: 'mat', seg };
+  if (r < 7) return { act: 'nap', seg };
+  const a = (((h >>> 8) % 1000) / 1000 - 0.5) * 2.4;
+  return { act: 'sniff', seg, a, at: STAY.sniff * (0.55 + ((h >>> 20) % 100) / 220) };
+}
+/** The pets that stay home now (pure): a pet with `stay === true` (rules wave 5); the renderer sends it to its bed. */
+export const petStaysHome = (pet) => Boolean(pet) && pet.stay === true;
 
 /** The point `back` metres behind the newest end of a trail ([{x, z}], newest last), walked along the trail; the
  *  oldest point when the trail is shorter. Null for an empty trail. Pure. */
@@ -956,7 +974,14 @@ export function createAvatarsView(layers, overlay, toScreen) {
       const keep = have && want && have.kind === want.kind && have.key !== petKeyOf(want) ? { x: have.x, z: have.z, facing: have.facing, placed: have.placed, asleep: have.asleep } : null;
       if (have && (!want || have.kind !== want.kind || keep)) dropPet(pid);
       if (want && (!have || have.kind !== want.kind || keep)) addPet(pid, want, keep);
-      if (want && pets.get(pid)) pets.get(pid).name = want.name;
+      if (want && pets.get(pid)) {
+        const p = pets.get(pid);
+        p.name = want.name;
+        // wave 5: "Stay home" / "Come with me"; coming back after a stay, it runs to its farmer (no hop to heel)
+        const stay = petStaysHome(want);
+        if (p.stay && !stay) p.callUntil = clock + 12;
+        p.stay = stay;
+      }
     }
     for (const pid of [...pets.keys()]) if (!players || !Object.hasOwn(players, pid)) dropPet(pid);
   }
@@ -989,6 +1014,12 @@ export function createAvatarsView(layers, overlay, toScreen) {
       if (!c) return;
       p.mixer = new THREE.AnimationMixer(c.object);
       for (const [name, clip] of c.clips) p.actions[name] = p.mixer.clipAction(clip);
+      // wave 5: the tail bones (Tail1 at the rump, out to the tip) for the wag, with their clip pose kept per frame
+      const tail = [];
+      c.object.traverse((x) => { const m = x.isBone && /^Tail(\d+)$/.exec(x.name); if (m) tail.push({ bone: x, n: Number(m[1]) }); });
+      tail.sort((x, y) => x.n - y.n);
+      p.tail = tail.slice(0, 3).map((x) => x.bone);
+      p.tailBase = p.tail.map(() => new THREE.Quaternion());
       holder.add(c.object);
       playPet(p, 'Idle', 1, 0);
     };
@@ -1092,6 +1123,15 @@ export function createAvatarsView(layers, overlay, toScreen) {
 
   function updatePet(p, dt, t) {
     const a = av.get(p.pid);
+    // wave 5: a pet told to stay home keeps to its Dog House / Cat Basket (else the farmhouse steps), its farmer here or
+    // not (both screens show it there); at night it sleeps there as every pet does
+    if (p.stay) {
+      const home = bedOf(p.kind);
+      if (home) {
+        if (petNight && clock >= p.wakeUntil) return sleepAt(p, home, dt);
+        return stayAt(p, home, dt, t, a && a.pose ? a : null);
+      }
+    }
     if (!a || !a.pose) { p.root.visible = false; PET_PICKS.delete(p.pid); if (p.zzz) p.zzz.style.display = 'none'; return 0; }
     const k = PET[p.kind];
     const ox = a.root.position.x; const oz = a.root.position.z;
@@ -1125,10 +1165,13 @@ export function createAvatarsView(layers, overlay, toScreen) {
     if (!p.placed) { p.x = goal.x; p.z = goal.z; p.facing = a.facing; p.placed = true; }
     const dx = goal.x - p.x; const dz = goal.z - p.z; const d = Math.hypot(dx, dz);
     let step = 0;
-    if (d > 14) { p.x = goal.x; p.z = goal.z; p.trail = [{ x: ox, z: oz }]; }                  // a hop: it comes along
+    const called = (p.callUntil || 0) > clock && d < 80;          // wave 5: "Come with me": it runs the whole way
+    if (called && d < 1.2) p.callUntil = 0;
+    if (d > 14 && !called) { p.x = goal.x; p.z = goal.z; p.trail = [{ x: ox, z: oz }]; }                  // a hop: it comes along
     else if (d > 0.2) {
       // keeping up with a walking (or riding) farmer, strolling when it sniffs about
-      const v = moving ? Math.min(14, a.speed + 0.5 + d * 2.5) : roam ? Math.min(k.walk * 1.1, 0.4 + d * 1.2) : Math.min(k.run + 1, 0.6 + d * 2.4);
+      const v = called ? Math.max(Math.min(14, (a.speed || 0) + 0.5 + d * 2.5), Math.min(k.run * 1.4, 0.6 + d * 2.4))
+        : moving ? Math.min(14, a.speed + 0.5 + d * 2.5) : roam ? Math.min(k.walk * 1.1, 0.4 + d * 1.2) : Math.min(k.run + 1, 0.6 + d * 2.4);
       step = Math.min(d, v * dt);
       p.x += (dx / d) * step; p.z += (dz / d) * step;
     }
@@ -1158,10 +1201,12 @@ export function createAvatarsView(layers, overlay, toScreen) {
     if (dozing && p.speed < 0.12 && !p.once) { lieDown(p); placeZzz(p); }
     else if (p.zzz && p.zzz.style.display !== 'none') p.zzz.style.display = 'none';
     if (p.mixer) p.mixer.update(motion === 'still' ? 0 : dt);
+    p.wagGoal = (p.wagUntil || 0) > clock ? 0.8 : 0;                    // wave 5: a wag after a pat
+    wagTail(p, dt, true);
     PET_PICKS.set(p.pid, { x: p.x, z: p.z, r: p.r, h: p.h, asleep: Boolean(dozing) });
     // a pat or a hop answers input at 60 fps; a pet keeping up with its walking farmer travels at the ambient rate; one
     // sniffing about its standing farmer is slow ambient (CL-03: strolling pets held 60 fps 60 % of the time at rest)
-    return p.once || p.hopT > 0 ? 2 : p.speed > 0.05 && moving ? WANT.MOVING : motion === 'still' ? 0 : 1;
+    return p.once || p.hopT > 0 ? 2 : (p.speed > 0.05 && moving) || called ? WANT.MOVING : motion === 'still' ? 0 : 1;
   }
 
   /** Lie down to sleep: the dog's 'Lie' clip (the UAA death fall, held on its last frame: lying on its side), the cat
@@ -1233,15 +1278,122 @@ export function createAvatarsView(layers, overlay, toScreen) {
     // the cat curls into a loaf: lower and rounder (no lying clip of its own)
     const kk = PET[p.kind].scale;
     if (p.lying && !p.actions.Lie) { p.holder.scale.set(kk * 1.08, kk * 0.7, kk * 1.02); if (p.actions.Idle) p.actions.Idle.timeScale = 0; }
-    if (p.mixer && (want || clock < (p.lieEnd || 0) + 0.1)) p.mixer.update(motion === 'still' ? 0 : dt);
+    if (p.mixer && (want || clock < (p.lieEnd || 0) + 0.1)) { p.mixer.update(motion === 'still' ? 0 : dt); p.tailKept = false; p.tailBent = false; }
     if (p.asleep) placeZzz(p); else if (p.zzz) p.zzz.style.display = 'none';
     PET_PICKS.set(p.pid, { x: p.x, z: p.z, r: p.r, h: p.h, asleep: p.asleep });
     return want;
   }
 
+  // ---- wave 5 (owner wish L2-3): "Stay home" -------------------------------------------------------------------
+  /** Walk a pet toward (x, z) at up to `vmax` m/s with the right clip; returns the distance left. */
+  function padTo(p, x, z, dt, vmax) {
+    const dx = x - p.x; const dz = z - p.z; const d = Math.hypot(dx, dz);
+    if (d <= 0.08) { p.speed += (0 - p.speed) * Math.min(1, dt * 8); return d; }
+    if (p.lying) wake(p);
+    const step = Math.min(d, Math.min(vmax, 0.5 + d * 1.6) * dt);
+    p.x += (dx / d) * step; p.z += (dz / d) * step;
+    p.speed += (step / Math.max(1e-4, dt) - p.speed) * Math.min(1, dt * 8);
+    p.facing += angleDelta(p.facing, Math.atan2(dx, dz)) * Math.min(1, dt * 8);
+    const k = PET[p.kind];
+    if (p.speed > k.run * 0.8 && Number.isFinite(k.run)) playPet(p, 'Run', Math.max(0.8, Math.min(1.6, p.speed / k.runRate)));
+    else playPet(p, 'Walk', Math.max(0.7, Math.min(2.2, p.speed / k.walk)));
+    return d - step;
+  }
+  /**
+   * A pet that stays home (wave 5): it trots to its bed (from anywhere on the farm: no hop), then keeps there: sits on its
+   * mat with a slow wag now and then, naps in the sun (💤), pads about in front of its house; when its farmer comes near
+   * it stands, turns to them and wags hard (stayActivity, server time: the same on both screens).
+   */
+  function stayAt(p, home, dt, t, owner) {
+    if (!p.placed) { p.x = home.x; p.z = home.z; p.facing = home.face; p.placed = true; }
+    const fx0 = owner ? owner.root.position.x : Infinity; const fz0 = owner ? owner.root.position.z : Infinity;
+    const toHome = Math.hypot(home.x - p.x, home.z - p.z);
+    let want = 0;
+    let wag = 0;
+    if (toHome > 3.2) {
+      // on its way home (a command just given, or the bed moved): a brisk trot, the whole way
+      if (toHome > 80) { p.x = home.x; p.z = home.z; } else padTo(p, home.x, home.z, dt, PET[p.kind].run === Infinity ? PET[p.kind].walk * 1.8 : PET[p.kind].run);
+      if (p.zzz && p.zzz.style.display !== 'none') p.zzz.style.display = 'none';
+      want = WANT.MOVING;
+    } else {
+      const act = stayActivity(p.pid, t, Math.hypot(fx0 - home.x, fz0 - home.z));
+      let gx = home.x; let gz = home.z; let face = home.face;
+      if (act.act === 'sniff' && motion !== 'still') {
+        const a = home.face + act.a;
+        gx = home.x + Math.sin(a) * act.at; gz = home.z + Math.cos(a) * act.at; face = null;
+      } else if (act.act === 'greet') {
+        // a step toward its farmer (never beyond the mat's reach) and a face toward them
+        const d = Math.hypot(fx0 - home.x, fz0 - home.z) || 1;
+        gx = home.x + ((fx0 - home.x) / d) * 0.7; gz = home.z + ((fz0 - home.z) / d) * 0.7;
+        face = Math.atan2(fx0 - p.x, fz0 - p.z);
+      }
+      const left = padTo(p, gx, gz, dt, PET[p.kind].walk);
+      if (left > 0.08) { want = 1; if (p.zzz && p.zzz.style.display !== 'none') p.zzz.style.display = 'none'; } else {
+        if (face !== null) p.facing += angleDelta(p.facing, face) * Math.min(1, dt * 5);
+        if (act.act === 'nap' && motion !== 'still') {
+          p.asleep = true;
+          lieDown(p);
+          if (clock < (p.lieEnd || 0)) want = 1;
+          placeZzz(p);
+        } else {
+          if (p.asleep || p.lying) wake(p);
+          if (p.zzz && p.zzz.style.display !== 'none') p.zzz.style.display = 'none';
+          playPet(p, act.act === 'mat' && (act.seg & 1) ? 'Idle2' : 'Idle', 1);
+          wag = act.act === 'greet' ? 1 : act.act === 'mat' && ((clock + (hash32(p.pid) % 7)) % 6) < 2.2 ? 0.45 : 0;
+          if (motion !== 'still') want = Math.max(want, 1);
+        }
+      }
+      if (act.act === 'greet' && p.greetSeg !== 'greet' && motion === 'full') { p.hopT = 0.45; want = 2; }
+      p.greetSeg = act.act;
+    }
+    p.wagGoal = wag;
+    p.root.position.set(p.x, Math.hypot(home.x - p.x, home.z - p.z) < 0.3 ? home.y || 0 : 0, p.z);
+    p.root.rotation.y = p.facing;
+    p.root.visible = true;
+    let bound = 0;
+    if (p.hopT > 0) { p.hopT = Math.max(0, p.hopT - dt); bound = Math.sin((1 - p.hopT / 0.45) * Math.PI) * 0.22; want = 2; }
+    p.holder.position.y = bound;
+    const kk = PET[p.kind].scale;
+    if (p.lying && !p.actions.Lie) { p.holder.scale.set(kk * 1.08, kk * 0.7, kk * 1.02); if (p.actions.Idle) p.actions.Idle.timeScale = 0; }
+    const mixed = Boolean(p.mixer && (want || clock < (p.lieEnd || 0) + 0.1));
+    if (mixed) p.mixer.update(motion === 'still' ? 0 : dt);
+    if (wagTail(p, dt, mixed)) want = Math.max(want, 1);
+    PET_PICKS.set(p.pid, { x: p.x, z: p.z, r: p.r, h: p.h, asleep: Boolean(p.asleep) });
+    return want;
+  }
+  const wagQ = new THREE.Quaternion();
+  const wagV = new THREE.Vector3();
+  const wagW = new THREE.Quaternion();
+  /** The tail wag over the clip pose (wave 5): `p.wagGoal` 0..1 eases in and out; the three tail bones swing side to
+   *  side about the world's up, more toward the tip. `mixed` = the mixer posed the bones this frame (keep that pose). */
+  function wagTail(p, dt, mixed) {
+    if (!p.tail || !p.tail.length) return false;
+    const goal = motion === 'still' ? 0 : p.wagGoal || 0;
+    p.wagK = (p.wagK || 0) + (goal - (p.wagK || 0)) * Math.min(1, dt * 4);
+    if (mixed || !p.tailKept) { p.tail.forEach((b, i) => p.tailBase[i].copy(b.quaternion)); p.tailKept = true; }
+    if (p.wagK < 0.01 && !p.tailBent) return false;
+    p.root.updateMatrixWorld(true);
+    const sw = Math.sin(clock * (10 + 6 * p.wagK)) * 0.55 * p.wagK;
+    p.tail.forEach((b, i) => {
+      b.quaternion.copy(p.tailBase[i]);
+      b.updateWorldMatrix(true, false);
+      b.getWorldQuaternion(wagW);
+      wagV.set(0, 1, 0).applyQuaternion(wagW.invert());
+      b.quaternion.multiply(wagQ.setFromAxisAngle(wagV, sw * (0.6 + i * 0.35)));
+    });
+    p.tailBent = p.wagK >= 0.01;
+    return p.tailBent;
+  }
+
   /** petAdopted / petPetted / petFed / petFind (pid = the owner, by = who did it): the pet reacts where it is. */
   function petEvent(ev) {
     const p = pets.get(ev.pid);
+    // wave 5: told to stay it gives a little hop and trots home; called, it jumps up and runs to its farmer
+    if (ev.e === 'petStay') {
+      if (p && motion !== 'still') { if (p.lying) wake(p); p.wakeUntil = clock + 4; if (ev.stay === false) petOnce(p, p.kind === 'dog' ? 'Jump' : null); else p.hopT = 0.45; }
+      if (p && ev.stay === false) p.callUntil = clock + 12;
+      return;
+    }
     // a sleeping pet that is petted or fed wakes for a little while (then goes back to bed)
     if (p && (p.asleep || p.lying) && (ev.e === 'petPetted' || ev.e === 'petFed' || ev.e === 'petFind' || ev.e === 'petTreasure')) { p.wakeUntil = clock + 12; wake(p); }
     const pos = p && p.placed ? new THREE.Vector3(p.x, 0, p.z) : null;
@@ -1250,7 +1402,7 @@ export function createAvatarsView(layers, overlay, toScreen) {
       if (fx && o && o.pose) fx.play({ e: 'joined', pid: ev.pid }, new THREE.Vector3(o.root.position.x, 0, o.root.position.z));
     }
     if (!p) return;
-    if (ev.e === 'petPetted') petOnce(p, p.kind === 'dog' ? 'Jump' : null);
+    if (ev.e === 'petPetted') { petOnce(p, p.kind === 'dog' ? 'Jump' : null); p.wagUntil = clock + 3; }
     else if (ev.e === 'petFed') petOnce(p, p.kind === 'dog' ? 'Eat' : null);
     else if (ev.e === 'petFind' || ev.e === 'petTreasure') {
       petOnce(p, p.kind === 'dog' ? 'Eat' : null);

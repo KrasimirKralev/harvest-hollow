@@ -5,7 +5,8 @@ import assert from 'node:assert/strict';
 import { installDom, textOf } from './ui-qa2-dom.js';
 import { farmAt } from './helpers/rules.js';
 import { T0 } from './helpers.js';
-import { CONTENT, live } from '../shared/content/index.js';
+import { live, isLive } from '../shared/content/index.js';
+import { landUnits, unitOfPiece } from '../public/js/ui/panels/w5-rules.js';
 import { resetGrid } from '../shared/rules/grid-cache.js';
 import { landCards } from '../public/js/ui/panels/model.js';
 import { landCard, proofLine } from '../public/js/ui/panels/market.js';
@@ -32,22 +33,25 @@ test('UI-01: every live expansion proof task has a line, alternatives joined by 
   assert.equal(proofLine({ verb: 'make', ref: 'goat_cheese', qty: 3 }), 'Make 3 Goat Cheese');
 });
 
-test('UI-01: the Land tab renders every live expansion card (owned or not) without throwing', () => {
+test('UI-01: the Land tab renders every live land card (owned or not) without throwing', () => {
+  // wave 5: land is sold by parcel (content's CONTENT.parcels: several old pieces together); farm.expansions lists pieces
+  const units = landUnits().filter((u) => u.k > 0 && isLive(u));
   const fresh = farmAt(25);
   const owned = farmAt(25);
-  owned.farm.expansions = live('expansions').map((e) => e.id);
+  owned.farm.expansions = ['home', ...units.flatMap((u) => u.pieces)];
   resetGrid(owned);
-  // the parcel before Riverbank owned: Riverbank (array proof) is the next card, its proof card open
+  // the parcel before the Riverbank's owned: its parcel (array proof) is the next card, its proof card open
   const river = farmAt(25);
-  const riverbank = CONTENT.expansions.get('riverbank');
-  river.farm.expansions = live('expansions').filter((e) => e.k > 0 && e.k < riverbank.k).map((e) => e.id);
-  river.farm.proofs = { riverbank: { at: T0, n: {} } };
+  const rbId = unitOfPiece('riverbank');
+  const rbUnit = units.find((u) => u.id === rbId);
+  river.farm.expansions = ['home', ...units.filter((u) => u.k < rbUnit.k).flatMap((u) => u.pieces)];
+  river.farm.proofs = { [rbId]: { at: T0, n: {} } };
   resetGrid(river);
   for (const state of [fresh, owned, river]) {
     const ctx = panelCtx(state);
     const kit = createKit(ctx);
     const cards = landCards(state, { now: T0, pid: 'p1' });
-    assert.equal(cards.length, live('expansions').filter((e) => e.k > 0).length);
+    assert.equal(cards.length, units.length);
     for (const c of cards) {
       const el = landCard(c, ctx, kit, false);
       const text = textOf(el);
@@ -55,7 +59,7 @@ test('UI-01: the Land tab renders every live expansion card (owned or not) witho
       assert.equal(Boolean(el.querySelector('ul.pn-reqs')), !c.owned, `${c.id}: a checklist only while not ours`);
     }
   }
-  const rb = landCards(river, { now: T0, pid: 'p1' }).find((c) => c.id === 'riverbank');
+  const rb = landCards(river, { now: T0, pid: 'p1' }).find((c) => c.id === rbId);
   assert.ok(rb && rb.isNext && !rb.owned);
   assert.match(textOf(landCard(rb, panelCtx(river), createKit(panelCtx(river)))), /Make 3 Cotton Totes or Wool Pillows/);
 });

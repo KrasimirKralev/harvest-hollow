@@ -142,7 +142,7 @@ export default {
   'market.intro.animals': 'Each species lives in its own home. Babies grow up on their own; adults produce at once.',
   'market.intro.buildings': 'Workshops turn crops into goods worth more. Each one is placed anywhere on your land.',
   'market.intro.decor': 'Decor makes the farm yours. Some pieces help too: scarecrows, bird baths and the Sunset Bench.',
-  'market.intro.land': 'Each expansion adds six plots to the cap and a new corner to explore.',
+  'market.intro.land': 'Each parcel adds plots to the cap and a new corner to explore: the bigger the parcel, the more plots.',
   'market.intro.tools': 'Bigger brushes do more per stroke. Feed from the store costs far more than the Feed Mill makes it for.',
   'market.intro.acorn': 'Acorns are rare: earned from levels, ribbons and golden orders. Spend them on something special.',
   'market.wishlink': '♥ Wishlist',
@@ -204,6 +204,8 @@ export default {
   'market.land.need': '{q:float}',
   'market.land.counting': 'The task counts everything you did since this card was first opened.',
   'market.land.startsCounting': 'The task starts counting the moment one of you opens this card.',
+  'market.land.facts': 'Plot cap +{n}',
+  'market.land.factsPieces': 'Plot cap +{n} · brings {list}',
   'market.land.buy': 'Buy the land',
   // proofLine(): Bulgarian only (English keeps its own pluralOf() line)
   'market.proof.harvest': 'Harvest {what}',

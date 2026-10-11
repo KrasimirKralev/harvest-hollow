@@ -28,7 +28,9 @@ export function give(s, item, n) {
 
 /** Every unlocked expansion's land, so big footprints always find a spot (setup only). */
 export function allLand(s) {
-  s.farm.expansions = [...CONTENT.expansions.values()].filter((e) => e.m === 'M1a').map((e) => e.id);
+  // the M1a land of the original table: pieces k 0-4 (wave 5 moved the pieces' milestones to their parcels', so the
+  // old `m === 'M1a'` filter would hand the tests other land; `k` keeps the old purchase order)
+  s.farm.expansions = [...CONTENT.expansions.values()].filter((e) => e.k <= 4).sort((a, b) => a.k - b.k).map((e) => e.id);
   resetGrid(s);
 }
 

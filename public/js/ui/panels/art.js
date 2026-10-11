@@ -2,8 +2,9 @@
 // shade, 2.5 ink outlines, light from the upper left). No external images: NPC portraits, letter-card scenes,
 // ribbon rosettes, chests, the land map. Everything is built with createElementNS from data (content), never
 // from strings that came from players.
-import { CONTENT, isLive } from '../../../../shared/content/index.js';
+import { isLive } from '../../../../shared/content/index.js';
 import { t, lang, fmtNum, name as cname } from '../../i18n/index.js';
+import { landUnits, unitOwned, landFamily, outlinePath, mainRect, rectsPath } from './w5-rules.js';
 
 const NS = 'http://www.w3.org/2000/svg';
 let clipSeq = 0;
@@ -52,21 +53,30 @@ export function landMap(state, cards, { selected = null, onPick = null } = {}) {
   svg.append(s('path', { d: `M${MAP.x0} ${MAP.z0 + MAP.size + 3.4} q3 -0.6 6 0 M${MAP.x0 + 20} ${MAP.z0 + MAP.size + 3.6} q3 -0.6 6 0 M${MAP.x0 + 38} ${MAP.z0 + MAP.size + 3.3} q3 -0.6 6 0`,
     fill: 'none', stroke: '#fff', 'stroke-opacity': 0.7, 'stroke-width': 0.35, 'stroke-linecap': 'round' }));
   const byId = new Map(cards.map((c) => [c.id, c]));
-  const owned = new Set(state.farm.expansions);
   const layer = s('g', {});
   const labels = s('g', {});
-  for (const e of CONTENT.expansions.values()) {
+  // wave 5: one parcel (several old pieces bought together) is one field: its rects join and one outline goes round
+  for (const e of landUnits()) {
     const card = byId.get(e.id);
-    const mine = owned.has(e.id);
+    const mine = unitOwned(state, e);
     const forSale = card && card.isNext && !mine;
     const liveOne = isLive(e);
-    const name = cname(e.id, { family: 'expansions' });
-    for (const [x, z, w, d] of e.rects) {
+    const name = cname(e.id, { family: landFamily() });
+    const multi = e.rects.length > 1;
+    const parts = multi ? [null] : e.rects;
+    for (const rect of parts) {
+      const [x, z, w, d] = rect ?? [0, 0, 0, 0];
       const fill = mine ? 'url(#pn-mow)' : forSale ? 'url(#pn-sale)' : 'url(#pn-wild)';
-      const r = s('rect', { x: x + 0.15, y: z + 0.15, width: w - 0.3, height: d - 0.3, rx: 1.1, fill,
-        stroke: forSale ? '#E39A1E' : mine ? '#3F8F2A' : 'rgba(62,38,18,.35)', 'stroke-width': forSale ? 0.55 : 0.3,
+      const look = { fill, stroke: forSale ? '#E39A1E' : mine ? '#3F8F2A' : 'rgba(62,38,18,.35)', 'stroke-width': forSale ? 0.55 : 0.3,
         'stroke-dasharray': forSale ? '1.2 0.7' : null, class: `pn-parcel${mine ? ' mine' : ''}${forSale ? ' sale' : ''}${selected === e.id ? ' sel' : ''}${liveOne ? '' : ' later'}`,
-        'data-exp': e.id });
+        'data-exp': e.id };
+      // wave 5: a parcel of several old pieces is ONE shape: its fill is one path (no seam where its pieces meet) and its
+      // edge the outline round the whole, never the lines between its pieces
+      const r = multi
+        ? s('g', { class: look.class, 'data-exp': e.id },
+          s('path', { d: rectsPath(e.rects), fill, stroke: 'none' }),
+          s('path', { d: outlinePath(e.rects), fill: 'none', stroke: look.stroke, 'stroke-width': look['stroke-width'], 'stroke-dasharray': look['stroke-dasharray'], 'stroke-linecap': 'square', class: 'pn-parcel-edge' }))
+        : s('rect', { x: x + 0.15, y: z + 0.15, width: w - 0.3, height: d - 0.3, rx: 1.1, ...look });
       if (!mine && !liveOne) r.setAttribute('opacity', '0.75');
       if (onPick && card && liveOne) {
         r.setAttribute('tabindex', '0');
@@ -77,7 +87,7 @@ export function landMap(state, cards, { selected = null, onPick = null } = {}) {
       }
       layer.append(r);
     }
-    const [x, z, w, d] = e.rects[0];
+    const [x, z, w, d] = mainRect(e);
     const cx = x + w / 2;
     const cz = z + d / 2;
     if (e.k === 0) {

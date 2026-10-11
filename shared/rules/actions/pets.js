@@ -12,11 +12,14 @@
 //   feedPet {owner}         one treat today for `owner`'s pet (RESERVED below the treat's Keep N)
 //   petPet {owner}          pet `owner`'s pet (once per player per pet per day)
 //   _petFind {}             system: the finds of every pet fed on an earlier day
+//   petStay {stay, owner?}  wave 5 (owner wish L2-3): "Stay home" / "Come with me" for `owner`'s pet (default mine;
+//                           either player may tell either pet). Staying, it goes to its bed (the first Dog House /
+//                           Cat Basket by id, else the farmhouse porch: the same bed it sleeps in) and stays there
 //
 // State: `players[pid].pet = null | { kind, name, at, fed: day | null, pets: { day, by: [pids] } | null,
-// treasure: day | null, breed? }` (fed = the day of its last treat whose find is still to come; breed absent = the
-// kind's first breed).
-import { PETS, BOOSTS, isLive, levelFromXp, liveAt } from '../../content/index.js';
+// treasure: day | null, breed?, stay? }` (fed = the day of its last treat whose find is still to come; breed absent =
+// the kind's first breed; stay: true while it stays home, absent = it follows its owner).
+import { PETS, BOOSTS, isLive, levelFromXp, liveAt, defOf } from '../../content/index.js';
 import { ERR, cleanName } from '../../net/protocol.js';
 import { V, confirmed } from '../schema.js';
 import { sortedKeys } from '../order.js';
@@ -84,6 +87,37 @@ export const petBreed = {
     if (BREED_CHANGE.acorns > 0) spendAcorns(tx, ctx, BREED_CHANGE.acorns, 'petBreed');
     tx.set(['players', ctx.pid, 'pet', 'breed'], a.breed);
     tx.emit({ e: 'petBreed', pid: ctx.pid, kind: pet.kind, breed: a.breed, by: ctx.pid });
+  },
+};
+
+/**
+ * The object id of the bed `pid`'s pet goes to (wave 5): the first object by id whose def is a home of its kind
+ * (`effect.petHome`, the Dog House / Cat Basket the renderer puts it to sleep in), or null (then the farmhouse porch).
+ */
+export function petHomeId(state, pid) {
+  const pet = petOf(state, pid);
+  if (!pet) return null;
+  const objs = state.farm.objects;
+  for (const id of sortedKeys(objs)) if (defOf(objs[id].def)?.effect?.petHome === pet.kind) return id;
+  return null;
+}
+
+/** True when `pid`'s pet stays home (wave 5): the renderer walks it to its bed instead of following its owner. */
+export const petStays = (state, pid) => petOf(state, pid)?.stay === true;
+
+export const petStay = {
+  schema: { stay: V.bool, owner: V.opt(V.pid) },
+  check(state, a, ctx) {
+    const pet = petOf(state, a.owner ?? ctx.pid);
+    if (!pet) return ERR.NOT_FOUND;
+    return (pet.stay === true) === a.stay ? ERR.ALREADY_DONE : null;
+  },
+  apply(tx, a, ctx) {
+    const owner = a.owner ?? ctx.pid;
+    const pet = petOf(tx.state, owner);
+    if (a.stay) tx.set(['players', owner, 'pet', 'stay'], true);
+    else tx.del(['players', owner, 'pet', 'stay']);
+    tx.emit({ e: 'petStay', pid: owner, kind: pet.kind, stay: a.stay, home: petHomeId(tx.state, owner), by: ctx.pid });
   },
 };
 

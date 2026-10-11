@@ -31,7 +31,7 @@ import { CONTENT } from '../../../shared/content/index.js';
 import { TILE_M } from '../../../shared/content/config.js';
 import { heightAt, WATER_Y, POND, POND_DOCK, TERRACES, terraceRisers, SUMMIT, RIDING, PLACES } from './ground.js';
 import { box, cyl, cone, ball, gable, flag, ring, merge, modelKey, geoPart, lin } from './world-kit.js';
-import { featureLive } from './world-state.js';
+import { featureLive, ownedLand } from './world-state.js';
 import { willowGeometry } from './river.js';
 import { models } from './models.js';
 
@@ -595,7 +595,8 @@ export function createLandFeatures({ scenery, mid = null, glows = null, fx = nul
   }
 
   function apply(state, now) {
-    const exp = new Set(Array.isArray(state?.farm?.expansions) ? state.farm.expansions : []);
+    // wave 5: an old parcel's feature shows once all of its land is owned, whichever (big) row owns it
+    const exp = ownedLand(state);
     const next = new Set(exp);
     for (const p of restoreDone(state, now)) next.add(`restore:${p}`);
     owners = next;

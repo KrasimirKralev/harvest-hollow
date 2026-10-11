@@ -22,7 +22,7 @@ import { t, lang, list, N, name as cname } from '../../i18n/index.js';
 import { tParts } from './kit.js';
 
 const NOUN = { chicken: 'chick', cow: 'calf', sheep: 'lamb', pig: 'piglet', duck: 'duckling', goat: 'kid', horse: 'foal',
-  alpaca: 'cria' };
+  alpaca: 'cria', rabbit: 'kit', bison: 'calf', quail: 'chick' };
 /** What a baby of a species is called ("a calf"); 'baby' for anything else (Bulgarian: "теленце", "малко"). */
 export const babyNoun = (species) => (lang() === 'en' ? NOUN[species] ?? 'baby'
   : t(`home.nursery.noun.${Object.hasOwn(NOUN, species) ? species : 'other'}`));

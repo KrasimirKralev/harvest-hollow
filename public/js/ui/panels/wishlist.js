@@ -2,7 +2,8 @@
 // the wish buys itself (into the build tray) the moment it is funded, on both screens. Your own coins come back at
 // once; the partner's coins need their OK (or 12 hours without an answer). Add wishes from the Market (♡).
 // Also: the expansion card (args { id }) opened from a "For sale" signpost.
-import { defOf, expansionOf, SAFETY } from '../../../../shared/content/index.js';
+import { unitOfPiece, landUnit, landFamily } from './w5-rules.js';
+import { defOf, SAFETY } from '../../../../shared/content/index.js';
 import { h, icon, svgIcon, fmt, fmtDuration, createKit, bar, empty, who } from './kit.js';
 import { reason } from './core.js';
 import { levelOf, storeCards, priceOf } from './model.js';
@@ -71,7 +72,8 @@ export const wishlistPanel = {
 };
 
 export const expansionPanel = {
-  title: (args) => (expansionOf(args.id) ? cname(args.id, { family: 'expansions' }) : t('market.land.forSaleTitle')),
+  // wave 5: a for-sale sign on an old small piece opens the parcel that sells it
+  title: (args) => { const id = unitOfPiece(args.id); return landUnit(id) ? cname(id, { family: landFamily() }) : t('market.land.forSaleTitle'); },
   size: 'wide',
   topics: ['expansions', 'proofs', 'wallet', 'inventory', 'xp', 'objects'],
   mount(body, ctx) {
@@ -80,7 +82,8 @@ export const expansionPanel = {
     function render() {
       const st = ctx.store.state;
       const cards = storeCards(st, 'land', { now: ctx.now(), pid: ctx.store.pid });
-      const c = cards.find((x) => x.id === ctx.args.id) ?? cards.find((x) => x.isNext && !x.owned) ?? cards[0];
+      const want = unitOfPiece(ctx.args.id);
+      const c = cards.find((x) => x.id === want) ?? cards.find((x) => x.isNext && !x.owned) ?? cards[0];
       body.replaceChildren();
       if (!c) { body.append(empty(t('market.land.noneForSale'), 'hammer')); return; }
       ctx.setTitle(c.name);

@@ -14,13 +14,12 @@ import { CONTENT, isLive, levelRow, defOf } from '../../../../shared/content/ind
 import * as decorA from '../../../../shared/rules/actions/decor.js';
 import { projectDone, projectPlotCap } from '../../../../shared/rules/economy.js';
 import { landCards, levelOf, placedOf } from './model.js';
+import { landUnits, unitOwned, landFamily, unitFeature, parcelPlots, parcelArea } from './w5-rules.js';
 import { proofLine, openProof } from './market.js';
 import { I } from './intents.js';
 import { h, fmt, fmtShort, createKit, price, pill, chip, svgIcon, icon, hintable, fill, bar } from './kit.js';
 import { atlasSvg } from './home-art.js';
-import { t, N, Q, ctext, name as cname } from '../../i18n/index.js';
-
-const PLOTS_PER_PARCEL = 6;
+import { t, N, Q, ctext, list, name as cname } from '../../i18n/index.js';
 
 /** Words for a parcel's permanent effect (content `feature`), or null. */
 export function featureText(feature) {
@@ -49,27 +48,32 @@ export function atlasView(state, env = {}) {
   const level = levelOf(state);
   const cards = landCards(state, env);
   const byId = new Map(cards.map((c) => [c.id, c]));
-  const ownedSet = new Set(state.farm.expansions);
-  const all = [...CONTENT.expansions.values()].sort((a, b) => a.k - b.k);
+  // wave 5: the land is bought by parcel (content's CONTENT.parcels: several old pieces together), else by expansion row
+  const all = landUnits();
+  const fam = landFamily();
   const parcels = all.map((e) => {
     const card = byId.get(e.id) ?? null;
     const live = isLive(e);
-    const owned = ownedSet.has(e.id);
+    const owned = unitOwned(state, e);
     let status;
     if (e.k === 0) status = 'home';
     else if (owned) status = 'ours';
     else if (card && card.isNext && level >= e.unlock) status = 'sale';
     else if (card && card.isNext) status = 'soon';
     else status = 'later';
-    const name = cname(e.id, { family: 'expansions' });
+    const name = cname(e.id, { family: fam });
     const label = status === 'home' ? t('farm.map.homestead') : status === 'sale' ? fmtShort(e.cost)
       : status === 'ours' ? name : t('common.levelShort', { n: e.unlock });
     const word = status === 'home' ? t('farm.map.word.home') : status === 'ours' ? t('farm.map.word.ours')
       : status === 'sale' ? t('farm.map.word.sale', { n: e.cost }) : status === 'soon' ? t('farm.map.word.soon', { n: e.unlock })
         : live ? t('farm.map.word.later', { n: e.unlock }) : t('farm.map.word.laterSoon', { n: e.unlock });
+    const pieces = e.pieces.length > 1 || e.pieces[0] !== e.id ? e.pieces : null;
     return { id: e.id, k: e.k, name, unlock: e.unlock, rects: e.rects, status, live, owned: owned || e.k === 0, card,
-      cost: e.cost, planks: e.planks, crates: e.crates, reveals: ctext('expansions', e.id, 'reveals', e.reveals), proofText: e.proofText ? ctext('expansions', e.id, 'proofText', e.proofText) : null,
-      feature: featureText(e.feature), label, aria: `${e.k ? `${e.k}. ` : ''}${name}: ${word}` };
+      cost: e.cost, planks: e.planks, crates: e.crates, reveals: ctext(fam, e.id, 'reveals', e.reveals ?? ''),
+      proofText: e.proofText ? ctext(fam, e.id, 'proofText', e.proofText) : null,
+      feature: featureText(unitFeature(e)), label, aria: `${e.k ? `${e.k}. ` : ''}${name}: ${word}`,
+      plots: parcelPlots(e), area: parcelArea(e), pieces,
+      pieceNames: pieces ? pieces.map((id) => cname(id, { family: 'expansions' })) : null };
   });
   const mp = meadowProject();
   if (mp) {
@@ -91,7 +95,7 @@ export function atlasView(state, env = {}) {
   const capRules = plot ? decorA.ownCap(state, plot) : null;
   const base = levelRow(1).plotCap;
   const fromLevels = levelRow(level).plotCap - base;
-  const fromLand = PLOTS_PER_PARCEL * bought;
+  const fromLand = parcels.filter((p) => p.status === 'ours').reduce((n, p) => n + (p.plots ?? 0), 0);
   const fromMeadow = projectPlotCap(state);
   const cap = Number.isFinite(capRules) ? capRules : base + fromLevels + fromLand + fromMeadow;
   return {
@@ -139,7 +143,10 @@ function parcelCard(ctx, kit, p, v) {
   const facts = h('ul.hm-facts',
     p.reveals ? h('li', svgIcon('sprout', 20), h('span', h('b', t('farm.map.whatThere')), p.reveals)) : null,
     p.feature ? h('li', svgIcon('star', 20), h('span', h('b', t('farm.map.forGood')), p.feature)) : null,
-    p.k ? h('li', icon('plot', { size: 20, alt: '' }), h('span', h('b', t('farm.map.plotCap')), t('farm.map.plusPlots', { n: PLOTS_PER_PARCEL }))) : null);
+    p.k ? h('li', icon('plot', { size: 20, alt: '' }), h('span', h('b', t('farm.map.plotCap')), t('farm.map.plusPlots', { n: p.plots }))) : null,
+    // wave 5: a parcel made of the old small pieces names them, and how much room it is
+    p.k && p.area ? h('li', svgIcon('hammer', 20), h('span', h('b', t('farm.map.room')),
+      p.pieceNames ? t('farm.map.roomPieces', { n: p.area, list: list(p.pieceNames) }) : t('farm.map.roomTiles', { n: p.area }))) : null);
   let body = null;
   if (p.status === 'home') {
     body = h('p.hm-note', t('farm.map.homeNote', { placed: v.plots.placed, cap: v.plots.cap }));

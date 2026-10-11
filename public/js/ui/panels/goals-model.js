@@ -1,6 +1,7 @@
 // View models of the Journal (ui-panels lane): story letters, ribbons, mastery, "Together we..." stats, the
 // treasury ledger, the activity feed and the week (Daily Gift, Farm Weeks, Almanac, Together task, Couple
 // Challenge). PURE (state, pid, now) -> plain data; every count comes from the rules' own helpers or the state.
+import { landRef } from './w5-rules.js';
 import {
   live, itemOf, defOf, cropOf, recipeOf, npcOf, questOf, ribbonOf, levelFromXp, personalLevelFromXp, titleFor,
   masteryStars, RIBBON_REWARDS, RIBBON_WALL, DAILY_GIFT, FARM_WEEKS, ALMANAC, COUPLE_CHALLENGE, MASTERY,
@@ -358,7 +359,7 @@ export function feedText(row) {
       const key = `feed.j.buy${row.c && row.a ? '.ca' : row.c ? '.c' : row.a ? '.a' : ''}`;
       return L(key, { _a: an(en), b: nm(row.def, en), ...(row.c ? { c: row.c } : {}), ...(row.a ? { n: row.a } : {}) });
     }
-    case 'expand': return L('feed.j.expand', { land: nm(row.def, nameOf(row.def), 'expansions') });
+    case 'expand': return L('feed.j.expand', { land: nm(row.def, landRef(row.def)?.en ?? nameOf(row.def), landRef(row.def)?.family ?? 'expansions') });
     case 'ribbon': {
       const rb = ribbonOf(row.id);
       return L(`feed.j.ribbon.${[1, 2, 3].includes(row.t) ? row.t : 'x'}`, { r: rb ? ribbonText(rb, 'name') : row.id });

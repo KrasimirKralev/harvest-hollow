@@ -12,4 +12,6 @@ export const FEEDS = [
     classes: [{ cls: 'root', qty: 2 }, { cls: 'veg', qty: 1 }], sell: 4, xp: 2, storePrice: 10 },
   { id: 'pig_slop', name: 'Pig Slop', m: 'M1b', building: 'feed_mill', unlock: 17, ms: min(10), out: 6,
     classes: [{ cls: 'produce', qty: 2 }], sell: 3, xp: 2, storePrice: 8 },
+  { id: 'prairie_hay', name: 'Prairie Hay', m: 'M1b', building: 'feed_mill', unlock: 17, ms: min(10), out: 6,
+    classes: [{ cls: 'grain', qty: 3 }, { cls: 'veg', qty: 1 }], sell: 4, xp: 2, storePrice: 10 },
 ];

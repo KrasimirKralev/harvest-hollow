@@ -50,9 +50,15 @@ test('R1: one formula prices everything (values, seeds, XP, prices recomputed fr
     assert.equal(q.coins, coins, `${q.id}.coins`);
     assert.equal(q.xp, nice(coins / C.XP_DIV), `${q.id}.xp`);
   }
-  for (const e of CONTENT.expansions.values()) {
-    if (e.k > 0) assert.equal(e.cost, nice(E(e.unlock) * (0.6 + 0.2 * e.k)), `${e.id}.cost`);
+  // wave 5: land is bought by parcel; a parcel costs E(level) x the sum over its pieces of (0.6 + 0.2 slot), slot =
+  // the piece's place in the purchase order; a piece alone costs nothing (it is never bought alone)
+  let slot = 0;
+  for (const p of [...CONTENT.parcels.values()].sort((a, b) => a.k - b.k)) {
+    if (p.k === 0) continue;
+    const hours = p.pieces.reduce((h) => h + 0.6 + 0.2 * ++slot, 0);
+    assert.equal(p.cost, nice(E(p.unlock) * hours), `${p.id}.cost`);
   }
+  for (const e of CONTENT.expansions.values()) assert.equal(e.cost, 0, `${e.id}: a piece is never sold alone`);
   for (const b of CONTENT.barn) assert.equal(b.cost, nice(E(b.unlock) * 0.3 * 1.15 ** (b.n - 1)), `barn ${b.n}`);
   for (const b of CONTENT.buildings.values()) {
     b.slotCosts.forEach((c, k) => assert.equal(c, nice(E(b.unlock) * 0.25 * 1.6 ** k), `${b.id} slot ${k + 1}`));

@@ -68,6 +68,37 @@ default; numbers, dates and durations follow the language. Bulgarian wording fol
 (`docs/agent-briefs/i18n-glossary-bg.md`) and its owner decisions: no gendered words about a player (titles are neutral
 noun phrases), the County Fair is **Големият панаир**, the River Barge **Шлепът**, XP is **опит** everywhere. The
 rules, the economy and the save are untouched.
+**2026-10-06, the owners' wish list (wave 5)** (`docs/agent-briefs/wave5-overview.md`; content
+`shared/content/wishes5.js`, `parcels.js`; rules `actions/pen.js`, `land.js`): **babies in the pen** (chosen over the
+Breeding Barn, which keeps the golden coats at L28): from L8 two grown animals of one species in one home are paired
+with ❤ on the home card for one of the species' baby food (a Baby Bottle; Chicken Feed for chicks, ducklings and quail
+chicks; Rabbit Greens for kits); after the species' baby time a baby arrives in that home (a full home grows a room step
+with it, its price folded in as in wave 4b; one pairing per home at a time; bees excluded; `PEN_BABIES`). **Bison**
+(L17): the Bison Range (5 x 4, grows to 18 head), Prairie Hay from the Feed Mill, Bison Wool spun to Bison Yarn for a
+Warm Bison Blanket, or felted into Felt Slippers; Bison Down the blue-ribbon good. **Quail** (L15): the Quail Coop (2 x 2),
+Chicken Feed, two Quail Eggs every 40 minutes for Quail Egg Canapés and Mini Quiches; Speckled Egg the blue-ribbon good.
+**Spices** (owners' Bulgarian kitchen): Paprika (червен пипер, L16), Savory (чубрица, L17), Chili Pepper (L18), Cumin
+(L19) and the Cinnamon Tree (L19); the **Spice Mill** (L16, 2 x 2) grinds Ground Paprika and Ground Cinnamon and mixes
+**Colourful Salt** (шарена сол: savory + ground paprika) and Grill Spice; the existing kitchens use them in Lyutenitsa
+(Preserves), Bread with Colourful Salt and Village Potatoes (Farm Kitchen), Cinnamon Rolls (Bakery) and Spiced Apple
+Juice (Juice Press). **The dog stays home** (a "Stay home" / "Come with me" command on the dog's card and in the pet
+panel, remembered, seen by both); **frogs** by the water at dusk and after rain, and **hungry hens wait in the coop**
+(both cosmetic). **Land: fewer, bigger expansions**: the 15 pieces of §2.2 keep their ids, rectangles, debris and
+features (a save lists the pieces it owns) and are sold as 7 parcels of two neighbouring pieces (the hilltop row three):
+Creek Hill (L5: Creekside Meadow + Cow Hill), Orchard Lane (L9: Old Orchard + Fairground Lane), Sunflower Glade (L13:
+Sunflower Rise + Bee Glade), Riverside Woods (L17: Riverbank + Pig Woods), Willow Meadow (L21: Willow Pond + Stable
+Paddock), Rocky Grove (L27: Goat Rocks + Walnut Grove) and Sunset Ridge (L33: Olive Terrace + Maple Ridge + Sunset Hill;
+the gazebo's Golden Hour bonus now arrives at L33). A parcel costs the same hours of income as its pieces did,
+bought at the parcel's level (E(L) x the sum of 0.6 + 0.2 k over its pieces: 1.8 to 10.2 hours, the last one a
+late-game sink like a Town Project), with the Planks and Crates of its last piece; its proof task joins its pieces' tasks
+that exist by its level. The plot cap stays +6 per piece (+12 a parcel). **Migration**: a farm that owns any piece of a
+parcel owns the whole parcel (in the player's favour; its free objects arrive, never debris), a piece's open land card
+carries over to its parcel's, no coins or land are taken, and nothing placed can leave the land (land only grows); the
+owners' live save (L17: Creekside, Old Orchard, Cow Hill) becomes Creek Hill and Orchard Lane (Fairground Lane added),
+next Sunflower Glade. The new defs and the parcels are kept out of E(L) (`economy-model.mjs` OWNER5; E still assumes the
+old land schedule, which the parcels never fall behind), so no level threshold or price of the live farm moved; Gold
+tiers that mean "every one" follow the families (Rainbow Harvest and Crop Master 25, Orchardist 15, Full Barnyard 12,
+Recipe Box 131); the Farmhouse pantry tiers (wave 4) are now part of `econ-sim` (23/23 PASS).
 
 Harvest Hollow is a FarmVille-2-style co-op farm for two people (up to four) who share one farm and play it together in
 real time on their home LAN. This document is the single source of truth for mechanics, numbers, UX, art and

@@ -249,7 +249,7 @@ function voice(name, { rate = 1, gain = 1, pan = 0, at = 0, dest, release = 0, d
 const midiRate = (inst, midi) => 2 ** ((midi - (BASE[inst] ?? 60)) / 12);
 /** Distant calls of the species on the farm (ambience); bees hum softly. */
 export const CALLS = Object.freeze({ chicken: 'cluck', cow: 'moo', sheep: 'baa', pig: 'oink', duck: 'quack', goat: 'bleat',
-  horse: 'neigh', bee: 'buzz', alpaca: 'hum', rabbit: 'bunny' });
+  horse: 'neigh', bee: 'buzz', alpaca: 'hum', rabbit: 'bunny', quail: 'cluck', bison: 'moo' });
 /** Indoors (the farmhouse interior, M2) the outdoor ambience is heard through the walls at this share. */
 export const INDOOR_K = 0.28;
 /** Rain this hard (0..1) counts as rain for the music and the birds (wave 4: the level follows the weather). */

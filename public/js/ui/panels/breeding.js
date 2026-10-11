@@ -29,7 +29,7 @@ export const coatName = (id) => {
   return s ? s[0].toLocaleUpperCase('bg') + s.slice(1) : s;
 };
 /** The baby noun with its article ("теленцето"), for Bulgarian lines about one baby. */
-const nounDef = (sp) => t(`home.nursery.nounDef.${['chicken', 'cow', 'sheep', 'pig', 'duck', 'goat', 'horse', 'alpaca'].includes(sp) ? sp : 'other'}`);
+const nounDef = (sp) => t(`home.nursery.nounDef.${['chicken', 'cow', 'sheep', 'pig', 'duck', 'goat', 'horse', 'alpaca', 'rabbit', 'bison', 'quail'].includes(sp) ? sp : 'other'}`);
 /** "the 5th calf" (English) / "5-то теленце" (a baby noun is neuter in Bulgarian). */
 // a no-break hyphen keeps "20-то" on one line
 const ord = (n) => (lang() === 'en' ? ordEn(n) : ordinal(n, 'n').replace('-', '\u2011'));

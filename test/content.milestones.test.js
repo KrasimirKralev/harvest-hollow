@@ -16,7 +16,9 @@ const ids = (list) => list.map((d) => d.id);
 const slice = (fam, m) => ids([...CONTENT[fam].values()].filter((d) => upTo(d.m, m)));
 
 // The owners' wave-4 additions (2026-10-04) sit in level order inside their generated tables: Raspberry (L12) is
-// M1a; Roses, Coffee Beans, the Pomegranate Tree, the Rabbit and its Hutch (L13-16) are M1b.
+// M1a; Roses, Coffee Beans, the Pomegranate Tree, the Rabbit and its Hutch (L13-16) are M1b. Wave 5 (2026-10-06): the
+// spices, the Cinnamon Tree, Quail, Bison and the Spice Mill (L15-19) are M1b; the land pieces take their PARCEL's
+// level, so the M1a land is the first two parcels (Creek Hill, Orchard Lane) in parcel order.
 const M1A_CROPS = ['wheat', 'carrot', 'corn', 'strawberry', 'potato', 'tomato', 'sugarcane', 'pumpkin', 'sunflower',
   'cabbage', 'raspberry'];
 const M1A = {
@@ -26,7 +28,7 @@ const M1A = {
   homes: ['coop', 'cow_barn', 'pasture'],
   buildings: ['feed_mill', 'mill', 'bakery', 'sawmill', 'dairy', 'compost_bin', 'kitchen', 'preserves', 'weaver',
     'juice_press'],
-  expansions: ['home', 'creekside', 'old_orchard', 'cow_hill', 'sunflower_rise'],
+  expansions: ['home', 'creekside', 'cow_hill', 'old_orchard', 'fair_lane'],
   quests: ['a1', 'a2', 'a3', 'a4', 'a5', 'a6', 'a7', 'a8', 'a9', 'a10', 'a11', 'b1', 'b2', 'b3', 'c0', 'c1', 'c2', 'c3',
     'd1', 'e1', 'e2', 'e3'],
   collections: [], restoration: [], townProjects: [], decorSets: [],
@@ -35,15 +37,17 @@ const M1A = {
 // Wedding Cake duets, the Fair and the Barge (chains F, G), Restoration 1-3, decor sets, collections (8 sets), Town
 // Projects 1-4, quest chains to L25 (and the Together chain H to L25), every ribbon to L25.
 const M1B = {
-  crops: [...M1A_CROPS, 'oats', 'rose', 'blueberry', 'cotton', 'coffee', 'lavender', 'onion'],
+  crops: [...M1A_CROPS, 'oats', 'rose', 'blueberry', 'cotton', 'coffee', 'paprika', 'savory', 'lavender', 'chili',
+    'cumin', 'onion'],
   // + the Rainbow Tree (wave 4b, an Acorn shop relic of L13): appended after the generated table
-  trees: [...M1A.trees, 'orange_tree', 'pomegranate_tree', 'lemon_tree', 'peach_tree', 'pear_tree', 'plum_tree',
-    'rainbow_tree'],
-  animals: [...M1A.animals, 'bee', 'rabbit', 'pig', 'duck', 'goat', 'horse'],
-  homes: [...M1A.homes, 'beehive', 'hutch', 'pig_pen', 'duck_pond', 'goat_yard', 'stable'],
+  trees: [...M1A.trees, 'orange_tree', 'pomegranate_tree', 'lemon_tree', 'peach_tree', 'pear_tree', 'cinnamon_tree',
+    'plum_tree', 'rainbow_tree'],
+  animals: [...M1A.animals, 'bee', 'rabbit', 'quail', 'pig', 'bison', 'duck', 'goat', 'horse'],
+  homes: [...M1A.homes, 'beehive', 'hutch', 'quail_coop', 'pig_pen', 'bison_range', 'duck_pond', 'goat_yard', 'stable'],
   buildings: ['feed_mill', 'mill', 'bakery', 'sawmill', 'dairy', 'compost_bin', 'kitchen', 'preserves', 'weaver',
-    'sewing', 'pie_oven', 'juice_press', 'chandlery', 'packing'],
-  expansions: [...M1A.expansions, 'bee_glade', 'fair_lane', 'riverbank', 'pig_woods', 'willow_pond', 'goat_rocks'],
+    'sewing', 'pie_oven', 'juice_press', 'chandlery', 'spice_mill', 'packing'],
+  expansions: [...M1A.expansions, 'sunflower_rise', 'bee_glade', 'riverbank', 'pig_woods', 'willow_pond',
+    'stable_paddock'],
   quests: ['a1', 'a2', 'a3', 'a4', 'a5', 'a6', 'a7', 'a8', 'a9', 'a10', 'a11', 'b1', 'b2', 'b3', 'b4', 'b5', 'c0', 'c1',
     'c2', 'c3', 'c4', 'c5', 'c6', 'c7', 'd1', 'd2', 'd3', 'd4', 'd5', 'e1', 'e2', 'e3', 'e4', 'e5', 'e6', 'e7', 'f1',
     'f2', 'f3', 'g1', 'g2', 'g3', 'h1', 'h2', 'h3', 'h4', 'h5'],
@@ -64,7 +68,7 @@ const M2 = {
   animals: [...M1B.animals, 'alpaca'],
   homes: [...M1B.homes, 'paddock'],
   buildings: [...M1B.buildings, 'oil_press', 'sugar_shack', 'chocolatier'],
-  expansions: [...M1B.expansions, 'stable_paddock', 'walnut_grove', 'olive_terrace', 'maple_ridge', 'sunset_hill'],
+  expansions: [...M1B.expansions, 'goat_rocks', 'walnut_grove', 'olive_terrace', 'maple_ridge', 'sunset_hill'],
   quests: all('quests'), collections: all('collections'), restoration: all('restoration'),
   townProjects: all('townProjects'), decorSets: all('decorSets'),
 };

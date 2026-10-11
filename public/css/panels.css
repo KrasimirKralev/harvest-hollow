@@ -252,6 +252,9 @@ body.motion-reduced .pn-card, body.motion-reduced .pn-card:hover { transform: no
 .pn-parcel[role="button"] { cursor: pointer; }
 .pn-parcel[role="button"]:hover, .pn-parcel[role="button"]:focus-visible { filter: brightness(1.08) saturate(1.1); outline: none; }
 .pn-parcel.sel { stroke: var(--sky-700); stroke-width: .8; stroke-dasharray: none; }
+/* wave 5: a parcel of several pieces is a group (one fill path + one outline): the selection rings the outline only */
+g.pn-parcel.sel { stroke: none; }
+g.pn-parcel.sel .pn-parcel-edge { stroke: var(--sky-700); stroke-width: .8; stroke-dasharray: none; }
 .pn-map-label { font: 800 2.1px var(--font-display); text-anchor: middle; fill: #fff; paint-order: stroke;
   stroke: rgba(42, 106, 28, .9); stroke-width: .5px; pointer-events: none; }
 .pn-map-label.home { font-size: 1.9px; }
@@ -1058,3 +1061,49 @@ body.cb-safe .pn-req.ok .pn-req-mark { outline: 2px solid var(--go-900); }
 :lang(bg) .pn-ins .pn-chip.inline .pn-chip-cls { white-space: normal; line-height: 1.1; }
 /* ... and a seed card's "Plant · grows" / "Harvest 3 × 15 · 6 XP" lines wrap between their parts, never inside one */
 :lang(bg) .pn-fact-line { flex-wrap: wrap; row-gap: 0; }
+
+/* ---- wave 5: babies in the pen (panels/pen-pair.js): the ❤ card under a home's header ----------------------------- */
+.pn-pair { display: flex; flex-direction: column; gap: 8px; margin: 0 0 12px; padding: 10px 12px 12px; border-radius: var(--r-m);
+  background: linear-gradient(180deg, #FFF1F3 0, #FFF8EC 100%); box-shadow: inset 0 0 0 2px #F2B8C3, var(--pn-shadow); }
+.pn-pair-quiet { background: var(--pn-card); box-shadow: inset 0 0 0 2px rgba(217, 182, 119, .8); }
+.pn-pair-head { display: flex; align-items: center; gap: 8px; }
+.pn-pair-head b { font: 800 1.05rem/1.1 var(--font-display); color: var(--ink-900); }
+.pn-pair-heart { color: #E8556E; font-size: 1.1rem; line-height: 1; text-shadow: 0 1px 0 rgba(0, 0, 0, .15); }
+.pn-pair-heart.big { font-size: 1.5rem; }
+.pn-pair-text { margin: 0; font: 600 .875rem/1.35 var(--font-ui); color: var(--ink-700); }
+.pn-pair-hint { font: 600 .8125rem/1.2 var(--font-ui); color: var(--ink-500); }
+.pn-pair-teaser { display: flex; align-items: center; gap: 8px; margin: 0 0 12px; padding: 6px 10px; border-radius: var(--r-pill);
+  background: var(--paper-50); font: 600 .8125rem/1.3 var(--font-ui); color: var(--ink-500); }
+/* the adults to pick from: they wrap (never a sideways scroll on a phone); a big flock scrolls inside two rows */
+.pn-pair-chips { display: flex; flex-wrap: wrap; gap: 6px; max-height: 108px; overflow-y: auto; overscroll-behavior: contain; padding: 2px 2px 4px;
+  scrollbar-width: thin; }
+.pn-pair-chip { flex: none; display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 4px 12px 4px 6px; border: 0;
+  border-radius: var(--r-pill); background: #FFFDF6; box-shadow: inset 0 0 0 2px #E2C99A; font: 700 .875rem/1 var(--font-ui);
+  color: var(--ink-900); cursor: pointer; }
+.pn-pair-chip .ic { width: 30px; height: 30px; }
+.pn-pair-chip.on { background: #FFE3E8; box-shadow: inset 0 0 0 2.5px #E8556E, 0 2px 0 #C9425A; }
+.pn-pair-chip i { font-style: normal; color: #E8556E; }
+.pn-pair-chip:focus-visible { outline: 3px solid var(--sky-900); outline-offset: 2px; }
+.pn-pair-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.pn-pair-foot .pn-act:last-child { margin-left: auto; }
+.pn-pair-cost { display: inline-flex; align-items: center; gap: 6px; font: 700 .8125rem/1.2 var(--font-ui); color: var(--ink-700); }
+.pn-pair-cost .ic { flex: none; }
+.pn-pair-room { flex: 1 1 100%; font: 600 .8125rem/1.3 var(--font-ui); color: var(--ink-700); }
+.pn-pair-room.bad, .pn-pair-when.bad { color: var(--stop-700); }
+.pn-pair-couple { display: flex; align-items: center; gap: 6px; }
+.pn-pair-couple .ic { width: 34px; height: 34px; }
+.pn-pair-who { display: flex; flex-direction: column; gap: 2px; margin-left: 6px; min-width: 0; }
+.pn-pair-who b { font: 800 .95rem/1.2 var(--font-display); color: var(--ink-900); }
+.pn-pair-who small { font: 600 .8125rem/1.2 var(--font-ui); color: var(--ink-500); }
+.pn-pair-progress { display: flex; align-items: center; gap: 8px; }
+.pn-pair-progress .pn-bar { flex: 1; height: 8px; }
+.pn-bar.pn-pair-bar .pn-bar-fill { background: linear-gradient(180deg, #F9B8C6, #EE7590 55%, #C9425A); }
+.pn-pair-when { font: 700 .8125rem/1 var(--font-ui); color: var(--ink-700); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.pn-ani-pair { align-self: flex-start; padding: 1px 8px; border-radius: var(--r-pill); background: #FFE3E8; color: #A8304A;
+  font: 700 .8125rem/1.35 var(--font-ui); }
+
+/* ---- wave 5: a land card says what a parcel brings (plot cap, the old pieces in it) ------------------------------- */
+.pn-land-facts { display: flex; align-items: center; gap: 6px; margin: 0 0 8px; font: 700 .8125rem/1.3 var(--font-ui); color: var(--ink-700); }
+.pn-land-facts .ic { flex: none; }
+.pn-pair-cost.short { color: var(--stop-700); }
+.pn-pair-move { flex: none; min-height: 36px; }

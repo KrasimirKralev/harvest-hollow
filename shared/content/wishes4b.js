@@ -142,6 +142,9 @@ export const HOME_GROWTH = {
     goat_yard: { caps: [8, 16, 24] },
     stable: { caps: [4, 10, 16] },
     paddock: { caps: [8, 16, 24] },
+    // wave 5: the quail's coop grows like the hen house; the bison's range like the Stable (big beasts)
+    quail_coop: { caps: [12, 20, 30] },
+    bison_range: { caps: [6, 12, 18] },
   },
 };
 

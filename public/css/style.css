@@ -331,3 +331,8 @@ body.motion-reduced *, body.motion-reduced *::before, body.motion-reduced *::aft
 /* the landing page waits (a second at most, landing.html) for its Bulgarian words instead of flashing English */
 html.i18n-wait body { visibility: hidden; }
 
+
+/* wave 5: a pet's world card (its face, where it is) and its "Stay home" / "Come with me" */
+.wtip-pet .t { gap: 10px; }
+.tip-pet-face { flex: none; display: inline-grid; place-items: center; width: 38px; height: 38px; border-radius: 50%; background: #F3E2BE; overflow: hidden; }
+.tip-pet-face svg, .tip-pet-face img { width: 34px; height: 34px; }

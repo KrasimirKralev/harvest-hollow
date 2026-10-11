@@ -29,7 +29,10 @@ test('every family of the whole game exists as data, every def carries a milesto
   // + the owners' wave-4 additions (2026-10-04): 3 crops, the Pomegranate Tree, Rabbit Greens, the Rabbit and its Hutch,
   // 12 recipes (the Fertilizer and the new goods' uses)
   // + wave 4b: the Rainbow Tree (an Acorn shop relic)
-  const sizes = { crops: 21, trees: 15, feeds: 4, animals: 10, homes: 10, buildings: 17, recipes: 117, expansions: 16 };
+  // + wave 5 (2026-10-06): 4 spices, the Cinnamon Tree, Prairie Hay, Quail and Bison with their homes, the Spice Mill,
+  // 14 recipes; the land is sold as 7 parcels (+ the Homestead) over the same 16 pieces
+  const sizes = { crops: 25, trees: 16, feeds: 5, animals: 12, homes: 12, buildings: 18, recipes: 131, expansions: 16,
+    parcels: 8 };
   for (const [fam, n] of Object.entries(sizes)) assert.equal(CONTENT[fam].size, n, fam);
   assert.equal(CONTENT.levels.length, 40);
   assert.equal(CONTENT.barn.length, 10);
@@ -95,7 +98,7 @@ test('recipesOf, classMembers and usesOf', () => {
   assert.deepEqual(recipesOf('mill').map((r) => r.id), MILESTONE === 'M1a' ? ['flour', 'cornmeal', 'sugar']
     : ['flour', 'cornmeal', 'sugar', 'oat_flakes']);
   assert.deepEqual(recipesOf('feed_mill').map((r) => r.id), MILESTONE === 'M1a' ? ['chicken_feed', 'livestock_feed']
-    : ['chicken_feed', 'livestock_feed', 'rabbit_greens', 'pig_slop']);
+    : ['chicken_feed', 'livestock_feed', 'rabbit_greens', 'pig_slop', 'prairie_hay']);
   assert.equal(recipesOf('bakery').some((r) => r.id === 'walnut_cookies'), MILESTONE === 'M2',
     'M2 recipes are listed only in the M2 build');
   assert.equal(recipesOf('bakery').some((r) => r.id === 'granola_bar'), MILESTONE !== 'M1a');

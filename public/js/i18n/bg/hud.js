@@ -105,4 +105,11 @@ export default {
   'hud.fert.input': '{q}',
   'hud.fert.make': 'Направи тор в компостера',
   'hud.fert.makeHow': 'Направи тор в компостера ({how})',
+  // wave 5: a pet's world card (hud.js petTip)
+  'hud.pet.asleep': 'Спи 💤 до сутринта',
+  'hud.pet.stays': 'Стои си вкъщи при {home:defObj} 🏠',
+  'hud.pet.staysAny': 'Стои си вкъщи 🏠',
+  'hud.pet.followsYou': 'Върви с теб из фермата 🐾',
+  'hud.pet.follows': 'Върви с {name} из фермата 🐾',
+  'hud.pet.staysPorch': 'Стои си вкъщи до къщата 🏠',
 };

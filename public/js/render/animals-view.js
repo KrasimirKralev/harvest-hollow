@@ -46,10 +46,15 @@ export const SKINNED_MAX = 8;
 export const WANDER_MS = 6000;
 /** Chunkier farm animals, so they read beside roofs (visual-09); hens 11 % smaller than wave 1 so a full coop does
  *  not crowd its own ramp (VISUAL-AFTER C2). */
-export const SPECIES_SCALE = Object.freeze({ chicken: 1.24, duck: 1.25, sheep: 1.15, cow: 1.1, pig: 1.05, goat: 1.0, horse: 1.0 });
+export const SPECIES_SCALE = Object.freeze({ chicken: 1.24, duck: 1.25, sheep: 1.15, cow: 1.1, pig: 1.05, goat: 1.0, horse: 1.0, quail: 1.45, bison: 1.08 });
+/** Wave 5: a bison calf is cinnamon-red (the "red dog" of the herd): a colour multiplier over the brown coat, on both its
+ *  near (skinned) and far (rigid) look; other babies keep their parents' colours. */
+export const BABY_TINT = Object.freeze({ bison: Object.freeze([1.6, 1.12, 0.78]) });
+/** Species that roll in their pen's dust patch (`dust` anchor): the alpacas (wave 3) and the bison's wallow (wave 5). */
+export const DUST_ROLLERS = new Set(['alpaca', 'bison']);
 /** A baby's size against its grown-up: 0.6 of the adult model, except where the baby has a model of its own (the chick
  *  is modelled chick-sized: at 0.6 it was a speck by the trough; live requests 2026-10-04 "real yellow chicks"). */
-export const BABY_SCALE = Object.freeze({ chicken: 0.9 });
+export const BABY_SCALE = Object.freeze({ chicken: 0.9, quail: 0.75 });
 export const babyScale = (def) => BABY_SCALE[def] ?? 0.6;
 /** An adult skinned animal's head scale (RD-14: heads x1.15, the friendlier farm proportions). */
 export const ADULT_HEAD = 1.15;
@@ -240,7 +245,7 @@ export function rotateRect([x0, z0, x1, z1], rot) {
 }
 
 /** Species whose body stays fully inside the rails (fitBody margin -0.1). */
-const BIG_BODIES = new Set(['cow', 'horse', 'alpaca']);
+const BIG_BODIES = new Set(['cow', 'horse', 'alpaca', 'bison']);
 
 /**
  * Keep a long body inside its yard (RD-19, QA wave 2: a horse's muzzle in the stable wall, its rump through the
@@ -319,6 +324,47 @@ export function pathPose(id, t, targetAt, { speed = 0.6, maxDur = 4.5 } = {}) {
   const walking = p > 0 && p < 1 && dist > 0.05;
   const face = dist > 0.05 ? Math.atan2(b.x - a.x, b.z - a.z) : (unit(hash32(id, k, 'f')) * 2 - 1) * Math.PI;
   return { x: a.x + (b.x - a.x) * e, z: a.z + (b.z - a.z) * e, walking, face, speed: walking ? dist / dur : 0, phase: into, seg: k, since: into - delay - dur };
+}
+
+// ---- Hungry hens wait in the coop (wave 5, owner wish list 1 #4: "a chicken that has not been fed walks into its coop and
+// stays inside until fed; fed ones come out and wander"). Cosmetic and the same on both screens: hungry is the rules' state
+// (adult, no cycle running), so a hen hungry when a screen first sees it is simply inside; one that turns hungry while the
+// screen watches (its egg collected, a newcomer, a chick grown up) walks over, up the ramp and in; a fed one comes out
+// `INDOOR.outDelay` + its own stagger after `fedAt` (server time: both screens agree) and trots back into the wander. The
+// home's model says where its door is (manifest `door`: [footX, footZ, sillX, sillY, sillZ, inX, inZ], model metres, see
+// tools/build-assets.mjs); a home without one keeps its hens outside, as before.
+/** Species that wait inside while hungry (when their home's model has a door). */
+export const INDOOR_HUNGRY = new Set(['chicken', 'quail']);
+/** inSpeed / outSpeed m/s; outDelay + up to outStagger ms after fedAt a hen comes out; it eases into its wander over
+ *  `settle` s; a hen bought (or born) less than `newcomer` ms ago looks round the yard for `look` s before it goes in. */
+export const INDOOR = Object.freeze({ inSpeed: 0.75, outSpeed: 0.7, outDelay: 700, outStagger: 1400, settle: 1.6, newcomer: 12_000, look: 2.5, pop: 0.25 });
+
+/** Walk a polyline of points [{ x, z, y? }] at `speed` m/s, `s` seconds in (pure): where, how high, which way, still
+ *  walking, and done (at the last point). */
+export function polyWalk(pts, s, speed) {
+  let left = Math.max(0, s) * speed;
+  for (let i = 1; i < pts.length; i++) {
+    const a = pts[i - 1]; const b = pts[i];
+    const d = Math.hypot(b.x - a.x, b.z - a.z);
+    const face = d > 1e-4 ? Math.atan2(b.x - a.x, b.z - a.z) : 0;
+    if (left <= d) {
+      const k = d > 1e-6 ? left / d : 1;
+      return { x: a.x + (b.x - a.x) * k, z: a.z + (b.z - a.z) * k, y: (a.y || 0) + ((b.y || 0) - (a.y || 0)) * k, face, walking: true, done: false };
+    }
+    left -= d;
+  }
+  const z = pts[pts.length - 1]; const y = pts[pts.length - 2] || z;
+  return { x: z.x, z: z.z, y: z.y || 0, face: Math.atan2(z.x - y.x, z.z - y.z), walking: false, done: true };
+}
+/** How long (s) a polyline takes at `speed`. Pure. */
+export function polyTime(pts, speed) {
+  let d = 0;
+  for (let i = 1; i < pts.length; i++) d += Math.hypot(pts[i].x - pts[i - 1].x, pts[i].z - pts[i - 1].z);
+  return d / Math.max(1e-6, speed);
+}
+/** When (server ms) a hen fed at `fedAt` steps out of the door: a delay and its own stagger, so a flock files out. Pure. */
+export function outAt(id, fedAt) {
+  return fedAt + INDOOR.outDelay + (hash32(id, 'out') % 1000) / 1000 * INDOOR.outStagger;
 }
 
 /** A point inside a disc for segment k (deterministic). */
@@ -600,9 +646,12 @@ export function createAnimalsView(layers, overlay, toScreenM, { now: nowFn } = {
     const pt = (x, z) => { switch (((rot % 4) + 4) % 4) { case 1: return [z, -x]; case 2: return [-x, -z]; case 3: return [-z, x]; default: return [x, z]; } };
     const disc = (a) => { if (!a) return null; const [px, pz] = pt(a[0], a[1]); return { x: cx + px, z: cz + pz, r: a[2], y: a[3] ?? 0 }; };
     const hive = info && info.hive ? (() => { const [px, pz] = pt(info.hive[0], info.hive[2]); return { x: cx + px, y: info.hive[1], z: cz + pz }; })() : null;
+    // wave 5: the house door hungry hens go in by (foot of the ramp, the sill, a point inside), world metres
+    const dr = info && Array.isArray(info.door) && info.door.length >= 7 && !k ? info.door : null;
+    const door = dr ? [[dr[0], dr[1], 0], [dr[2], dr[4], dr[3]], [dr[5], dr[6], dr[3]]].map(([x, z, y]) => { const [px, pz] = pt(x, z); return { x: cx + px, z: cz + pz, y }; }) : null;
     return { rect: [cx + r[0], cz + r[1], cx + r[2], cz + r[3]], cx, cz, rot, def: h.def,
       water: disc(info && info.water), mud: disc(info && info.mud), dust: disc(info && info.dust), perches: (info && info.perches || []).map(disc), avoid: (info && info.avoid || []).map(disc),
-      hive: hive || { x: cx, y: 0.45, z: cz } };
+      hive: hive || { x: cx, y: 0.45, z: cz }, door };
   }
 
   // bee forage within reach of the hives: decor with effect.forage, flower crops, flowering trees (world metres)
@@ -707,7 +756,9 @@ export function createAnimalsView(layers, overlay, toScreenM, { now: nowFn } = {
     // a bred coat (wave 3): a material of its own whose coat patch recolours the coat vertices; else (RD-14) the
     // individual tint, a colour multiplier
     const cc = coatColors(a.def, cid);
-    const coat = coatOf(a.def, a.id);
+    const coat0 = coatOf(a.def, a.id);
+    const bt = baby && !cc ? BABY_TINT[a.def] : null;                  // wave 5: the bison calf's cinnamon coat
+    const coat = bt ? [coat0[0] * bt[0], coat0[1] * bt[1], coat0[2] * bt[2]] : coat0;
     if (cc || coat[0] !== 1 || coat[1] !== 1 || coat[2] !== 1) {
       c.object.traverse((o) => {
         if (!o.isMesh) return;
@@ -902,6 +953,63 @@ export function createAnimalsView(layers, overlay, toScreenM, { now: nowFn } = {
   let rain = 0;
   const dirtAt = new Map();
 
+  /**
+   * Wave 5 (INDOOR): what a hen of a home with a door does about being hungry. null = its normal wander; { hidden: true } =
+   * inside; { p, lift, scaleK } = walking in (local clock: from the moment this screen saw it turn hungry) or out (server
+   * time: `outAt(fedAt)`, the same on both screens). `a.ioIn`: null | { t0, x, z } walking in | 'in'; `a.ioOut`: server
+   * ms it steps out, or null.
+   */
+  function indoor(a, st, t, home, spot, yard, radius, speed) {
+    const first = !a.ioSeen;
+    a.ioSeen = true;
+    const [foot, sill, inside] = home.door;
+    if (st.hungry) {
+      a.ioOut = null;
+      if (a.ioIn === 'in') return { hidden: true };
+      if (first || motion === 'still') {
+        // a newcomer (bought or grown up a moment ago) looks round the yard first; any other hungry hen is simply inside
+        const born = Math.max(Number.isFinite(a.o.placedAt) ? a.o.placedAt : -Infinity, Number.isFinite(a.o.adultAt) ? a.o.adultAt : -Infinity);
+        if (motion === 'still' || !(t - born < INDOOR.newcomer)) { a.ioIn = 'in'; return { hidden: true }; }
+        a.ioIn = { t0: clock + INDOOR.look, x: null, z: null };
+      }
+      if (!a.ioIn) a.ioIn = { t0: clock + 0.4, x: null, z: null };
+      if (clock < a.ioIn.t0) return null;
+      if (a.ioIn.x === null) { a.ioIn.x = a.x; a.ioIn.z = a.z; }
+      const path = [{ x: a.ioIn.x, z: a.ioIn.z, y: 0 }, foot, sill, inside];
+      const s = clock - a.ioIn.t0;
+      const w = polyWalk(path, s, INDOOR.inSpeed);
+      if (w.done) {
+        a.ioIn = 'in';
+        if (fx && motion === 'full' && Math.hypot(sill.x - focus.x, sill.z - focus.z) < 60) {
+          fx.burst('feather', new THREE.Vector3(sill.x, sill.y + 0.25, sill.z), { n: 3, colors: ['#FFF8EC', '#E8C9A0'], speed: 0.5, up: 0.7, size: 0.12, grav: 0.4, life: 0.9, spread: 0.15, ambient: true });
+        }
+        return { hidden: true };
+      }
+      // the last steps through the door: into the dark of the house
+      const rest = polyTime(path, INDOOR.inSpeed) - s;
+      const k = Math.min(1, rest / INDOOR.pop);
+      return { p: { x: w.x, z: w.z, walking: true, face: w.face, speed: INDOOR.inSpeed, phase: s, seg: -3, since: 0 }, lift: w.y, scaleK: 0.25 + 0.75 * k };
+    }
+    // fed: a hen that was in (or on its way in) comes out a little after its feed (server time)
+    if (a.ioIn) { a.ioIn = null; a.ioOut = Number.isFinite(a.o.fedAt) && t - a.o.fedAt < 60_000 ? outAt(a.id, a.o.fedAt) : null; }
+    if (!Number.isFinite(a.ioOut)) return null;
+    const s = (t - a.ioOut) / 1000;
+    if (s < 0) return { hidden: true };
+    const path = [inside, sill, foot];
+    const w = polyWalk(path, s, INDOOR.outSpeed);
+    if (!w.done) {
+      const k = Math.min(1, s / INDOOR.pop);
+      return { p: { x: w.x, z: w.z, walking: true, face: w.face, speed: INDOOR.outSpeed, phase: s, seg: -4, since: 0 }, lift: w.y, scaleK: 0.25 + 0.75 * k };
+    }
+    // down the ramp: ease into its wander over `settle` seconds
+    const s2 = s - polyTime(path, INDOOR.outSpeed);
+    if (s2 >= INDOOR.settle) { a.ioOut = null; return null; }
+    const wp = night > 0.5 ? { x: spot.x, z: spot.z } : wanderPose(a.id, t, spot, yard, { radius, speed });
+    const u = s2 / INDOOR.settle; const e = u < 0.5 ? 2 * u * u : 1 - (-2 * u + 2) ** 2 / 2;
+    const d = Math.hypot(wp.x - foot.x, wp.z - foot.z);
+    return { p: { x: foot.x + (wp.x - foot.x) * e, z: foot.z + (wp.z - foot.z) * e, walking: d > 0.1, face: d > 0.05 ? Math.atan2(wp.x - foot.x, wp.z - foot.z) : a.face,
+      speed: d / INDOOR.settle, phase: s, seg: -4, since: 0 }, lift: 0, scaleK: 1 };
+  }
   function update(dt) {
     clock += dt;
     if (!state || !animals.size) {
@@ -957,11 +1065,20 @@ export function createAnimalsView(layers, overlay, toScreenM, { now: nowFn } = {
       const speed = (info.speed || 0.6) * (st.baby ? 1.2 : 1);
       const yard = home.rect;
       const radius = Math.min(3, Math.max(0.6, Math.min(yard[2] - yard[0], yard[3] - yard[1]) * 0.45));
+      a.scale = (st.baby ? babyScale(a.def) : 1) * (st.ribbon ? 1.05 : 1) * (SPECIES_SCALE[a.def] || 1);
+      // wave 5: a hungry hen waits in the coop (INDOOR): hidden inside, or on its way in or out (no pen spacing then)
+      const io = home.door && INDOOR_HUNGRY.has(a.def) && !st.baby ? indoor(a, st, t, home, spot, yard, radius, speed) : null;
+      a.hidden = Boolean(io && io.hidden);
+      a.ioLift = io && io.lift ? io.lift : 0;
+      a.ioScale = io && io.scaleK ? io.scaleK : 1;
+      // (an inside hen stands half-way up the ramp for the coop's need cloud, fx and positionOf: in front of the door)
+      if (a.hidden) { a.p = null; a.x = (home.door[0].x + home.door[1].x) / 2; a.z = (home.door[0].z + home.door[1].z) / 2; continue; }
+      if (io && io.p) { a.p = io.p; a.x = io.p.x; a.z = io.p.z; continue; }
       let p;
       if (asleep || st.eating || motion === 'still') p = { x: a.x || spot.x, z: a.z || spot.z, walking: false, face: a.face, speed: 0, phase: clock, seg: -1, since: 99 };
       else if (a.def === 'duck' && home.water) p = pondPose(a.id, t, spot, yard, home.water, { speed });
       else if (a.def === 'goat' && home.perches.length) p = climbPose(a.id, t, spot, yard, home.perches, { radius, speed });
-      else if (a.def === 'alpaca') p = dustPose(a.id, t, spot, yard, home.dust, home.perches, { radius, speed });
+      else if (DUST_ROLLERS.has(a.def)) p = dustPose(a.id, t, spot, yard, home.dust, home.perches, { radius, speed });
       else p = wanderPose(a.id, t, spot, yard, { radius, speed });
       // the horse show (wave 3): a horse entered trots laps of its yard while the show plays
       if (a.show && clock < a.show.until && !st.baby) {
@@ -969,7 +1086,6 @@ export function createAnimalsView(layers, overlay, toScreenM, { now: nowFn } = {
         p = trotPose(clock, a.show.t0, { x: (x0 + x1) / 2, z: (z0 + z1) / 2, rx: Math.max(0.6, (x1 - x0) * 0.32), rz: Math.max(0.6, (z1 - z0) * 0.32) });
       } else if (a.show) a.show = null;
       a.p = p;
-      a.scale = (st.baby ? babyScale(a.def) : 1) * (st.ribbon ? 1.05 : 1) * (SPECIES_SCALE[a.def] || 1);
       let list = pens.get(home); if (!list) { list = []; pens.set(home, list); }
       list.push({ x: p.x, z: p.z, r: bodyRadius(a, a.scale), a, free: (a.def === 'goat' || a.def === 'alpaca') && perchY(p.x, p.z, home.perches) > 0.05 });
     }
@@ -993,20 +1109,27 @@ export function createAnimalsView(layers, overlay, toScreenM, { now: nowFn } = {
     // phase C: draw
     for (const a of animals.values()) {
       const home = a.homeRec;
+      // wave 5: hens waiting in the coop: not drawn, but the coop shows one hungry cloud over its door for all of them
+      if (home && a.hidden && a.def !== 'bee' && !ridden.has(a.id)) {
+        a.drawn = true;
+        drawNeeds(a, t, (home.door[1].y || 0) + 0.6, () => { frame = Math.max(frame, 1); }, true);
+        continue;
+      }
       if (!home || a.def === 'bee' || ridden.has(a.id) || !a.p) continue;
       const st = a.status; const p = a.p; const info = a.info || {};
       const speed = info.speed || 0.6;
-      a.face += (((((p.face - a.face) % (Math.PI * 2)) + Math.PI * 3) % (Math.PI * 2)) - Math.PI) * Math.min(1, dt * 6);
+      a.face += (((((p.face - a.face) % (Math.PI * 2)) + Math.PI * 3) % (Math.PI * 2)) - Math.PI) * Math.min(1, dt * (a.ioScale < 1 || a.ioLift ? 12 : 6));
       if (p.walking) frame = Math.max(frame, 1);
-      const scale = a.scale;
+      const scale = a.scale * (a.ioScale || 1);
       // behaviours: afloat in the pond, up on a perch, rooting, wallowing in the mud
       const swim = a.def === 'duck' && home.water && Math.hypot(a.x - home.water.x, a.z - home.water.z) < home.water.r * 0.95;
       let lift = a.def === 'goat' || a.def === 'alpaca' ? perchY(a.x, a.z, home.perches) : 0;
+      if (a.ioLift) lift = Math.max(lift, a.ioLift);
       const idle = !p.walking && !st.eating && !asleep && motion !== 'still';
       // wave 3: an alpaca rolls in the dust patch, cushes (lies down, legs folded under) now and then, pronks when
       // playful; a sleepy animal lies down often (Nursery personalities)
       const pers = personalityOf(a.o);
-      const bathe = a.def === 'alpaca' && idle && p.inDust && p.since > 0.4;
+      const bathe = DUST_ROLLERS.has(a.def) && idle && p.inDust && p.since > 0.4;
       const lie = idle && !bathe && p.since > 0.6 && cushes(a.def, a.id, p.seg, pers);
       const cushGoal = bathe || lie ? -0.42 * scale * (st.baby ? 0.8 : 1) : 0;
       a.cushY = (a.cushY || 0) + (cushGoal - (a.cushY || 0)) * Math.min(1, dt * 3);
@@ -1125,7 +1248,9 @@ export function createAnimalsView(layers, overlay, toScreenM, { now: nowFn } = {
           ensureCap(r, r.n + 1);
           const cc = coatColors(a.def, coatId(a.o));
           const coat = cc ? [1, 1, 1] : coatOf(a.def, a.id);
-          r.mesh.setColorAt(r.n, coatCol.setRGB(coat[0], coat[1], coat[2]));
+          const bt = st.baby && !cc ? BABY_TINT[a.def] : null;            // wave 5: the bison calf's cinnamon coat
+          if (bt) coatCol.setRGB(coat[0] * bt[0], coat[1] * bt[1], coat[2] * bt[2]); else coatCol.setRGB(coat[0], coat[1], coat[2]);
+          r.mesh.setColorAt(r.n, coatCol);
           setCoatAt(r, r.n, cc);
           r.mesh.setMatrixAt(r.n++, m4);
           if (motion !== 'still' && (p.walking || !asleep)) frame = Math.max(frame, 1);
@@ -1200,14 +1325,14 @@ export function createAnimalsView(layers, overlay, toScreenM, { now: nowFn } = {
   }
 
   /** The need bubble over an animal (or over a hive) at height h. */
-  function drawNeeds(a, t, h, wantFrame) {
+  function drawNeeds(a, t, h, wantFrame, pen = false) {
     const st = a.status;
     const product = a.content && a.content.product;
     const feed = a.content && a.content.feed;
     let kind = st.ready && product ? 'ready' : (st.hungry && feed && !st.eating ? 'hungry' : null);
     if (kind) needCount++;
     const wide = focus.dist >= WIDE_DIST;
-    if (kind && wide && a.o.home) {
+    if (kind && (wide || pen) && a.o.home) {
       const pk = `${a.o.home}|${kind}`;
       if (penShown.has(pk)) kind = null; else penShown.add(pk);
     }
@@ -1237,7 +1362,7 @@ export function createAnimalsView(layers, overlay, toScreenM, { now: nowFn } = {
     pickables() {
       const out = [];
       for (const a of animals.values()) {
-        if (a.drawn === false) continue;                  // out riding
+        if (a.drawn === false || a.hidden) continue;      // out riding, or a hen waiting in the coop (wave 5)
         const baby = Boolean(a.status && a.status.baby);
         const b = models.boundsOf(keyFor(a.def, baby) || `animal:${a.def}`);
         const s = (baby ? babyScale(a.def) : 1) * (SPECIES_SCALE[a.def] || 1);

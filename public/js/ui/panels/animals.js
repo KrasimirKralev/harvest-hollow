@@ -9,6 +9,8 @@ import { I } from './intents.js';
 import { rosette } from './art.js';
 import { m1bSection } from './animals-m1b.js';
 import { homeGrowth, growthTiles, buyQuote } from './w4b-rules.js';
+import { pairSection, pairSig, pairTag } from './pen-pair.js';
+import { pairOf } from './w5-rules.js';
 import { t, N, Q, list, getters, name as cname } from '../../i18n/index.js';
 
 const lazy = (f) => ({ type: () => f().type, args: () => f().args });
@@ -29,11 +31,13 @@ export const animalsPanel = {
   mount(body, ctx) {
     const kit = createKit(ctx);
     const view = () => homeView(ctx.store.state, ctx.args.id, ctx.now());
+    // babies in the pen (wave 5): the farmer's own pick of the pair survives a redraw
+    const pairSel = { ids: null, redraw: () => update(true) };
     const sig = () => {
       const v = view();
       const g = v && homeGrowth(ctx.store.state, v.id);
       return v && [v.cap, v.animals.map((a) => [a.id, a.status, a.end, a.cycle, a.petBy, a.name, a.refundable]), v.feeds, levelOf(ctx.store.state),
-        g && [g.code, g.next, g.coins, g.grows, g.blockers]];
+        g && [g.code, g.next, g.coins, g.grows, g.blockers], pairSig(ctx.store.state, v.id, ctx.now(), pairSel)];
     };
     const update = kit.memo(body, sig, render);
 
@@ -71,6 +75,7 @@ export const animalsPanel = {
               } }),
             sp && sp.feed === null ? null : kit.button({ label: t('farm.ani.petAll'), glyph: 'hand', cls: 'pn-sm btn--sky', ...lazy(() => I.pet(v.id)), data: { pet: v.id },
               hint: { done: t('farm.ani.allPetted') } }))),
+        pairSection(ctx, kit, v.id, pairSel),
         animalGrid(v),
         // the M1b species' own section: truffles, the pond, the goat, the horse (Ride), the hive's forage (ui-collect)
         ...[m1bSection(v, ctx)].filter(Boolean),
@@ -86,6 +91,8 @@ export const animalsPanel = {
           : t('farm.ani.noneAny'), 'heart'));
       }
       const st = ctx.store.state;
+      const pr = pairOf(st, v.id);
+      const paired = new Set(pr ? [pr.a, pr.b] : []);
       for (const a of v.animals) {
         const fill = bar(0, null, a.status === 'baby' ? 'pn-thin pn-go' : 'pn-thin pn-sky');
         const line = h('span.pn-ani-state');
@@ -121,7 +128,7 @@ export const animalsPanel = {
             icon(a.baby ? babyIcon(a.def.id) : a.def.id, { size: a.baby ? 50 : 60 }), a.baby ? h('span.pn-ani-baby', t('farm.ani.babyTag')) : null),
           h('div.pn-ani-main',
             h('div.pn-ani-top', nameTag(a), h('span.pn-ani-status', STATUS[a.status]), hearts),
-            line, a.status === 'baby' || a.status === 'producing' ? fill : null, prize),
+            line, a.status === 'baby' || a.status === 'producing' ? fill : null, prize, paired.has(a.id) ? pairTag() : null),
           h('div.pn-ani-acts', act, hurry, sellBtn(a))));
       }
       return grid;
@@ -294,7 +301,7 @@ export function animalTint(id, def) {
 
 function plural(name, n) {
   if (n === 1) return name.toLowerCase();
-  if (/sheep$/i.test(name)) return name.toLowerCase();
+  if (/(sheep|bison|quail)$/i.test(name)) return name.toLowerCase();
   return `${name.toLowerCase()}s`;
 }
 

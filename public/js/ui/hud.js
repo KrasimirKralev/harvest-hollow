@@ -19,6 +19,10 @@ import * as FARMING from '../../../shared/rules/actions/farming.js';
 import * as UPG from '../../../shared/rules/upgrades.js';
 import * as WEEDS from '../../../shared/rules/actions/weeds.js';
 import { isCrateDef, crateOf, treeAgeOf, treeStageOf, ageLine } from './panels/w4b-rules.js';
+import { stayOf, stayIntent, can5, petOf, stayLine, stayForOthers } from './panels/w5-rules.js';
+import { pairTipLine } from './panels/pen-pair.js';
+import { breedOf, breedName } from './panels/w4-rules.js';
+import { petFace } from './panels/pet-art.js';
 import { t, t as tt, tn, onLang, name as cname, N, Q, ctext, fmtDuration } from '../i18n/index.js';
 
 const $ = (id) => document.getElementById(id);
@@ -34,6 +38,7 @@ export function unlockName({ family, id }) {
 /** The icon id for an unlock row (features and barn rows have none of their own). */
 export function unlockIcon({ family, id }) {
   if (family === 'barn') return 'barn';
+  if (family === 'parcels') return 'plot';                 // wave 5: a land parcel has no icon of its own
   if (family === 'features') return null;
   return id;
 }
@@ -700,6 +705,7 @@ export const slotOf = (pid) => (/^p[0-9]+$/.test(String(pid)) ? String(pid) : 'p
 /** The world tooltip's lines for a pick (pure; tests): { title, icon, lines: [text], bar?: 0..1, by?: pid, ready? } */
 export function worldTip(state, pick, now, me = null, { riding = null } = {}) {
   if (pick && pick.kind === 'tile' && pick.weed) return weedTip(state, now);
+  if (pick && (pick.kind === 'pet' || typeof pick.pet === 'string')) return petTip(state, pick, now, me);
   if (!pick || pick.kind !== 'object' || !pick.id || !Object.hasOwn(state.farm.objects, pick.id)) return null;
   const o = state.farm.objects[pick.id];
   const def = defOfSafe(o.def);
@@ -770,8 +776,33 @@ export function worldTip(state, pick, now, me = null, { riding = null } = {}) {
   // the farmhouse, the Well, the Market Stand and the benches: their upgrade tier (wave 4, wish E)
   const up = upgradeLine(o);
   if (up) tip.lines.push(up);
+  // a home with a pair expecting (wave 5, babies in the pen): both farmers see the baby coming
+  if (def.kind === 'home') {
+    const pair = pairTipLine(state, pick.id, now);
+    if (pair) tip.lines.push(pair);
+  }
   if (o.by && o.by !== 'sys') tip.by = o.by;
   return tip;
+}
+
+/**
+ * A pet's world card (wave 5, the dog's "Stay home"): its name, whose it is, and where it is: following its farmer,
+ * staying at its doghouse, asleep. Pure. { title, face: { kind, breed }, lines, kind: 'pet', owner, mine, stay }
+ */
+export function petTip(state, pick, now, me = null) {
+  const owner = pick.owner ?? pick.pet;
+  const p = typeof owner === 'string' && Object.hasOwn(state.players ?? {}, owner) ? state.players[owner] : null;
+  const pet = p ? petOf(state, owner) : null;
+  if (!pet) return null;
+  const mine = owner === me;
+  const breed = breedOf(pet);
+  const stay = stayOf(pet);
+  const what = breed ? breedName(pet.kind, breed) : t('home.pets.petWord');
+  const lines = [t(mine ? 'home.pets.yours' : 'home.pets.theirs', { owner: p.name, what })];
+  if (pick.asleep) lines.push(t('hud.pet.asleep'));
+  else if (stay) lines.push(stayLine(state, owner));
+  else lines.push(mine ? t('hud.pet.followsYou') : t('hud.pet.follows', { name: p.name }));
+  return { title: pet.name, icon: null, face: { kind: pet.kind, breed }, lines, kind: 'pet', owner, mine, stay };
 }
 
 /**
@@ -1095,6 +1126,7 @@ export function createTips(S) {
     if (!worldPick || hudEl || !S.store.state) return;
     const t = worldTip(S.store.state, worldPick, S.store.now(), S.store.pid, { riding: S.controller?.riding ?? null });
     if (!t) { hide(); return; }
+    if (t.kind === 'pet') { renderPet(t); return; }
     const p = t.by && S.store.state.players[t.by];
     const act = pullButton(worldPick);
     if (!act) pull = null;
@@ -1121,6 +1153,46 @@ export function createTips(S) {
     else placeAt(mouse.x, mouse.y - 16);
   }
   /**
+   * A pet's card (wave 5): its face, whose it is, where it is; on my own pet, where the card can be acted on (a touch
+   * card, a clicked card), "Stay home" / "Come with me" (the rules' petStay; built once per pet, refreshed in place).
+   */
+  let stayBtn = null;       // { owner, el, label }
+  function renderPet(pt) {
+    const actionable = S.controller?.input === 'touch' || Boolean(pin && pin.id === pickKey(worldPick));
+    const btn = (pt.mine || stayForOthers()) && actionable && can5('petStay') ? stayButton(pt) : null;
+    if (!btn) stayBtn = null;
+    tip.className = 'tip wtip wtip-pet';
+    tip.replaceChildren(...[
+      h('div.t', h('span.tip-pet-face', petFace(pt.face.kind, pt.face.breed, { size: 34 })), pt.title),
+      ...pt.lines.map((l) => h('div.s', l)),
+      btn,
+    ].filter(Boolean));
+    tip.classList.toggle('has-act', Boolean(btn));
+    tip.classList.toggle('pinned', Boolean(pin));
+    tip.hidden = false;
+    if (pin) placeAt(pin.x, pin.y - 16);
+    else placeAt(mouse.x, mouse.y - 16);
+  }
+  function stayButton(pt) {
+    if (!stayBtn || stayBtn.owner !== pt.owner) {
+      const label = h('span');
+      const el = h('button.btn.btn--paper.btn--small.tip-act.tip-stay', { type: 'button' }, label);
+      el.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const st = S.store.state;
+        const owner = stayBtn?.owner ?? S.store.pid;
+        const it = stayIntent(!stayOf(petOf(st, owner)), owner, S.store.pid);
+        tooltip(null, { force: true });
+        S.controller?.do?.(it.type, it.args);
+      });
+      stayBtn = { owner: pt.owner, el, label };
+    }
+    stayBtn.label.textContent = pt.stay ? tt('home.pets.come') : tt('home.pets.stay');
+    stayBtn.el.dataset.stay = pt.stay ? 'come' : 'stay';
+    return stayBtn.el;
+  }
+
+  /**
    * The world card for a pick (null hides it). A pick with `card: true` (the Hand clicked a growing crop) pins a mouse
    * player's card with its buttons; while pinned, hovers elsewhere leave it alone until `force` (a click elsewhere,
    * Esc, a panel opening, the pointer gone far).
@@ -1139,7 +1211,8 @@ export function createTips(S) {
   S.store.on?.('fx', ({ ev, by }) => {
     if (ev?.e === 'weedsCleared' && by === S.store.pid && !weedsKnown) { weedsKnown = true; kv.set(weedsKey(), true); }
   });
-  const pickKey = (p) => (p.kind === 'object' ? p.id : `t${p.x},${p.z}`);
+  const isPet = (p) => Boolean(p) && (p.kind === 'pet' || typeof p.pet === 'string');
+  const pickKey = (p) => (p.kind === 'object' ? p.id : isPet(p) ? `pet:${p.owner ?? p.pet}` : `t${p.x},${p.z}`);
 
   function tooltip(pick, { force = false } = {}) {
     if (pin && !force) return;
@@ -1147,8 +1220,15 @@ export function createTips(S) {
     clearInterval(worldTimer);
     if (force && pin) { pin = null; worldPick = null; hide(); }
     const same = pick && worldPick && pickKey(pick) === pickKey(worldPick);
-    worldPick = pick && (pick.kind === 'object' || weedHint(pick)) ? pick : null;
+    worldPick = pick && (pick.kind === 'object' || isPet(pick) || weedHint(pick)) ? pick : null;
     if (!worldPick) { if (!hudEl) hide(); return; }
+    // the Hand clicked my own pet (wave 5): its card stays where it was clicked, with "Stay home" / "Come with me"
+    if (pick.card && isPet(pick) && S.controller?.input !== 'touch' && !hudEl) {
+      pin = { id: pickKey(pick), x: mouse.x, y: mouse.y };
+      renderWorld();
+      worldTimer = setInterval(renderWorld, 1000);
+      return;
+    }
     if (pick.card && S.controller?.input !== 'touch' && !hudEl) {
       // a card that offers nothing to press is not pinned: it is the plain tooltip
       const t = S.store.state ? worldTip(S.store.state, worldPick, S.store.now(), S.store.pid) : null;
