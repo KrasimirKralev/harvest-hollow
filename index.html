@@ -229,6 +229,9 @@ button { font: inherit; color: inherit; cursor: pointer; }
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .26); transition: background .2s, box-shadow .2s; }
 .ld-link:hover { background: rgba(255, 255, 255, .16); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .5); }
 .ld-link:focus-visible { outline: 3px solid #fff; outline-offset: 2px; }
+.ld-credit { margin: 10px 0 0; padding-bottom: env(safe-area-inset-bottom, 0px); text-align: center; font: 500 .8125rem/1.3 var(--font); color: var(--lilac); }
+.ld-credit a { color: #fff; text-underline-offset: 2px; }
+.ld-credit a:focus-visible { outline: 3px solid #fff; outline-offset: 2px; border-radius: 4px; }
 .ld-noscript { position: relative; margin: 16px; text-align: center; font: 600 1.0625rem/1.4 var(--font); }
 .ld-noscript a { color: #fff; }
 .ld-sheet { width: min(600px, calc(100vw - 32px)); max-width: none; max-height: min(90svh, 860px); margin: auto; padding: 0; border: 0;
@@ -370,6 +373,7 @@ button { font: inherit; color: inherit; cursor: pointer; }
       <a class="ld-link" href="https://harvest-hollow.up.railway.app/privacy">Privacy</a>
       <a class="ld-link" href="https://github.com/KrasimirKralev/harvest-hollow#play-it-in-2-minutes" target="_blank" rel="noopener">Self-host it</a>
     </nav>
+    <p class="ld-credit">Made by Krasimir Kralev · <a href="https://github.com/KrasimirKralev">@KrasimirKralev</a> on GitHub</p>
   </main>
 
   <script>
