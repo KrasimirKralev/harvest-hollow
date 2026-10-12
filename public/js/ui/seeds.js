@@ -13,7 +13,7 @@
 //   createSeeds(S) -> { open({ id, x, z }), close(), get isOpen, renderStrip() }
 //   pickerRows(state, last?) -> rows   the picker's seeds: every open crop, then at most two locked (pure)
 //   popPlacement(pt, size, view, { margin, gap }) -> { left, top, below }   where the card goes (pure)
-import { h, icon, svgIcon, fmt, fmtDuration, touchPlayer } from './dom.js';
+import { h, icon, svgIcon, fmt, fmtShort, fmtDuration, touchPlayer } from './dom.js';
 import { seedRows, shortTime, TOOL_CONTENT } from './toolbar.js';
 import { t as tr, onLang, N, name as cname, lang } from '../i18n/index.js';
 
@@ -184,7 +184,7 @@ export function createSeeds(S) {
     const show = Boolean(st) && isSeedTool(t.id) && tray.hidden;
     if (!show) { strip.hidden = true; stripKey = ''; return; }
     const rows = seedRows(st).filter((r) => r.open);
-    const key = `${rows.map((r) => r.id).join(',')}|${t.crop}|${lang()}`;
+    const key = `${rows.map((r) => `${r.id}:${r.stock}`).join(',')}|${t.crop}|${lang()}`;
     strip.hidden = false;
     if (key === stripKey) return;
     stripKey = key;
@@ -192,16 +192,19 @@ export function createSeeds(S) {
     strip.replaceChildren(
       h('span.ss-label', { 'aria-hidden': 'true' }, tr('toolbar.short.seeds')),
       ...rows.map((r) => h('button.ss-seed', {
-        type: 'button', dataset: { crop: r.id, tip: tr('toolbar.strip.tip', { name: N(r.id, 'crops'), seed: r.seed, d: fmtDuration(r.growMs) }) },
+        type: 'button', dataset: { crop: r.id, tip: `${tr('toolbar.strip.tip', { name: N(r.id, 'crops'), seed: r.seed, d: fmtDuration(r.growMs) })} · ${tr('toolbar.seed.inBarn', { n: r.stock })}` },
         'aria-pressed': String(t.crop === r.id), 'aria-label': tr('toolbar.strip.seed', { name: N(r.id, 'crops'), seed: r.seed }),
         on: { click: () => controller.setTool(t.id, { crop: r.id }) },
-      }, icon(r.id, { size: 34 }))),
+      }, icon(r.id, { size: 34 }),
+      // the barn's stock of it (owner 2026-10-11), small on the icon's corner
+      h(`span.ss-n${r.stock ? '' : '.zero'}`, { 'aria-hidden': 'true' }, fmtShort(r.stock)))),
       h('button.ss-more', { type: 'button', 'aria-label': tr('toolbar.strip.all'), dataset: { tip: tr('toolbar.strip.allTip') },
         on: { click: () => S.toolbar?.openSeeds(true) } }, h('span', { 'aria-hidden': 'true' }, '⋯')));
   }
   controller.on('tool', renderStrip);
   onLang(() => { renderStrip(); if (at) { render(); lastPos = ''; } });
   store.subscribe('xp', renderStrip);
+  store.subscribe('inventory', renderStrip);
   store.on('welcome', renderStrip);
   if (typeof MutationObserver === 'function') new MutationObserver(renderStrip).observe(tray, { attributes: true, attributeFilter: ['hidden'] });
 

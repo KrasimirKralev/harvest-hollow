@@ -41,6 +41,7 @@ export default {
   'toolbar.seed.lockedToast': '{name} се отключва на ниво {level}.',
   'toolbar.seed.plant': 'Цена',
   'toolbar.seed.harvest': 'Добив',
+  'toolbar.seed.inBarn': '{n} в хамбара',
   'toolbar.seedsLeft': 'Още семена вляво',
   'toolbar.seedsRight': 'Още семена вдясно',
 

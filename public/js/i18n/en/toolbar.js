@@ -44,6 +44,7 @@ export default {
   'toolbar.seed.lockedToast': '{name} unlocks at farm level {level}.',
   'toolbar.seed.plant': 'Plant',
   'toolbar.seed.harvest': 'Harvest',
+  'toolbar.seed.inBarn': '{n} in the barn',
   'toolbar.seedsLeft': 'More seeds to the left',
   'toolbar.seedsRight': 'More seeds to the right',
 

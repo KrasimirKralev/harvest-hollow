@@ -309,6 +309,9 @@ export function createToolbar(S) {
         on: { click: () => pickSeed(r) },
       },
       icon(r.id, { size: 46 }),
+      // how many the barn holds already (owner 2026-10-11: "show when planting how much we have in the barn")
+      r.open ? h(`span.stock${r.stock ? '' : '.zero'}`, { 'aria-hidden': 'true', title: tr('toolbar.seed.inBarn', { n: r.stock }) },
+        icon('barn', { size: 16 }), fmt(r.stock)) : null,
       h('span.nm', cname(r.id, { family: 'crops' })),
       // "Plant 2 · 1m" and "Harvest 2 × 2": what a plot costs and what it gives, labelled (QA wave 1 UI-25)
       r.open
