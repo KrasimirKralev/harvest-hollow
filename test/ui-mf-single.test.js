@@ -5,7 +5,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { installDom } from './ui-qa2-dom.js';
 
-globalThis.location = { pathname: '/', origin: 'http://192.168.1.20:3300', protocol: 'http:', host: '192.168.1.20:3300', search: '?slot=p1', hash: '' };
+globalThis.location = { pathname: '/', origin: 'http://192.0.2.20:3300', protocol: 'http:', host: '192.0.2.20:3300', search: '?slot=p1', hash: '' };
 const store = new Map();
 globalThis.localStorage = { getItem: (k) => store.get(k) ?? null, setItem: (k, v) => store.set(k, String(v)), removeItem: (k) => store.delete(k) };
 installDom();

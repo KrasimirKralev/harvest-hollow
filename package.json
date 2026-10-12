@@ -2,7 +2,7 @@
   "name": "harvest-hollow",
   "version": "0.1.0",
   "private": true,
-  "description": "Harvest Hollow: a cozy FarmVille-2-style 3D co-op farm for two players sharing one farm over the LAN.",
+  "description": "Harvest Hollow: a cozy 3D co-op farming game for two, in the browser. Play free online or self-host (Node + Three.js). Phones too.",
   "license": "MIT",
   "type": "module",
   "main": "server/index.js",
