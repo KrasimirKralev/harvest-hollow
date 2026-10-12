@@ -2,29 +2,36 @@
   <img src="public/assets/art/logo-wide.png" alt="Harvest Hollow" width="560">
 </p>
 
+<p align="center">
+  <picture>
+    <source srcset="docs/media/hero.webp" type="image/webp">
+    <img src="docs/media/hero.gif" alt="Two browsers, one farm: farmer Rowan (left) sows sunflowers while farmer Mia (right) sows pumpkins; time passes, the crops grow, and each harvests the other's rows, seen on both screens at once" width="900">
+  </picture>
+</p>
+
 <p align="center"><b>A cozy 3D farming game for two, in the browser.</b><br>
 Plant, harvest, raise animals, craft and grow a whole valley together, on one shared farm, in real time.</p>
 
 <p align="center"><a href="https://harvest-hollow.up.railway.app"><b>▶ Play now in your browser</b></a> ·
 <a href="https://github.com/KrasimirKralev/harvest-hollow/stargazers">⭐ Star it</a> · English &amp; Български</p>
 
-<p align="center">
-  <img src="docs/screenshots/hero.png" alt="Two farmers on the sunset bench during Golden Hour, a busy farm around them" width="900">
-</p>
-
-Harvest Hollow is a FarmVille-2-style co-op farm. Play it at **[harvest-hollow.up.railway.app](https://harvest-hollow.up.railway.app)**
+Harvest Hollow is a co-op farming game for two. Play it at **[harvest-hollow.up.railway.app](https://harvest-hollow.up.railway.app)**
 (no account; start a farm in one tap and invite your partner with a link; farms nobody visits for 7 days are deleted
 there), or host your own. One small Node server runs the farm 24/7, and
 everyone plays in a browser — on a PC, a laptop, a tablet or a phone. Two people share **one** farm: one plants, the
 other harvests; one runs the bakery while the other feeds the cows; you both see everything the moment it happens.
 
+<p align="center">
+  <img src="docs/screenshots/hero.png" alt="Two farmers on the sunset bench during Golden Hour, a busy farm around them" width="900">
+</p>
+
 ## Features
 
-- **A whole valley, 40 levels deep** (and Legacy levels after): 21 crops from Wheat to Roses and Coffee Beans;
-  15 kinds of trees (fruit, nuts, olives, maple and cocoa, and the Pine for wood) that age a year with every harvest
-  and bear more as they grow old; 10 kinds of animals, from chickens and rabbits to bees, horses and alpacas, with
+- **A whole valley, 40 levels deep** (and Legacy levels after): 25 crops from Wheat to Roses, Coffee Beans and four spices;
+  16 kinds of trees (fruit, nuts, olives, maple and cocoa, and the Pine for wood) that age a year with every harvest
+  and bear more as they grow old; 12 kinds of animals, from chickens, quail and rabbits to bees, horses, alpacas and bison, with
   babies, a Nursery and breeding with coat colours, in homes that grow bigger with the flock.
-- **Craft everything**: 17 workshops and 121 recipes (animal feeds included), queues you drag to reorder and finish
+- **Craft everything**: 18 workshops and 136 recipes (animal feeds included), queues you drag to reorder and finish
   item by item, and Compost and Fertilizer for bigger, faster harvests.
 - **Always a next goal**: Mabel's orders board, illustrated story letters from the townsfolk, 64 quests,
   68 ribbons, 12 collection albums, a 30-tier seasonal ribbon track, a weekly County Fair with an NPC league and a
@@ -156,10 +163,34 @@ Settings › Controls lists every key and gesture.
   `docs/research/tech-architecture.md` explains the technical decisions.
 
 ```sh
-npm test                          # 1,655 unit and integration tests (node:test)
+npm test                          # 1,843 unit and integration tests (node:test)
 npm run test:e2e -- --port 3310   # two players in two headless browsers, end to end (needs Chrome; CHROME=<path>)
 node tools/econ-sim.mjs --checks  # the economy's pacing and balance checks
 ```
+
+## How it was built
+
+Harvest Hollow was built in October 2026 by [@KrasimirKralev](https://github.com/KrasimirKralev), directing AI coding
+agents. The repository shows how:
+
+- **Design first.** [`docs/GDD.md`](docs/GDD.md) is the design the build followed: every system and number, two design
+  critiques ([`docs/design/`](docs/design)) answered point by point, and each later owner change with its date.
+- **Parallel lanes.** [`docs/research/tech-architecture.md`](docs/research/tech-architecture.md) (§11) splits the work
+  between four to six agents, each owning its own files.
+- **The economy is simulated.** Prices, timers and rewards come from one model (`tools/economy-model.mjs`), and
+  `node tools/econ-sim.mjs --checks` replays the pacing and balance checks after content changes.
+- **Tests at every layer.** 1,843 unit and integration tests, and an end-to-end run that drives two headless browsers
+  through a co-op session (`tools/e2e-coop.mjs`).
+- **Human calls.** What to build next (the hosted mode with invite links, Bulgarian as a second language, the new
+  content waves) are owner decisions, dated in the GDD. The illustrations were made with an AI image model and checked
+  image by image.
+
+## Contributing
+
+Bug reports and ideas are welcome: open an [issue](https://github.com/KrasimirKralev/harvest-hollow/issues/new/choose)
+or read [CONTRIBUTING.md](CONTRIBUTING.md). Issues labelled
+[good first issue](https://github.com/KrasimirKralev/harvest-hollow/labels/good%20first%20issue) are a good place to
+start. Everyone taking part follows the [Code of Conduct](CODE_OF_CONDUCT.md).
 
 ## Credits
 
@@ -182,3 +213,7 @@ everything on your own machine ([PRIVACY.md](PRIVACY.md)).
 
 Code and the game's own art, including the AI-generated illustrations: [MIT](LICENSE). Third-party assets keep their
 own licences (CC0 or the SIL OFL, listed above).
+
+---
+
+More from [@KrasimirKralev](https://github.com/KrasimirKralev): [other open-source projects](https://github.com/KrasimirKralev?tab=repositories).

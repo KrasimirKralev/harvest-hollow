@@ -1,0 +1,29 @@
+name: Idea
+description: Suggest something new for the farm, or a change to how something works
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: idea
+    attributes:
+      label: Your idea
+      description: What would you like to see in the game?
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Why would it make the game better?
+      description: What would it add for the two of you, or what is missing or annoying today?
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Crops, trees or animals
+        - Crafting and workshops
+        - Playing together (co-op)
+        - Goals, quests and events
+        - Decor and the farm's look
+        - Controls, phones and tablets
+        - Self-hosting and the server
+        - Something else

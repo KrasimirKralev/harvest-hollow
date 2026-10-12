@@ -1,0 +1,53 @@
+name: Bug report
+description: Something in the game or the server does not work as it should
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report this. Please do not paste a personal farm link, an invite link or a
+        passphrase: they open your farm to anyone who reads the issue.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What you saw, and what you expected to see instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: What you did just before it happened, step by step.
+      placeholder: |
+        1. Pick the Sickle
+        2. Drag across the ripe Wheat
+        3. ...
+    validations:
+      required: true
+  - type: dropdown
+    id: where
+    attributes:
+      label: Where were you playing?
+      options:
+        - The hosted game (harvest-hollow.up.railway.app)
+        - My own server (npm start / Docker)
+    validations:
+      required: true
+  - type: input
+    id: device
+    attributes:
+      label: Browser and device
+      placeholder: "Firefox 131 on Windows 11, Safari on an iPhone 15, ..."
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: For your own server, the release or commit you run (`git rev-parse --short HEAD`).
+  - type: textarea
+    id: extra
+    attributes:
+      label: Screenshots or logs
+      description: A screenshot, the browser console (F12) or the server log around the time it happened.

@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Play Harvest Hollow
+    url: https://harvest-hollow.up.railway.app
+    about: The hosted game, free in your browser, no account.
+  - name: Questions and show-and-tell
+    url: https://github.com/KrasimirKralev/harvest-hollow/discussions
+    about: Ask a question or share your farm in Discussions.
