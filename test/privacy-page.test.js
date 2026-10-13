@@ -73,13 +73,13 @@ test('privacy page: English and Bulgarian, each complete: every topic, the same 
   assert.match(PAGE, /<article[^>]*\bid="bg"[^>]*\blang="bg"/);
   const ids = (html, lang) => [...html.matchAll(/\bid="([a-z-]+)"/g)].map((m) => m[1]).filter((x) => x.startsWith(`${lang}-`)).map((x) => x.slice(lang.length + 1));
   assert.deepEqual(ids(bg, 'bg'), ids(en, 'en'), 'the two languages have the same sections and fields, in the same order');
-  for (const id of ['title', 'short', 'who', 'what', 'long', 'ip', 'who-else', 'basis', 'rights', 'delete', 'request', 'text', 'contact']) {
+  for (const id of ['title', 'short', 'who', 'what', 'helper', 'long', 'ip', 'who-else', 'basis', 'rights', 'delete', 'request', 'text', 'contact']) {
     assert.ok(ids(en, 'en').includes(id), `section ${id}`);
   }
   for (const html of [en, bg]) {
     assert.equal((html.match(/<h1\b/g) || []).length, 1, 'one h1 per language');
     assert.deepEqual([...html.matchAll(/name="kind" value="(\w+)"/g)].map((m) => m[1]), ['idea', 'farm', 'copy', 'other']);
-    assert.match(html, /<time datetime="2026-10-05">/);
+    assert.match(html, /<time datetime="2026-10-13">/);
     assert.match(html, /cpdp\.bg/);
     assert.match(html, /КЗЛД/);
     assert.match(html, /github\.com\/KrasimirKralev/);
@@ -90,14 +90,21 @@ test('privacy page: English and Bulgarian, each complete: every topic, the same 
   for (const must of ['Rowena Kralev', 'Bulgaria', 'controller', 'hash', 'browser\'s family', 'Safari on iOS', 'only to reply',
     'no tracking cookies, no analytics and no ads', '7 days', '12 months', 'United States', 'travels to the US', 'legitimate interest',
     'consent', 'Access', 'Deletion', 'Objection', 'Commission for Personal Data Protection', 'Settings › Farm', 'Delete this farm now',
-    'Keep my farm', 'every backup', 'cannot be undone', 'We are not lawyers', 'Memory Book', 'IP address', '203.0.113.0']) {
+    'Keep my farm', 'every backup', 'cannot be undone', 'We are not lawyers', 'Memory Book', 'IP address', '203.0.113.0',
+    // the in-game helper (harness-contract §6): the provider under the player's own account, the sign-ins, speech, sharing
+    'The in-game helper', 'OpenAI (ChatGPT)', 'Anthropic (Claude)', 'Under your own account', 'never see your password',
+    'Claude Code', 'private folder our code never opens', 'Settings › Helper', 'speech recognition', 'off unless you say yes',
+    'Until you say yes, nothing', 'install id', 'Never your sign-in', 'blanked out', '12 months at most', 'Never your farm\'s save']) {
     assert.ok(e.includes(must), `EN says "${must}"`);
   }
   const b = words(bg);
   for (const must of ['Красимир Кралев', 'България', 'администраторът', 'хеш', 'Safari on iOS', 'само за да ти отговорим',
     'проследяващи бисквитки', '7 дни', '12 месеца', 'Съединените щати', 'САЩ', 'законен интерес', 'съгласие', 'Достъп', 'Изтриване',
     'Възражение', 'Комисията за защита на личните данни', 'Настройки › Ферма', 'необратимо', 'Не сме юристи', 'Книгата на спомените',
-    'IP адрес', '203.0.113.0']) {
+    'IP адрес', '203.0.113.0',
+    'Помощникът в играта', 'OpenAI (ChatGPT)', 'Anthropic (Claude)', 'През твоя собствен профил', 'Claude Code',
+    'нашият код никога не отваря', 'Настройки › Помощник', 'разпознаването на говор', 'изключено, докато не кажеш „да“',
+    'кода на инсталацията', 'Никога входът ти', 'се заличава', 'най-много 12 месеца', 'Никога записа на фермата']) {
     assert.ok(b.includes(must), `BG says "${must}"`);
   }
   // the informal "ти" of the game's Bulgarian (docs/agent-briefs/i18n-glossary-bg.md), never the capitalised "Вие"
@@ -127,6 +134,18 @@ test('privacy page: every number it states is the code\'s own', async () => {
   assert.ok(e.includes('about ten minutes') && b.includes('около десет минути'));
   assert.equal(STARS_TTL_MS, 60 * 60_000);
   assert.ok(e.includes('at most once an hour') && b.includes('най-много веднъж на час'));
+  // the in-game helper: sharing is OFF until a farmer says yes; shared events are kept 365 days; the sender's numbers
+  const tcfg = await import('../server/telemetry/config.js');
+  assert.equal(tcfg.TELEMETRY_KEEP_MS, 365 * 86_400_000);
+  assert.ok(e.includes('kept 12 months at most') && b.includes('най-много 12 месеца'));
+  assert.ok(e.includes('Shared helper requests') && b.includes('Споделените молби към помощника'));
+  // the helper's own records (agent lane, contract §4.5: finished jobs' files 7 days, job.json 30 days)
+  assert.ok(e.includes('The record of a request: 30 days. Its work files: 7 days.') && b.includes('Записът на една молба: 30 дни. Работните ѝ файлове: 7 дни.'));
+  const jobs = await import('../server/agent/jobs.js');
+  assert.equal(jobs.JOB_FILES_KEEP_MS, 7 * 86_400_000);
+  assert.equal(jobs.JOB_RECORD_KEEP_MS, 30 * 86_400_000);
+  const { readConsent } = await import('../server/telemetry/consent.js');
+  assert.equal(readConsent(path.join(ROOT, 'test', 'no-such-dir'), 'p1').telemetry, null, 'never asked = not sharing');
   // the form's limits are the server's
   assert.ok(PAGE.includes(`maxlength="${PRIVACY_LIMITS.textMax}"`) && PAGE.includes(`maxlength="${PRIVACY_LIMITS.contactMax}"`));
 });
@@ -185,7 +204,7 @@ test('privacy page: served at /privacy in multi mode (versioned assets, no third
       assert.equal(r.status, 200, p);
       assert.match(r.headers.get('content-type'), /text\/html/);
       const html = await r.text();
-      assert.match(html, /<title>Privacy · Harvest Hollow<\/title>/);
+      assert.match(html, /<title>Privacy · Harness Hollow<\/title>/);
       assert.match(html, /src="\/js\/privacy\.js\?v=[0-9a-f]+"/, 'the script is versioned like every page\'s');
       assert.match(html, /href="\/css\/privacy\.css\?v=[0-9a-f]+"/);
       assert.equal(r.headers.get('referrer-policy'), 'same-origin');

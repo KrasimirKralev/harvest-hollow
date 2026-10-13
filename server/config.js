@@ -6,6 +6,8 @@ import { DEFAULT_TZ } from '../shared/rules/state.js';
 import { PLAYER_SLOTS } from '../shared/content/config.js';
 import { isTimeZone } from '../shared/rules/calendar.js';
 import { STARS_URL } from './stars.js';
+import { agentConfig } from './agent/config.js';
+import { telemetryConfig } from './telemetry/config.js';
 
 export const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -72,6 +74,36 @@ export function loadConfig(env = process.env) {
       && Number(env.HH_AWAY_GRACE_MS) >= 0 ? Number(env.HH_AWAY_GRACE_MS) : undefined,
     root: ROOT,
     version: packageVersion(),
+    harness: harnessConfig(env),          // the in-game helper (Harness Hollow): every HH_HARNESS* / HH_MOD* knob
+    telemetry: telemetryConfig(env),      // the helper's opt-in sharing (server/telemetry)
+  };
+}
+
+/**
+ * The in-game helper's knobs (docs/agent-notes/harness-contract.md; one block for the four lanes). A set but invalid
+ * value refuses the boot. The agent and telemetry lanes keep their own parsers (server/agent/config.js,
+ * server/telemetry/config.js); they are folded in here so a bad value stops the boot like every other knob.
+ *   cfg.harness            { enabled, mock, modWorkers, modWorkersMax, bootTimeoutMs, renderSmoke, agent }
+ *   cfg.harness.agent      agentConfig(env)      HH_HELPER HH_HELPER_CLAUDE HH_HELPER_CHATGPT HH_HARNESS_MOCK
+ *                                                HH_CLAUDE_* HH_CHATGPT_HOSTING HH_OPENAI_* HH_AGENT_*
+ *                                                HH_HARNESS_JOBS_PER_HOUR / _PER_DAY HH_MOCK_STEP_MS
+ *   cfg.telemetry          telemetryConfig(env)  HH_TELEMETRY HH_TELEMETRY_URL HH_TELEMETRY_RECEIVE HH_TELEMETRY_PER_DAY
+ */
+export function harnessConfig(env = process.env) {
+  let agent;
+  try {
+    agent = agentConfig(env);
+  } catch (err) {
+    throw new ConfigError(err.message);
+  }
+  return {
+    enabled: agent.enabled,                                      // HH_HELPER (single: on, multi: off unless set on)
+    mock: agent.mock,                                            // the scripted mock provider (tests, dev)
+    modWorkers: posInt(env, 'HH_MOD_WORKERS', 2),                // boot tests at once (one worker thread each)
+    modWorkersMax: posInt(env, 'HH_MOD_WORKERS_MAX', 16),        // multi: loaded modded farms (one worker thread each)
+    bootTimeoutMs: posInt(env, 'HH_MOD_BOOT_TIMEOUT_MS', 20_000),
+    renderSmoke: env.HH_RENDER_SMOKE === '1',
+    agent,
   };
 }
 

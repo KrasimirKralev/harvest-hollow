@@ -11,6 +11,7 @@ import { ribbonsView } from './goals-model.js';
 import { h, fmt, createKit, bar, pill, playerMark, phoneTitle } from './kit.js';
 import { rosette, s } from './art.js';
 import { t, has, ctext } from '../../i18n/index.js';
+import { farmName } from '../../../../shared/brand.js';
 
 const INK = '#3E2612';
 /** Bronze / Silver / Gold by tier (1..3), in the language in effect. */
@@ -220,7 +221,7 @@ export const ribbonWallPanel = {
           h('small', v.next ? t('collect.wall.moreFor', { n: v.toNext, name: v.next.name.toLowerCase() }) : t('collect.wall.allUp'))),
         h('div.pc-wall-ladder', trail, h('ol.pc-tiers', ...v.tiers.map((x) => tierCard(x, v)))));
       const wall = h(`div.pc-wall${v.framed ? '.framed' : ''}${v.open.bunting_fence ? '.bunting' : ''}`);
-      if (v.open.gate_arch) wall.append(archArt(st.farm.name || t('collect.wall.ourFarm')));
+      if (v.open.gate_arch) wall.append(archArt(farmName(st) || t('collect.wall.ourFarm')));
       wall.append(h('h3.pc-wall-row-title', t('collect.wall.shared')),
         v.shared.length ? h('div.pc-frames', ...v.shared.map((f) => frameEl(f, v.framed)))
           : h('p.pc-wall-empty', t('collect.wall.sharedEmpty')));

@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="public/assets/art/logo-wide.png" alt="Harvest Hollow" width="560">
+  <img src="public/assets/art/logo-wide.png" alt="Harness Hollow" width="560">
 </p>
 
 <p align="center">
@@ -15,7 +15,7 @@ Plant, harvest, raise animals, craft and grow a whole valley together, on one sh
 <p align="center"><a href="https://harvest-hollow.up.railway.app"><b>▶ Play now in your browser</b></a> ·
 <a href="https://github.com/KrasimirKralev/harvest-hollow/stargazers">⭐ Star it</a> · English &amp; Български</p>
 
-Harvest Hollow is a co-op farming game for two. Play it at **[harvest-hollow.up.railway.app](https://harvest-hollow.up.railway.app)**
+Harness Hollow is a co-op farming game for two. Play it at **[harvest-hollow.up.railway.app](https://harvest-hollow.up.railway.app)**
 (no account; start a farm in one tap and invite your partner with a link; farms nobody visits for 7 days are deleted
 there), or host your own. One small Node server runs the farm 24/7, and
 everyone plays in a browser — on a PC, a laptop, a tablet or a phone. Two people share **one** farm: one plants, the
@@ -73,6 +73,37 @@ other harvests; one runs the bakery while the other feeds the cows; you both see
   <img src="docs/screenshots/phone-farm.png" alt="Playing on a phone" width="220">
   <img src="docs/screenshots/phone-panel.png" alt="The Acorn shop's treasures on a phone" width="220">
 </p>
+
+## Harvey: change the game by asking
+
+The purple wand button (the phone's farm menu has a tile too) opens **Harvey**. Type or speak a wish ("a pale blue
+melon that glows at dusk, and a pie from it"); Harvey builds it while you play, tests it on a copy of your farm and
+shows a "changes ready" pop-up with the list of changes and the test results. **Apply** puts it on the farm for both of
+you without a reload; **History** undoes any change in one tap (what you already have keeps working, nothing new of it
+is sold). One change at a time per farm. Harvey writes a mod of data files, never game code; prices and XP come from
+the game's economy model. The rules for mods: [docs/mod-guide.md](docs/mod-guide.md).
+
+Each farmer signs in with their **own plan**, no API keys: **Claude** (the server runs the unmodified Claude Code
+binary and you sign in to it through Anthropic's own sign-in; install it yourself, e.g. `npm i -g
+@anthropic-ai/claude-code`, it is never a dependency of this project) or **ChatGPT** (Sign in with ChatGPT). On a
+phone or a second computer you paste back the code or the final address the sign-in page shows. Sharing your requests
+with the team is off until you say yes (Settings › Helper); the privacy page says exactly what is sent.
+
+| Variable | Default | What it does |
+|---|---|---|
+| `HH_HELPER` | `on` (single), `off` (multi) | the whole helper; the public host stays off until its owner turns it on (`HH_HARNESS` is the older name) |
+| `HH_HELPER_CLAUDE` / `HH_HELPER_CHATGPT` | `on` | offer that provider (off: listed as "turned off on this server") |
+| `HH_CLAUDE_HOSTING=accepted` | unset | multi mode: Claude only after the operator accepted Anthropic's Commercial Terms |
+| `HH_CHATGPT_HOSTING=approved` | unset | multi mode: ChatGPT only after OpenAI approved the hosted app |
+| `HH_CLAUDE_BIN` | `claude` on `PATH` | the Claude Code binary (refused if it lacks a restriction flag) |
+| `HH_TELEMETRY` / `HH_TELEMETRY_URL` | on / the official host | shared events (only with a farmer's yes); `off` sends nothing |
+| `HH_HARNESS_MOCK=1` | unset | a scripted pretend provider for tests and dev (refused with `NODE_ENV=production`) |
+
+Tests: `node tools/e2e-harness.mjs --port 4353` (two farmers, desktop English and iPhone 13 Bulgarian, the whole walk
+with the mock provider; `--multi` adds a second farm that never sees it; `--signin` signs in to a fake Claude Code and
+a stand-in for OpenAI; `--fake` every screen state). A manual test of the real sign-ins:
+[docs/harness/manual-test.md](docs/harness/manual-test.md). Harvey is on for self-hosted farms; the public host turns
+it on once both providers have cleared it for a hosted site.
 
 ## Play it in 2 minutes
 
@@ -170,7 +201,7 @@ node tools/econ-sim.mjs --checks  # the economy's pacing and balance checks
 
 ## How it was built
 
-Harvest Hollow was built in October 2026 by [@KrasimirKralev](https://github.com/KrasimirKralev), directing AI coding
+Harness Hollow was built in October 2026 by [@KrasimirKralev](https://github.com/KrasimirKralev), directing AI coding
 agents. The repository shows how:
 
 - **Design first.** [`docs/GDD.md`](docs/GDD.md) is the design the build followed: every system and number, two design

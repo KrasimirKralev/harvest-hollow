@@ -108,7 +108,7 @@ export default {
   'settings.credits.music': 'Music',
   'settings.credits.musicLead': 'The music is real, composed acoustic and folk music, shared by its artists with everyone. Thank you!',
   'settings.credits.sounds': 'Sounds',
-  'settings.credits.soundsLead': 'The sound effects are synthesised for Harvest Hollow (no recordings), and the stand-in music that plays when a track cannot load is composed note by note in your browser.',
+  'settings.credits.soundsLead': 'The sound effects are synthesised for Harness Hollow (no recordings), and the stand-in music that plays when a track cannot load is composed note by note in your browser.',
   'settings.mood.title': 'Title screen',
   'settings.mood.day': 'Day',
   'settings.mood.evening': 'Evening and Golden Hour',

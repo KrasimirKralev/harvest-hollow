@@ -2485,7 +2485,7 @@ export function createController({
     focusPartner,
     photo,
     latency,
-    seeds: () => (store.state ? liveAt('crops', levelFromXp(store.state.farm.xp)).map((c) => c.id) : []),
+    seeds: () => (store.state ? liveAt('crops', levelFromXp(store.state.farm.xp)).filter((c) => !c.retired).map((c) => c.id) : []),
     /** Input settings for the settings panel: { edgeScroll, haptics, keepAwake, rotateDrag } (+ rightDrag, read-only:
      *  'pan' | 'rotate'), persisted per browser in localStorage 'hh.input'. */
     get options() { return { ...options, rightDrag: options.rotateDrag ? 'rotate' : 'pan' }; },

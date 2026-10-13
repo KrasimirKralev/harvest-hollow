@@ -65,7 +65,7 @@ function ideas(state, b, level) {
     const p = { set: cname(close.st.id, { family: 'decorSets' }), r: close.st.radius, pct: FARM_BEAUTY.setBp / 100, n: close.n, total: close.st.pieces.length };
     out.push({ kind: 'set', set: close.st.id, text: close.n === close.st.pieces.length ? t('collect.beauty.idea.setAll', p) : t('collect.beauty.idea.set', p) });
   }
-  const fresh = live('decor').filter((d) => d.shop && d.tier === 'coin' && (d.unlock ?? 1) <= level && !owned.has(d.id) && d.beauty10 > 0 && d.cost > 0)
+  const fresh = live('decor').filter((d) => d.shop && !d.retired && d.tier === 'coin' && (d.unlock ?? 1) <= level && !owned.has(d.id) && d.beauty10 > 0 && d.cost > 0)
     .sort((x, y) => (y.beauty10 / y.cost) - (x.beauty10 / x.cost))[0];
   if (fresh) out.push({ kind: 'buy', def: fresh.id,
     text: t('collect.beauty.idea.buy', { name: cname(fresh.id), b: fmt(fresh.beauty10 / 10) }) });

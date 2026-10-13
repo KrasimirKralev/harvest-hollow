@@ -121,11 +121,16 @@ test('the device\'s farm list: newest first, names kept, no secrets in it; forge
   assert.equal(st.keys().filter((k) => k.startsWith('hh.f.bbbbbbbbbbbb.')).length, 0);
 });
 
-test('lead: the device list names a farm by its own name, else by its farmers (not a column of "Harvest Hollow")', () => {
+test('lead: the device list names a farm by its own name, else by its farmers (not a column of "Harness Hollow")', () => {
   assert.equal(F.farmLabel({ farm: { name: 'Sunny Acres' }, players: { p1: { name: 'Rowan' } } }), 'Sunny Acres');
-  assert.equal(F.farmLabel({ farm: { name: 'Harvest Hollow' }, players: { p2: { name: 'Mia' }, p1: { name: 'Rowan' } } }), 'Rowan & Mia\'s farm');
+  assert.equal(F.farmLabel({ farm: { name: 'Harness Hollow' }, players: { p2: { name: 'Mia' }, p1: { name: 'Rowan' } } }), 'Rowan & Mia\'s farm');
+  assert.equal(F.farmLabel({ farm: { name: 'Harness Hollow' }, players: { p1: { name: 'Rowan' } } }), 'Rowan\'s farm');
+  assert.equal(F.farmLabel({ farm: { name: 'Harness Hollow' }, players: {} }), 'Harness Hollow');
+  // a farm made before the rename keeps the old default name in its save: it reads as unnamed, under the new name
   assert.equal(F.farmLabel({ farm: { name: 'Harvest Hollow' }, players: { p1: { name: 'Rowan' } } }), 'Rowan\'s farm');
-  assert.equal(F.farmLabel({ farm: { name: 'Harvest Hollow' }, players: {} }), 'Harvest Hollow');
+  assert.equal(F.farmLabel({ farm: { name: 'Harvest Hollow' }, players: {} }), 'Harness Hollow');
+  // ...unless its farmers carved that name themselves
+  assert.equal(F.farmLabel({ farm: { name: 'Harvest Hollow', coop: { named: { by: 'p1', at: 1 } } }, players: { p1: { name: 'Rowan' } } }), 'Harvest Hollow');
   assert.equal(F.farmLabel(null), null);
 });
 
@@ -223,7 +228,7 @@ test('the home-screen manifest of a farm starts at /f/<id> with the farmer\'s ke
   link.setAttribute('rel', 'manifest');
   link.setAttribute('href', '/manifest.webmanifest');
   const doc = { querySelector: () => link };
-  const base = { name: 'Harvest Hollow', id: '/', start_url: '/', scope: '/', display: 'standalone', icons: [{ src: '/assets/pwa/icon-192.png', sizes: '192x192' }] };
+  const base = { name: 'Harness Hollow', id: '/', start_url: '/', scope: '/', display: 'standalone', icons: [{ src: '/assets/pwa/icon-192.png', sizes: '192x192' }] };
   const m = await G.installFarmManifest(ID, SECRET, { doc, fetcher: fakeFetch({ '/manifest.webmanifest': { body: base } }), origin: ORIGIN });
   assert.equal(m.start_url, `${ORIGIN}/f/${ID}#k=${SECRET}`);
   assert.equal(m.id, `/f/${ID}`);

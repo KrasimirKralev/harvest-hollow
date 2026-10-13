@@ -10,8 +10,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#4C9A3E">
   <meta name="color-scheme" content="light">
-  <meta name="description" content="What Harvest Hollow keeps about you, why, for how long, and how to ask for a copy or a deletion. In English and Bulgarian.">
-  <title>Privacy · Harvest Hollow</title>
+  <meta name="description" content="What Harness Hollow keeps about you, why, for how long, and how to ask for a copy or a deletion. In English and Bulgarian.">
+  <title>Privacy · Harness Hollow</title>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/assets/pwa/apple-touch-icon.png">
   <link rel="preload" href="/assets/fonts/fredoka-latin.woff2" as="font" type="font/woff2" crossorigin>
@@ -21,7 +21,7 @@
 </head>
 <body class="pv-page">
   <header class="pv-top">
-    <a class="pv-home" href="/"><img src="/assets/art/logo-wide.png" alt="Harvest Hollow" width="1400" height="336"></a>
+    <a class="pv-home" href="/"><img src="/assets/art/logo-wide.png" alt="Harness Hollow" width="1400" height="336"></a>
     <nav class="pv-lang" aria-label="Language · Език">
       <a href="?lang=en" lang="en" hreflang="en" data-lang="en">English</a>
       <a href="?lang=bg" lang="bg" hreflang="bg" data-lang="bg">Български</a>
@@ -31,11 +31,11 @@
   <main id="pv-main" class="pv-main">
 
 <!-- ================================================ ENGLISH ================================================ -->
-<article class="pv-doc paper" id="en" lang="en" data-lang="en" data-title="Privacy · Harvest Hollow" aria-labelledby="en-title">
-  <h1 class="pv-h1" id="en-title">Privacy at Harvest Hollow</h1>
-  <p class="pv-lead">Harvest Hollow is a free little farm game for two. It needs very little about you, keeps it only as long as it has to, never
+<article class="pv-doc paper" id="en" lang="en" data-lang="en" data-title="Privacy · Harness Hollow" aria-labelledby="en-title">
+  <h1 class="pv-h1" id="en-title">Privacy at Harness Hollow</h1>
+  <p class="pv-lead">Harness Hollow is a free little farm game for two. It needs very little about you, keeps it only as long as it has to, never
     sells it, and hands it to no one but the company that hosts the site. Here is all of it, in plain words.</p>
-  <p class="pv-updated">Last updated: <time datetime="2026-10-05">5 October 2026</time></p>
+  <p class="pv-updated">Last updated: <time datetime="2026-10-13">13 October 2026</time></p>
 
   <section class="pv-short" aria-labelledby="en-short">
     <h2 class="pv-h2" id="en-short">In short</h2>
@@ -45,12 +45,14 @@
       <li>Ideas and privacy requests are kept 12 months at most.</li>
       <li>Your IP address is used only in the server's memory, to keep spam and abuse out.</li>
       <li>The site is hosted by Railway, in the United States.</li>
+      <li>The in-game helper sends your requests only to the AI you pick, under your own account. Sharing them with us is off
+        until you turn it on.</li>
     </ul>
   </section>
 
   <section aria-labelledby="en-who">
     <h2 class="pv-h2" id="en-who">Who runs it</h2>
-    <p>Harvest Hollow is a free hobby project by <strong>Rowena Kralev</strong>, who lives in Bulgaria. He decides what this site keeps
+    <p>Harness Hollow is a free hobby project by <strong>Rowena Kralev</strong>, who lives in Bulgaria. He decides what this site keeps
       and why (in legal words, he is the controller of your data). There is no company behind it, no advertising and nothing to buy.</p>
     <p>To reach him, use the <a href="#en-request">privacy request form</a> at the end of this page. You can also find him on GitHub at
       <a href="https://github.com/KrasimirKralev" rel="noopener">github.com/KrasimirKralev</a>, where the game's code is open for anyone to
@@ -98,6 +100,58 @@
     </div>
   </section>
 
+  <section aria-labelledby="en-helper">
+    <h2 class="pv-h2" id="en-helper">The in-game helper</h2>
+    <p>The helper changes your farm when you ask it to, by typing or speaking: a new crop, a recipe, a decoration. You can play
+      without it; nothing below happens until you use it.</p>
+
+    <div class="pv-item">
+      <h3 class="pv-h3"><span aria-hidden="true">🤖</span> Your request goes to the AI you choose</h3>
+      <p><b>What:</b> the farm's server sends your request, the farm's level and your game language, the game's modding guide, lists
+        of what already exists in the game, and the helper's changes your farm already has (small data files) to the AI provider you
+        picked: OpenAI (ChatGPT) or Anthropic
+        (Claude). Never your farm's save, your farm key or anyone's sign-in.</p>
+      <p><b>Under your own account:</b> you sign in with your own ChatGPT or Claude plan, on the provider's own sign-in page; we never
+        see your password. The work counts against your plan, and the provider handles your request under its own privacy rules
+        (<a href="https://openai.com/policies/privacy-policy/" rel="noopener">OpenAI</a>,
+        <a href="https://www.anthropic.com/legal/privacy" rel="noopener">Anthropic</a>).</p>
+      <p><b>Your sign-in:</b> kept only on the farm's server, in the farm's own folder, for the farmer who signed in. ChatGPT's
+        sign-in is a file only the server itself can read; it is never written to a log and never shared. For Claude the server runs
+        Claude Code, which keeps its own login in a private folder our code never opens. Sign out in Settings › Helper and it is
+        removed; it also goes when the farm is deleted.</p>
+    </div>
+
+    <div class="pv-item">
+      <h3 class="pv-h3"><span aria-hidden="true">🧩</span> The changes on your farm</h3>
+      <p>What the helper built for you (its files, the checks it passed, your request and its short summary) is kept with the farm, so
+        both of you can see the history and undo a change. The record of a request is deleted after 30 days and its work files after
+        7; the changes you applied stay with the farm until the farm is deleted.</p>
+    </div>
+
+    <div class="pv-item">
+      <h3 class="pv-h3"><span aria-hidden="true">🎙️</span> Speaking to the helper</h3>
+      <p>The microphone button uses your browser's own speech recognition. Your browser may send the sound to its maker's service to
+        turn it into text (Chrome to Google, Safari to Apple, for example). We never receive the sound, only the words that appear in
+        the box. Reading an answer aloud happens in your browser.</p>
+    </div>
+
+    <div class="pv-item pv-share">
+      <h3 class="pv-h3"><span aria-hidden="true">📤</span> Sharing your requests with us: off unless you say yes</h3>
+      <p>The first time you use the helper, it asks whether to share your requests with the Harness Hollow team, so we can improve
+        the game for everyone. Until you say yes, nothing about your requests is shared with us. You can change your mind at any time
+        in Settings › Helper; turning it off also deletes what was still waiting to be sent.</p>
+      <p><b>What is shared when it is on:</b> what you asked, in your words; the helper's changes (its data files); what they added,
+        changed or removed; whether the checks passed, with their error codes; whether you applied, discarded or undid the change; the
+        AI provider and model; your game language; the game's version; and a random install id. Never your sign-in, account, e-mail,
+        farm address, farm key, IP address or files, and no farmer or farm names unless you typed them into your request. Anything in a
+        request that looks like a key, a password, an e-mail, a farm's address or a file path is blanked out before it leaves.</p>
+      <p><b>Where and how long:</b> on this site's server, kept 12 months at most, then deleted automatically. Only the game's maker
+        reads them, to make the game better.</p>
+      <p><b>Taking it back:</b> Settings › Helper shows your install id. Send it with a <a href="#en-request">privacy request</a> and
+        everything shared under it is deleted.</p>
+    </div>
+  </section>
+
   <section aria-labelledby="en-long">
     <h2 class="pv-h2" id="en-long">How long</h2>
     <dl class="pv-times">
@@ -105,6 +159,10 @@
         also <a href="#en-delete">delete it yourself</a> at any time.</dd></div>
       <div><dt>Ideas</dt><dd>12 months at most, then they are deleted automatically. Ask, and yours goes sooner.</dd></div>
       <div><dt>Privacy requests</dt><dd>12 months, as a record that we answered, then they are deleted automatically.</dd></div>
+      <div><dt>The helper's work</dt><dd>The record of a request: 30 days. Its work files: 7 days. The changes you applied: as long as
+        the farm.</dd></div>
+      <div><dt>Shared helper requests</dt><dd>Only if you said yes: 12 months at most, then they are deleted automatically. Send your
+        install id, and yours go sooner.</dd></div>
       <div><dt>Chat</dt><dd>Only in the server's memory, gone when the farm goes to sleep (about ten minutes after you both leave).</dd></div>
       <div><dt>Server logs</dt><dd>Short lines like “a farm was created” or an error, so we can keep the game running. They name a farm
         only by a short tag, never by its address, and carry no key and no full IP address; when something breaks, a line can include
@@ -115,9 +173,9 @@
 
   <section aria-labelledby="en-ip">
     <h2 class="pv-h2" id="en-ip">Your IP address</h2>
-    <p>Every visit comes with your internet address (IP address). Harvest Hollow uses it only in the server's memory, to keep spam and
+    <p>Every visit comes with your internet address (IP address). Harness Hollow uses it only in the server's memory, to keep spam and
       abuse out: for example, at most 5 new farms an hour from one address, and limits on ideas, invites and connections. It is never
-      written into a farm, an idea or a request.</p>
+      written into a farm, an idea, a request or a shared helper request.</p>
     <p>Our own log lines carry no full address. When a connection is closed for abuse, the line shows only the network part of the
       address (like 203.0.113.0). Railway, the host, also records every request in its own logs: the time, the page, the IP address and
       the browser's description.</p>
@@ -127,7 +185,9 @@
     <h2 class="pv-h2" id="en-who-else">Who else is involved</h2>
     <p><strong>Railway</strong> (Railway Corporation, San Francisco) hosts this site on its servers in the <strong>United States</strong>.
       Everything described here is stored there, so when you play, your data travels to the US.</p>
-    <p>No one else. No analytics, no ads, no fonts or scripts from other sites. Even the GitHub star count on the start page is fetched by
+    <p>When you use the helper, the AI provider you chose (OpenAI or Anthropic) receives your requests under your own account, as
+      described in <a href="#en-helper">The in-game helper</a>. Apart from that, no one else. No analytics, no ads, no fonts or scripts
+      from other sites. Even the GitHub star count on the start page is fetched by
       our server, at most once an hour, not by your browser. Links to GitHub or to the music's sources take you to those sites, which
       have their own privacy rules.</p>
   </section>
@@ -140,6 +200,8 @@
     <p>The contact field in the ideas box and in the request form is optional. If you fill it in, you <strong>consent</strong> to us using
       it to reply to you (Article 6(1)(a)). You can take that back at any time with a privacy request; leave it empty and we simply
       cannot reply.</p>
+    <p>Sharing your helper requests with us is also based on your <strong>consent</strong> (Article 6(1)(a)): it is off until you turn
+      it on, and you can turn it off at any time in Settings › Helper.</p>
   </section>
 
   <section aria-labelledby="en-rights">
@@ -151,7 +213,8 @@
       <li><b>Correction:</b> ask us to fix something that is wrong.</li>
     </ul>
     <p>Use the <a href="#en-request">request form</a> below; we answer within one month. There are no accounts, so we only know which farm
-      is yours if you tell us: its address (/f/…) helps. Never send your personal farm link with its #k= part: that is your key.</p>
+      is yours if you tell us: its address (/f/…) helps, and for shared helper requests, the install id from Settings › Helper. Never
+      send your personal farm link with its #k= part: that is your key.</p>
     <p>You can also complain to the Bulgarian data protection authority, the Commission for Personal Data Protection
       (<span lang="bg">КЗЛД</span>, <a href="https://www.cpdp.bg/" rel="noopener">cpdp.bg</a>), or to the authority where you live.</p>
   </section>
@@ -184,7 +247,7 @@
       <div class="pv-field">
         <label class="pv-label" for="en-text">Tell us more</label>
         <textarea class="pv-input pv-text" id="en-text" name="text" rows="5" maxlength="2000" required aria-describedby="en-text-hint"></textarea>
-        <p class="pv-hint" id="en-text-hint">Which idea or farm (the farm's address, never its #k= part), and anything that helps us find it.</p>
+        <p class="pv-hint" id="en-text-hint">Which idea or farm (the farm's address, never its #k= part) or the install id of shared helper requests, and anything that helps us find it.</p>
         <p class="pv-err" data-err="text" role="alert" hidden></p>
       </div>
       <div class="pv-field">
@@ -209,11 +272,11 @@
 </article>
 
 <!-- ================================================ БЪЛГАРСКИ ================================================ -->
-<article class="pv-doc paper" id="bg" lang="bg" data-lang="bg" data-title="Поверителност · Harvest Hollow" aria-labelledby="bg-title">
-  <h1 class="pv-h1" id="bg-title">Поверителност в Harvest Hollow</h1>
-  <p class="pv-lead">Harvest Hollow е малка безплатна игра за ферма за двама. Иска съвсем малко за теб, пази го само докато е нужно,
+<article class="pv-doc paper" id="bg" lang="bg" data-lang="bg" data-title="Поверителност · Harness Hollow" aria-labelledby="bg-title">
+  <h1 class="pv-h1" id="bg-title">Поверителност в Harness Hollow</h1>
+  <p class="pv-lead">Harness Hollow е малка безплатна игра за ферма за двама. Иска съвсем малко за теб, пази го само докато е нужно,
     никога не го продава и не го дава на никого освен на фирмата, която хоства сайта. Ето всичко, с прости думи.</p>
-  <p class="pv-updated">Последна промяна: <time datetime="2026-10-05">5 октомври 2026 г.</time></p>
+  <p class="pv-updated">Последна промяна: <time datetime="2026-10-13">13 октомври 2026 г.</time></p>
 
   <section class="pv-short" aria-labelledby="bg-short">
     <h2 class="pv-h2" id="bg-short">Накратко</h2>
@@ -223,12 +286,14 @@
       <li>Идеите и запитванията за поверителност се пазят най-много 12 месеца.</li>
       <li>IP адресът ти се ползва само в паметта на сървъра, за да спира спама и злоупотребите.</li>
       <li>Сайтът се хоства от Railway, в Съединените щати.</li>
+      <li>Помощникът в играта праща молбите ти само до изкуствения интелект, който избереш, през твоя собствен профил там. Споделянето
+        им с нас е изключено, докато не го включиш.</li>
     </ul>
   </section>
 
   <section aria-labelledby="bg-who">
     <h2 class="pv-h2" id="bg-who">Кой стои зад играта</h2>
-    <p>Harvest Hollow е безплатен проект-хоби на <strong>Красимир Кралев</strong>, който живее в България. Той решава какво пази сайтът и
+    <p>Harness Hollow е безплатен проект-хоби на <strong>Красимир Кралев</strong>, който живее в България. Той решава какво пази сайтът и
       защо (на езика на закона: той е администраторът на данните ти). Зад играта няма фирма, няма реклами и няма нищо за купуване.</p>
     <p>Най-лесно ще се свържеш с него чрез <a href="#bg-request">формуляра за запитвания</a> в края на страницата. Ще го намериш и в
       GitHub: <a href="https://github.com/KrasimirKralev" rel="noopener">github.com/KrasimirKralev</a>, където кодът на играта е отворен
@@ -276,6 +341,58 @@
     </div>
   </section>
 
+  <section aria-labelledby="bg-helper">
+    <h2 class="pv-h2" id="bg-helper">Помощникът в играта</h2>
+    <p>Помощникът променя фермата ти, когато го помолиш – с писане или с глас: нова култура, рецепта, украса. Можеш да играеш и без
+      него; нищо от описаното тук не се случва, докато не го ползваш.</p>
+
+    <div class="pv-item">
+      <h3 class="pv-h3"><span aria-hidden="true">🤖</span> Молбата ти отива при изкуствения интелект, който избереш</h3>
+      <p><b>Какво:</b> сървърът на фермата праща молбата ти, нивото на фермата и езика на играта, ръководството за промени в играта,
+        списъци с това, което вече има в нея, и промените на помощника, които фермата ти вече има (малки файлове с данни), до
+        доставчика по твой избор: OpenAI (ChatGPT) или Anthropic (Claude). Никога записа на фермата, ключа ѝ или нечий вход.</p>
+      <p><b>През твоя собствен профил:</b> влизаш със своя абонамент за ChatGPT или Claude, на страницата за вход на самия доставчик;
+        паролата ти никога не стига до нас. Работата се отчита към твоя абонамент, а доставчикът обработва молбата ти по своите правила
+        за поверителност (<a href="https://openai.com/policies/privacy-policy/" rel="noopener">OpenAI</a>,
+        <a href="https://www.anthropic.com/legal/privacy" rel="noopener">Anthropic</a>).</p>
+      <p><b>Входът ти:</b> пази се само на сървъра на фермата, в нейната папка, за фермера, който влезе. Входът в ChatGPT е файл,
+        който може да чете само самият сървър; никога не се записва в дневник и никога не се споделя. За Claude сървърът пуска Claude
+        Code, който пази входа си в своя лична папка, която нашият код никога не отваря. Излез от профила в Настройки › Помощник
+        (Settings › Helper) и входът се изтрива; изчезва и когато фермата бъде изтрита.</p>
+    </div>
+
+    <div class="pv-item">
+      <h3 class="pv-h3"><span aria-hidden="true">🧩</span> Промените във фермата ти</h3>
+      <p>Това, което помощникът направи за теб (файловете му, проверките, които е минал, молбата ти и краткото му описание), се пази с
+        фермата, за да виждате и двамата историята и да можете да отмените промяна. Записът на една молба се изтрива след 30 дни, а
+        работните ѝ файлове – след 7; приложените промени остават с фермата, докато тя не бъде изтрита.</p>
+    </div>
+
+    <div class="pv-item">
+      <h3 class="pv-h3"><span aria-hidden="true">🎙️</span> Когато говориш на помощника</h3>
+      <p>Бутонът с микрофона ползва разпознаването на говор на самия браузър. Браузърът ти може да прати звука до услуга на своя
+        производител, за да го превърне в текст (например Chrome до Google, Safari до Apple). Ние никога не получаваме звука, а само
+        думите, които се появяват в полето. Прочитането на отговор на глас става в браузъра ти.</p>
+    </div>
+
+    <div class="pv-item pv-share">
+      <h3 class="pv-h3"><span aria-hidden="true">📤</span> Споделяне на молбите ти с нас: изключено, докато не кажеш „да“</h3>
+      <p>Първия път, когато ползваш помощника, той те пита дали да споделя молбите ти с екипа на Harness Hollow, за да подобряваме
+        играта за всички. Докато не кажеш „да“, нищо от молбите ти не се споделя с нас. Можеш да промениш решението си по всяко време от
+        Настройки › Помощник; като го изключиш, се изтрива и това, което още чака да бъде изпратено.</p>
+      <p><b>Какво се споделя, когато е включено:</b> какво поиска, с твоите думи; промените на помощника (файловете му с данни);
+        какво са добавили, променили или махнали; дали са минали проверките и с какви кодове за грешка; дали приложи, отказа или
+        отмени промяната; доставчикът и моделът; езикът на играта; версията на играта; и случаен код на инсталацията. Никога входът ти,
+        профилът ти, имейлът ти, адресът или ключът на фермата, IP адресът ти или файлове, и никакви имена на фермери или ферми, освен ако
+        не ги написа в молбата. Всичко в молбата, което прилича на ключ, парола, имейл, адрес на ферма или път до файл, се заличава,
+        преди да тръгне.</p>
+      <p><b>Къде и колко дълго:</b> на сървъра на този сайт, най-много 12 месеца, после се изтрива само. Чете ги само създателят на
+        играта, за да я прави по-добра.</p>
+      <p><b>Ако се откажеш:</b> в Настройки › Помощник е показан кодът на инсталацията ти. Прати го със
+        <a href="#bg-request">запитване за поверителност</a> и всичко, споделено с него, се изтрива.</p>
+    </div>
+  </section>
+
   <section aria-labelledby="bg-long">
     <h2 class="pv-h2" id="bg-long">Колко дълго</h2>
     <dl class="pv-times">
@@ -283,6 +400,10 @@
         тя остава. Можеш и <a href="#bg-delete">да я изтриеш от играта</a> по всяко време.</dd></div>
       <div><dt>Идеите</dt><dd>Най-много 12 месеца, после се изтриват сами. Поискай и твоята ще изчезне по-рано.</dd></div>
       <div><dt>Запитванията за поверителност</dt><dd>12 месеца, като запис, че сме отговорили, после се изтриват сами.</dd></div>
+      <div><dt>Работата на помощника</dt><dd>Записът на една молба: 30 дни. Работните ѝ файлове: 7 дни. Приложените промени: колкото и
+        фермата.</dd></div>
+      <div><dt>Споделените молби към помощника</dt><dd>Само ако каза „да“: най-много 12 месеца, после се изтриват сами. Прати кода
+        на инсталацията си и твоите ще изчезнат по-рано.</dd></div>
       <div><dt>Чатът</dt><dd>Само в паметта на сървъра; изчезва, когато фермата заспи (около десет минути, след като и двамата излезете).</dd></div>
       <div><dt>Записите на сървъра</dt><dd>Кратки редове като „създадена е ферма“ или някоя грешка, за да поддържаме играта жива.
         Наричат фермата само с кратък етикет, никога с адреса ѝ, и не съдържат ключове и пълни IP адреси; когато нещо се счупи, един ред
@@ -293,9 +414,9 @@
 
   <section aria-labelledby="bg-ip">
     <h2 class="pv-h2" id="bg-ip">IP адресът ти</h2>
-    <p>Всяко посещение идва с интернет адреса ти (IP адрес). Harvest Hollow го ползва само в паметта на сървъра, за да спира спама и
+    <p>Всяко посещение идва с интернет адреса ти (IP адрес). Harness Hollow го ползва само в паметта на сървъра, за да спира спама и
       злоупотребите: например най-много 5 нови ферми на час от един адрес и граници за идеите, поканите и връзките. Никога не се
-      записва във ферма, идея или запитване.</p>
+      записва във ферма, идея, запитване или споделена молба към помощника.</p>
     <p>Нашите собствени записи не съдържат пълен адрес. Когато някоя връзка бъде затворена заради злоупотреба, редът показва само
       мрежовата част на адреса (например 203.0.113.0). Railway, хостингът, също записва всяка заявка в своите записи: часа, страницата,
       IP адреса и описанието на браузъра.</p>
@@ -305,7 +426,9 @@
     <h2 class="pv-h2" id="bg-who-else">Кой още участва</h2>
     <p><strong>Railway</strong> (Railway Corporation, Сан Франциско) хоства сайта на своите сървъри в <strong>Съединените щати</strong>.
       Всичко описано тук се пази там, така че докато играеш, данните ти пътуват до САЩ.</p>
-    <p>Никой друг. Без статистики, без реклами, без шрифтове или скриптове от други сайтове. Дори броят звезди от GitHub на началната
+    <p>Когато ползваш помощника, доставчикът на изкуствен интелект по твой избор (OpenAI или Anthropic), получава молбите ти през
+      твоя собствен профил, както е описано в <a href="#bg-helper">Помощникът в играта</a>. Освен него – никой друг. Без статистики, без
+      реклами, без шрифтове или скриптове от други сайтове. Дори броят звезди от GitHub на началната
       страница се взима от нашия сървър, най-много веднъж на час, а не от браузъра ти. Линковете към GitHub или към източниците на
       музиката те водят към тези сайтове, които имат свои правила за поверителност.</p>
   </section>
@@ -318,6 +441,8 @@
     <p>Полето за контакт в кутията за идеи и във формуляра за запитвания не е задължително. Ако го попълниш, даваш <strong>съгласие</strong>
       да го ползваме, за да ти отговорим (чл. 6, пар. 1, буква „а“). Можеш да оттеглиш съгласието си по всяко време със запитване; ако
       оставиш полето празно, просто няма как да ти отговорим.</p>
+    <p>Споделянето на молбите ти към помощника с нас също се основава на твоето <strong>съгласие</strong> (чл. 6, пар. 1, буква „а“):
+      изключено е, докато не го включиш, и можеш да го изключиш по всяко време от Настройки › Помощник.</p>
   </section>
 
   <section aria-labelledby="bg-rights">
@@ -329,8 +454,8 @@
       <li><b>Поправка:</b> да поискаш да оправим нещо, което не е вярно.</li>
     </ul>
     <p>Използвай <a href="#bg-request">формуляра за запитвания</a> по-долу; отговаряме до един месец. Профили няма, така че знаем коя
-      ферма е твоята само ако ни кажеш: адресът ѝ (/f/…) помага. Никога не изпращай личния си линк към фермата с частта #k=: това е
-      ключът ти.</p>
+      ферма е твоята само ако ни кажеш: адресът ѝ (/f/…) помага, а за споделените молби към помощника – кодът на инсталацията от
+      Настройки › Помощник. Никога не изпращай личния си линк към фермата с частта #k=: това е ключът ти.</p>
     <p>Можеш да подадеш и жалба до Комисията за защита на личните данни (КЗЛД, <a href="https://www.cpdp.bg/" rel="noopener">cpdp.bg</a>)
       или до органа по защита на данните там, където живееш.</p>
   </section>
@@ -364,7 +489,7 @@
       <div class="pv-field">
         <label class="pv-label" for="bg-text">Разкажи ни повече</label>
         <textarea class="pv-input pv-text" id="bg-text" name="text" rows="5" maxlength="2000" required aria-describedby="bg-text-hint"></textarea>
-        <p class="pv-hint" id="bg-text-hint">Коя идея или ферма (адресът на фермата, никога частта #k=) и всичко, което ще ни помогне да я намерим.</p>
+        <p class="pv-hint" id="bg-text-hint">Коя идея или ферма (адресът на фермата, никога частта #k=) или кодът на инсталацията за споделени молби към помощника, и всичко, което ще ни помогне да я намерим.</p>
         <p class="pv-err" data-err="text" role="alert" hidden></p>
       </div>
       <div class="pv-field">
@@ -391,9 +516,9 @@
   </main>
 
   <footer class="pv-foot">
-    <nav class="pv-links" aria-label="Harvest Hollow">
+    <nav class="pv-links" aria-label="Harness Hollow">
       <a href="/" data-pv="home"><span lang="en">Start page</span><span class="pv-sep" aria-hidden="true"> · </span><span lang="bg">Начална страница</span></a>
-      <a href="https://github.com/KrasimirKralev/harvest-hollow" rel="noopener">Harvest Hollow on GitHub</a>
+      <a href="https://github.com/KrasimirKralev/harvest-hollow" rel="noopener">Harness Hollow on GitHub</a>
     </nav>
   </footer>
   <script type="module" src="/js/privacy.js"></script>

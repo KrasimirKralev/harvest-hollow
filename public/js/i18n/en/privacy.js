@@ -7,7 +7,7 @@ export default {
   'privacy.row': 'Your data',
   'privacy.link': 'Read the privacy note',
   'privacy.help.multi': 'What this site keeps about you, for how long, and how to ask for a copy or a deletion.',
-  'privacy.help.single': 'This farm server keeps your farm on its own computer; nothing goes anywhere else.',
+  'privacy.help.single': 'This farm server keeps your farm on its own computer; nothing goes anywhere else unless you use the helper.',
   'privacy.delete.row': 'Delete this farm',
   'privacy.delete.button': 'Delete this farm now…',
   'privacy.delete.help': 'Everything on it goes at once, for both farmers. This cannot be undone.',

@@ -72,7 +72,7 @@ export function banner({ port, dev = false, color = false, addresses = lanAddres
   const green = (s) => (color ? `\x1b[1;32m${s}\x1b[0m` : s);
   const dim = (s) => (color ? `\x1b[2m${s}\x1b[0m` : s);
   const bar = '='.repeat(72);
-  const lines = [bar, `  Harvest Hollow${version ? ` ${version}` : ''} is running at:`, ''];
+  const lines = [bar, `  Harness Hollow${version ? ` ${version}` : ''} is running at:`, ''];
   const urls = [[`http://localhost:${port}`, '', ''],
     ...addresses.map((a, i) => [`http://${a.address}:${port}`,
       a.kind === 'tailscale' ? `${a.iface} (Tailscale)` : a.kind === 'vpn' ? `${a.iface} (VPN)` : a.iface,

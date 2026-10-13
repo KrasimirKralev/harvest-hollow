@@ -65,6 +65,13 @@
 //                                        names: 'standard', 'foliage' (DoubleSide), 'ghost' (transparent)
 //   createMaterial(opts) -> a NEW patched Lambert (opts: any MeshLambertMaterial params + { wrap, rim })
 //   dispose(key?)                        drop prepared data (all when key omitted)
+//   setOverlay({ [defId]: { key, from, to, kind, leaf? } })   (additive, Harness Hollow mods lane; harness contract
+//                                        §2.6) a farm's mod things: a key naming a mod def ('crop:x_moon_melon:3',
+//                                        'animal:x_moon_hen', or keyOf('x_moon_melon', 3)) answers the anchor's key with a
+//                                        `~<defId>.<colour>` variant whose prepared geometry is the anchor's with its baked
+//                                        vertex colours moved from `from` to `to` (public/js/mod/recolor.js; 'tint' for an
+//                                        animal's coat), done once per key and cached; skinned anchors are cloned with
+//                                        recoloured geometry. Every method below accepts these keys.
 // Named exports:
 //   LOOK                    shared uniforms { uWrap, uRim, uRimColor } of every material made here (tune
 //                           in look-dev; night can lower uRim)
@@ -78,6 +85,7 @@
 //   branch skips them by day) and the night glow of window glass (vertex colour GLASS) and lamp glass (LAMP_GLASS)
 import * as THREE from 'three';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
+import { recolorColors } from '../mod/recolor.js';
 import { loadManifest, getManifest, loadGLB } from './assets.js';
 
 export const LAMP_N = 4;
@@ -349,20 +357,75 @@ function prepareFile(file, gltf) {
   }
 }
 
+// ---- a farm's mod things (Harness Hollow): anchor keys with a recolour variant ---------------------------------
+let modLooks = {};
+const MOD_SEP = '~';
+/** The anchor key of a mod variant key ('crop:watermelon:3~x_moon_melon.BFE3FF' -> 'crop:watermelon:3'). */
+const baseOf = (key) => (typeof key === 'string' && key.includes(MOD_SEP) ? key.slice(0, key.indexOf(MOD_SEP)) : key);
+const lookOfKey = (key) => {
+  const tag = key.slice(key.indexOf(MOD_SEP) + 1);
+  return modLooks[tag.slice(0, tag.lastIndexOf('.'))] ?? null;
+};
+const tagOf = (defId, look) => `${MOD_SEP}${defId}.${String(look.to).replace('#', '')}`;
+/** A key that names a mod def ('animal:x_moon_hen:baby') becomes its anchor's variant key; any other key is unchanged. */
+function norm(key) {
+  if (typeof key !== 'string' || key.includes(MOD_SEP) || !key.includes(':x_')) return key;
+  const parts = key.split(':');
+  const look = modLooks[parts[1]];
+  if (!look) return key;
+  const anchor = look.key.slice(look.key.indexOf(':') + 1);
+  return `${[parts[0], anchor, ...parts.slice(2)].join(':')}${tagOf(parts[1], look)}`;
+}
+
+/** The recoloured twin of an anchor's prepared entry (once per key). */
+function derive(key) {
+  if (prepared.has(key)) return prepared.get(key);
+  const base = prepared.get(baseOf(key));
+  const look = lookOfKey(key);
+  if (!base || !look) return null;
+  // the anchor's attributes are shared (no copy of the shape); only the colours are new. Never disposed: disposing
+  // would free the anchor's shared GPU buffers too
+  const paint = (g) => {
+    if (!g) return g;
+    const c = g.getAttribute('color');
+    if (!c) return g;
+    const out = new THREE.BufferGeometry();
+    for (const [name, attr] of Object.entries(g.attributes)) {
+      out.setAttribute(name, name === 'color' ? new THREE.BufferAttribute(recolorColors(c.array, look), c.itemSize) : attr);
+    }
+    if (g.index) out.setIndex(g.index);
+    for (const gr of g.groups) out.addGroup(gr.start, gr.count, gr.materialIndex);
+    if (g.boundingBox) out.boundingBox = g.boundingBox.clone();
+    if (g.boundingSphere) out.boundingSphere = g.boundingSphere.clone();
+    out.userData = { ...g.userData };
+    return out;
+  };
+  const entry = base.skinned ? { ...base, geometry: paint(base.geometry), look, painted: new Map() }
+    : { geometry: paint(base.geometry), bounds: base.bounds, skinned: false };
+  if (base.skinned) entry.paint = paint;
+  prepared.set(key, entry);
+  return entry;
+}
+
 function fileOf(key) {
   const m = getManifest();
-  const e = m && m.keys[key];
+  const e = m && m.keys[baseOf(norm(key))];
   return e ? e.file : null;
 }
 
 function info(key) {
   const m = getManifest();
-  return (m && m.keys[key]) || null;
+  return (m && m.keys[baseOf(norm(key))]) || null;
 }
 
 function keyOf(defId, variant) {
   const m = getManifest();
   if (!m) return null;
+  const look = modLooks[defId];
+  if (look) {
+    const ak = keyOf(look.key.slice(look.key.indexOf(':') + 1), variant);
+    return ak ? `${ak}${tagOf(defId, look)}` : null;
+  }
   const alias = m.aliases && m.aliases[defId];
   if (alias && variant === undefined) return alias;
   const d = m.defs && m.defs[defId];
@@ -376,13 +439,14 @@ export const models = {
   async init() { await loadManifest(); },
 
   ready(keys) {
-    const list = Array.isArray(keys) ? keys : [keys];
+    const list = (Array.isArray(keys) ? keys : [keys]).map(norm);
     const files = new Set();
     for (const k of list) {
-      if (prepared.has(k)) continue;
+      if (prepared.has(k) || prepared.has(baseOf(k))) continue;
       const f = fileOf(k);
       if (f) files.add(f);
     }
+    const derived = () => { for (const k of list) if (k !== baseOf(k)) derive(k); };
     return Promise.all([...files].map((f) => {
       let p = loading.get(f);
       if (!p) {
@@ -391,10 +455,13 @@ export const models = {
         p.catch(() => loading.delete(f));
       }
       return p;
-    })).then(() => undefined);
+    })).then(() => { derived(); return undefined; });
   },
 
-  isReady(key) { return prepared.has(key); },
+  isReady(key) {
+    const k = norm(key);
+    return prepared.has(k) || (k !== baseOf(k) && Boolean(derive(k)));
+  },
   has(key) { return !!info(key); },
   keys(prefix = '') {
     const m = getManifest();
@@ -406,11 +473,13 @@ export const models = {
   treeKey(treeId, state) { return `tree:${treeId}:${state}`; },
 
   geometryFor(key) {
-    const p = prepared.get(key);
+    const k = norm(key);
+    const p = prepared.get(k) ?? (k !== baseOf(k) ? derive(k) : null);
     return p ? p.geometry : null;
   },
 
   placeholder(key) {
+    key = baseOf(norm(key));
     let g = placeholders.get(key);
     if (!g) {
       const e = info(key);
@@ -423,6 +492,7 @@ export const models = {
   },
 
   boundsOf(key) {
+    key = baseOf(norm(key));
     const p = prepared.get(key);
     if (p) return p.bounds;
     const e = info(key);
@@ -431,7 +501,8 @@ export const models = {
   },
 
   clone(key, { tint } = {}) {
-    const p = prepared.get(key);
+    key = norm(key);
+    const p = prepared.get(key) ?? (key !== baseOf(key) ? derive(key) : null);
     if (!p) return null;
     if (!p.skinned) {
       const mesh = new THREE.Mesh(p.geometry, material(info(key)?.doubleSided ? 'foliage' : 'standard'));
@@ -440,6 +511,15 @@ export const models = {
     }
     const object = SkeletonUtils.clone(p.template);
     object.name = key;
+    if (p.look) {
+      // a mod breed: each mesh gets the recoloured twin of its geometry (made once per source geometry)
+      object.traverse((o) => {
+        if (!o.isMesh || !o.geometry || !o.geometry.getAttribute('color')) return;
+        let g = p.painted.get(o.geometry.uuid);
+        if (!g) { g = p.paint(o.geometry); p.painted.set(o.geometry.uuid, g); }
+        o.geometry = g;
+      });
+    }
     object.position.set(0, 0, 0);
     object.rotation.set(0, 0, 0);
     object.updateMatrix();
@@ -471,11 +551,19 @@ export const models = {
   material,
   createMaterial,
 
+  /** A farm's mod things (Harness Hollow): { [defId]: { key, from, to, kind, leaf? } }; replaces the previous map. */
+  setOverlay(map) {
+    modLooks = map && typeof map === 'object' ? { ...map } : {};
+    // the recoloured twins share the anchors' buffers: dropped, never disposed
+    for (const k of [...prepared.keys()]) if (k.includes(MOD_SEP)) prepared.delete(k);
+    for (const k of [...placeholders.keys()]) if (k.includes(MOD_SEP)) placeholders.delete(k);
+  },
+
   dispose(key) {
     const drop = (k) => {
       const p = prepared.get(k);
       if (!p) return;
-      if (p.geometry) p.geometry.dispose();
+      if (p.geometry && !k.includes(MOD_SEP)) p.geometry.dispose();   // a mod twin shares its anchor's buffers
       prepared.delete(k);
     };
     if (key) drop(key);

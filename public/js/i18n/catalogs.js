@@ -56,3 +56,15 @@ export const AREAS = [
   ['privacy', privacy, () => import('./bg/privacy.js')],
   ['front', front, () => import('./bg/front.js')],
 ];
+
+/**
+ * Areas registered on demand by their own entry, not with the page (the tests check them like the others):
+ * [area, () => import(en), () => import(bg)]. 'harness': the in-game helper (i18n/harness.js, loaded by
+ * ui/harness/boot.js only when the farm's server offers the helper).
+ */
+export const LAZY_AREAS = [
+  ['harness', () => import('./en/harness.js'), () => import('./bg/harness.js')],
+];
+
+/** Every area with its English catalog loaded: [area, en, () => import(bg)] (tests and tools). */
+export const allAreas = async () => [...AREAS, ...await Promise.all(LAZY_AREAS.map(async ([a, en, bg]) => [a, (await en()).default, bg]))];

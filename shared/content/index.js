@@ -105,6 +105,10 @@
 //                            cinnamon_tree, building spice_mill, animals quail (quail_coop) and bison (bison_range), feed
 //                            prairie_hay, 14 recipes; unlocksAt lists parcels (not pieces)
 //
+// Added for Harness Hollow (mods lane, additive; docs/agent-notes/harness-contract.md §2.3):
+//   resetDerived()           clears the caches derived from the Maps (live()); shared/mod/install.js calls it after it
+//                            installed a farm's mod overlay into the Maps (or restored the base)
+//
 // Rules for content data: plain objects, no functions, no Math.random, no Date, integer math only (percentages in
 // basis points, durations in ms). Ids match ID_RE. Generated tables (header "GENERATED") come from
 // tools/gen-content.mjs; never edit them by hand.
@@ -1133,6 +1137,11 @@ export function live(family) {
     liveCache.set(family, Object.freeze(m instanceof Map ? [...m.values()].filter(isLive) : []));
   }
   return liveCache.get(family);
+}
+
+/** Forget everything derived from the Maps (a mod overlay was installed or removed: shared/mod/install.js). */
+export function resetDerived() {
+  liveCache.clear();
 }
 
 /** Live defs of a family unlocked at or below `level` (defs without `unlock` count as level 1). */

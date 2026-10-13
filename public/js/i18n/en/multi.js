@@ -13,8 +13,8 @@ export default {
   },
 
   // the landing page
-  'multi.ld.title': 'Harvest Hollow · a cozy farm for two',
-  'multi.ld.description': 'Harvest Hollow: a cozy 3D farm for two, in your browser. Start a farm in one tap and invite a friend to farm with you, live. Free and open source.',
+  'multi.ld.title': 'Harness Hollow · a cozy farm for two',
+  'multi.ld.description': 'Harness Hollow: a cozy 3D farm for two, in your browser. Start a farm in one tap and invite a friend to farm with you, live. Free and open source.',
 
   // the farm gate
   'multi.gate.private.title': 'This farm is private',
@@ -38,7 +38,7 @@ export default {
   'multi.invite.rules': 'The link works once, for {n} days. Making a new link turns the old one off.',
   'multi.invite.full': 'Your farm has two farmers. That is everyone a farm can have, so there is nothing to invite to.',
   'multi.invite.nudge': 'Farming is better with two. Send a friend a link and they can farm here with you, live.',
-  'multi.invite.share': 'Come and farm with me in Harvest Hollow!',
+  'multi.invite.share': 'Come and farm with me in Harness Hollow!',
   'multi.invite.err.FULL': 'Your farm already has two farmers.',
   'multi.invite.err.AUTH': 'This device cannot make an invite for this farm. Open your personal farm link first.',
   'multi.invite.err.RATE': 'Lots of invites just now. Try again in a minute.',

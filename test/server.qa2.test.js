@@ -346,6 +346,11 @@ test('server/index.js starts when it is run through a symlinked checkout, with o
         sleep(20_000).then(() => 'no banner in 20 s'),
       ]);
       assert.equal(started, true, `node ${flags.join(' ')} <symlink>/server/index.js`);
+      // exactly one server: a module importing the entry by its real path once got a second copy of it whose own
+      // entry check passed, and on a fixed port the second listen failed (EADDRINUSE on the live box, 2026-10-13)
+      await sleep(1500);
+      assert.equal(out.match(/is running at/g)?.length, 1, `one server started: ${out.slice(-400)}`);
+      assert.doesNotMatch(out, /failed to start|snapshot failed/);
       child.kill('SIGTERM');
       assert.equal(await exited, 0, 'a clean SIGTERM shutdown');
     }

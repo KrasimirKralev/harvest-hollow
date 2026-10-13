@@ -249,6 +249,15 @@
   .notice { max-width: calc(100vw - 16px); }
   .banners { top: calc(108px + var(--sat)); right: calc(12px + var(--sar)); left: calc(12px + var(--sal)); align-items: center; }
   .unlock-banner .x { right: -6px; }
+  /* the right edge column (Harvey, zoom, turn) keeps its own lane: banners, toasts and notices stop short of it, so none
+     of them ever lies over its buttons, whatever their height or the column's place (verifier 2026-10-13: the land
+     banner covered Harvey's button on an iPhone 13 and the tap landed on the banner). 16 px edge + 44 px button + gap */
+  #hud { --edge-lane: calc(var(--safe) + 56px + var(--sar)); }
+  .banners { right: var(--edge-lane); }
+  .toasts, #hud:has(#banners > :not(.banner-more)) .toasts { right: var(--edge-lane); }
+  .toast, #hud:has(#banners > :not(.banner-more)) .toast { max-width: min(560px, calc(100vw - 8px - var(--sal) - var(--edge-lane))); }
+  .notice, #hud:has(#banners > :not(.banner-more)) .notice { left: calc(8px + var(--sal)); right: var(--edge-lane); width: fit-content;
+    margin-inline: auto; transform: none; max-width: min(560px, calc(100vw - 8px - var(--sal) - var(--edge-lane))); }
   body.tut-bar #hud:has(#banners > .unlock-banner, #banners > .rosette, #banners > .bloom-banner) .toasts {
     bottom: calc(var(--bar-h) + var(--sab) + 82px); }
   .unlock-banner, .bloom-banner, .rosette { width: min(360px, 100%); }

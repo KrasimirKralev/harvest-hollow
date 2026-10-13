@@ -19,7 +19,7 @@ export default {
   'keep.later': 'Later',
   'keep.copied': 'Copied. Paste it somewhere only you can see.',
   'keep.copy.fail': 'Press and hold the link to copy it.',
-  'keep.share.title': 'My Harvest Hollow farm',
+  'keep.share.title': 'My Harness Hollow farm',
   'keep.share.text': 'My personal link to my farm. Keep it private: it opens the farm as me.',
   'keep.thanks': 'Lovely. Your farm is safe.',
   'keep.nolink': 'Your personal link is not ready yet. Open this card again in a moment.',
@@ -57,7 +57,7 @@ export default {
   'keep.newkey.lead': 'Send this link to {name}. It opens the farm as {name} on any phone, once, within {days} days.',
   'keep.newkey.rules': 'Their old devices are signed out. Making another new key turns this link off.',
   'keep.newkey.label': 'New key link for {name}',
-  'keep.newkey.share.text': 'Here is your new key to our farm in Harvest Hollow.',
+  'keep.newkey.share.text': 'Here is your new key to our farm in Harness Hollow.',
   'keep.newkey.qr.label': 'QR code of the new key link for {name}',
   'keep.newkey.gone': 'This link was used or has run out. Make a new key in Settings if it is still needed.',
   'keep.newkey.done': 'Done',
@@ -92,7 +92,7 @@ export default {
   'keep.gate.back.photo': 'Use a photo of it',
   'keep.gate.back.bad': 'That does not look like a farm link. It starts with the address of this site.',
   'keep.gate.back.noqr': 'No QR code found in that picture. Try a sharper photo, or paste the link.',
-  'keep.gate.back.notlink': 'That QR code is not a Harvest Hollow farm link.',
+  'keep.gate.back.notlink': 'That QR code is not a Harness Hollow farm link.',
 
   // ---- the camera scanner (ui/qr-scan.js)
   'keep.scan.title': 'Scan your QR code',

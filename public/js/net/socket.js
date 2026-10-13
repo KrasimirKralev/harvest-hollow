@@ -12,8 +12,13 @@
 //                           disconnected (the SyncStore re-sends pending actions after the next welcome)
 //   socket.ping()           one clock sample now
 //   socket.stop()           close for good, no reconnect (multi-farm mode: a private farm, a used-up invite)
+//   close code CLOSE.MOD_RELOAD (4010, Harness Hollow): the farm moved into its own worker for its first mod; the
+//                           socket reconnects at once and quietly ('reconnecting' only if it is not back within 3 s)
 //   status: 'connecting' | 'open' | 'reconnecting'
-import { MSG, LIMITS } from '../../../shared/net/protocol.js';
+import { MSG, LIMITS, CLOSE } from '../../../shared/net/protocol.js';
+
+/** A quiet reconnect (CLOSE.MOD_RELOAD) shows 'reconnecting' only after this long. */
+export const QUIET_RECONNECT_MS = 3000;
 
 export class Socket {
   /**
@@ -51,6 +56,8 @@ export class Socket {
     this.ws = ws;
     ws.onopen = () => {
       this.attempt = 0;
+      clearTimeout(this.quietTimer);
+      this.quietTimer = null;
       this.setStatus('open');
       this.clock.reset();
       this.onOpen();
@@ -70,12 +77,19 @@ export class Socket {
         this.onMessage(m);
       }
     };
-    ws.onclose = () => {
+    ws.onclose = (e) => {
       if (this.ws !== ws) return;
       this.ws = null;
       clearTimeout(this.pingTimer);
       this.batch = [];             // the store re-sends every pending action after the next welcome
       if (this.stopped) return;    // stop(): the farm said no (multi mode's private page), knocking again changes nothing
+      if (e && e.code === CLOSE.MOD_RELOAD) {
+        // the farm reloads with its new mod: back at once, and the banner only if that takes a while
+        clearTimeout(this.quietTimer);
+        this.quietTimer = setTimeout(() => { this.quietTimer = null; if (!this.open) this.setStatus('reconnecting'); }, QUIET_RECONNECT_MS);
+        setTimeout(() => this.connect(), 50);
+        return;
+      }
       this.setStatus('reconnecting');
       const steps = LIMITS.RECONNECT_MS;
       const delay = steps[Math.min(this.attempt++, steps.length - 1)];

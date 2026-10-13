@@ -54,6 +54,7 @@
 //        in localStorage 'hh.audio'
 //   audio.setScene({ title })                true / false: the title screen (default: the slot picker is showing);
 //                                            null: back to that default
+//   audio.prefer(trackIds)                   (additive, Harness Hollow) a farm's mod prefers these tracks where they fit
 //   audio.info() -> { ready, unlocked, state, loaded, music: { mode, playing, track, title, context, variant, bar,
 //                                            piece, format, failed, ... }, voices }   mode 'tracks' | 'generative'
 //                                            ('pending' while the track list loads)
@@ -139,8 +140,11 @@ export function musicPool(tracks, context) {
  * @param {string} context
  * @param {{ last?: string|null, failed?: Iterable<string>, random?: () => number }} [o]
  */
-export function pickTrack(tracks, context, { last = null, failed = [], random = Math.random } = {}) {
+export function pickTrack(tracks, context, { last = null, failed = [], random = Math.random, prefer = [] } = {}) {
   const bad = new Set(failed);
+  // a farm's mod may prefer some tracks (Harness Hollow look.json): one of them when it fits this scene
+  const liked = prefer.length ? musicPool(tracks, context).filter((t) => prefer.includes(t.id) && t.id !== last && !bad.has(t.id)) : [];
+  if (liked.length) return liked[Math.min(liked.length - 1, Math.floor(random() * liked.length))];
   for (const c of [context, ...(MUSIC_FALLBACK[context] ?? [])]) {
     const pool = musicPool(tracks, c).filter((t) => t.id !== last && !bad.has(t.id));
     if (pool.length) return pool[Math.min(pool.length - 1, Math.floor(random() * pool.length))];
@@ -755,7 +759,7 @@ function startNext(context, fade) {
     const failed = failedIds(now);
     if (D.pinTrack) t = D.list.find((x) => x.id === D.pinTrack && !failed.includes(x.id)) ?? null;
     D.pinTrack = null;
-    t ??= pickTrack(D.list, context, { last: D.last, failed });
+    t ??= pickTrack(D.list, context, { last: D.last, failed, prefer: preferred });
   }
   if (t) { playTrack(t, context, fade); return; }
   if (D.active) releaseDeck(D.active, fade);
@@ -984,7 +988,13 @@ async function loadTracks(q) {
 }
 
 // ---- public API -----------------------------------------------------------------------------------------------
+/** Track ids a farm's mod prefers (Harness Hollow look.json music.prefer; audio.prefer). */
+let preferred = [];
+
 export const audio = {
+  /** (additive, Harness Hollow mods lane) prefer these track ids where their moods fit the scene; [] = no preference */
+  prefer(ids) { preferred = Array.isArray(ids) ? ids.filter((x) => typeof x === 'string').slice(0, 3) : []; },
+
   async init({ now, dayMode } = {}) {
     if (S.ctx) return;
     if (typeof now === 'function') S.now = now;

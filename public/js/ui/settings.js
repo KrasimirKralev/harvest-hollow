@@ -14,6 +14,7 @@
 // audio.js (it persists them in 'hh.audio'): the Sound section reads audio.volumes() and writes
 // audio.setVolume(channel, 0..1) / audio.setMuted(bool); `volume` here is only the fallback before audio exists.
 import { h, kv } from './dom.js';
+import { farmName } from '../../../shared/brand.js';
 import { t, liveRows, live, lang, setLang, LANGS, LANG_NAMES, fmtPct } from '../i18n/index.js';
 
 const KEY = 'hh.settings';
@@ -352,7 +353,10 @@ export function createSettings(S) {
     hotkey: ',',
     get tabs() {
       return [{ id: 'look', label: t('settings.tab.look') }, { id: 'access', label: t('settings.tab.access') }, { id: 'keys', label: t('settings.tab.keys') },
-        { id: 'farm', label: t('settings.tab.farm') }, { id: 'credits', label: t('settings.tab.credits') }];
+        { id: 'farm', label: t('settings.tab.farm') },
+        // Harness Hollow: Settings › Helper while the server offers the helper (ui/harness/index.js settingsRows)
+        ...(S.harness?.enabled?.() ? [{ id: 'helper', label: t('harness.set.tab') }] : []),
+        { id: 'credits', label: t('settings.tab.credits') }];
     },
     mount(body, ctx) {
       const grid = h('div.settings');
@@ -395,12 +399,14 @@ export function createSettings(S) {
         grid.append(h('h3', t('settings.keys')), keys);
       } else if (ctx.tab === 'credits') {
         grid.append(...creditRows());
+      } else if (ctx.tab === 'helper' && S.harness) {
+        grid.append(...S.harness.settingsRows(ctx));
       } else {
         const st = S.store.state;
         grid.append(
           h('h3', t('settings.farm.ours')),
           h('div.set-row', h('span.lbl', t('settings.farm.name')), h('div.set-inline',
-            h('strong.set-farm-name', st ? st.farm.name : ''),
+            h('strong.set-farm-name', farmName(st) ?? ''),
             h('button.btn.btn--sky.btn--small', { type: 'button', on: { click: () => { ctx.close(); S.ui.nameFarm(); } } }, t('settings.farm.rename')))),
           h('div.set-row', h('span.lbl', t('settings.farm.guide')), h('div',
             h('button.btn.btn--paper.btn--small', { type: 'button', dataset: { guide: 'again' }, on: { click: () => { ctx.close(); S.tutorial?.restart(); } } }, t('settings.farm.guideAgain'))),

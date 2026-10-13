@@ -2,7 +2,7 @@
 // schema n+1. Each one needs a fixture test (test/fixtures/save-v<n>.json, test/persist.migrations.test.js).
 // Content edits never need a migration unless they remove or rename ids, which is forbidden (use `retired`).
 //
-// Two layers, in this order, at every boot (server/index.js loadFarm, before the journal replays):
+// Two layers, in this order, at every boot (server/app.js loadFarm, before the journal replays):
 //   1. migrate(): the explicit, ordered steps for changes to EXISTING fields (renames, reshapes). The loader
 //      first keeps the save as loaded in backups/farm.pre-migrate-v<N>.json.
 //   2. backfill(): ADDITIVE fields. A lane that adds a field to createFarm() or createPlayer() (and to the key

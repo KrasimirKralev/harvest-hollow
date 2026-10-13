@@ -45,11 +45,17 @@ import { ClockSync } from '../../shared/net/clock.js';
 import { makeCid } from '../../shared/net/ids.js';
 import { MSG, ERR, PROTOCOL_VERSION, CAPS } from '../../shared/net/protocol.js';
 import { CONTENT_HASH, furnitureOf } from '../../shared/content/index.js';
+import { BRAND } from '../../shared/brand.js';
 import { RULES_VERSION } from '../../shared/rules/version.js';
 import { farm, session, readLaunch, cleanUrl, rememberFarm, forgetFarm, farmLabel, validSecret, ttlDays, isStandalone } from './net/farm.js';
 import { showFarmGate, installFarmManifest } from './ui/farm-gate.js';
 import { ready as i18nReady, t, N } from './i18n/index.js';
 import { FARM_DELETED_EVENT } from './ui/privacy.js';
+import { syncOverlay } from './mod/overlay.js';
+import { setLookAudio } from './mod/look.js';
+import { emitHarness, setHarnessAuth } from './harness/bus.js';
+
+setLookAudio(audio);          // a farm's mod may prefer some music tracks (public/js/mod/look.js)
 
 // a farm's own keys are namespaced per farm in multi mode (farm.key); unchanged in single mode
 const storage = {
@@ -217,6 +223,10 @@ function onWelcome(w) {
   if (gate === 'mismatch') { ui.hideSlots(); ui.setConnection('mismatch'); return; }
   ui.hideSlots();
   clock.seed(w.serverNow, performance.now());
+  // the farm's mod (Harness Hollow): installed before the reset, so pending predictions replay on its content and every
+  // panel re-reads it; a welcome without one puts the base game back (an undo to nothing, another farm)
+  syncOverlay(w.mod);
+  setHarnessAuth({ pid: w.pid, token: farm.multi ? session.secret ?? ident.tokens[w.pid] : ident.tokens[w.pid] });
   store.reset(w);
   if (!started) {
     started = true;
@@ -279,7 +289,7 @@ function onWelcome(w) {
     if (!p.online) view.avatars?.ride?.(p.pid, false);
   }
   if (Array.isArray(w.chat) && typeof ui.chatHistory === 'function') ui.chatHistory(w.chat);
-  document.title = `Harvest Hollow · ${store.state.players[w.pid]?.name ?? ''}`; // i18n-ok: the brand stays
+  document.title = `${BRAND} · ${store.state.players[w.pid]?.name ?? ''}`;
   if (settle) settle();
 }
 
@@ -463,6 +473,9 @@ function handle(m) {
       return feedback?.partnerEmote(m.pid, m.id, { visual: typeof ui.emote !== 'function' });
     case MSG.CHAT:
       return typeof ui.chat === 'function' ? ui.chat(m) : undefined;
+    // the in-game helper's pushes (Harness Hollow): the ui lane listens on public/js/harness/bus.js
+    case MSG.HX:
+      return emitHarness(m);
     default:
       return undefined;
   }

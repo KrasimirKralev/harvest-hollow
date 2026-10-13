@@ -16,6 +16,12 @@
 //   10. farm 2 with nobody connected unloads after the idle time; reopened, its state is identical
 //   11. farm 2 idle past the 7-day TTL (the dev sweep's test clock) is deleted from disk; Dana's device says "gone"
 //   12. the per-address creation limit holds (429, and the landing page says so)
+//   6b. the in-game helper (Harness Hollow, mock provider): Rowan asks for a Moon Melon, the job runs while both play,
+//       Mia taps Harvey's button with the land card up (it must be what the tap touches: elementFromPoint) and is told
+//       one change runs at a time,
+//       Apply moves farm 1 into its own worker (a quiet reconnect, code 4010) and both of its screens learn the crop with
+//       no reload; Mia plants one on her phone; farm 2 never knows it; an undo retires it. Every later step (keys,
+//       reloads, the delete) then runs against a farm that lives in a worker
 //   13. security: no farm id, key or invite in the server log; no member secret in any URL a request carried; the
 //       global status lists no id; no page errors
 // Keep your key (docs/agent-notes/mf-client.md "Keys"), between the steps above:
@@ -104,7 +110,9 @@ function startServer() {
   serverLog = '';
   server = spawn(process.execPath, ['server/index.js'], {
     cwd: ROOT, env: { ...process.env, PORT: String(port), HH_DATA_DIR: dataDir, HH_DEV: '1', HH_MODE: 'multi', HH_TZ: 'Europe/Sofia',
-      HH_FARM_IDLE_MS: '4000', NODE_ENV: 'development', HH_ADMIN_TOKEN: ADMIN_TOKEN, HH_STARS_URL: `http://127.0.0.1:${stubPort}/repos/KrasimirKralev/harvest-hollow` },
+      HH_FARM_IDLE_MS: '4000', NODE_ENV: 'development', HH_ADMIN_TOKEN: ADMIN_TOKEN,
+      // the in-game helper (Harness Hollow): off on a multi host by default; on here, with the scripted mock provider
+      HH_HELPER: 'on', HH_HARNESS_MOCK: '1', HH_MOCK_STEP_MS: '300', HH_STARS_URL: `http://127.0.0.1:${stubPort}/repos/KrasimirKralev/harvest-hollow` },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   server.stdout.on('data', (d) => { serverLog += d; });
@@ -223,9 +231,29 @@ async function pressUntil(page, sel, until, arg = null, tries = 3) {
       return;
     } catch { /* read as a long press, or still sliding in ("not clickable"): again */ }
   }
-  // the machine is too busy for a quick synthetic tap: the button's own click (what a quick tap ends in)
+  // the machine is too busy for a quick synthetic tap: the button's own click (what a quick tap ends in), but only on
+  // a button a finger would reach: a click from code must never hide a banner or a toast lying over it
+  const cover = await coverOf(page, sel);
+  check(`${page.tag}: ${sel} is the topmost element at its centre before the click`, cover === null, cover ?? '');
   await page.$eval(sel, (b) => b.click());
   await waitFor(page, until, arg, 10_000);
+}
+/**
+ * What a finger at the centre of the visible `sel` would touch (document.elementFromPoint): null when it is the element
+ * itself (or inside it), else what lies over it, in words (verifier 2026-10-13: a farm banner covered Harvey's button
+ * on an iPhone 13, and a click from code had hidden it).
+ */
+function coverOf(page, sel) {
+  return page.evaluate((s) => {
+    const el = [...document.querySelectorAll(s)].find((x) => x.getClientRects().length);
+    if (!el) return `${s} is not on the screen`;
+    const r = el.getBoundingClientRect();
+    const top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+    if (top && (top === el || el.contains(top))) return null;
+    const card = top?.closest('.unlock-banner, .bloom-banner, .rosette, .toast, .notice, .hh-panel, section, aside') ?? top;
+    return `${top ? `${top.tagName.toLowerCase()}.${String(top.className).trim().replace(/\s+/g, '.')}` : 'nothing'} of ${card?.className ?? '?'}: "${
+      String(card?.textContent ?? '').replace(/\s+/g, ' ').trim().slice(0, 50)}"`;
+  }, sel);
 }
 /** Click the visible button under `sel` whose words are `text` (true when there was one). */
 const clickText = (page, sel, text) => page.evaluate((s, t) => {
@@ -602,6 +630,65 @@ try {
   const names = await Promise.all([K, D].map((p) => p.evaluate(() => Object.values(window.__hh.state.players).map((x) => x.name).sort().join())));
   check('each farm holds its own two farmers', names[0] === 'Rowan,Mia' && names[1] === 'Dana,Leo', names.join(' | '));
 
+  // 6b. the in-game helper on farm 1 (mock provider), farm 2 untouched -------------------------------------------------
+  {
+    const keyOf = (p) => p.evaluate(async () => (await import('/js/harness/bus.js')).harnessAuth()?.token ?? null);
+    const hx = async (p, method, rel, body) => {
+      const r = await fetch(`${BASE}/api/f/${f1.id}/harness${rel}`, { method, headers: { authorization: `Bearer ${await keyOf(p)}`,
+        'content-type': 'application/json', origin: BASE }, ...(body ? { body: JSON.stringify(body) } : {}) });
+      return { status: r.status, body: await r.json().catch(() => null) };
+    };
+    const knows = (p, id) => p.evaluate(async (x) => { const c = await import('/shared/content/index.js'); const d = c.cropOf(x); return d ? { retired: Boolean(d.retired) } : null; }, id);
+    const st = await hx(K, 'GET', '/state');
+    check('farm 1 offers the helper (HH_HELPER=on), the mock provider listed', st.status === 200 && st.body.enabled === true
+      && st.body.providers.some((x) => x.id === 'mock'), JSON.stringify(st.body).slice(0, 160));
+    const si = await hx(K, 'POST', '/providers/mock/signin', {});
+    const url = (si.body?.signin ?? si.body)?.step?.url;
+    check('the mock sign-in hands out its page', typeof url === 'string', JSON.stringify(si.body).slice(0, 160));
+    await fetch(`${BASE}${url}`);
+    check('Rowan says no to sharing', (await hx(K, 'POST', '/consent', { telemetry: false })).status === 200);
+    const job = await hx(K, 'POST', '/jobs', { prompt: 'a moon melon I can plant now', provider: 'mock', lang: 'en' });
+    check('the request is taken (202)', job.status === 202, JSON.stringify(job.body).slice(0, 160));
+    check('Mia sees Rowan\'s helper at work', await waitFor(M, () => /Rowan/.test(document.querySelector('.hx-pill-line')?.textContent ?? ''), null, 20_000).then(() => true, () => false));
+    // her finger on Harvey's button while the farm's land card (ui/panels/w5.js) spans the top of her screen: the
+    // button is what the tap touches, and the helper says one change runs at a time
+    await M.evaluate(() => {
+      window.__e2eLand = window.__hh.ui.banner({ id: 'e2e-land', kind: 'quest', ttl: 600_000, things: [], ribbon: 'По‑голяма земя!',
+        message: 'Земята на фермата вече е в 7 големи парцела вместо в много малки. Всичко ваше си остава ваше: Хълмът при потока и Овощната алея.',
+        actions: [{ label: 'Отвори картата', kind: 'sky', fn: () => {} }] });
+    });
+    await sleep(600 * SLOW);
+    const harveyCover = await coverOf(M, '#hx-btn');
+    check('Mia\'s tap lands on Harvey\'s button, not on the land card (elementFromPoint at its centre)', harveyCover === null, harveyCover ?? '');
+    await pressUntil(M, '#hx-btn', () => window.__hh.ui.panels.top() === 'helper');
+    await M.evaluate(() => window.__hh.ui.panels.open('helper', { tab: 'ask' }));
+    check('...and the helper tells her Rowan\'s change runs first', await waitFor(M, () => /Rowan/.test(document.querySelector('#panel-helper .hx-busy')?.textContent ?? ''), null, 15_000)
+      .then(() => true, () => false));
+    await M.evaluate(() => { window.__hh.ui.panels.closeAll(); window.__e2eLand?.close?.(); window.__e2eLand = null; });
+    check('one change at a time: a second request is 409 BUSY', (await hx(M, 'POST', '/jobs', { prompt: 'x', provider: 'mock', lang: 'bg' })).status === 409);
+    let cur = null;
+    for (let i = 0; i < 120 && !(cur && ['ready', 'failed'].includes(cur.state)); i++) { await sleep(500); cur = (await hx(K, 'GET', '/jobs/current')).body?.job; }
+    check('the mod passed every check and waits for Rowan', cur?.state === 'ready' && cur.result?.validation?.ok === true, JSON.stringify(cur?.error ?? cur?.state));
+    await shot(M, '07b-helper-ready-partner-iphone13');
+    const ap = await hx(K, 'POST', `/jobs/${cur.id}/apply`);
+    check('Apply (the farm moves into its own worker)', ap.status === 200, JSON.stringify(ap.body).slice(0, 160));
+    for (const [p, who] of [[K, 'Rowan'], [M, 'Mia']]) {
+      check(`${who}'s screen learns the Moon Melon with no reload`, await waitFor(p, async () => Boolean((await import('/shared/content/index.js')).cropOf('x_moon_melon')), null, 30_000)
+        .then(() => true, () => false) && await p.evaluate(() => performance.getEntriesByType('navigation').length === 1));
+    }
+    await waitFor(M, () => window.__hh.state && window.__hh.pending === 0, null, 20_000);
+    const freeM = await M.evaluate(() => Object.entries(window.__hh.state.farm.objects).find(([, o]) => o.def === 'plot' && !o.crop)?.[0] ?? null);
+    const planted = await M.evaluate((id) => window.__hh.act('plant', { id, crop: 'x_moon_melon' }).ok, freeM);
+    check('Mia plants a Moon Melon on her phone, and Rowan sees it', planted && await waitFor(K, (id) => window.__hh.state.farm.objects[id]?.crop?.def === 'x_moon_melon', freeM, 20_000).then(() => true, () => false));
+    await shot(M, '07c-helper-applied-iphone13');
+    check('farm 2 never knows the Moon Melon', (await knows(D, 'x_moon_melon')) === null && (await knows(L, 'x_moon_melon')) === null);
+    const un = await hx(M, 'POST', '/undo', {});
+    check('Mia undoes it', un.status === 200, JSON.stringify(un.body).slice(0, 160));
+    check('...the crop is retired on both screens, hers still grows', await waitFor(K, async () => (await import('/shared/content/index.js')).cropOf('x_moon_melon')?.retired === true, null, 30_000).then(() => true, () => false)
+      && await M.evaluate((id) => window.__hh.state.farm.objects[id]?.crop?.def === 'x_moon_melon', freeM));
+    check('farm 2 still never knew it', (await knows(D, 'x_moon_melon')) === null);
+  }
+
   // 7. private farm ----------------------------------------------------------------------------------------------------
   for (const [tag, kind] of [['Stranger phone', 'iPhone 13'], ['Stranger desktop', 'desktop']]) {
     const S = await device(tag, kind);
@@ -699,8 +786,8 @@ try {
   await K.evaluate((ids) => ids.forEach((id) => window.__hh.act('plant', { id, crop: 'wheat' })), [plot, plot2]);
   await waitFor(K, () => Boolean(document.querySelector('.unlock-banner[data-kind="star"]')), null, 20_000);
   const card = await K.evaluate(() => document.querySelector('.unlock-banner[data-kind="star"]').innerText);
-  check('after a harvest on the third play day: "Enjoying Harvest Hollow?" with Star it / Maybe later / Don\'t ask again',
-    /Enjoying Harvest Hollow\?/.test(card) && /helps other couples find it/.test(card) && /Star it/.test(card) && /Maybe later/.test(card) && /Don't ask again/.test(card), card);
+  check('after a harvest on the third play day: "Enjoying Harness Hollow?" with Star it / Maybe later / Don\'t ask again',
+    /Enjoying Harness Hollow\?/.test(card) && /helps other couples find it/.test(card) && /Star it/.test(card) && /Maybe later/.test(card) && /Don't ask again/.test(card), card);
   await sleep(600);
   await shot(K, '09c-star-card-desktop');
   await K.evaluate(() => [...document.querySelectorAll('.unlock-banner[data-kind="star"] .acts .btn')].find((b) => /Maybe later/.test(b.textContent)).click());
@@ -988,7 +1075,7 @@ try {
   check('the landing page\'s Privacy link opens /privacy', new URL(PE.url()).pathname === '/privacy', PE.url());
   const pe = await pvState(PE);
   check('privacy page: an English browser gets the English note (the Bulgarian one hidden), the switch says so', pe.lang === 'en'
-    && pe.shown.join() === 'en' && pe.current === 'en' && pe.title === 'Privacy · Harvest Hollow', JSON.stringify(pe));
+    && pe.shown.join() === 'en' && pe.current === 'en' && pe.title === 'Privacy · Harness Hollow', JSON.stringify(pe));
   const peText = await PE.$eval('article[data-lang="en"]', (a) => a.innerText);
   check('privacy page (EN): who runs it, what is kept, how long, IP addresses, Railway in the US, the legal basis, the rights, deleting a farm, the form',
     ['Rowena Kralev', 'Bulgaria', 'What is kept, and why', '7 days', '12 months', 'IP address', 'United States', 'legitimate interest', 'consent',

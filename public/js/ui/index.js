@@ -20,6 +20,8 @@
 //                                           'phone-land', is(name), insets() -> { top, right, bottom, left }, on(fn) }
 //   ui.hints                                (additive, live requests 2026-10-04) ui/item-hint.js: the "where to get it"
 //                                           bubble on every needed item ({ show(el), hide(), refresh(), el, current })
+//   ui.harness                              (additive, Harness Hollow 2026-10-13) ui/harness/index.js: the in-game helper
+//                                           ({ enabled(), connect(), refresh(), receive(msg), open(tab), openReady(), ... }), or null
 //
 // ---- Panel registry: ui.panels (ui-panels registers its panels here) -----------------------------------------
 // The shell draws the frame (wood frame, overhanging banner title + close button, optional tab strip, parchment
@@ -106,6 +108,7 @@ import { farmManifestHref } from './farm-gate.js';
 import { langToggle } from './lang-toggle.js';
 import { createKeepUi } from './keep.js';
 import { createPrivacyUi } from './privacy.js';
+import { bootHarness } from './harness/boot.js';
 import { farm } from '../net/farm.js';
 import { t, tn, live, onLang, fmtDuration as fmtDur, name as nameOf, N } from '../i18n/index.js';
 
@@ -649,6 +652,12 @@ export const ui = {
     // phones and tablets: html[data-layout], the farm menu button and its panel (css/mobile.css lays them out)
     ctx.layout = createLayout(ctx);
     ui.layout = ctx.layout;
+    // Harness Hollow: the in-game helper (ui/harness/index.js): loaded only when the farm's server offers it
+    // (ui/harness/boot.js asks after the welcome), so the game without the helper carries none of its code. Its button
+    // then tops the right edge column. A failure there never takes the game down with it
+    ctx.harness = null;
+    ui.harness = null;
+    try { bootHarness(ctx, (helper) => { ctx.harness = helper; ui.harness = helper; }); } catch (err) { console.error('the helper did not start', err); }
     const levelup = createLevelup(ctx);
     const tracker = createTracker(ctx);
     const naming = createNaming(ctx);

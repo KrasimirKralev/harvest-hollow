@@ -334,7 +334,7 @@ test('the home-screen manifest: an iPhone gets the key in the start URL\'s fragm
     link.setAttribute('href', '/manifest.webmanifest');
     return { link, doc: { querySelector: () => link } };
   };
-  const base = { name: 'Harvest Hollow', id: '/', start_url: '/', scope: '/', display: 'standalone', icons: [{ src: '/assets/pwa/icon-192.png', sizes: '192x192' }] };
+  const base = { name: 'Harness Hollow', id: '/', start_url: '/', scope: '/', display: 'standalone', icons: [{ src: '/assets/pwa/icon-192.png', sizes: '192x192' }] };
   const ios = mk();
   const iphone = { userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1', standalone: false };
   const m = await G.installFarmManifest(ID, SECRET, { doc: ios.doc, fetcher: fakeFetch({ '/manifest.webmanifest': { body: base } }), origin: ORIGIN, nav: iphone });

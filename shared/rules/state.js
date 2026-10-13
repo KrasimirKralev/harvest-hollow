@@ -53,6 +53,7 @@ import {
 import { START, PLAYER_SLOTS, WORLD_TILES, LEDGER_MAX } from '../content/config.js';
 import { objTiles, inLand, capacityOf, greenhousePlotTiles } from './grid.js';
 import { isTimeZone } from './calendar.js';
+import { BRAND } from '../brand.js';
 import { interiorCells } from './interior-cells.js';
 import { UPGRADES, upgradeTargetOf } from './upgrades.js';
 import { avatarOk } from './actions/avatar.js';
@@ -122,7 +123,7 @@ export function createFarm(farmSeed, now, tz = DEFAULT_TZ) {
   const storage = {};
   for (const d of START.tray) storage[d] = (storage[d] ?? 0) + 1;
   const farm = {
-    name: 'Harvest Hollow',
+    name: BRAND,        // until the farmers name it (farms made before the rename keep 'Harvest Hollow': shared/brand.js)
     xp: 0,
     xpFrac: 0,          // hundredths of a farm XP not paid yet (crop harvests, RC-13); absent in older saves = 0
     wallet: { coins: START.coins, acorns: START.acorns },

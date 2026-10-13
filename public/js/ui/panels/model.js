@@ -344,7 +344,8 @@ function storeCardsRaw(state, tab, env) {
   };
   switch (tab) {
     case 'seeds':
-      return live('crops').map((c) => {
+      // a helper's thing taken back (retired, Harness Hollow) is never for sale; what the farm has keeps working
+      return live('crops').filter((c) => !c.retired).map((c) => {
         const ms = starsOf(state, 'crops', c.id);
         const inSeason = env.now !== undefined && typeof economy.inSeason === 'function' ? economy.inSeason(state, c.id, env.now) : false;
         return {
@@ -355,7 +356,7 @@ function storeCardsRaw(state, tab, env) {
         };
       });
     case 'trees':
-      return live('trees').filter((t) => t.shop !== false).map((t) => card(t.id, {
+      return live('trees').filter((t) => t.shop !== false && !t.retired).map((t) => card(t.id, {
         kind: 'tree', name: cname(t.id), unlock: t.unlock, cycle: fmtMs(t.cycleMs), yield: t.yield, product: t.product,
         xp: t.xp, size: t.size, stars: starsOf(state, 'trees', t.id).stars,
       }));
@@ -367,7 +368,7 @@ function storeCardsRaw(state, tab, env) {
           species: home.species }));
         for (const sp of home.species) {
           const a = animalOf(sp);
-          if (!a || !isLive(a) || a.shop === false) continue;
+          if (!a || !isLive(a) || a.shop === false || a.retired) continue;
           const homes = placedOf(state, home.id);
           const room = sum(homes.map((hid) => homeRoom(state, hid)));
           const extra = { kind: 'animal', name: cname(a.id), unlock: a.unlock, home: home.id, homeName: cname(home.id), homes,
@@ -405,12 +406,12 @@ function storeCardsRaw(state, tab, env) {
         recipes: recipesOf(b.id).length, free: b.cost === 0,
       }));
     case 'decor':
-      return live('decor').filter((d) => d.shop !== false && d.tier === 'coin').map((d) => card(d.id, {
+      return live('decor').filter((d) => d.shop !== false && !d.retired && d.tier === 'coin').map((d) => card(d.id, {
         kind: 'decor', name: cname(d.id), unlock: d.unlock, size: d.size, beauty: d.beauty10 / 10, text: ctext('decor', d.id, 'desc', d.text),
         cap: Infinity,
       }));
     case 'acorn': {
-      const out = live('decor').filter((d) => d.shop !== false && d.tier === 'acorn').map((d) => card(d.id, {
+      const out = live('decor').filter((d) => d.shop !== false && !d.retired && d.tier === 'acorn').map((d) => card(d.id, {
         kind: 'decor', name: cname(d.id), unlock: d.unlock, size: d.size, beauty: d.beauty10 / 10, text: ctext('decor', d.id, 'desc', d.text),
         cap: Infinity,
       }));
@@ -766,7 +767,8 @@ export function buildingView(state, id, now) {
   const bought = slots - (obj.xs ?? 0) - def.slots[0];
   const nextCost = typeof craftingA.slotPrice === 'function' && Number.isSafeInteger(obj.slots) ? craftingA.slotPrice(obj)
     : slots < def.slots[1] ? def.slotCosts[bought] ?? null : null;
-  const recipes = recipesOf(def.id).map((r) => {
+  // a retired recipe (a helper's change taken back) is not offered; a craft already queued still shows in the queue
+  const recipes = recipesOf(def.id).filter((r) => !r.retired).map((r) => {
     const ins = inputsOf(state, r);
     const missing = ins.filter((x) => x.have < x.need).map((x) => ({ item: x.item ?? classMembers(x.cls)[0], n: x.need - x.have, cls: x.cls,
       label: x.cls ? CLASS_NAMES[x.cls] ?? x.cls : undefined }));

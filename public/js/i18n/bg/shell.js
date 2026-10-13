@@ -5,8 +5,8 @@ export default {
   'shell.boot.retry': 'Фермата още не отговаря. Опитваме пак…',
   'shell.boot.asleep': 'Сървърът на фермата май спи. Пуснат ли е? Продължаваме да опитваме…',
   'shell.boot.mismatch': 'Сървърът на фермата работи с други файлове на играта. Рестартирай го и презареди.',
-  'shell.boot.failed': 'Harvest Hollow не успя да тръгне (трябва WebGL2). Виж конзолата.',
-  'shell.noscript': 'Harvest Hollow има нужда от JavaScript и WebGL2.',
+  'shell.boot.failed': 'Harness Hollow не успя да тръгне (трябва WebGL2). Виж конзолата.',
+  'shell.noscript': 'Harness Hollow има нужда от JavaScript и WebGL2.',
 
   'shell.slot.who': 'Кой играе на този екран?',
   'shell.slot.welcomeBack': 'Пак си тук! Кой играе на този екран?',

@@ -66,6 +66,14 @@
 //   peer    { pid, online, name, color }                            join / leave (a leave only after the
 //                                                                   reconnect grace, 10 s: a blip sends nothing)
 //   ghost / emote / mark / chat                                     relayed with { pid, ts }
+//   hx      { e: 'job' | 'applied' | 'undone' | 'suspended' | 'signin', ... }   HARNESS (additive, Harness Hollow;
+//                                                                   docs/agent-notes/harness-contract.md §4.4): the
+//                                                                   in-game helper's progress and its mod changes.
+//                                                                   Clients never send it (the parser answers null)
+//   welcome.mod { n, hash, overlay } | absent                       (additive, harness contract §2.6) the farm's
+//                                                                   active mod overlay; absent = the base game.
+//                                                                   contentHash stays the BASE hash, so a mod never
+//                                                                   reloads a page: the client installs the overlay
 //   b       { list: [msg, ...] }                                    BATCH: only to a client whose hello had
 //                                                                   caps ['b']. Every server message of one
 //                                                                   server tick (<= TICK_MS) in send order;
@@ -75,7 +83,8 @@
 //
 // Close codes the server uses (CLOSE): REPLACED (a newer socket of the same cid took over), EVICTED (the server
 // was full and this socket had not joined), IDLE (no hello for anonIdleMs), OVERFLOW (the client stopped reading;
-// it reconnects and gets a welcome), ABUSE (malformed flood), FULL, SHUTDOWN.
+// it reconnects and gets a welcome), ABUSE (malformed flood), FULL, SHUTDOWN, MOD_RELOAD (additive, harness contract
+// §2.4: a multi-mode farm moves into its own worker for its first mod; the client reconnects quietly).
 //
 // System actions (type starting with '_') are server-only: they arrive as ordinary `d` deltas with
 // by = 'sys', cid = 'sys'.
@@ -91,6 +100,8 @@ export const MSG = Object.freeze({
   // server -> client
   SLOTS: 'slots', DENY: 'deny', WELCOME: 'welcome', DELTA: 'd', REJ: 'rej', ACK: 'ack', PONG: 'pong',
   PRESENCE: 'pr', PEER: 'peer', BATCH: 'b',
+  // server -> client, additive (Harness Hollow)
+  HX: 'hx',
 });
 
 /** Client capabilities announced in `hello.caps` (additive; unknown ones are ignored). */
@@ -99,6 +110,7 @@ export const CAPS = Object.freeze({ BATCH: 'b' });
 /** WebSocket close codes the server sends (4000-4999 are application codes). */
 export const CLOSE = Object.freeze({
   SHUTDOWN: 1001, ABUSE: 1008, FULL: 1013, REPLACED: 4000, EVICTED: 4001, IDLE: 4002, OVERFLOW: 4003,
+  MOD_RELOAD: 4010,
 });
 
 /** The free emotes every player has (GDD §6.2 #2). Relayed only if listed here. */

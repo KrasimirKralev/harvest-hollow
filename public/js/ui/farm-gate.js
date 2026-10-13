@@ -23,6 +23,7 @@ import { langToggle } from './lang-toggle.js';
 import { createFarmScope, farmsOnDevice, personalLink, parseFarmLink, farmLinkPath, isAndroid, TTL_DAYS } from '../net/farm.js';
 import { waysBack } from './link-open.js';
 import { PRIVACY_PATH } from '../front/links.js';
+import { BRAND } from '../../../shared/brand.js';
 import { t, getters, lang } from '../i18n/index.js';
 
 export const GATE_TEXT = getters({
@@ -107,7 +108,7 @@ export function showFarmGate(kind, { farmId = null, doc = globalThis.document, l
   const el = h('section.modal-layer.farm-gate#farm-gate', { role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'farm-gate-title',
     'aria-describedby': 'farm-gate-lead', dataset: { gate: kind in GATE_TEXT ? kind : 'private' } },
   h('div.slot-card.wood.gate-card',
-    h('div.slot-title', h('img.slot-logo', { src: '/assets/art/logo-wide.png', alt: 'Harvest Hollow', width: '1400', height: '336' })), // i18n-ok: brand
+    h('div.slot-title', h('img.slot-logo', { src: '/assets/art/logo-wide.png', alt: BRAND, width: '1400', height: '336' })),
     h('div.slot-paper.paper', langToggle(() => showFarmGate(kind, { farmId, doc, loc, st })),
       h('h2.gate-title#farm-gate-title', { tabindex: '-1' }, text.title),
       h('p.gate-lead#farm-gate-lead', text.lead),

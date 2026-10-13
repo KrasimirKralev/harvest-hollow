@@ -16,6 +16,9 @@
 //   hasIcon(id) -> boolean            known to the manifest (false before init)
 //   iconIds() -> string[]             every id with an icon (empty before init)
 //   FALLBACK_ICON                     '_fallback'
+//   setIconOverlay({ [id]: url128 }, { [id]: url64 })   (additive, Harness Hollow mods lane; harness contract §2.6) a
+//                                     farm's mod things: iconUrl() answers their server-made icons (immutable URLs by
+//                                     overlay hash), hasIcon() is true for them, iconIds() lists them; replaces the map
 import { ASSET_ROOT, pageBuild } from './assets.js';
 
 export const FALLBACK_ICON = '_fallback';
@@ -44,11 +47,19 @@ export function initIcons() {
   return promise;
 }
 
-export function hasIcon(id) { return !!(manifest && Object.hasOwn(manifest.ids, id)); }
+let modBig = {};
+let modSmall = {};
+export function setIconOverlay(big = {}, small = {}) {
+  modBig = { ...big };
+  modSmall = { ...small };
+}
 
-export function iconIds() { return manifest ? Object.keys(manifest.ids) : []; }
+export function hasIcon(id) { return Object.hasOwn(modBig, id) || !!(manifest && Object.hasOwn(manifest.ids, id)); }
+
+export function iconIds() { return [...(manifest ? Object.keys(manifest.ids) : []), ...Object.keys(modBig)]; }
 
 export function iconUrl(id, size = 128) {
+  if (typeof id === 'string' && Object.hasOwn(modBig, id)) return size <= 64 ? modSmall[id] ?? modBig[id] : modBig[id];
   const known = !manifest || Object.hasOwn(manifest.ids, id);
   const name = known && typeof id === 'string' && /^[a-z0-9_]{1,40}$/.test(id) ? id : FALLBACK_ICON;
   const v = manifest && manifest.hash ? `?v=${manifest.hash}` : '';

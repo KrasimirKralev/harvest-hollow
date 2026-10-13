@@ -22,6 +22,7 @@ import * as LE from '../../../../shared/rules/actions/legacy.js';
 import * as DU from '../../../../shared/rules/actions/duel.js';
 import * as CO from '../../../../shared/rules/coop.js';
 import { available } from '../../../../shared/rules/economy.js';
+import { farmName } from '../../../../shared/brand.js';
 import { t, lang, fmtDec, ctext, getters } from '../../i18n/index.js';
 
 const { systemLive, weekOf } = CO;
@@ -139,7 +140,7 @@ export function leagueTable(state, now) {
   if (!tb) return null;
   const rows = tb.rows.map((r, k) => {
     const us = Boolean(r.farm);
-    return { key: us ? 'farm' : `npc:${r.name}`, name: us ? (state.farm.name || t('league.yourFarm')) : ctext('FAIR', `npc.${npcKey(r.name)}`, 'name', r.name), p10: r.p10, us,
+    return { key: us ? 'farm' : `npc:${r.name}`, name: us ? (farmName(state) || t('league.yourFarm')) : ctext('FAIR', `npc.${npcKey(r.name)}`, 'name', r.name), p10: r.p10, us,
       rank: k + 1, zone: r.zone ?? null, npc: us ? null : npcFarm(r.name) };
   });
   const us = rows.find((r) => r.us) ?? null;

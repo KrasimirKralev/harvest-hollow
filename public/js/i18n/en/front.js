@@ -5,7 +5,7 @@
 export default {
   // the one screen: the tagline and the three actions
   'front.hero.tag': 'A cozy 3D farm for two, live in your browser.',
-  'front.act.title': 'Play, or help Harvest Hollow grow',
+  'front.act.title': 'Play, or help Harness Hollow grow',
   'front.act.play': 'Play',
   'front.act.playSub': 'Start a new farm',
   'front.act.star': 'Star us',
@@ -23,7 +23,7 @@ export default {
   'front.start.rateLater': 'Lots of new farms were just started from this network. Try again a little later.',
   'front.start.net': 'The farm server did not answer. Try again in a moment.',
   'front.full.title': 'The valley is full right now',
-  'front.full.text': 'Every farm Harvest Hollow can keep is taken. Farms nobody visits for 7 days are deleted, so room opens up again: please try once more tomorrow.',
+  'front.full.text': 'Every farm Harness Hollow can keep is taken. Farms nobody visits for 7 days are deleted, so room opens up again: please try once more tomorrow.',
   'front.storage': 'This browser window does not keep anything once it closes, so this device will forget your farm. In the game, Settings › Farm has your personal farm link: keep it somewhere safe.',
 
   // this device's farms
@@ -107,7 +107,7 @@ export default {
   'front.game.ideasHelp': 'Tell us what you would love to see. We read every one.',
   'front.game.ideasHelpGithub': 'Opens the ideas board on GitHub.',
   'front.game.ideasLead': 'What would make your farm even cozier? A crop, an animal, a building, or something that bugged you.',
-  'front.game.starRibbon': 'Enjoying Harvest Hollow?',
+  'front.game.starRibbon': 'Enjoying Harness Hollow?',
   'front.game.starText': 'A ⭐ on GitHub helps other couples find it.',
   'front.game.starIt': 'Star it',
   'front.game.later': 'Maybe later',

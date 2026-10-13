@@ -3,7 +3,7 @@
 // stays exactly what it was. The English-literal scanner is test/i18n.scan.test.js.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { AREAS } from '../public/js/i18n/catalogs.js';
+import { allAreas } from '../public/js/i18n/catalogs.js';
 import * as I from '../public/js/i18n/index.js';
 import BG_NAMES from '../public/js/i18n/bg/names.js';
 import BG_TEXT from '../public/js/i18n/bg/text.js';
@@ -23,6 +23,7 @@ function paramsOf(v) {
 const CORE_PREFIXES = ['err.', 'lang.', 'common.'];
 const VARIANT_KEYS = new Set(['zero', 'one', 'two', 'few', 'many', 'other', 'm', 'f', 'n', 'pl', 'touch']);
 
+const AREAS = await allAreas();
 const bgAreas = await Promise.all(AREAS.map(async ([area, en, load]) => [area, en, (await load()).default]));
 
 test('every English key has a Bulgarian one and the other way round, with the same {params}', () => {

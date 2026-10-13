@@ -1,4 +1,4 @@
-# Harvest Hollow — Game Design Document
+# Harness Hollow — Game Design Document
 
 Version 2.0, 2026-10-02. Lead design. Status: **approved for build** unless the owner overrides a decision.
 Version 2 applies the economy critique (`docs/design/critique-economy.md`) and the co-op/fun critique
@@ -98,7 +98,19 @@ owners' live save (L17: Creekside, Old Orchard, Cow Hill) becomes Creek Hill and
 next Sunflower Glade. The new defs and the parcels are kept out of E(L) (`economy-model.mjs` OWNER5; E still assumes the
 old land schedule, which the parcels never fall behind), so no level threshold or price of the live farm moved; Gold
 tiers that mean "every one" follow the families (Rainbow Harvest and Crop Master 25, Orchardist 15, Full Barnyard 12,
-Recipe Box 131); the Farmhouse pantry tiers (wave 4) are now part of `econ-sim` (23/23 PASS).
+Recipe Box 131); the Farmhouse pantry tiers (wave 4) are now part of `econ-sim` (23/23 PASS). **2026-10-13, Harvest
+Harness**: the game is renamed Harness Hollow (a new wooden wordmark; ids, paths and saves keep the old name) and gains
+**Harvey, the in-game helper** (Харви): a farmer types or speaks a wish ("a pale blue melon and a pie from it"), keeps
+playing under a small working pill, and gets a "changes ready" pop-up with the list of changes and the test results;
+Apply reaches both farmers' screens without a reload, every change is undone in one tap (History), and a request that
+cannot be built is reported plainly. Harvey never edits the game: it writes a **mod** for one farm (new crops, fruit
+trees, recipes, animal breeds and decorations built on existing ones, speed knobs within 80-125 %, colours, sky, music,
+letters and tips; never quests, events, weather odds or NPC lines), and every price, seed cost and XP of a new thing
+is computed from the economy model (`shared/mod/econ.js`, pinned to `economy-model.mjs`), so E(L) and the live
+farm's thresholds do not move; a boot test on a copy of the farm caps coins and XP per hour at +30 %. The player signs
+in with their own plan (Claude through the unmodified Claude Code binary, or Sign in with ChatGPT; no API keys).
+Sharing requests with the team is off until a farmer says yes. Contract: `docs/agent-notes/harness-contract.md`;
+integration: `docs/agent-notes/integration-harness.md`.
 
 Harvest Hollow is a FarmVille-2-style co-op farm for two people (up to four) who share one farm and play it together in
 real time on their home LAN. This document is the single source of truth for mechanics, numbers, UX, art and

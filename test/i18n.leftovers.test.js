@@ -231,7 +231,7 @@ const NOT_ON_TOUCH = {
 
 test('touch parity: a Bulgarian line that names a key says its touch words to a finger, as English drops its key hints', async () => {
   const { touchText } = await import('../public/js/ui/dom.js');
-  const { AREAS } = await import('../public/js/i18n/catalogs.js');
+  const AREAS = await (await import('../public/js/i18n/catalogs.js')).allAreas();
   const BG_TEXT = (await import('../public/js/i18n/bg/text.js')).default;
   const BG_NAMES = (await import('../public/js/i18n/bg/names.js')).default;
   const params = { name: 'Деси', title: 'Новак', total: 12, max: 50, cap: 40 };
@@ -293,6 +293,6 @@ test('the landing page\'s meta description follows the language, like the rest o
   const en = (await import('../public/js/i18n/en/multi.js')).default;
   const bg = (await import('../public/js/i18n/bg/multi.js')).default;
   assert.equal(en[key], meta.match(/content="([^"]*)"/)[1], 'English stays the description it always was');
-  assert.match(bg[key], /^Harvest Hollow: /, 'the brand in Latin letters');
-  assert.doesNotMatch(bg[key].replace(/^Harvest Hollow: /, '').replace(/\b3D\b/, ''), /[A-Za-z]/, `Bulgarian: ${bg[key]}`);
+  assert.match(bg[key], /^Harness Hollow: /, 'the brand in Latin letters');
+  assert.doesNotMatch(bg[key].replace(/^Harness Hollow: /, '').replace(/\b3D\b/, ''), /[A-Za-z]/, `Bulgarian: ${bg[key]}`);
 });

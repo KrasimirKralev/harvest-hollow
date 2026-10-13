@@ -403,13 +403,13 @@
         "file": "logo.webp",
         "w": 1200,
         "h": 538,
-        "bytes": 133398
+        "bytes": 95832
       },
       "png": {
         "file": "logo.png",
         "w": 1200,
         "h": 538,
-        "bytes": 734843
+        "bytes": 356775
       }
     },
     "wide": {
@@ -417,13 +417,13 @@
         "file": "logo-wide.webp",
         "w": 1400,
         "h": 336,
-        "bytes": 95888
+        "bytes": 56090
       },
       "png": {
         "file": "logo-wide.png",
         "w": 1400,
         "h": 336,
-        "bytes": 474175
+        "bytes": 213608
       }
     }
   },
@@ -479,5 +479,5 @@
       "bytes": 56276
     }
   },
-  "totalBytes": 2939643
+  "totalBytes": 2223644
 }

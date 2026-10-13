@@ -1,4 +1,4 @@
-# Hosting Harvest Hollow in the cloud (multi-farm mode)
+# Hosting Harness Hollow in the cloud (multi-farm mode)
 
 One container, one persistent volume, one public URL. Everyone who opens the URL can start their own farm in one
 tap (no account), invite one friend with a one-time link, and come back later with their personal link. A farm
@@ -42,6 +42,9 @@ docker run -p 3000:3000 -v hh-data:/data harvest-hollow      # http://localhost:
 | `HH_TZ` | container zone (UTC) | The calendar zone of a farm whose creator's browser did not send one (`POST /api/farms { tz }`). |
 | `HH_LOG` | `json` | One JSON object per log line. No request logging; keys, farm ids and full client addresses are never logged (an abuse warning names the /24 or /48 network only). |
 | `HH_ADMIN_TOKEN` | unset | Turns on the ideas admin routes (`/api/admin/ideas`, see "Ideas from players"). At least 24 characters, e.g. `openssl rand -hex 32`; a shorter one leaves them off. Unset: those routes answer 404. |
+| `HH_HELPER` | `off` in multi mode | Harvey, the in-game helper. Stays off on the public host until the owner sets `on` after the provider steps in `docs/harness-owner-test.md` §5. The telemetry receiver (`POST /api/telemetry`) is mounted either way. |
+| `HH_CLAUDE_HOSTING` / `HH_CHATGPT_HOSTING` | unset | `accepted` once the operator accepted Anthropic's Commercial Terms for hosting Claude Code; `approved` once OpenAI approved this hosted app for Sign in with ChatGPT. Unset: that provider is shown as unavailable. `HH_HELPER_CLAUDE=off` / `HH_HELPER_CHATGPT=off` hide one entirely. |
+| `HH_MOD_WORKERS_MAX` | `16` | Loaded farms that carry a helper change, one worker thread each (~30-50 MB); above it such a farm's socket is refused 503 until another sleeps. |
 | `HH_IDEAS_PER_DAY` | `200` | Ideas accepted in any 24 hours, from everyone together (on top of 5 an hour and 20 a day per address). |
 | `HH_DELETE_PER_HOUR` | `10` | "Delete this farm now" requests per client address an hour. |
 | `HH_STARS_URL` | GitHub API | Where the server asks for the landing page's GitHub star count (at most once an hour; visitors' browsers never call GitHub). `off` = no count. |

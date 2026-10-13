@@ -17,6 +17,8 @@
 //                                     sunMoved when the sun stepped >= 0.5 degrees (static shadow refresh)
 //     dn.current -> Sky
 import * as THREE from 'three';
+// a mod's sky preset (Harness Hollow, docs/agent-notes/hh-mods.md): identity when no mod sets one
+import { skyFilter } from '../mod/look.js';
 
 const MIN = 60_000;
 export const CYCLE = Object.freeze({ dawn: 4 * MIN, day: 26 * MIN, dusk: 4 * MIN, night: 6 * MIN, total: 40 * MIN });
@@ -156,11 +158,11 @@ export function skyAt(now, { mode = 'cycle', localHour = null, gold = 0, weather
   const az = s.az * DEG;
   const el = s.el * DEG;
   const sunDir = [Math.cos(el) * Math.cos(az), Math.sin(el), Math.cos(el) * Math.sin(az)];
-  return {
+  return skyFilter({
     phase, k, night, sunDir, sunColor: s.sunColor, sunI: s.sunI, hemiSky: s.hemiSky, hemiGround: s.hemiGround,
     hemiI: s.hemiI, top: s.top, horizon: s.horizon, fog: s.fog, exposure: s.exposure, rim: s.rim,
     windows: Math.max(night, phase === 'dusk' ? smooth(Math.min(1, k / 0.6)) * 0.6 : 0),
-  };
+  });
 }
 
 /** Angle in degrees between two unit vectors. */

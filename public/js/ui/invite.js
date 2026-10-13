@@ -17,6 +17,7 @@
 // lost phone never leaves the farm "full" for good.
 import { h, kv, svgIcon, ensureStylesheet } from './dom.js';
 import { farm, session, createInvite, inviteLink, personalLink, TTL_DAYS } from '../net/farm.js';
+import { BRAND } from '../../../shared/brand.js';
 import { t, tn, getters, lang } from '../i18n/index.js';
 
 const DAY_MS = 86_400_000;
@@ -60,7 +61,7 @@ const canShare = (nav = globalThis.navigator) => typeof nav?.share === 'function
 
 async function share(url, text = INVITE_TEXT.share, nav = globalThis.navigator) {
   try {
-    await nav.share({ title: 'Harvest Hollow', text, url }); // i18n-ok: brand
+    await nav.share({ title: BRAND, text, url });
     return true;
   } catch { return false; }   // the player closed the sheet: nothing to say
 }

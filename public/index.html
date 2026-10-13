@@ -12,10 +12,10 @@
   <link rel="apple-touch-icon" href="/assets/pwa/apple-touch-icon.png">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-title" content="Harvest Hollow">
+  <meta name="apple-mobile-web-app-title" content="Harness Hollow">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="color-scheme" content="light">
-  <title>Harvest Hollow</title>
+  <title>Harness Hollow</title>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <!-- Fonts are vendored (public/assets/fonts, SIL OFL): LAN play may have no internet, and no public CDN (tech §12.1). -->
   <link rel="preload" href="/assets/fonts/fredoka-latin.woff2" as="font" type="font/woff2" crossorigin>
@@ -62,7 +62,7 @@
           <span class="sr-only"><span data-i18n="shell.html.levelSr">Farm level</span> <span id="hud-level-text">1</span></span>
         </button>
         <div class="level-body">
-          <div class="farm-name outlined" id="hud-farm-name">Harvest Hollow</div>
+          <div class="farm-name outlined" id="hud-farm-name">Harness Hollow</div>
           <div class="xp" role="progressbar" aria-label="Farm XP" data-i18n-attr="aria-label:shell.html.xpBar" aria-valuemin="0" id="hud-xp-bar">
             <div class="fill" id="hud-xp-fill"></div>
             <span class="xp-text" id="hud-xp-text">0 / 25 XP</span>
@@ -135,7 +135,7 @@
     </div>
     <div class="boot-card">
       <h1 class="boot-title"><picture><source srcset="/assets/art/logo.webp" type="image/webp">
-        <img class="boot-logo" src="/assets/art/logo.png" alt="Harvest Hollow" width="1200" height="538"></picture></h1>
+        <img class="boot-logo" src="/assets/art/logo.png" alt="Harness Hollow" width="1200" height="538"></picture></h1>
       <p class="boot-line" id="boot-line"><span class="spin" aria-hidden="true"></span><span id="boot-text">Waking up the farm…</span></p>
       <!-- the language toggle (i18n): works before any module has loaded (the inline script below), remembered per device -->
       <div class="lang-pick" role="group" aria-label="English / Български"><button type="button" class="lang-opt" data-lang="en" lang="en">English</button><span class="lang-dot" aria-hidden="true">·</span><button type="button" class="lang-opt" data-lang="bg" lang="bg">Български</button></div>
@@ -161,7 +161,7 @@
         for (var i = 0; i < opts.length; i++) opts[i].setAttribute('aria-pressed', String(opts[i].getAttribute('data-lang') === l));
       }
       paint(L, true);
-      // the home-screen app's description in the chosen language (the name stays "Harvest Hollow")
+      // the home-screen app's description in the chosen language (the name stays "Harness Hollow")
       var mf = document.querySelector('link[rel="manifest"]');
       if (mf && L === 'bg') mf.setAttribute('href', '/manifest.bg.webmanifest');
       for (var i = 0; i < opts.length; i++) {
@@ -184,7 +184,7 @@
     <div class="slot-card wood">
       <!-- the carved wide logo above the card (art lane Hookup 4: the welcome painting keeps its sky free for it) -->
       <h1 class="slot-title" id="slot-title"><picture><source srcset="/assets/art/logo-wide.webp" type="image/webp">
-        <img class="slot-logo" src="/assets/art/logo-wide.png" alt="Harvest Hollow" width="1400" height="336"></picture></h1>
+        <img class="slot-logo" src="/assets/art/logo-wide.png" alt="Harness Hollow" width="1400" height="336"></picture></h1>
       <div class="slot-paper paper">
         <p class="slot-sub" id="slot-sub" data-i18n="shell.slot.who">Who is playing on this screen?</p>
         <div class="slots" id="slot-list"></div>
@@ -193,7 +193,7 @@
     </div>
   </section>
 
-  <noscript>Harvest Hollow needs JavaScript and WebGL2. · Harvest Hollow има нужда от JavaScript и WebGL2.</noscript>
+  <noscript>Harness Hollow needs JavaScript and WebGL2. · Harness Hollow има нужда от JavaScript и WebGL2.</noscript>
   <script type="module" src="/js/main.js"></script>
 </body>
 </html>

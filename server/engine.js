@@ -12,6 +12,8 @@
 //   h      CONTENT_HASH (content + config + RULES_VERSION) the action was accepted under (review-m0 #10)
 //   srv    server-private facts that must survive a crash with the action (the token hash of a `_join`,
 //          review-m0 H1). Journaled, never broadcast.
+//   mh     (additive, Harness Hollow) the hash of the farm's mod overlay the action was accepted under, when the farm
+//          has one (engine.modHash, set by server/mods/hot.js); replay installs that overlay first (server/app.js)
 //
 // System actions due by time (tech §15.1) run in runDue(): before every player action, before every welcome,
 // at boot (catch-up after downtime) and from the scheduler's timer. A due action that is REJECTED (a rules bug)
@@ -95,6 +97,8 @@ export class Engine {
     this.incident = () => {};
     this.onCommit = () => {};
     this.running = false;
+    /** the active mod overlay's hash (journal `mh`), or null: the base game */
+    this.modHash = null;
   }
 
   get v() { return this.state.meta.version; }
@@ -282,6 +286,7 @@ export class Engine {
     if (this.journal) {
       const line = { v, now, pid, cid, seq, type, args, ext, grace, h: CONTENT_HASH };
       if (srv) line.srv = srv;
+      if (this.modHash) line.mh = this.modHash;
       try {
         this.journal.append(line);
       } catch (err) {

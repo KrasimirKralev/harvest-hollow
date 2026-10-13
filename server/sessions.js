@@ -87,6 +87,8 @@ export class Sessions {
     this.graceMs = cfg.awayGraceMs ?? AWAY_GRACE_MS;
     this.stopping = false;
     this.wall = cfg.wall || Date.now;
+    /** () => { n, hash, overlay } | null: the farm's mod for the welcome (additive, Harness Hollow; server/mods/hot.js) */
+    this.modOf = () => null;
   }
 
   get server() { return this.engine.server; }
@@ -318,6 +320,9 @@ export class Sessions {
    * `known` is false only on a hello whose cid had no dedupe record: the client then cannot know whether its
    * unacknowledged actions were applied, and drops them instead of re-sending (review-m0 #4).
    * `rejected` lists the cid's newest rejections, so a `rej` lost in a disconnect still surfaces (L2).
+   * `mod` (additive, Harness Hollow): the farm's active mod overlay { n, hash, overlay }, absent for the base game. The
+   * server also sends a welcome on its own after a mod is applied or undone (server/mods/hot.js): the page installs the
+   * overlay and keeps its camera, panels and pending actions (they replay on the new content).
    */
   welcome(conn, token, known = true) {
     clearTimeout(conn.resyncTimer);
@@ -334,6 +339,8 @@ export class Sessions {
     };
     if (this.build) msg.buildHash = this.build;
     if (token) msg.token = token;
+    const mod = this.modOf();
+    if (mod) msg.mod = mod;
     this.send(conn, msg, true);
   }
 

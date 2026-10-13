@@ -536,7 +536,7 @@ test('audio: iOS-activating gestures unlock the context', () => {
 test('manifest: standalone, theme colours, 192 and 512 px icons (and maskable) that exist at those sizes', () => {
   const m = JSON.parse(fs.readFileSync(path.join(ROOT, 'public', 'manifest.webmanifest'), 'utf8'));
   assert.equal(m.display, 'standalone');
-  assert.equal(m.name, 'Harvest Hollow');
+  assert.equal(m.name, 'Harness Hollow');
   assert.ok(m.short_name && m.short_name.length <= 15, 'fits under a home-screen icon');
   assert.match(m.theme_color, /^#[0-9A-Fa-f]{6}$/);
   assert.match(m.background_color, /^#[0-9A-Fa-f]{6}$/);

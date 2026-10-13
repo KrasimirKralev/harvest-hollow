@@ -1,6 +1,6 @@
 // "Give a nudge to star it on GitHub if they like it" (owner request 2026-10-05). Hosted farms only (multi mode): a
 // gentle, one-time card after a happy moment, once the farm has reached level 5 or this device is on its third day of
-// play, whichever comes first: "Enjoying Harvest Hollow? A ⭐ on GitHub helps other couples find it" with Star it /
+// play, whichever comes first: "Enjoying Harness Hollow? A ⭐ on GitHub helps other couples find it" with Star it /
 // Maybe later / Don't ask again.
 //   - At most twice ever, the second time only after "Maybe later" (closing the card or letting it go counts as that)
 //     and at least 3 days after the first.

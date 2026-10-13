@@ -106,7 +106,7 @@ export default {
   'settings.credits.music': 'Музика',
   'settings.credits.musicLead': 'Музиката е истинска: акустична и фолк музика, която авторите ѝ споделят с всички. Благодарим!',
   'settings.credits.sounds': 'Звуци',
-  'settings.credits.soundsLead': 'Звуковите ефекти са синтезирани за Harvest Hollow (без записи), а резервната музика, която свири, когато парче не се зареди, се композира нота по нота в браузъра ти.',
+  'settings.credits.soundsLead': 'Звуковите ефекти са синтезирани за Harness Hollow (без записи), а резервната музика, която свири, когато парче не се зареди, се композира нота по нота в браузъра ти.',
   'settings.mood.title': 'Начален екран',
   'settings.mood.day': 'Ден',
   'settings.mood.evening': 'Вечер и Златният час',

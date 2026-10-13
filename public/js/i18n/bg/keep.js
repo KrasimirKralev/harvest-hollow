@@ -16,7 +16,7 @@ export default {
   'keep.later': 'По‑късно',
   'keep.copied': 'Копирано. Постави го някъде, където само ти можеш да го видиш.',
   'keep.copy.fail': 'Задръж пръст върху линка, за да го копираш.',
-  'keep.share.title': 'Моята ферма в Harvest Hollow',
+  'keep.share.title': 'Моята ферма в Harness Hollow',
   'keep.share.text': 'Личният ми линк към фермата. Пази го в тайна: с него се влиза във фермата като мен.',
   'keep.thanks': 'Чудесно. Фермата ти е на сигурно място.',
   'keep.nolink': 'Личният ти линк още не е готов. Отвори тази карта пак след малко.',
@@ -53,7 +53,7 @@ export default {
   'keep.newkey.lead': 'Изпрати този линк на {name}. Той отваря фермата като {name} от всеки телефон, веднъж, в рамките на {days} дни.',
   'keep.newkey.rules': 'Старите устройства вече нямат достъп. Ако направиш още един нов ключ, този линк спира да работи.',
   'keep.newkey.label': 'Линк с нов ключ за {name}',
-  'keep.newkey.share.text': 'Ето новия ти ключ към нашата ферма в Harvest Hollow.',
+  'keep.newkey.share.text': 'Ето новия ти ключ към нашата ферма в Harness Hollow.',
   'keep.newkey.qr.label': 'QR код на линка с нов ключ за {name}',
   'keep.newkey.gone': 'Този линк вече е използван или е изтекъл. Ако още трябва, направи нов ключ от Настройки.',
   'keep.newkey.done': 'Готово',
@@ -88,7 +88,7 @@ export default {
   'keep.gate.back.photo': 'Избери снимка',
   'keep.gate.back.bad': 'Това не прилича на линк към ферма. Истинският започва с адреса на този сайт.',
   'keep.gate.back.noqr': 'В тази снимка няма QR код. Опитай с по‑ясна снимка или постави линка.',
-  'keep.gate.back.notlink': 'Този QR код не е линк към ферма в Harvest Hollow.',
+  'keep.gate.back.notlink': 'Този QR код не е линк към ферма в Harness Hollow.',
 
   // ---- the camera scanner (ui/qr-scan.js)
   'keep.scan.title': 'Сканирай QR кода си',

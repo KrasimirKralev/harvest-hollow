@@ -11,6 +11,7 @@ import { CONTENT_HASH } from '../shared/content/index.js';
 import { RULES_VERSION } from '../shared/rules/index.js';
 import { PROTOCOL_VERSION } from '../shared/net/protocol.js';
 import { StaticFiles, REVALIDATE } from './static.js';
+import { farmMethods } from './farm-host.js';
 
 export const isLoopback = (ip) => ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1';
 
@@ -73,25 +74,25 @@ export function devRouter(farmOf) {
     if (!hh) return res.status(404).json({ error: 'not found' });
     return fn(hh, req, res);
   };
+  // `hh` is a FarmHost (server/farm-host.js; a modded multi-mode farm runs in a worker) or a plain farm context.
+  const call = (hh, m, ...a) => (typeof hh.call === 'function' ? hh.call(m, ...a) : farmMethods(hh)[m](...a));
   // Jump game time forward. Due system actions run at once, as the scheduler would have run them.
-  dev.post('/warp', withFarm((hh, req, res) => {
+  dev.post('/warp', withFarm(async (hh, req, res) => {
     const ms = Number(req.body && req.body.ms);
     if (!Number.isSafeInteger(ms) || ms <= 0 || ms > 400 * 86_400_000) return res.status(400).json({ error: 'ms' });
-    const now = hh.clock.warp(ms);
-    hh.engine.runDue();
-    hh.scheduler.arm();
+    const now = await call(hh, 'devWarp', ms);
     return res.json({ ok: true, serverNow: now });
   }));
   // Cut a player's sockets (simulated sleep / Wi-Fi drop); the client reconnects on its own.
-  dev.post('/drop', withFarm((hh, req, res) => {
+  dev.post('/drop', withFarm(async (hh, req, res) => {
     const pid = req.body && req.body.pid;
     if (typeof pid !== 'string') return res.status(400).json({ error: 'pid' });
-    return res.json({ ok: true, dropped: hh.sessions.drop(pid) });
+    return res.json({ ok: true, dropped: await call(hh, 'devDrop', pid) });
   }));
   // Force a snapshot now (tests use it before a restart).
   dev.post('/save', withFarm(async (hh, _req, res) => {
-    await hh.scheduler.save();
-    res.json({ ok: true, v: hh.engine.v });
+    const v = await call(hh, 'devSave');
+    res.json({ ok: true, v });
   }));
   return dev;
 }
@@ -109,6 +110,12 @@ export function createApp(hh) {
   app.get('/api/status', (_req, res) => res.json(status(hh)));
 
   if (hh.cfg.dev) app.use('/api/dev', devRouter(() => hh));
+  // the in-game helper (Harness Hollow, server/harness): its REST base, the mod icons, the telemetry receiver
+  if (hh.harness) {
+    hh.harness.receiverRoutes(app);                // first: the agent's /api/harness/mock/... and loopback routes
+    app.use('/api/harness', hh.harness.router);
+    hh.harness.mountAssets(app);
+  }
 
   app.use('/api', (_req, res) => res.status(404).json({ error: 'not found' }));
   return app;

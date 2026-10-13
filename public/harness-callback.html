@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <!-- The page a sign-in for the in-game helper lands on (server/agent/routes.js: GET /auth/callback for Sign in with
+       ChatGPT, and the mock provider's page). The server stamps the outcome on <body> (data-result ok|error,
+       data-code one of DENIED EXPIRED BAD_CODE STATE UNAVAILABLE INTERNAL) and sends no-store, no-referrer and a CSP that
+       allows only this page's own inline style and script. Both languages are in the page, like privacy.html: the
+       script shows ?lang=, else the device's choice (localStorage 'hh.lang'), else the browser's; without JavaScript
+       both show. Nothing here reads or keeps the address (it carried a one-time code, already used). -->
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="light">
+  <meta name="robots" content="noindex">
+  <title>Harness Hollow</title>
+  <style>
+    @font-face { font-family: 'Fredoka'; font-weight: 300 700; font-display: swap; src: url('/assets/fonts/fredoka-latin.woff2') format('woff2');
+      unicode-range: U+0000-00FF, U+2000-206F; }
+    @font-face { font-family: 'Fredoka'; font-weight: 300 700; font-display: swap; src: url('/assets/fonts/nunito-cyrillic.woff2') format('woff2');
+      unicode-range: U+0400-045F; size-adjust: 103%; }
+    :root { --wood-900: #5A3215; --wood-700: #8A5224; --paper-50: #FFFBEE; --paper-100: #FFF4D6; --paper-edge: #D9B677;
+      --leaf-mid: #4C9A3E; --barn-red: #A8382D; }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; min-height: 100%; }
+    body { font: 17px/1.5 'Fredoka', system-ui, sans-serif; color: var(--wood-900);
+      background: linear-gradient(#BFE6FF, #E9F7FF 45%, #CFEAB0 46%, #A9D67C); min-height: 100vh;
+      display: grid; place-items: center; padding: max(16px, env(safe-area-inset-top)) 16px max(16px, env(safe-area-inset-bottom)); }
+    main { width: min(100%, 30rem); }
+    .card { background: var(--paper-100); border: 2px solid var(--paper-edge); border-radius: 18px; padding: 1.25rem 1.5rem;
+      box-shadow: 0 6px 0 rgba(90, 50, 21, .18), inset 0 0 24px rgba(160, 110, 40, .15); margin-block: .75rem; }
+    img { display: block; width: min(100%, 22rem); height: auto; margin: 0 auto .5rem; }
+    h1 { font-size: 1.45rem; line-height: 1.2; margin: 0 0 .4rem; }
+    p { margin: .35rem 0; }
+    .mark { font-size: 2.2rem; line-height: 1; margin-bottom: .3rem; }
+    body[data-result="ok"] .mark { color: var(--leaf-mid); }
+    body[data-result="error"] .mark { color: var(--barn-red); }
+    /* the outcome the server stamped decides which lines show */
+    body[data-result="ok"] .when-error, body[data-result="error"] .when-ok { display: none; }
+    .why { display: none; }
+    body[data-code="DENIED"] .why-DENIED, body[data-code="EXPIRED"] .why-EXPIRED, body[data-code="BAD_CODE"] .why-BAD_CODE,
+    body[data-code="STATE"] .why-STATE, body[data-code="UNAVAILABLE"] .why-UNAVAILABLE, body[data-code="INTERNAL"] .why-INTERNAL,
+    body[data-code="USAGE_LIMIT"] .why-UNAVAILABLE, body[data-code=""] .why-INTERNAL { display: block; }
+    html.one-lang .card[hidden] { display: none; }
+  </style>
+</head>
+<body data-result="RESULT" data-code="CODE">
+  <main>
+    <img src="/assets/art/logo-wide.png" alt="Harness Hollow" width="1400" height="336">
+
+    <section class="card" lang="en" data-lang="en">
+      <div class="mark" aria-hidden="true"><span class="when-ok">✓</span><span class="when-error">!</span></div>
+      <h1><span class="when-ok">You are signed in</span><span class="when-error">The sign-in did not work</span></h1>
+      <p class="when-ok">Your helper can work with your account now. You can close this tab and go back to your farm.</p>
+      <p class="why why-DENIED">You did not allow access, or this account cannot use its plan here. Try again from the game.</p>
+      <p class="why why-EXPIRED">The sign-in took too long. Start it again from the game.</p>
+      <p class="why why-BAD_CODE">The code was not accepted. Start the sign-in again from the game.</p>
+      <p class="why why-STATE">This sign-in link is no longer valid. Start the sign-in again from the game.</p>
+      <p class="why why-UNAVAILABLE">The provider cannot be reached right now. Try again in a little while.</p>
+      <p class="why why-INTERNAL">Something went wrong on the farm's server. Try again from the game.</p>
+    </section>
+
+    <section class="card" lang="bg" data-lang="bg">
+      <div class="mark" aria-hidden="true"><span class="when-ok">✓</span><span class="when-error">!</span></div>
+      <h1><span class="when-ok">Готово, влезе!</span><span class="when-error">Влизането не стана</span></h1>
+      <p class="when-ok">Помощникът ти вече може да работи с профила ти. Можеш да затвориш този раздел и да се върнеш във фермата.</p>
+      <p class="why why-DENIED">Не позволи достъпа или този профил не може да ползва абонамента си тук. Опитай пак от играта.</p>
+      <p class="why why-EXPIRED">Влизането отне твърде дълго. Започни го отново от играта.</p>
+      <p class="why why-BAD_CODE">Кодът не беше приет. Започни влизането отново от играта.</p>
+      <p class="why why-STATE">Тази връзка за вход вече не важи. Започни влизането отново от играта.</p>
+      <p class="why why-UNAVAILABLE">Доставчикът не отговаря в момента. Опитай пак след малко.</p>
+      <p class="why why-INTERNAL">Нещо се обърка на сървъра на фермата. Опитай пак от играта.</p>
+    </section>
+  </main>
+  <script>
+    // one language: ?lang=, then the device's choice, then the browser's (bg* -> Bulgarian), else English
+    (function () {
+      var pick = 'en';
+      try {
+        var asked = new URLSearchParams(location.search).get('lang');
+        var stored = null;
+        try { stored = localStorage.getItem('hh.lang'); } catch (e) { stored = null; }
+        var langs = navigator.languages || [navigator.language || ''];
+        if (asked === 'en' || asked === 'bg') pick = asked;
+        else if (stored === 'en' || stored === 'bg') pick = stored;
+        else for (var i = 0; i < langs.length; i++) {
+          var b = String(langs[i] || '').toLowerCase().split('-')[0];
+          if (b === 'bg' || b === 'en') { pick = b; break; }
+        }
+      } catch (e) { pick = 'en'; }
+      document.documentElement.lang = pick;
+      document.documentElement.classList.add('one-lang');
+      var cards = document.querySelectorAll('.card');
+      for (var j = 0; j < cards.length; j++) cards[j].hidden = cards[j].getAttribute('data-lang') !== pick;
+      // the address carried a one-time code: drop it from the history entry
+      try { history.replaceState(null, '', location.pathname); } catch (e) { /* fine */ }
+    })();
+  </script>
+</body>
+</html>

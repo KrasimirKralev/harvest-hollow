@@ -14,6 +14,9 @@
 //   gender(id) -> 'm' | 'f' | 'n' | 'pl' | null   the Bulgarian gender (adjective agreement: catalog { m, f, n })
 //   ctext(family, id, field, english) -> any  a content text field (a description, a letter's body) in the language in
 //                                             effect, else the English value given
+//   setNameOverlay({ bg: { [id]: entry } })   (additive, Harness Hollow mods lane; harness contract §2.6) a farm's mod
+//                                             things' Bulgarian entries, merged over bg/names.js; English comes from the
+//                                             installed defs (the English index is rebuilt)
 //
 // Entry shape in i18n/bg/names.js (lane B), keyed by content id ('family:id' overrides an id shared by families):
 //   { name: 'Морков', g: 'm', pl: 'моркови', count: 'моркова', def: 'морковът', defObj: 'моркова', plDef: 'морковите',
@@ -47,9 +50,17 @@ const enName = (id, family) => {
   return (d && (d.name ?? d.title)) || String(id ?? '').replace(/_/g, ' ');
 };
 
+let modNames = {};
+/** A farm's mod things' Bulgarian entries (Harness Hollow); the English index follows the installed content. */
+export function setNameOverlay(overlay = {}) {
+  modNames = overlay && overlay.bg && typeof overlay.bg === 'object' ? { ...overlay.bg } : {};
+  enIndex.clear();
+}
+
 /** The Bulgarian entry for an id (or null: English is shown). */
 export function entry(id, family) {
   if (lang() !== 'bg') return null;
+  if (typeof id === 'string' && Object.hasOwn(modNames, id)) return modNames[id];
   const tbl = data('names');
   if (!tbl) return null;
   const n = tbl.names ?? tbl;

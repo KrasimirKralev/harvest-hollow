@@ -15,6 +15,7 @@ import { portraitSpec, portraitKey, peekPortrait } from '../render/portrait.js';
 import { plotHurry, treeHurry, fieldHurry, hurryReason, finishField, fieldLabel } from './crop-hurry.js';
 import { probe } from './panels/core.js';
 import { SOFT } from '../../../shared/net/protocol.js';
+import { farmName } from '../../../shared/brand.js';
 import * as FARMING from '../../../shared/rules/actions/farming.js';
 import * as UPG from '../../../shared/rules/upgrades.js';
 import * as WEEDS from '../../../shared/rules/actions/weeds.js';
@@ -199,8 +200,7 @@ export function createHud(S) {
   }
 
   function renderFarmName() {
-    const name = store.state.farm.name || 'Harvest Hollow'; // i18n-ok: the brand
-    $('hud-farm-name').textContent = name;
+    $('hud-farm-name').textContent = farmName(store.state);
   }
 
   // ---- currencies ------------------------------------------------------------------------------------------

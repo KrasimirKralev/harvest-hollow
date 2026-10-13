@@ -7,8 +7,8 @@ export default {
   'shell.boot.retry': 'The farm is not answering yet. Trying again…',
   'shell.boot.asleep': 'The farm server seems to be asleep. Is it running? Still trying…',
   'shell.boot.mismatch': 'The farm server runs other game files. Restart it, then reload.',
-  'shell.boot.failed': 'Harvest Hollow could not start (WebGL2 needed). Check the console.',
-  'shell.noscript': 'Harvest Hollow needs JavaScript and WebGL2.',
+  'shell.boot.failed': 'Harness Hollow could not start (WebGL2 needed). Check the console.',
+  'shell.noscript': 'Harness Hollow needs JavaScript and WebGL2.',
 
   // the farmer picker
   'shell.slot.who': 'Who is playing on this screen?',

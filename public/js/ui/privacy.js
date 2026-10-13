@@ -11,6 +11,7 @@
 //   opts: { fetcher, win } (tests)
 import { h } from './dom.js';
 import { farm, session, deleteFarm } from '../net/farm.js';
+import { ownFarmName } from '../../../shared/brand.js';
 import { PRIVACY_PATH, PRIVACY_MD_URL } from '../front/links.js';
 import { t } from '../i18n/index.js';
 
@@ -21,10 +22,8 @@ export function createPrivacyUi(S, opts = {}) {
   const multi = farm.multi;
   const fetcher = opts.fetcher ?? ((...a) => globalThis.fetch(...a));
   const win = opts.win ?? globalThis;
-  const farmName = () => {
-    const n = S.store?.state?.farm?.name;
-    return typeof n === 'string' && n.trim() ? n.trim() : null;
-  };
+  // a farm nobody named carries the game's name: "this farm" then, not "Everything on Harness Hollow goes"
+  const farmName = () => ownFarmName(S.store?.state);
 
   let busy = false;
   async function deleteFlow(ctx = null) {

@@ -40,7 +40,6 @@ import { createLogger } from './log.js';
 import { Perf } from './perf.js';
 import { StaticFiles } from './static.js';
 import { mountAssets, devRouter, isLoopback } from './http.js';
-import { handleMessage } from './router.js';
 import { FarmRegistry, ID_RE, redactArg, redactLog } from './farms.js';
 import { WindowLimiter, Counter, clientIp, maskIp } from './ip-limits.js';
 import { multiConfig } from './config.js';
@@ -78,9 +77,9 @@ function sameOrigin(req, res, next) {
 
 /** A tiny fallback front door when public/landing.html is missing (the real one is the client's). */
 const FALLBACK_LANDING = `<!doctype html><html lang="en"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1"><title>Harvest Hollow</title></head>
+<meta name="viewport" content="width=device-width, initial-scale=1"><title>Harness Hollow</title></head>
 <body style="font-family:system-ui,sans-serif;max-width:32rem;margin:3rem auto;padding:0 1rem">
-<h1>Harvest Hollow</h1><button id="go" type="button">Start a new farm</button><p id="st" role="status"></p>
+<h1>Harness Hollow</h1><button id="go" type="button">Start a new farm</button><p id="st" role="status"></p>
 <p>Farms nobody visits for 7 days are deleted.</p>
 <script>document.getElementById('go').onclick=async()=>{const r=await fetch('/api/farms',{method:'POST'});
 const b=await r.json().catch(()=>({}));if(r.ok){location.href='/f/'+b.id+'#k='+b.secret}else{
@@ -191,7 +190,7 @@ export function createMultiApp(hh) {
   app.post('/api/farms', sameOrigin, express.json({ limit: '1kb' }), async (req, res) => {
     res.set('Cache-Control', NO_STORE);
     if (reg.count >= mc.maxFarms) {
-      return res.status(503).json({ error: 'FULL', message: 'Harvest Hollow is full right now. Please try again later.' });
+      return res.status(503).json({ error: 'FULL', message: 'Harness Hollow is full right now. Please try again later.' });
     }
     const r = create.take(ipOf(req));
     if (!r.ok) {
@@ -231,16 +230,18 @@ export function createMultiApp(hh) {
     try { rec = key || join ? await reg.acquire(id) : reg.rec(id); } catch { return res.status(503).json({ ok: false, error: 'UNAVAILABLE' }); }
     if (!rec) return res.status(404).json({ ok: false, error: 'NOT_FOUND' });
     const out = { ok: true, id, buildHash: hh.static.build, ttlDays: mc.ttlDays, slots: cfg.slots ?? 2 };
-    const s = rec.hh && rec.hh.sessions;
-    out.full = s ? s.full() : (rec.meta.members || 0) + (rec.meta.reserve ? 1 : 0) >= (cfg.slots ?? 2);
-    if (s && join) out.invite = s.inviteState(join) ?? 'invalid';
-    if (s && key) {
-      const g = s.grantOf(key);
-      out.member = Boolean(g && g.kind === 'member');
-      if (out.member) out.pid = g.pid;
-      if (g && g.kind === 'creator') out.creator = true;
-      if (out.member) out.waiting = s.waiting();
-    }
+    const h = rec.host;
+    try {
+      out.full = h ? await h.call('full') : (rec.meta.members || 0) + (rec.meta.reserve ? 1 : 0) >= (cfg.slots ?? 2);
+      if (h && join) out.invite = (await h.call('inviteState', join)) ?? 'invalid';
+      if (h && key) {
+        const g = await h.call('grantOf', key);
+        out.member = Boolean(g && g.kind === 'member');
+        if (out.member) out.pid = g.pid;
+        if (g && g.kind === 'creator') out.creator = true;
+        if (out.member) out.waiting = await h.call('waiting');
+      }
+    } catch { return res.status(503).json({ ok: false, error: 'UNAVAILABLE' }); }
     return res.json(out);
   });
 
@@ -252,11 +253,11 @@ export function createMultiApp(hh) {
     let rec;
     try { rec = await reg.acquire(req.params.id); } catch { return res.status(503).json({ ok: false, error: 'UNAVAILABLE' }); }
     if (!rec) return res.status(404).json({ ok: false, error: 'NOT_FOUND' });
-    const g = rec.hh.sessions.grantOf(key);
-    if (!g || g.kind !== 'member') return res.status(403).json({ error: 'AUTH' });
-    if (rec.hh.sessions.full()) return res.status(409).json({ error: 'FULL' });
     try {
-      return res.status(201).json(reg.invite(rec, g.pid));
+      const g = await rec.host.call('grantOf', key);
+      if (!g || g.kind !== 'member') return res.status(403).json({ error: 'AUTH' });
+      if (await rec.host.call('full')) return res.status(409).json({ error: 'FULL' });
+      return res.status(201).json(await reg.invite(rec, g.pid));
     } catch (err) {
       log.error('making an invite failed', redactArg(err));
       return res.status(500).json({ error: 'INTERNAL' });
@@ -272,17 +273,21 @@ export function createMultiApp(hh) {
     let rec;
     try { rec = await reg.acquire(req.params.id); } catch { return res.status(503).json({ ok: false, error: 'UNAVAILABLE' }); }
     if (!rec) return res.status(404).json({ ok: false, error: 'NOT_FOUND' });
-    const s = rec.hh.sessions;
-    const g = s.grantOf(key);
+    let g;
+    let players;
+    try {
+      g = await rec.host.call('grantOf', key);
+      players = await rec.host.call('players');
+    } catch { return res.status(503).json({ ok: false, error: 'UNAVAILABLE' }); }
     if (!g || g.kind !== 'member') return res.status(403).json({ error: 'AUTH' });
     const pid = req.body && typeof req.body.pid === 'string' ? req.body.pid : null;
-    if (!pid || !PLAYER_SLOTS.includes(pid) || pid === g.pid || !Object.hasOwn(s.state.players, pid)) {
+    if (!pid || !PLAYER_SLOTS.includes(pid) || pid === g.pid || !players.includes(pid)) {
       return res.status(400).json({ error: 'BAD_REQUEST' });
     }
     const f = rekeysFarm.take(req.params.id);
     if (!f.ok) return res.set('Retry-After', String(Math.ceil(f.retryAfterMs / 1000))).status(429).json({ error: 'RATE' });
     try {
-      const made = reg.rekey(rec, g.pid, pid);
+      const made = await reg.rekey(rec, g.pid, pid);
       if (made.error === 'BAD') return res.status(400).json({ error: 'BAD_REQUEST' });
       if (made.error) return res.status(500).json({ error: 'INTERNAL' });
       return res.status(201).json(made);
@@ -304,9 +309,11 @@ export function createMultiApp(hh) {
     let rec;
     try { rec = await reg.acquire(req.params.id); } catch { return res.status(503).json({ ok: false, error: 'UNAVAILABLE' }); }
     if (!rec) return res.status(404).json({ ok: false, error: 'NOT_FOUND' });
-    const g = rec.hh.sessions.grantOf(key);
+    let g;
+    try { g = await rec.host.call('grantOf', key); } catch { return res.status(503).json({ ok: false, error: 'UNAVAILABLE' }); }
     if (!g || g.kind !== 'member') return res.status(403).json({ error: 'AUTH' });
     try {
+      hh.harness?.onFarmDeleted(req.params.id);
       if (!(await reg.remove(rec, { by: g.pid }))) return res.status(404).json({ ok: false, error: 'NOT_FOUND' });
       return res.json({ ok: true });
     } catch (err) {
@@ -316,14 +323,14 @@ export function createMultiApp(hh) {
   });
 
   if (cfg.dev) {
-    const farmOf = async (req) => (await reg.acquire(req.params.id).catch(() => null))?.hh ?? null;
+    const farmOf = async (req) => (await reg.acquire(req.params.id).catch(() => null))?.host ?? null;
     const extra = express.Router({ mergeParams: true });
     extra.use((req, res, next) => (isLoopback(req.socket.remoteAddress) ? next() : res.status(403).json({ error: 'loopback only' })));
     // Unload now (a test of the sleep -> catch-up path); refused while a socket is open.
     extra.post('/unload', async (req, res) => {
       const rec = reg.rec(req.params.id);
       if (!rec) return res.status(404).json({ error: 'not found' });
-      if (rec.hh && rec.hh.sessions.conns.size) return res.status(409).json({ error: 'connected' });
+      if (rec.host && rec.host.status().conns) return res.status(409).json({ error: 'connected' });
       rec.leaseUntil = 0;
       await reg.unload(rec);
       return res.json({ ok: true });
@@ -335,6 +342,12 @@ export function createMultiApp(hh) {
         const deleted = await reg.sweep(Number.isSafeInteger(now) ? now : undefined);
         res.json({ ok: true, deleted, expired: reg.lastExpired });
       });
+  }
+  // the in-game helper (Harness Hollow): /api/f/:id/harness/... and the mod icons /f/:id/mods/... (server/harness)
+  if (hh.harness) {
+    hh.harness.receiverRoutes(app);
+    farmApi.use('/harness', hh.harness.router);
+    hh.harness.mountAssets(app);
   }
   app.use('/api/f/:id', farmApi);
   app.use('/api', (_req, res) => res.status(404).json({ error: 'not found' }));
@@ -365,6 +378,8 @@ export async function startMultiServer(cfg) {
   const sockets = new Counter();
   hh.sockets = sockets;
 
+  const { createMultiHarness } = await import('./harness/index.js');
+  hh.harness = await createMultiHarness(hh);
   const app = createMultiApp(hh);
   const server = http.createServer(app);
   const wss = new WebSocketServer({ server, path: '/ws', maxPayload: LIMITS.MAX_PAYLOAD, perMessageDeflate: false,
@@ -398,16 +413,11 @@ export async function startMultiServer(cfg) {
   wss.on('error', () => {});
   wss.on('connection', (ws, req) => {
     const rec = req.hhFarm;
-    const fh = rec && rec.hh;
-    if (!fh) { ws.close(1013, 'farm unavailable'); return; }   // unloaded in between (should not happen: leased)
+    const host = rec && rec.host;
+    if (!host) { ws.close(1013, 'farm unavailable'); return; }   // unloaded in between (should not happen: leased)
     // a farm's connection holds only the address's network (maskIp): it is used for nothing but the abuse warning's
     // log line (server/router.js); the full address stays in the per-address counters above, in memory
-    const conn = fh.sessions.open(ws, maskIp(req.hhIp));
-    if (!conn) return;
-    ws.on('pong', () => { conn.missed = 0; });
-    ws.on('message', (raw) => handleMessage(fh, conn, raw));
-    ws.on('close', () => fh.sessions.close(conn));
-    ws.on('error', () => {});
+    host.attach(ws, maskIp(req.hhIp));
   });
   const prune = setInterval(() => { for (const l of hh.limiters) l.prune(); }, 10 * 60_000);
   prune.unref?.();
@@ -423,6 +433,7 @@ export async function startMultiServer(cfg) {
   }
   reg.start();
   const port = server.address().port;
+  hh.harness?.listening(port);
   let closing = null;
   const close = () => {
     closing ??= (async () => {
@@ -431,13 +442,14 @@ export async function startMultiServer(cfg) {
       const done = new Promise((r) => server.close(() => r()));
       server.closeAllConnections?.();
       await reg.closeAll();                         // every loaded farm: sockets closed, final snapshot
+      await hh.harness?.stop();
       await done;
       perf.stop();
     })();
     return closing;
   };
   const text = [
-    'Harvest Hollow — multi-farm host',
+    'Harness Hollow — multi-farm host',
     `  running at http://localhost:${port}`,
     `  data: ${cfg.dataDir} (${stored} farm(s) stored, up to ${mc.maxFarms}; deleted after ${mc.ttlDays} days without a visit)`,
     cfg.dev ? '  DEV routes are ON (loopback only)' : null,

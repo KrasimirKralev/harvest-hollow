@@ -89,6 +89,7 @@ export function seedRows(state) {
   const rows = [];
   let upcoming = 0;
   for (const c of live('crops')) {
+    if (c.retired) continue;                 // a helper's crop taken back: not for sale (Harness Hollow)
     const open = level >= c.unlock;
     if (!open && upcoming >= 2) continue;
     if (!open) upcoming++;

@@ -145,6 +145,8 @@ export function createLayout(S) {
         p?.catch?.(fail);
       } } }, h('span.m-ico', svgIcon('fullscreen', 30)), fsLbl));
     }
+    // Harness Hollow: the helper's tile while the server offers it (ui/harness/index.js tile(); null otherwise)
+    if (S.harness?.tile) { const hx = S.harness.tile(() => ctx.close()); if (hx) tiles.push(hx); }
     if (S.ideas) tiles.push(S.ideas.tile(() => ctx.close()));
     return h('div.m-tiles', ...tiles.filter(Boolean));
   }

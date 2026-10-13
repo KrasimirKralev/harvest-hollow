@@ -24,6 +24,7 @@
 //   isStandalone(), isAndroid()  a home-screen app; Android (one storage for the browser and its home-screen apps)
 //   ttlDays(status)              the retention in days (GET /api/f/:id/status `ttlDays`, default 7)
 import { t } from '../i18n/multi.js';
+import { BRAND, ownFarmName } from '../../../shared/brand.js';
 
 /** A farm id in a page path: the server's ids are >= 10 base32 characters; accept the URL-safe alphabet. */
 export const FARM_PATH = /^\/f\/([A-Za-z0-9_-]{6,64})\/?$/;
@@ -152,18 +153,16 @@ export function rememberFarm(st, { id, name = null, at = Date.now() }) {
   writeList(st, list.sort((a, b) => (b.lastOpen || 0) - (a.lastOpen || 0)).slice(0, LIST_MAX));
 }
 
-/** Every new farm is called this until its farmers rename it (shared/rules/state.js createFarm). */
-const DEFAULT_NAME = 'Harvest Hollow'; // i18n-ok: the brand
-
 /**
  * The name a farm goes by in the device's list: its own name once the farmers gave it one, else whose farm it is
- * ("Rowan & Mia's farm"), so a list of new farms is not a column of "Harvest Hollow". Pure; null when unknown.
+ * ("Rowan & Mia's farm"), so a list of new farms is not a column of "Harness Hollow" (every new farm carries the
+ * game's name until it is named: shared/brand.js, also the old "Harvest Hollow"). Pure; null when unknown.
  */
 export function farmLabel(state) {
-  const own = typeof state?.farm?.name === 'string' ? state.farm.name.trim() : '';
-  if (own && own !== DEFAULT_NAME) return own;
+  const own = ownFarmName(state);
+  if (own) return own;
   const names = Object.keys(state?.players ?? {}).sort().map((pid) => state.players[pid]?.name).filter((n) => typeof n === 'string' && n.trim());
-  if (!names.length) return own || null;
+  if (!names.length) return typeof state?.farm?.name === 'string' && state.farm.name.trim() ? BRAND : null;
   const nm = names.map((n) => n.trim());
   return nm.length === 1 ? t('multi.farmOf', { name: nm[0] }) : t('multi.farmOf2', { a: nm[0], b: nm.slice(1).join(' & ') });
 }
