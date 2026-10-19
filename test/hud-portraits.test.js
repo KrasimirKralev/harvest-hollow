@@ -107,3 +107,17 @@ test('the name plate CSS: a fixed-height plate with both lines centred, the name
   assert.doesNotMatch(css, /\.who::after \{ content: ' \(you\)'/, '"(you)" is an element now, never cut by the ellipsis');
   assert.match(css, /\.players\.snug li\.partner \.tag \{ display: none; \}/);
 });
+
+test('a top row too narrow for the faces (owner 2026-10-20): fit() stacks them after snug, shell.css styles the stack', () => {
+  const css = fs.readFileSync(new URL('../public/css/shell.css', import.meta.url), 'utf8');
+  const i = css.indexOf('.hud-tl.stack .players {');
+  assert.ok(i > 0, 'the stacked faces are styled');
+  const block = css.lastIndexOf('@media', i);
+  assert.match(css.slice(block, css.indexOf('{', block)), /\(min-width: 601px\) and \(min-height: 501px\)/,
+    'phones keep their own top row');
+  assert.match(css.slice(i, css.indexOf('}', i)), /flex-direction: column/);
+  assert.match(css, /\.hud-tl\.stack #hud-xp-bar \{ width: 110px; \}/);
+  const js = fs.readFileSync(new URL('../public/js/ui/hud.js', import.meta.url), 'utf8');
+  assert.match(js, /row\.classList\.remove\('stack'\)/, 'measured with the class off every time');
+  assert.match(js, /if \(list\.classList\.contains\('snug'\) && over\(\)\) row\.classList\.add\('stack'\)/);
+});

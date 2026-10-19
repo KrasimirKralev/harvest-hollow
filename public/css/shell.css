@@ -90,6 +90,18 @@ body.hud-hidden #hud, body.hud-hidden #panels, body.hud-hidden #pointers { displ
   .players .title { max-width: 112px; }
 }
 .players.snug li.partner .tag { display: none; }
+/* a top row too narrow for the faces (601-740 px; owner 2026-10-20): hud.js fit() adds .stack after .snug, and the
+   faces stack as on a phone with a shorter XP bar, so they never cover the coins. Phones keep their own row */
+@media (min-width: 601px) and (min-height: 501px) {
+  .hud-tl.stack { gap: 8px; }
+  .hud-tl.stack #hud-xp-bar { width: 110px; }
+  .hud-tl.stack .xp-text .xp-unit { display: none; }
+  .hud-tl.stack .players { flex-direction: column; gap: 1px; }
+  .hud-tl.stack .players .face, .hud-tl.stack .players li.partner .face { width: 24px; height: 24px; font-size: .875rem;
+    box-shadow: 0 0 0 2px var(--paper-50), 0 0 0 4px var(--pcd), 0 2px 0 4px rgba(62, 38, 18, .25); }
+  .hud-tl.stack .players li[data-slot="p2"] .face { border-radius: 7px; }
+  .hud-tl.stack .players .face::after { width: 9px; height: 9px; right: -4px; bottom: -3px; box-shadow: 0 0 0 2px var(--paper-50); }
+}
 .players.snug li.me .who .nm { max-width: 72px; }
 /* where the browser can trim a line to its letters (cap height to baseline), the two lines sit optically centred */
 @supports (text-box: trim-both cap alphabetic) {

@@ -25,10 +25,15 @@ const SHOW_HARVEY = { gzipKB: 0.06, codeKB: 0.07 };
 // the tap-through fix (2026-10-19, ui-shell lane; same section): game/touch.js createQuiet and its controller wiring, so
 // the second tap of a double tap on a sheet that closes never acts on the farm (470 B / 294 B)
 const TAP_THROUGH = { gzipKB: 0.47, codeKB: 0.30 };
+// the owner's "portraits cover the coins" (2026-10-20, lead; rel-integration.md "Owner request 2026-10-20"): hud.js
+// fit()'s second step, 'stack' on the top-left row (118 B / 45 B)
+const TOP_ROW_STACK = { gzipKB: 0.12, codeKB: 0.05 };
 const RECORD = {
-  gzipKB: HEAD.gzipKB + 186.67 + POWERUPS.gzipKB + SHOW_HARVEY.gzipKB + TAP_THROUGH.gzipKB,
-  codeKB: HEAD.codeKB + 96.0 + POWERUPS.codeKB + SHOW_HARVEY.codeKB + TAP_THROUGH.codeKB,
-  decided: 'owner 2026-10-19 sideways rows + crate power-ups + Show Harvey + tap-through',
+  gzipKB: HEAD.gzipKB + 186.67 + POWERUPS.gzipKB + SHOW_HARVEY.gzipKB + TAP_THROUGH.gzipKB
+    + TOP_ROW_STACK.gzipKB,
+  codeKB: HEAD.codeKB + 96.0 + POWERUPS.codeKB + SHOW_HARVEY.codeKB + TAP_THROUGH.codeKB
+    + TOP_ROW_STACK.codeKB,
+  decided: 'owner 2026-10-19 sideways rows + crate power-ups + Show Harvey + tap-through; 2026-10-20 top row stack',
 };
 
 const quiet = { info() {}, warn() {}, error() {}, log() {} };

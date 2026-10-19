@@ -391,14 +391,18 @@ export function createHud(S) {
   // class off every time (both changes land before the frame paints), so the choice never depends on itself: no flicker.
   let fitQ = 0;
   function fitSoon() { if (!fitQ) fitQ = requestAnimationFrame(fit); }
+  // under ~740 px one step more: 'stack' stacks the faces and shortens the XP bar (shell.css)
   function fit() {
     fitQ = 0;
     const list = $('hud-players');
     const tr = document.querySelector('.hud-tr');
     if (!list || !tr || !list.offsetParent) return;
+    const row = list.parentElement;
+    const over = () => list.getBoundingClientRect().right > tr.getBoundingClientRect().left - 16;
     list.classList.remove('snug');
-    const a = list.getBoundingClientRect();
-    if (a.right > tr.getBoundingClientRect().left - 16) list.classList.add('snug');
+    row.classList.remove('stack');
+    if (over()) list.classList.add('snug');
+    if (list.classList.contains('snug') && over()) row.classList.add('stack');
   }
   // what moves either side: the window (a media query), the Interface size (applied 120 ms after a resize, or chosen in
   // Settings), the pills' own width (a longer coin count) and the chips' (a rename, the partner's title)
