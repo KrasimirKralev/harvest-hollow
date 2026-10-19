@@ -16,10 +16,12 @@
 import { CONTENT, FAIR, itemOf, npcOf, pluralOf } from '../../../../shared/content/index.js';
 import * as FR from '../../../../shared/rules/actions/fair.js';
 import { systemLive, weekOf } from '../../../../shared/rules/coop.js';
-import { h, icon, svgIcon, fmt, fmtDuration, playerMark, createKit, fill, price, hintable } from './kit.js';
+import { h, icon, svgIcon, fmt, fmtDuration, playerMark, createKit, fill, price, hintable, phoneSheet } from './kit.js';
 import { pick, probe, passes, levelOf, available } from './core.js';
 import { portrait, s as sv } from './art.js';
 import { ensureStylesheet } from '../dom.js';
+import { assetUrl } from '../../net/asset-base.js';
+import { lazyImport, importFailed } from '../../net/lazy.js';
 import { leagueOpen, horseShowOpen } from './league-rules.js';
 import { t, lang, ctext, name as cname } from '../../i18n/index.js';
 
@@ -40,12 +42,24 @@ export function systemOpen(sys, state) {
 /** The registered action type (the goals lanes' names), else the canonical name (its probe says "Not open yet"). */
 export const actionOf = (...names) => pick(...names) ?? names[0];
 
-/** Points are stored ×10 (one decimal, GDD §5.6 v2): 1712 -> "171.2", 1710 -> "171". */
+/**
+ * Points are stored ×10 (one decimal, GDD §5.6 v2): 172 -> "17.2", 170 -> "17"; from 100 points on a whole number
+ * ("548.6" is noise there: 5486 -> "549", astra#10).
+ */
 export function fmtPts(p10) {
   const v = Math.max(0, Math.round(num(p10)));
+  if (v >= 1000) return fmt(Math.round(v / 10));
   const whole = Math.floor(v / 10);
   const tenth = v % 10;
   return tenth ? `${fmt(whole)}${lang() === 'bg' ? ',' : '.'}${tenth}` : fmt(whole);
+}
+
+/**
+ * "190 of 250 points", or just "549 points" once the score is past the week's reference W (astra#10): "549 of 190"
+ * reads like a bug.
+ */
+export function ptsOfText(p10, W10) {
+  return num(W10) > 0 && num(p10) >= num(W10) ? t('weekly.fair.pts', { p: fmtPts(p10) }) : t('weekly.fair.ptsOf', { p: fmtPts(p10), w: fmtPts(W10) });
 }
 
 /**
@@ -109,26 +123,45 @@ export const BANNER_FOCUS = Object.freeze({ f: [0.5, 0.52], g: [0.3, 0.7], b: [0
 /** The painted banner strip at the top of a weekly panel: art, a title on an ink gradient, an optional chip. */
 export function banner(art, title, sub, { chip = null, cls = '', focus = null } = {}) {
   const [fx, fy] = focus ?? BANNER_FOCUS[art] ?? [0.5, 0.5];
-  return h(`header.wk-banner${cls ? `.${cls}` : ''}`,
-    h('img.wk-banner-art', { src: `/assets/art/quests/${art}.webp`, alt: '', decoding: 'async', draggable: 'false',
+  // on a phone the hero is a 56 px strip (ux-phone#15): the line under the title waits behind a "?" chip
+  const el = h(`div.wk-banner${cls ? `.${cls}` : ''}`,
+    h('img.wk-banner-art', { src: assetUrl(`/assets/art/quests/${art}.webp`), alt: '', decoding: 'async', draggable: 'false',
       style: { objectPosition: `${fx * 100}% ${fy * 100}%` } }),
     h('div.wk-banner-ink', { 'aria-hidden': 'true' }),
     h('div.wk-banner-text', h('h2.wk-banner-title', title), sub ? h('p.wk-banner-sub', sub) : null),
+    sub ? h('button.pn-chipbtn.wk-banner-more', { type: 'button', 'aria-expanded': 'false', 'aria-label': t('weekly.banner.more'), title: sub,
+      on: { click: (e) => { const on = !el.classList.contains('open'); el.classList.toggle('open', on); e.currentTarget.setAttribute('aria-expanded', String(on)); } } }, '?') : null,
     chip);
+  return el;
 }
 
 /** A countdown chip ("Judging Sunday 20:00 · 2d 4h") that ticks with the panel's kit. */
 export function clockChip(kit, { label, at, doneText = t('weekly.clock.anyMoment'), glyph = 'sun', cls = '' }) {
   const tm = h('b.wk-clock-t');
   kit.timer(tm, { end: at, doneText });
-  return h(`div.wk-clock${cls ? `.${cls}` : ''}`, svgIcon(glyph, 20), h('span', label), tm);
+  // the label stays in the tooltip when a phone strip shows only the countdown
+  return h(`div.wk-clock${cls ? `.${cls}` : ''}`, { title: label }, svgIcon(glyph, 20), h('span.wk-clock-l', label), tm);
 }
 
-/** An NPC portrait with a speech bubble (the tent / jetty / board host). */
+/** Speeches opened on this device (a re-render keeps a folded line open). */
+const openSpeech = new Set();
+/**
+ * An NPC portrait with a speech bubble (the tent / jetty / board host). On a phone the bubble is one line with a tap
+ * to open (ux-phone#15): a real toggle (aria-expanded, Enter / Space), so the whole line is one press away.
+ */
 export function speech(npcId, line, small = null, size = 64) {
   const npc = npcOf(npcId);
-  return h('div.wk-host', npc ? portrait(npc, size) : null,
-    h('div.wk-speech', h('b', npc ? cname(npcId) : ''), h('p', t('weekly.quote', { line })), small ? h('small', small) : null));
+  const bubble = h('div.wk-speech', h('b', npc ? cname(npcId) : ''), h('p', t('weekly.quote', { line })), small ? h('small', small) : null);
+  if (phoneSheet()) {
+    const set = (on) => { bubble.setAttribute('aria-expanded', String(on)); if (on) openSpeech.add(npcId); else openSpeech.delete(npcId); };
+    Object.assign(bubble.dataset, { fold: '' });
+    bubble.setAttribute('role', 'button');
+    bubble.setAttribute('tabindex', '0');
+    set(openSpeech.has(npcId));
+    bubble.addEventListener('click', () => set(bubble.getAttribute('aria-expanded') !== 'true'));
+    bubble.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); set(bubble.getAttribute('aria-expanded') !== 'true'); } });
+  }
+  return h('div.wk-host', npc ? portrait(npc, size) : null, bubble);
 }
 
 /** A two-colour split bar of what each farmer brought, with marks and names (identity is never colour alone). */
@@ -327,11 +360,23 @@ export const fairPanel = {
     const update = kit.memo(body, sig, render);
     // the window flips (Sunday 20:00, Monday 00:00) without a store change: look again once a minute
     ctx.every(60_000, () => update());
+    // QA r2 P2-04 sibling: the entries keep the order they had when the sheet opened (what can be entered first). A
+    // partner's sale or entry re-sorted them under the cursor, and "Enter 5" went to another good: nothing undoes an
+    // entry. A good that is new since then goes last; the order is fresh on the next open
+    let order = null;
+    function stableEntries(list) {
+      if (!order) { order = list.map((e) => e.item); return list; }
+      const pos = new Map(order.map((x, i) => [x, i]));
+      const out = [...list.filter((e) => pos.has(e.item)).sort((a, b) => pos.get(a.item) - pos.get(b.item)), ...list.filter((e) => !pos.has(e.item))];
+      order = out.map((e) => e.item);
+      return out;
+    }
 
     function render() {
       const st = ctx.store.state;
       const now = ctx.now();
       const v = fairView(st, ctx.store.pid, now);
+      v.entries = stableEntries(v.entries);
       if (!v.open) {
         fill(body, lockedBody('g', t('weekly.fair.title'), [
           t('weekly.fair.locked.1'),
@@ -345,14 +390,14 @@ export const fairPanel = {
         : clockChip(kit, { label: t('weekly.fair.clock.next'), at: v.opensAt, doneText: t('weekly.fair.clock.openingNow'), cls: 'closed' });
       const line = !v.has ? PEMBERTON.setup : !v.isOpen ? PEMBERTON.closed : v.medal && v.medal.metal === 'gold' ? PEMBERTON.gold
         : v.next && v.p10 > 0 && v.toNext10 * 100 <= v.W10 * 15 ? PEMBERTON.close : PEMBERTON.start;
-      fill(body,
-        v.isOpen
-          ? banner('g', t('weekly.fair.banner.open'), t('weekly.fair.banner.openSub', { week: weekLabel(v.closesAt, st) }), { chip })
-          : banner('g', t('weekly.fair.banner.done'), t('weekly.fair.banner.doneSub'), { chip }),
-        h('div.wk-fair-top', speech('pemberton', line), ladderCard(st, v)),
-        h('div.wk-fair-cols',
-          h('section.wk-col.wk-entries-col', h('h3.pn-h', h('span', t('weekly.fair.enterHead'))), entriesGrid(st, v)),
-          h('aside.wk-col.wk-side', tablesCard(st, v), rulesCard(v))));
+      const head = v.isOpen
+        ? banner('g', t('weekly.fair.banner.open'), t('weekly.fair.banner.openSub', { week: weekLabel(v.closesAt, st) }), { chip })
+        : banner('g', t('weekly.fair.banner.done'), t('weekly.fair.banner.doneSub'), { chip });
+      const entries = h('section.wk-col.wk-entries-col', h('h3.pn-h', h('span', t('weekly.fair.enterHead'))), entriesGrid(st, v));
+      const side = h('section.wk-col.wk-side', tablesCard(st, v), rulesCard(v));
+      // a phone opens on the action (ux-phone#15): the goods to enter come right under the judge, the score after them
+      if (phoneSheet()) fill(body, head, speech('pemberton', line), entries, ladderCard(st, v), side);
+      else fill(body, head, h('div.wk-fair-top', speech('pemberton', line), ladderCard(st, v)), h('div.wk-fair-cols', entries, side));
       kit.refresh();
       kit.tick();
       if (ctx.args.item && !ctx.wkRang) focusOn(ctx.wkRang = body.querySelector(`[data-item="${CSS.escape(ctx.args.item)}"]`));
@@ -378,12 +423,12 @@ export const fairPanel = {
         : h('span.wk-now-medal.none', h('small', t('weekly.fair.firstAt', { pts: fmtPts(v.ladder[0]?.at10 ?? 0), n: (v.ladder[0]?.at10 ?? 0) / 10 })));
       return h('section.wk-ladder', { 'aria-label': t('weekly.fair.ladderLabel') },
         h('div.wk-ladder-head',
-          h('div.wk-score', h('b.wk-score-n', fmtPts(v.p10)), h('span', t('weekly.fair.ofPts', { pts: fmtPts(v.W10) })),
+          h('div.wk-score', h('b.wk-score-n', fmtPts(v.p10)), h('span', v.W10 > 0 && v.p10 >= v.W10 ? t('weekly.fair.ptsUnit') : t('weekly.fair.ofPts', { pts: fmtPts(v.W10) })),
             h('small', t('weekly.fair.targetNote'))),
           nowLine),
         h('div.wk-track', { role: 'progressbar', 'aria-valuemin': '0', 'aria-valuemax': String(Math.round(max / 10)),
           'aria-valuenow': String(Math.round(v.p10 / 10)),
-          'aria-label': t('weekly.fair.ptsOf', { p: fmtPts(v.p10), w: fmtPts(v.W10) }) },
+          'aria-label': ptsOfText(v.p10, v.W10) },
         h('span.wk-track-fill', { style: { '--p': String(Math.min(1, v.p10 / max)) } }),
         ...marks),
         v.isOpen ? nextLine : null,
@@ -413,7 +458,7 @@ export const fairPanel = {
       const pips = h('span.wk-pips', { title: count, 'aria-label': count, role: 'img' },
         ...Array.from({ length: v.cap }, (_, i) => h(`i${i < e.entered ? '.on' : ''}`)));
       const hint = (n) => () => (e.left <= 0 ? { texts: { CAP: t('weekly.fair.allEntered', { n: v.cap }) } } : need(e.item, n - e.have));
-      return h(`article.wk-entry${e.left <= 0 ? '.full' : ''}`, { role: 'listitem', dataset: { item: e.item } },
+      return h(`div.wk-entry${e.left <= 0 ? '.full' : ''}`, { role: 'listitem', dataset: { item: e.item } },
         hintable(h('div.wk-entry-art', icon(e.item, { size: 56, alt: '' }),
           e.duet ? h('span.wk-x2', { title: t('weekly.fair.duetTip') }, '♥ ×2')
             : e.prized ? h('span.wk-x2.prized', { title: t('weekly.fair.prizedTip') }, '×2') : null), e.item),
@@ -431,7 +476,7 @@ export const fairPanel = {
 
     function tablesCard(st, v) {
       const list = v.entered.map((r) => h('li.wk-log-row', icon(r.item, { size: 28 }),
-        h('span', `${fmt(r.n)} × ${itemOf(r.item) ? cname(r.item) : r.item}`),
+        h('span', `${fmt(r.n)}\u00a0×\u00a0${itemOf(r.item) ? cname(r.item) : r.item}`),
         h('b', `+${fmtPts(r.pts10)}`)));
       const fromEntries = v.entered.reduce((n, r) => n + r.pts10, 0);
       const ribbons = Math.max(0, v.p10 - fromEntries);
@@ -446,7 +491,7 @@ export const fairPanel = {
     function lastLine(l) {
       return h('div.wk-last', medalArt(l.metal, l.rank, 30, { dim: !l.medal }),
         h('div', h('b', l.name ? t('weekly.fair.last', { medal: l.name }) : t('weekly.fair.lastNone')),
-          h('small', l.coins ? t('weekly.fair.lastPtsCoins', { p: fmtPts(l.p10), w: fmtPts(l.W10), coins: l.coins }) : t('weekly.fair.ptsOf', { p: fmtPts(l.p10), w: fmtPts(l.W10) }))));
+          h('small', l.coins ? t('weekly.fair.lastPtsCoins', { score: ptsOfText(l.p10, l.W10), coins: l.coins }) : ptsOfText(l.p10, l.W10))));
     }
 
     function rulesCard(v) {
@@ -458,10 +503,10 @@ export const fairPanel = {
           h('li', t('weekly.fair.rules.4'))),
         // M2: the league IS the Fair's points; the horse show doubles the Show Ribbon (ui-league's panels)
         h('div.wk-links',
-          leagueOpen(ctx.store.state) && ctx.ui.panels.has('league') ? h('button.btn.btn--paper.btn--small', { type: 'button',
+          leagueOpen(ctx.store.state) && ctx.ui.panels.has('league') ? h('button.btn.btn--paper.btn--small', { type: 'button', 'data-sfx': 'own',
             on: { click: () => ctx.ui.panels.open('league') } }, t('weekly.fair.toLeague')) : null,
           horseShowOpen(ctx.store.state) && ctx.ui.panels.has('horseShow') ? h('button.btn.btn--paper.btn--small',
-            { type: 'button', on: { click: () => ctx.ui.panels.open('horseShow') } }, t('weekly.fair.toShow')) : null));
+            { type: 'button', 'data-sfx': 'own', on: { click: () => ctx.ui.panels.open('horseShow') } }, t('weekly.fair.toShow')) : null));
     }
 
     update(true);
@@ -500,7 +545,7 @@ export const ceremonyPanel = {
     const mine = c.by[me] ?? 0;
     const theirs = Object.entries(c.by).filter(([k, p]) => k !== me && p > 0);
     const lead = won
-      ? t(`weekly.cere.won.${c.metal}`, { p: fmtPts(c.p10), w: fmtPts(c.W10) })
+      ? t(`weekly.cere.won.${c.metal}`, { score: ptsOfText(c.p10, c.W10) })
       : t('weekly.cere.lost', { p: fmtPts(c.p10), n: c.p10 / 10, bronze: fmtPts(c.next ? c.next.at10 : 0) });
     const thanks = theirs.length && mine > 0
       ? t('weekly.cere.thanks', { mine: fmtPts(mine), n: mine / 10, others: theirs.map(([pid, p]) => `${st.players?.[pid]?.name ?? t('weekly.partner')} ${fmtPts(p)}`)
@@ -508,7 +553,7 @@ export const ceremonyPanel = {
       : null;
     fill(body,
       h('div.wk-cere', { dataset: { metal: c.metal } },
-        h('div.wk-cere-art', h('img', { src: '/assets/art/quests/g_600.webp', alt: '', decoding: 'async' }),
+        h('div.wk-cere-art', h('img', { src: assetUrl('/assets/art/quests/g_600.webp'), alt: '', decoding: 'async' }),
           h('div.wk-cere-medal', medalArt(c.metal, c.rank, 112, { dim: !won }))),
         ctx.args.catchUp ? h('p.wk-cere-away', t('weekly.cere.away')) : null,
         h('h2.wk-cere-title', won ? t('weekly.cere.medal', { medal: c.name }) : t('weekly.cere.goodTry')),
@@ -519,7 +564,7 @@ export const ceremonyPanel = {
         thanks ? h('p.wk-cere-thanks', thanks) : null,
         h('div.wk-cere-acts',
           h('button.btn.btn--sun', { type: 'button', on: { click: () => ctx.close() } }, won ? t('weekly.cere.hooray') : t('weekly.cere.nextWeek')),
-          h('button.btn.btn--paper.btn--small', { type: 'button', on: { click: () => { ctx.close(); ctx.ui.panels.open('fair'); } } },
+          h('button.btn.btn--paper.btn--small', { type: 'button', 'data-sfx': 'own', on: { click: () => { ctx.close(); ctx.ui.panels.open('fair'); } } },
             t('weekly.cere.seeFair')))));
     return {};
   },
@@ -566,8 +611,8 @@ export function installWeekly(ui, deps = {}) {
   let dead = false;
   const store = deps.store || ui.store || globalThis.__hh?.store || null;
   (async () => {
-    const [{ bargePanel, bargeBadge, bargeTone }, { townsfolkPanel, townsfolkBadge, townsfolkTone }, { townPanel, townBadge }, C] = await Promise.all([
-      import('./barge.js'), import('./townsfolk.js'), import('./town.js'), import('../../../../shared/content/index.js')]);
+    const [{ bargePanel, bargeBadge, bargeTone }, { townsfolkPanel, townsfolkBadge, townsfolkTone }, { townPanel, townBadge }, C] = await lazyImport('weekly', () => Promise.all([
+      import('./barge.js'), import('./townsfolk.js'), import('./town.js'), import('../../../../shared/content/index.js')]));
     if (dead) return;
     const docks = {
       fair: { get label() { return t('weekly.dock.fair'); }, icon: 'ribbon_rosette', order: 6, mini: true, get hint() { return t('weekly.dock.fairHint'); } },
@@ -586,7 +631,7 @@ export function installWeekly(ui, deps = {}) {
         townsfolk: [townsfolkBadge, townsfolkTone], town: [townBadge, () => 'calm'] }));
       off.push(startCeremony(ui, store));
     }
-  })().catch((err) => console.error('weekly panels failed to install', err));
+  })().catch((err) => { if (!importFailed(err)) console.error('weekly panels failed to install', err); });
   return () => { dead = true; for (const f of off.splice(0)) { try { f(); } catch { /* gone */ } } };
 }
 

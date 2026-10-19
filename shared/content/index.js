@@ -105,6 +105,8 @@
 //                            cinnamon_tree, building spice_mill, animals quail (quail_coop) and bison (bison_range), feed
 //                            prairie_hay, 14 recipes; unlocksAt lists parcels (not pieces)
 //
+// Added in release 1.0 (features lane): CRATES.powerups, the crates' rare power-ups (shared/rules/powerups.js)
+//
 // Added for Harness Hollow (mods lane, additive; docs/agent-notes/harness-contract.md §2.3):
 //   resetDerived()           clears the caches derived from the Maps (live()); shared/mod/install.js calls it after it
 //                            installed a farm's mod overlay into the Maps (or restored the base)
@@ -151,7 +153,7 @@ import { QUEST_VERBS, SPECIAL_REFS, LETTER_ART, QUEST_STORY, STORY_BEATS } from 
 import { RIBBONS, HIDDEN_RIBBONS, MEDAL_RANKS, RIBBON_REWARDS, RIBBON_WALL } from './ribbons.js';
 import { ORDERS } from './orders.js';
 import { DAILY_GIFT, FARM_WEEKS, ALMANAC, COUPLE_CHALLENGE, RECAP } from './daily.js';
-import { COOP, SAFETY, FEED } from './coop.js';
+import { COOP, SAFETY, FEED, GIFT_DEF } from './coop.js';
 import { GROWTH, BOOSTS, MASTERY } from './boosts.js';
 import { TOOLS } from './tools.js';
 import { MARKET } from './market.js';
@@ -209,7 +211,7 @@ const TABLES = {
   crops: CROPS, trees: [...TREES, ...RELIC_TREES], feeds: FEEDS, animals: ANIMALS, homes: HOMES, buildings: BUILDINGS,
   recipes: RECIPES,
   items: ITEMS, decor: [...DECOR.map(playerText), ...TROPHIES, ...COLLECTION_DISPLAYS,
-    ...TOWN_SOUVENIRS, ...RELIC_DECOR], plots: PLOTS, landmarks: [...LANDMARKS, CRATE_DEF],
+    ...TOWN_SOUVENIRS, ...RELIC_DECOR], plots: PLOTS, landmarks: [...LANDMARKS, CRATE_DEF, GIFT_DEF],
   debris: DEBRIS, expansions: EXPANSIONS, parcels: PARCELS, levels: LEVELS, barn: BARN_UPGRADES, quests: QUEST_DEFS,
   ribbons: [...RIBBONS, ...HIDDEN_RIBBONS], npcs: NPCS, tools: TOOLS, features: FEATURES, titles: TITLES,
   collections: COLLECTIONS, expansionDebris: EXPANSION_DEBRIS, restoration: RESTORATION, townProjects: TOWN_PROJECTS,
@@ -1419,5 +1421,5 @@ export {
   MEDAL_RANKS, COLLECTION_RULES, COLLECTION_SOURCES, MODEL, FAIR, BARGE, TOWNSFOLK, TOWN_PROJECT_RULES, FARM_BEAUTY,
   MASTERWORK, SEASONAL_TRACK, LEGACY, HEARTS_SHOP, PERKS, PETS, NURSERY, BREEDING, RESTED, FISHING, DUEL, INTERIOR,
   GRANDMA_VISIT, FESTIVAL_PAVILION, UPGRADES, WEEDS, AVATAR_LOOKS, CRATES, RELICS, HOME_GROWTH, TREE_AGE, QUEUE_FINISH,
-  PEN_BABIES,
+  PEN_BABIES, GIFT_DEF,
 };

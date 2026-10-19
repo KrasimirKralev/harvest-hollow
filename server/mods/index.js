@@ -13,13 +13,16 @@ import { validateCandidate, bootPool, base } from './validate.js';
 import { buildCatalog } from './catalog.js';
 import { compileMod } from '../../shared/mod/compile.js';
 import { checkFiles, parseFiles } from '../../shared/mod/schema.js';
-import { diffOverlays } from '../../shared/mod/diff.js';
+import { diffOverlays, changeRows, sameEffect } from '../../shared/mod/diff.js';
 import { applyMod } from '../../shared/mod/apply.js';
 import { modHash } from '../../shared/mod/hash.js';
 import { validateContent, CONTENT_HASH } from '../../shared/content/index.js';
 import { loadActive } from './hot.js';
+import { renderCheck } from './render.js';
 
 const NAME_LANGS = ['en', 'bg'];
+/** "Undo" all the way: the farm with no change of Harvey's (version 0). */
+const AS_IT_WAS = Object.freeze({ format: 1, title: Object.freeze({ en: 'The Farm As It Was', bg: 'Фермата както беше' }) });
 let bgCache = null;
 /** The base game's Bulgarian names table (NAME_TAKEN and the catalog). */
 export async function bgNamesTable(root) {
@@ -40,17 +43,32 @@ export function musicTracks(root) {
   return tracksCache;
 }
 
-/** Recompile a version's files for this build (boot after a game update): compile + the game's content check. */
+/**
+ * Recompile a version's files for this build (boot after a game update): compile + the game's content check. A knob a
+ * later format removed is left out, never a reason to suspend the farm's mod (M24): `ignored` lists what was left out.
+ */
 export function recompileFor(root) {
-  return (files, prevOverlay, n) => {
-    const tracks = musicTracks(root).map((t) => t.id);
-    const c = compileMod(base(), files, { n, prevOverlay, tracks });
-    if (!c.ok) return { ok: false };
-    try {
-      if (validateContent(applyMod(base().tables, c.overlay)).length) return { ok: false };
-    } catch { return { ok: false }; }
-    return { ok: true, overlay: c.overlay };
+  // the icons of a version the game makes (a rebuild, a pause), as an apply renders them (QA r2: they were never made, so
+  // every mod icon answered 404 after a game update); a failed render is no icons, never a failed boot
+  const render = (overlay) => {
+    try { return renderCheck(overlay, { root }).icons ?? {}; } catch { return {}; }
   };
+  const fn = (files, prevOverlay, n) => {
+    const tracks = musicTracks(root).map((t) => t.id);
+    // inside the try (QA r1 H-01): a file the compiler chokes on is a failed recompile (the mod is suspended), never a
+    // throw that reaches server start
+    try {
+      const c = compileMod(base(), files, { n, prevOverlay, tracks });
+      if (!c.ok) return { ok: false, problems: c.problems };
+      const content = validateContent(applyMod(base().tables, c.overlay));
+      if (content.length) return { ok: false, problems: content };
+      return { ok: true, overlay: c.overlay, ignored: c.warnings.filter((w) => w.code === 'IGNORED'), icons: render(c.overlay) };
+    } catch (err) {
+      return { ok: false, problems: [{ code: 'INTERNAL', message: String(err && err.message).slice(0, 200) }] };
+    }
+  };
+  fn.render = render;
+  return fn;
 }
 
 /** The icon URL of a mod thing (contract §4.6). */
@@ -77,6 +95,72 @@ export function createMods(ctx) {
   };
 
   const titleOf = (ov) => (ov ? ov.title : null);
+
+  /** The files of version `target` (0: the game as it was) and what does not read in them. */
+  const readTarget = (s, target) => (target > 0 ? s.readFiles(target) : { files: { 'mod.json': structuredClone(AS_IT_WAS) }, problems: [] });
+  /**
+   * Version `target` compiled as the farm's next version on this game: { ok, overlay } or { ok: false, code, problems }
+   * (code DAMAGED: a stored file does not read; INVALID: it no longer compiles or fails the game's content check).
+   */
+  const compileTarget = (s, target, n) => {
+    const read = readTarget(s, target);
+    if (read.problems.length) return { ok: false, code: 'DAMAGED', problems: read.problems };
+    try {
+      const c = compileMod(base(), read.files, { n, prevOverlay: s.activeOverlay(), tracks: musicTracks(root).map((t) => t.id) });
+      if (!c.ok) return { ok: false, code: 'INVALID', problems: c.problems };
+      const content = validateContent(applyMod(base().tables, c.overlay));
+      if (content.length) return { ok: false, code: 'INVALID', problems: content };
+      return { ok: true, overlay: c.overlay, files: read.files };
+    } catch (err) {
+      return { ok: false, code: 'INVALID', problems: [{ code: 'INTERNAL', message: String(err && err.message).slice(0, 200) }] };
+    }
+  };
+  // a thing an undo or a go-back takes out of the shop or brings back, as the toasts and confirms name it; bgDef: the
+  // Bulgarian definite form, for a sentence about one thing ("Ламата вече не се продава", H-12); g: its gender or 'pl'
+  // (a plural noun takes the plural verb: "карамелените ябълки отново се продават", QA r3 H3-05)
+  const named = (x, ov) => ({ id: x.id, en: x.name?.en ?? x.id, bg: x.name?.bg ?? null, bgDef: ov?.names?.bg?.[x.id]?.def ?? null,
+    g: ov?.names?.bg?.[x.id]?.g ?? null });
+  const isThing = (x) => x.kind !== 'text' && ['crops', 'trees', 'recipes', 'animals', 'decor'].includes(x.family);
+  /** What leaves the shop and what comes back between two overlays (the change rows of `changes`). */
+  const effectOf = (changes, prev, next) => ({
+    left: changes.filter((x) => x.op === 'retire' && isThing(x)).map((x) => named(x, prev)),
+    back: changes.filter((x) => (x.op === 'revive' || x.op === 'add') && isThing(x)).map((x) => named(x, next)),
+  });
+  // What making version `target` live now would do: { ok: true, left, back } or { ok: false, code } (DAMAGED, INVALID, or
+  // NO_CHANGE: it has the active version's effect). Stored versions never change and the key carries the active version,
+  // as the compile reads it: History asks on every open (each row's "Go back to this": QA r4 H4-07), so the answer is kept
+  const plans = new Map();
+  const planOf = (fk, s, target) => {
+    const a = s.active();
+    const k = `${fk}:${target}:${a?.n ?? 0}:${a?.hash ?? ''}`;
+    if (plans.has(k)) return plans.get(k);
+    const c = compileTarget(s, target, s.nextN());
+    const prev = s.activeOverlay();
+    let p;
+    if (!c.ok) p = { ok: false, code: c.code };
+    else if (sameEffect(prev, c.overlay)) p = { ok: false, code: 'NO_CHANGE' };
+    else p = { ok: true, ...effectOf(api.changes(fk, prev, c.overlay, { icons: false }), prev, c.overlay) };
+    if (plans.size > 400) plans.clear();
+    plans.set(k, p);
+    return p;
+  };
+  // whether a version can be made live again now
+  const canComeBack = (fk, s, target) => planOf(fk, s, target).ok;
+  /**
+   * Where "Undo the last change" goes now: { to, last, revive } (store.undoTarget), checked (QA r3 H3-05). A bring-back
+   * whose version cannot come back (a damaged file, or it no longer fits this game) is never offered: when the undo it
+   * would reverse replaced a pause, undoing it goes back to the game's own content (what the pause had); otherwise there
+   * is nothing to undo (`to: null`).
+   */
+  const undoPlanOf = (fk, s, a) => {
+    const u = s.undoTarget(a.n);
+    if (!u.revive || canComeBack(fk, s, u.to)) return u;
+    const um = s.meta(u.last);
+    const replaced = Number.isSafeInteger(um?.parent) ? s.meta(um.parent) : null;
+    if (replaced?.kind === 'suspend' && canComeBack(fk, s, 0)) return { to: 0, last: u.last, revive: false };
+    return { to: null, last: u.last, revive: false };
+  };
+
   const api = {
     store: storeOf,
     busy: (fk) => busy.has(fk),
@@ -99,9 +183,10 @@ export function createMods(ctx) {
 
     overlayFor(fk) { return storeOf(fk).activeOverlay(); },
 
-    async catalog(fk) {
+    /** The agent's catalog; `level` (the farm's) marks the anchors this farm can use now and each crop's fastest time. */
+    async catalog(fk, { level = null } = {}) {
       const s = storeOf(fk);
-      return buildCatalog({ overlay: s.activeOverlay(), graveyard: s.graveyard(), bgNames: await bgNamesTable(root), tracks: musicTracks(root) });
+      return buildCatalog({ overlay: s.activeOverlay(), graveyard: s.graveyard(), bgNames: await bgNamesTable(root), tracks: musicTracks(root), level });
     },
 
     /**
@@ -140,35 +225,20 @@ export function createMods(ctx) {
       return { ok: true, changes: api.changes(fk, s.activeOverlay(), c.overlay, { icons: false }), numbers: c.numbers };
     },
 
-    /** The pop-up's change list between two overlays (contract §4.2 Change). */
+    /**
+     * The pop-up's change list between two overlays (contract §4.2 Change; release 1.0 H3, shared/mod/diff.js
+     * changeRows): things with their facts, one row per speed knob, a crop tuned on its own, the sky, the music, a
+     * letter. A mod thing's icon is its own (when rendered), a base thing's the game's (/assets/icons/<id>.png).
+     */
     changes(fk, prev, next, { icons = true } = {}) {
-      const d = diffOverlays(prev, next);
-      const byId = new Map();
-      for (const part of ['defs', 'graveyard', 'patch']) {
-        for (const [fam, list] of Object.entries(next?.[part] ?? {})) {
-          if (fam === 'items' || fam === 'homes') continue;      // a crop's item shares its id: the crop speaks for it
-          for (const x of list) byId.set(x.id, x);
-        }
-      }
-      const bg = next?.names?.bg ?? {};
-      const out = [];
-      const num = (id, x) => {
-        if (!x) return undefined;
-        const r = { sell: x.sell ?? x.cost, xp: x.xp, unlock: x.unlock };
-        if (x.seed) r.seed = x.seed;
-        const ms = x.growMs ?? x.ms ?? x.cycleMs;
-        if (ms) r.minutes = Math.round(ms / 60_000);
-        return Object.fromEntries(Object.entries(r).filter(([, v]) => v !== undefined));
-      };
-      for (const [op, list] of [['add', d.added], ['change', d.changed], ['retire', d.retired], ['revive', d.revived]]) {
-        for (const { family, id } of list) {
-          const x = byId.get(id);
-          const modThing = /^x_/.test(id);
-          out.push({ op, family, id, name: { en: x?.name ?? id, bg: bg[id]?.name ?? null },
-            icon: icons && modThing && next?.look?.icons?.[id] ? iconUrl(ctx.mode, fk, next.hash, id) : null, numbers: num(id, x) });
-        }
-      }
-      return out;
+      const bg = bgCache ?? {};
+      const titles = new Map(musicTracks(root).map((t) => [t.id, t.title ?? t.id]));
+      return changeRows(prev, next, {
+        base: base().tables,
+        bgName: (id) => bg[id]?.name ?? null,
+        musicTitle: (id) => titles.get(id) ?? null,
+        iconOf: (id, mod) => (mod ? (icons && next?.look?.icons?.[id] ? iconUrl(ctx.mode, fk, next.hash, id) : null) : `/assets/icons/${id}.png`),
+      });
     },
 
     /**
@@ -196,6 +266,7 @@ export function createMods(ctx) {
       const changes = api.changes(fk, prev, overlay);
       s.stage({ files: parsed, overlay, icons: p.icons, report: p.result,
         meta: { parent: p.parent, at: Date.now(), by: meta.by ?? null, jobId: meta.jobId ?? null, prompt: meta.prompt ?? null,
+          prompts: Array.isArray(meta.prompts) ? meta.prompts.slice(0, 6).map((x) => String(x).slice(0, 1000)) : null,
           summary: meta.summary ?? null, title: overlay.title, changes } });
       passed.delete(key);
       return { candidate: n, hash: overlay.hash, validation: p.result, changes };
@@ -211,8 +282,12 @@ export function createMods(ctx) {
         if ((s.active()?.n ?? 0) !== (meta.parent ?? 0) || overlay.base !== CONTENT_HASH) {
           const e = new Error('STALE'); e.status = 409; e.code = 'STALE'; throw e;
         }
-        const names = Object.entries(overlay.names?.bg ?? {}).filter(([id]) => (meta.changes ?? []).some((c) => c.id === id && (c.op === 'add' || c.op === 'revive')))
-          .map(([id, e]) => ({ id, en: [...Object.values(overlay.defs)].flat().find((d) => d.id === id)?.name ?? id, bg: e.name }));
+        // the things it adds, with where each lives (the client's "Show me": a Market tab or the recipe's workshop)
+        const names = (meta.changes ?? []).filter((c) => (c.op === 'add' || c.op === 'revive') && ['crops', 'trees', 'recipes', 'animals', 'decor'].includes(c.family))
+          .map((c) => ({ id: c.id, en: c.name?.en ?? c.id, bg: c.name?.bg ?? overlay.names?.bg?.[c.id]?.name ?? null, family: c.family,
+            ...(c.info?.building?.id ? { building: c.info.building.id } : {}),
+            // its level (QA r2 H2-03): a thing above the farm's level gets no "Show me" (the Market keeps it in "Next:")
+            ...(Number.isInteger(c.numbers?.unlock) ? { unlock: c.numbers.unlock } : {}) }));
         const push = { e: 'applied', by, n: candidate, title: overlay.title, names, summary: summary ?? meta.summary ?? null };
         await api.install(fk, candidate, overlay, { by, kind: 'apply', push });
         return api.active(fk);
@@ -225,27 +300,38 @@ export function createMods(ctx) {
         const s = storeOf(fk);
         const a = s.active();
         if (!a) { const e = new Error('NOT_FOUND'); e.status = 404; e.code = 'NOT_FOUND'; throw e; }
+        // "the last change" looks through the versions the game made (a rebuild for a new game version, a pause): its
+        // target is the parent of the farmer's own last change (QA r2 H2-01: a rebuild's parent holds the same files); a
+        // bring-back that cannot come back is never the default (QA r3 H3-05: History's plan, the same function)
+        const last = s.undoTarget(a.n);
         let target = to;
-        if (target === undefined || target === null) {
-          const parent = s.meta(a.n)?.parent;
-          target = Number.isSafeInteger(parent) ? parent : 0;
-        }
+        if (target === undefined || target === null) target = undoPlanOf(fk, s, a).to;
         if (!Number.isSafeInteger(target) || target < 0 || target === a.n || (target > 0 && !s.overlay(target))) {
           const e = new Error('NOT_FOUND'); e.status = 404; e.code = 'NOT_FOUND'; throw e;
         }
-        const files = target > 0 ? s.files(target)
-          : { 'mod.json': { format: 1, title: { en: 'The Farm As It Was', bg: 'Фермата както беше' } } };
+        const refuse = (code, problems = []) => { const e = new Error(code); e.status = 409; e.code = code; e.problems = problems; return e; };
+        // a stored file that does not read refuses the undo (QA r1 H-01): leaving it out would retire its thing silently.
+        // Its own code (QA r2 H2-02): the farmer reads "version N has a damaged file", not the job's "did not pass the tests"
         const n = s.nextN();
-        const c = compileMod(base(), files, { n, prevOverlay: s.activeOverlay(), tracks: musicTracks(root).map((t) => t.id) });
-        if (!c.ok) { const e = new Error('INVALID'); e.status = 409; e.code = 'INVALID'; e.problems = c.problems; throw e; }
-        const content = validateContent(applyMod(base().tables, c.overlay));
-        if (content.length) { const e = new Error('INVALID'); e.status = 409; e.code = 'INVALID'; e.problems = content; throw e; }
-        const { icons } = (await import('./render.js')).renderCheck(c.overlay, { root });
+        const c = compileTarget(s, target, n);
+        if (!c.ok) throw refuse(c.code, c.problems);
+        const { files } = c;
         const prev = s.activeOverlay();
+        // an undo that changes nothing on the farm commits no version and never says it undid something (QA r2 H2-01)
+        if (sameEffect(prev, c.overlay)) throw refuse('NO_CHANGE');
+        const { icons } = renderCheck(c.overlay, { root });
         const changes = api.changes(fk, prev, c.overlay);
+        // "Bring back {title}" (QA r1 H-04): undoing an undo brings the undone change back; it is announced as such,
+        // never as another undo (kind 'revive', its own badge, confirm and toast). The undo is the farmer's last change
+        // seen through a rebuild or a pause (H2-01), and the change it brings back is the farmer's own below a pause (H3-05)
+        const reviving = target > 0 && last.revive && last.to === target;
         s.stage({ files, overlay: c.overlay, icons, report: null,
           meta: { parent: a.n, at: Date.now(), by, jobId: null, prompt: null, summary: null, title: c.overlay.title, changes, undoTo: target } });
-        await api.install(fk, n, c.overlay, { by, kind: 'undo', push: { e: 'undone', by, n, to: target } });
+        // the toast names what left the shop (harvey#17: "Moon Melon and Melon Pie left the shop") and what came back; a
+        // bring-back names both (QA r4 H4-04: it can take a thing out of the shop too)
+        const { left, back } = effectOf(changes, prev, c.overlay);
+        await api.install(fk, n, c.overlay, { by, kind: reviving ? 'revive' : 'undo',
+          push: { e: 'undone', by, n, to: target, names: left, back, ...(reviving ? { revive: true, title: c.overlay.title ?? null } : {}) } });
         return api.active(fk);
       });
     },
@@ -260,7 +346,30 @@ export function createMods(ctx) {
       await host.call('applyOverlay', overlay, { n, by, kind, at: Date.now(), push });
     },
 
-    history(fk) { return storeOf(fk).history(50); },
+    history(fk) {
+      const s = storeOf(fk);
+      const out = s.history(50);
+      // where "Undo the last change" goes, checked: never a bring-back that can only fail (QA r3 H3-05)
+      const a = s.active();
+      if (a && out.undo) {
+        const plan = undoPlanOf(fk, s, a);
+        const no = s.ordinals();
+        // what it takes out of the shop and brings back (QA r4 H4-04: the bring-back confirm said neither)
+        const eff = Number.isSafeInteger(plan.to) ? planOf(fk, s, plan.to) : null;
+        out.undo = { ...plan, toNo: Number.isSafeInteger(plan.to) ? (plan.to > 0 ? no.get(plan.to) ?? null : 0) : null, lastNo: no.get(plan.last) ?? null,
+          ...(eff?.ok ? { left: eff.left, back: eff.back } : {}) };
+      }
+      // each version says whether "Go back to this" can work now (QA r4 H4-07: a version with the active one's effect, or
+      // a damaged one, offered it and was refused) and what it would do (its own confirm words: H4-04)
+      if (a) {
+        for (const v of out.versions) {
+          if (v.n === a.n || v.kind === 'suspend') continue;
+          const p = planOf(fk, s, v.n);
+          v.go = p.ok ? { ok: true, left: p.left, back: p.back } : { ok: false, code: p.code };
+        }
+      }
+      return out;
+    },
 
     /** Single mode boot: the active overlay (recompiled or suspended after a game update), installed by the caller. */
     bootInstall(fk = 'local') {
@@ -309,7 +418,10 @@ export function createMods(ctx) {
       app.use(r);
     },
 
-    onFarmDeleted(fk) { stores.delete(fk); for (const k of [...passed.keys()]) if (k.startsWith(`${fk}:`)) passed.delete(k); },
+    onFarmDeleted(fk) {
+      stores.delete(fk);
+      for (const m of [passed, plans]) for (const k of [...m.keys()]) if (k.startsWith(`${fk}:`)) m.delete(k);
+    },
     stop() {},
     langs: NAME_LANGS,
   };

@@ -22,7 +22,7 @@ export default {
   'shell.slot.continue': 'Continue',
   'shell.slot.newDevice': 'Is this you on a new device? Open your personal farm link.',
   'shell.slot.pass': 'Farm passphrase',
-  'shell.slot.reclaim': 'This is me on a new computer',
+  'shell.slot.reclaim': 'This is me on a new device',
   'shell.slot.name': 'Your name',
   'shell.slot.nameFor': 'Name for farmer {n}',
   'shell.slot.play': 'Play',
@@ -43,6 +43,9 @@ export default {
 
   // the panel frame
   'shell.panel.broken': 'This page could not be drawn. The farm is fine; try again in a moment.',
+  // ui/hscroll.js
+  'shell.scroll.left': 'Scroll left',
+  'shell.scroll.right': 'Scroll right',
 
   // the partner comes and goes (a feed line after the farmer's name, and a toast)
   'shell.peer.arrivedFeed': 'arrived on the farm 🌻',

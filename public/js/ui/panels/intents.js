@@ -79,7 +79,9 @@ export const I = {
   postNote: (text, x, z) => ({ type: first('noteAdd'), args: { x, z, text } }),
   removeNote: (id) => ({ type: first('noteDel'), args: { id } }),
   thank: (i) => ({ type: first('thank'), args: { i } }),
-  keepsake: (item, to) => ({ type: first('keepsake'), args: to ? { item, to } : { item } }),
+  // release 1.0 (features' D1): the wrapped surprise carries a note; the recipient opens it
+  keepsake: (item, to, note) => ({ type: first('keepsake'), args: { item, ...(to ? { to } : {}), ...(note ? { note } : {}) } }),
+  openGift: (id) => ({ type: first('openGift'), args: { id } }),
   markSeen: (kind, id, level) => ({ type: first('markSeen'), args: { kind, ...(id !== undefined ? { id } : {}), ...(level !== undefined ? { level } : {}) } }),
   titlePick: (ribbon) => ({ type: first('titlePick'), args: ribbon ? { ribbon } : {} }),
   nameAnimal: (id, name) => ({ type: first('nameAnimal'), args: { id, name } }),

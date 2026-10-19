@@ -88,7 +88,7 @@ export function pairSection(ctx, kit, homeId, sel = { ids: null }) {
   };
   return h('section.pn-pair', { dataset: { pair: homeId } },
     head,
-    h('p.pn-pair-text', t('farm.pair.intro', { sp, noun: word(v), d: fmtDuration(v.ms) })),
+    h('p.pn-pair-text', t('farm.pair.intro', { sp, noun: word(v), d: fmtDuration(v.ms, { trim: true }) })),
     v.adults.length > 2 ? h('small.pn-pair-hint', t('farm.pair.pick')) : null,
     chips,
     h('div.pn-pair-foot', cost, room, move,

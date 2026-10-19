@@ -2,6 +2,7 @@
 // inline art (league crests, the NPC farms' barns, the duel crown, a progress ring) and reward chips. DOM-free helpers
 // first, DOM after. Styles: public/css/panels-league.css (`lg-` prefix), in the panels' wood-and-parchment language.
 import { h, icon, svgIcon, fmt, fmtShort } from './kit.js';
+import { tabCue } from '../dom.js';
 import { s as sv } from './art.js';
 import { DAILY_GIFT, BOOSTS, eHours, itemOf, defOf } from '../../../../shared/content/index.js';
 import { systemLive } from '../../../../shared/rules/coop.js';
@@ -79,6 +80,9 @@ export function hubBadge(state, pid, now) {
   return bang ? '!' : n > 0 ? n : null;
 }
 
+/** The farm level from which the hub shows Legacy's locked pill (two levels before it opens at the top level). */
+export const LEGACY_SHOWS_AT = 38;
+
 /**
  * The strip of hub tabs at the top of every lane panel: open systems as buttons (with their badge), the next locked
  * one as a dimmed "L27" pill so there is always a next goal in sight. `active` = this panel's name.
@@ -89,10 +93,13 @@ export function hubNav(ctx, active) {
   const v = hubView(st, pid, ctx.now());
   const shown = v.filter((e) => e.open || e.name === active);
   const lvl = levelOf(st);
-  const nextLocked = v.filter((e) => e.build && !e.open && e.name !== active && e.at > lvl).sort((a, b) => a.at - b.at)[0];
+  // Legacy (L40) stays out of sight below L38: an "opens at 40" pill at L21 is noise, not a goal (astra cut list)
+  const nextLocked = v.filter((e) => e.build && !e.open && e.name !== active && e.at > lvl && !(e.name === 'legacy' && lvl < LEGACY_SHOWS_AT))
+    .sort((a, b) => a.at - b.at)[0];
   if (shown.length + (nextLocked ? 1 : 0) < 2) return null;
   const tabs = shown.map((e) => h(`button.lg-hub-tab${e.name === active ? '.on' : ''}`, {
-    type: 'button', 'aria-current': e.name === active ? 'page' : null, dataset: { hub: e.name },
+    // opening a panel plays the panel's own sound: no generic click on top (life-feel's F1)
+    type: 'button', 'data-sfx': 'own', 'aria-current': e.name === active ? 'page' : null, dataset: { hub: e.name },
     on: { click: () => { if (e.name !== active) ctx.ui.panels.open(e.name); } },
   }, icon(e.icon, { size: 26, alt: '' }), h('span', e.label),
   e.badge && e.name !== active ? h(`span.lg-hub-badge${e.badge === '!' ? '' : '.calm'}`, { 'aria-label': e.badge === '!' ? t('league.hub.new') : t('league.hub.waiting', { n: e.badge }) }, String(e.badge)) : null));
@@ -100,7 +107,16 @@ export function hubNav(ctx, active) {
     tabs.push(h('span.lg-hub-tab.locked', { title: t('league.hub.opensAt', { name: nextLocked.label, n: nextLocked.at }), dataset: { hub: nextLocked.name } },
       svgIcon('lock', 18), h('span', nextLocked.label), h('small', t('league.hub.lvl', { n: nextLocked.at }))));
   }
-  return h('nav.lg-hub', { 'aria-label': t('league.hub.label') }, ...tabs);
+  // QA r4 S4-07 (ui-shell's X4-3): a strip wider than a phone gets the frame tabs' "‹" / "›" cue, and this panel's own
+  // tab is scrolled clear of the cue (the Ribbon Track's "🔒 Изложба · ниво 25" sat off a 360 screen with no cue)
+  const nav = h('nav.lg-hub', { 'aria-label': t('league.hub.label'), on: { scroll: () => tabCue(nav) } }, ...tabs);
+  globalThis.requestAnimationFrame?.(() => {
+    const b = nav.querySelector('[aria-current="page"]');
+    if (b && b.offsetLeft + b.offsetWidth > nav.scrollLeft + nav.clientWidth - 34) nav.scrollLeft = b.offsetLeft + b.offsetWidth - nav.clientWidth + 34;
+    else if (b && b.offsetLeft < nav.scrollLeft + 34) nav.scrollLeft = Math.max(0, b.offsetLeft - 34);
+    tabCue(nav);
+  });
+  return nav;
 }
 
 // ---- art ----------------------------------------------------------------------------------------------------------

@@ -87,5 +87,5 @@ test('CL-01 / RD-15: the world tooltip says who sits on a bench and who watered 
   must(s, 'plant', { id: plot, crop: 'strawberry' }, { pid: 'p1' });
   assert.ok(worldTip(s, { kind: 'object', id: plot }, T0 + 1000, 'p2').lines.some((l) => /^Needs water/.test(l)));
   must(s, 'water', { id: plot }, { pid: 'p1', now: T0 + 1000 });
-  assert.ok(worldTip(s, { kind: 'object', id: plot }, T0 + 2000, 'p2').lines.includes('Watered by Rowan · -15 %'));
+  assert.ok(worldTip(s, { kind: 'object', id: plot }, T0 + 2000, 'p2').lines.includes('Watered by Rowan · -15%'));
 });

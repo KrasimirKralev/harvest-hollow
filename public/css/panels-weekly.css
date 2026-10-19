@@ -7,7 +7,9 @@
 
 .wk-banner { position: relative; display: flex; align-items: flex-end; justify-content: space-between; gap: 12px;
   height: 124px; margin: 0 0 14px; padding: 12px 16px; border-radius: var(--r-m); overflow: hidden; isolation: isolate;
-  background: #C9A36A; box-shadow: inset 0 0 0 3px rgba(90, 50, 21, .55), 0 3px 0 rgba(90, 50, 21, .25), var(--pn-shadow); }
+  /* a dark wood under the painting: the words stay readable while it loads or if it never does (and axe measures them
+     against this colour: the old tan gave 2.8:1) */
+  background: #4A2A12; box-shadow: inset 0 0 0 3px rgba(90, 50, 21, .55), 0 3px 0 rgba(90, 50, 21, .25), var(--pn-shadow); }
 .wk-banner-art { position: absolute; inset: 0; z-index: -2; width: 100%; height: 100%; object-fit: cover; }
 .wk-banner-ink { position: absolute; inset: 0; z-index: -1; pointer-events: none;
   background: linear-gradient(90deg, rgba(42, 24, 10, .78) 0%, rgba(42, 24, 10, .45) 38%, rgba(42, 24, 10, 0) 70%),
@@ -15,7 +17,8 @@
 .wk-banner-text { min-width: 0; }
 .wk-banner-title { margin: 0; font: 800 1.7rem/1.05 var(--font-display); color: #FFFBEE; letter-spacing: .01em;
   text-shadow: 0 2px 0 rgba(42, 24, 10, .85), 0 0 12px rgba(42, 24, 10, .6); }
-.wk-banner-sub { margin: 2px 0 0; font: 700 .92rem/1.25 var(--font-ui); color: #FFF4D6; text-shadow: 0 1px 2px rgba(42, 24, 10, .9); }
+.wk-banner-sub { margin: 2px 0 0; font: 700 .92rem/1.25 var(--font-ui); color: #FFF4D6;
+  text-shadow: 0 1px 0 #2A180A, 0 0 2px #2A180A, 0 0 6px rgba(42, 24, 10, .9); }
 
 .wk-clock { display: inline-flex; align-items: center; gap: 6px; flex: none; padding: 6px 12px 6px 8px; border-radius: var(--r-pill);
   background: var(--paper-50); color: var(--ink-700); font: 700 .85rem/1 var(--font-ui);
@@ -365,7 +368,10 @@
 @keyframes wk-bob { from { transform: translateX(-50%) translateY(0); } to { transform: translateX(-50%) translateY(-4px); } }
 @keyframes wk-pop { 0% { transform: translateX(-50%) scale(.3) rotate(-25deg); opacity: 0; } 100% { transform: translateX(-50%) scale(1) rotate(0); opacity: 1; } }
 @keyframes wk-drift { from { transform: translateX(-8px); } to { transform: translateX(8px); } }
-@media (prefers-reduced-motion: reduce) { .wk-rung.next, .wk-cere-medal, .wk-far-barge { animation: none; } }
+@media (prefers-reduced-motion: reduce) {
+  body:not(.motion-set) .wk-rung.next, body:not(.motion-set) .wk-cere-medal,
+    body:not(.motion-set) .wk-far-barge { animation: none; }
+}
 body.motion-reduced .wk-rung.next, body.motion-reduced .wk-cere-medal, body.motion-reduced .wk-far-barge { animation: none; }
 
 /* ---- small windows ------------------------------------------------------------------------------------------- */
@@ -389,10 +395,18 @@ body.motion-reduced .wk-rung.next, body.motion-reduced .wk-cere-medal, body.moti
 /* the card a tracker card or a world click named: a warm outline for a moment (removed by fair.js focusOn) */
 .wk-focus { outline: 4px solid var(--sun-500); outline-offset: 3px; animation: wk-ring 900ms var(--ease-inout) 3 alternate; }
 @keyframes wk-ring { from { outline-color: var(--sun-500); } to { outline-color: var(--sun-300); } }
-@media (prefers-reduced-motion: reduce) { .wk-focus { animation: none; } }
+@media (prefers-reduced-motion: reduce) {
+  body:not(.motion-set) .wk-focus { animation: none; }
+}
 body.motion-reduced .wk-focus { animation: none; }
 
 /* Bulgarian (i18n lane B): sentence case; Title Case On Every Word is English typography */
 :lang(bg) .wk-post-head small, :lang(bg) .wk-friend-text small { text-transform: none; }
 /* a long one-word Bulgarian name ("Ябълков сок") ran under its "0 / 4" on a phone: name and count stack there */
 @media (max-width: 600px) { html[lang="bg"] .wk-good-text { grid-template-columns: minmax(0, 1fr); } }
+
+/* release 1.0 (ux-phone#15): the banner's "?" chip exists for the phone strip only (css/mobile-panels.css) */
+.wk-banner-more { display: none; }
+/* copy#17: the dot between a clock's words and its countdown is drawn here, so it travels with the countdown when the
+   line wraps (never "Judging Sunday 20:00 ·" left alone at a line end) */
+.wk-clock .wk-clock-l + .wk-clock-t::before { content: '· '; color: var(--ink-500); font-weight: 700; }

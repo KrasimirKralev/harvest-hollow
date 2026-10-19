@@ -13,18 +13,21 @@
 // setDayCycle, audio.setDayMode, controller.setOption('edgeScroll'). Volumes and mute belong to client-core's
 // audio.js (it persists them in 'hh.audio'): the Sound section reads audio.volumes() and writes
 // audio.setVolume(channel, 0..1) / audio.setMuted(bool); `volume` here is only the fallback before audio exists.
+import { assetUrl } from '../net/asset-base.js';
 import { h, kv } from './dom.js';
+import { LAYOUT_Q } from './layout.js';
 import { farmName } from '../../../shared/brand.js';
 import { t, liveRows, live, lang, setLang, LANGS, LANG_NAMES, fmtPct } from '../i18n/index.js';
 
 const KEY = 'hh.settings';
-const prefersReduced = () => Boolean(globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches);
+const REDUCE_Q = '(prefers-reduced-motion: reduce)';
+const prefersReduced = () => Boolean(globalThis.matchMedia?.(REDUCE_Q).matches);
 const QUALITIES = ['auto', 'high', 'medium', 'low', 'eco'];
 
 export const DEFAULTS = Object.freeze({
   quality: 'auto',            // 'auto' | 'high' | 'medium' | 'low' | 'eco'
   dayCycle: 'cycle',          // 'cycle' | 'day' | 'clock'
-  motion: 'full',             // 'full' | 'reduced' | 'still'
+  motion: 'system',           // 'system' (the device's reduced-motion setting, re-read on change) | 'full' | 'reduced' | 'still'
   uiScale: 100,               // 80..140 %: the player's choice, used only when uiScaleSet
   uiScaleSet: false,          // false: the size follows the window (uiScaleAuto)
   muted: false,
@@ -34,7 +37,20 @@ export const DEFAULTS = Object.freeze({
   edgeScroll: false,
   keyHints: true,
   rightDrag: 'pan',           // 'pan' | 'rotate' (wave 4, wish H): the controller's own option wins when it has one
+  showHarvey: true,           // Settings › Harvey: false hides his button and pill here (owner 2026-10-19)
 });
+
+/** The motion in effect: a pick, or the device's setting for 'system' (`reduce`: prefers-reduced-motion now). Pure. */
+export function motionOf(s, reduce = prefersReduced()) {
+  const m = s && s.motion;
+  if (m === 'full' || m === 'reduced' || m === 'still') return m;
+  return reduce ? 'reduced' : 'full';
+}
+
+/** What goes to storage: the settings, motion in its versioned field (`motion` stays the effective value for HEAD). */
+function stored(s) {
+  return { ...s, motion2: s.motion, motion: motionOf(s) };
+}
 
 /** Merge a stored object over the defaults, dropping anything out of range (pure; tests). */
 export function sanitize(raw) {
@@ -43,10 +59,14 @@ export function sanitize(raw) {
   const pick = (k, allowed) => { if (allowed.includes(raw[k])) s[k] = raw[k]; };
   pick('quality', QUALITIES);
   pick('dayCycle', ['cycle', 'day', 'clock']);
-  pick('motion', ['full', 'reduced', 'still']);
+  // motion is stored only when the player picks it, in the versioned field `motion2` (release 1.0 M25, critique#4):
+  // HEAD wrote motion 'full' with every save, a value that cannot be told apart from a pick, so a stored 'full' without
+  // `motion2` follows the system; HEAD's 'reduced' / 'still' were picks (or the device's reduce) and stay
+  if (['system', 'full', 'reduced', 'still'].includes(raw.motion2)) s.motion = raw.motion2;
+  else if (raw.motion === 'reduced' || raw.motion === 'still') s.motion = raw.motion;
   pick('rightDrag', ['pan', 'rotate']);
   if (Number.isFinite(raw.uiScale)) s.uiScale = Math.min(UI_SCALE_TOP, Math.max(UI_SCALE_MIN, Math.round(raw.uiScale / 5) * 5));
-  for (const k of ['muted', 'cbSafe', 'captions', 'edgeScroll', 'keyHints', 'uiScaleSet']) if (typeof raw[k] === 'boolean') s[k] = raw[k];
+  for (const k of ['muted', 'cbSafe', 'captions', 'edgeScroll', 'keyHints', 'uiScaleSet', 'showHarvey']) if (typeof raw[k] === 'boolean') s[k] = raw[k];
   if (raw.volume && typeof raw.volume === 'object') {
     for (const k of Object.keys(DEFAULTS.volume)) {
       const v = raw.volume[k];
@@ -122,7 +142,7 @@ let musicList = null;
 function loadMusicList() {
   if (!musicList) {
     const v = globalThis.document?.querySelector?.('meta[name="hh-build"]')?.content;
-    musicList = fetch(`/assets/audio/music/tracks.json${v ? `?v=${encodeURIComponent(v)}` : ''}`)
+    musicList = fetch(assetUrl(`/assets/audio/music/tracks.json${v ? `?v=${encodeURIComponent(v)}` : ''}`))
       .then((r) => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); })
       .then((j) => (Array.isArray(j?.tracks) ? j.tracks : []))
       .catch((err) => { musicList = null; throw err; });
@@ -145,7 +165,8 @@ export function createSettings(S) {
     ? [[t('settings.cap.rightDrag'), t('settings.key.turnTilt')], [t('settings.cap.middleDrag'), t('settings.key.panShort')]]
     : [[t('settings.cap.rightDrag'), t('settings.key.panShort')]]);
   let cur = sanitize(kv.get(KEY));
-  if (!kv.get(KEY) && prefersReduced()) cur.motion = 'reduced';
+  // 'system' follows the device: a change of the device's setting while the game is open applies at once
+  globalThis.matchMedia?.(REDUCE_Q)?.addEventListener?.('change', () => { if (cur.motion === 'system') apply(); });
   const subs = new Set();
   // ?quality=low|medium|high|eco|auto picks the graphics tier for this visit (README); a choice made in Settings
   // during the visit wins from then on
@@ -166,15 +187,18 @@ export function createSettings(S) {
 
   function apply() {
     document.documentElement.style.setProperty('--ui-scale', String(scale() / 100));
-    document.body.classList.toggle('motion-reduced', cur.motion !== 'full');
-    document.body.classList.toggle('motion-still', cur.motion === 'still');
+    const motion = motionOf(cur);
+    document.body.classList.toggle('motion-reduced', motion !== 'full');
+    document.body.classList.toggle('motion-still', motion === 'still');
+    // from here on the player's choice (body.motion-reduced) rules the CSS, not the device's media query (QA r2 S-15)
+    document.body.classList.add('motion-set');
     document.body.classList.toggle('cb-safe', cur.cbSafe);
     document.body.classList.toggle('no-key-hints', !cur.keyHints);
     const v = S.view;
     if (v) {
       // 'eco' goes through as itself: the view runs the low tier at 20 / 30 fps for it (render/index.js setQuality)
       try { v.setQuality?.(urlQuality ?? cur.quality); } catch (err) { console.warn('view.setQuality', err); }
-      try { v.setMotion?.(cur.motion); } catch (err) { console.warn('view.setMotion', err); }
+      try { v.setMotion?.(motion); } catch (err) { console.warn('view.setMotion', err); }
       try { v.setDayCycle?.(cur.dayCycle === 'clock' ? 'real' : cur.dayCycle); } catch (err) { console.warn('view.setDayCycle', err); }
     }
     const audio = audioOf();
@@ -223,9 +247,13 @@ export function createSettings(S) {
       if (Object.hasOwn(patch, 'quality')) urlQuality = null;
       // picking a size is a choice (it no longer follows the window); { uiScaleSet: false } goes back to automatic
       const chose = Object.hasOwn(patch, 'uiScale') && !Object.hasOwn(patch, 'uiScaleSet') ? { uiScaleSet: true } : {};
-      const next = sanitize({ ...cur, ...patch, ...chose, volume: { ...cur.volume, ...(patch.volume || {}) } });
+      // motion is a pick in the versioned field (M25): sanitize reads a pick only from `motion2`, so a "Full" from the
+      // segment (and a "Full" picked earlier, through any later change) must go there, or it fell back to "Like this
+      // device" and a player whose OS reduces motion could never turn full motion on (QA r1 S-08)
+      const motion2 = Object.hasOwn(patch, 'motion') ? patch.motion : cur.motion;
+      const next = sanitize({ ...cur, ...patch, motion2, ...chose, volume: { ...cur.volume, ...(patch.volume || {}) } });
       cur = next;
-      kv.set(KEY, cur);
+      kv.set(KEY, stored(cur));
       apply();
       const snap = api.get();
       for (const fn of [...subs]) { try { fn(snap, patch); } catch (err) { console.error('settings listener failed', err); } }
@@ -285,6 +313,8 @@ export function createSettings(S) {
     return h('div.set-row', b);
   }
 
+  /** The tools' key numbers can show: the desktop layout (every touch layout hides them, css/mobile.css). */
+  const keyHintsShown = () => !globalThis.matchMedia?.(LAYOUT_Q.touch)?.matches;
   /** A phone or tablet (coarse pointer, no hover; game/device.js decides when it is there). */
   const touchFirst = () => Boolean(S.controller?.device?.touchFirst
     ?? globalThis.matchMedia?.('(hover: none) and (pointer: coarse)').matches);
@@ -292,7 +322,10 @@ export function createSettings(S) {
     const dev = S.controller?.device;
     const opts = ctl()?.options || {};
     const rows = [h('h3', t('settings.touch')), h('ul.keys.gestures', TOUCH_GESTURES.map(([k, what]) => h('li', h('kbd', k), what)))];
-    if (Object.hasOwn(opts, 'haptics')) rows.push(toggle(t('settings.vibration'), 'haptics', t('settings.vibrationHelp')));
+    // a phone that cannot vibrate (an iPhone: no navigator.vibrate) gets no switch that does nothing (QA r1 S-35)
+    if (Object.hasOwn(opts, 'haptics') && typeof globalThis.navigator?.vibrate === 'function') {
+      rows.push(toggle(t('settings.vibration'), 'haptics', t('settings.vibrationHelp')));
+    }
     if (Object.hasOwn(opts, 'keepAwake')) {
       const can = dev?.wakeLock?.available;
       rows.push(toggle(t('settings.awake'), 'keepAwake', can ? t('settings.awakeHelp') : t('settings.awakeNo')));
@@ -376,15 +409,17 @@ export function createSettings(S) {
           slider(t('settings.vol.ui'), () => volOf('ui'), (v) => setVol('ui', v), { id: 'buttons' }),
         );
       } else if (ctx.tab === 'access') {
-        grid.append(
+        grid.append(...[
           h('h3', t('settings.tab.access')),
-          seg(t('settings.motion'), 'motion', [['full', t('settings.motion.full')], ['reduced', t('settings.motion.reduced')], ['still', t('settings.motion.still')]],
-            t('settings.motionHelp')),
+          seg(t('settings.motion'), 'motion', [['system', t('dock.motion.system')], ['full', t('settings.motion.full')], ['reduced', t('settings.motion.reduced')],
+            ['still', t('settings.motion.still')]], `${t('dock.motion.systemHelp')} ${t('settings.motionHelp')}`),
           sizeSlider(),
           toggle(t('settings.cb'), 'cbSafe', t('settings.cbHelp')),
           toggle(t('settings.captions'), 'captions', t('settings.captionsHelp')),
-          toggle(t('settings.keyHints'), 'keyHints', t('settings.keyHintsHelp')),
-        );
+          // the key numbers on the tools show only on the desktop layout (css/mobile.css hides them on every touch layout):
+          // no switch that changes nothing on a phone or a tablet (QA r3 S3-20, oib#7; a sibling of QA r1 S-35)
+          keyHintsShown() ? toggle(t('settings.keyHints'), 'keyHints', t('settings.keyHintsHelp')) : null,
+        ].filter(Boolean));
       } else if (ctx.tab === 'keys') {
         // a phone or tablet: the gestures and its own switches first (game/device.js, the input lane's options)
         if (touchFirst()) grid.append(...touchRows());
@@ -396,7 +431,9 @@ export function createSettings(S) {
         // a phone without a mouse has no right button and no screen edge to scroll at
         const mouse = !touchFirst() || Boolean(globalThis.matchMedia?.('(any-pointer: fine)').matches);
         if (mouse) grid.append(h('h3', t('settings.mouse')), drag, toggle(t('settings.edge'), 'edgeScroll', t('settings.edgeHelp')));
-        grid.append(h('h3', t('settings.keys')), keys);
+        // a phone without a keyboard: the key list folds behind its heading (QA r1 S-35); a keyboard plugged in opens it
+        if (mouse) grid.append(h('h3', t('settings.keys')), keys);
+        else grid.append(h('details.set-fold', h('summary', t('settings.keys')), keys));
       } else if (ctx.tab === 'credits') {
         grid.append(...creditRows());
       } else if (ctx.tab === 'helper' && S.harness) {

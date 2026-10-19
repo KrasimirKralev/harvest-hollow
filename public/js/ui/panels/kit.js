@@ -2,14 +2,16 @@
 // public/css/panels.css under the `pn-` prefix; the frame (.hh-panel*) and the .btn family belong to the shell.
 //
 //   createKit(ctx) -> kit        one per mounted panel (ctx = the shell's panel ctx)
-//     kit.button({ label, glyph?, icon?, cls?, type, args, gate?, hint?, after?, title? }) -> el
+//     kit.button({ label, glyph?, icon?, cls?, type, args, gate?, hint?, after?, title?, from?, guard? }) -> el
+//       guard() -> true: this press is ignored (nothing sent, no flight); the button stays enabled
+//          (`from: true`: a reward's flight starts at this button, see actFrom)
 //          an action button that asks the rules BEFORE the click: probe(type, args) (or gate() first) decides
 //          disabled + a visible reason under it ("Need 2 more Flour"); a soft code keeps it enabled (the shell
 //          asks "are you sure?" on click). `args` and `hint` may be functions (re-read on every refresh).
 //     kit.refresh()              re-probe every button (call from the panel's update())
 //     kit.timer(el, { end, start?, bar?, done?, prefix? })   ticks `el`'s text (and a bar) from ctx.now()
 //     kit.tick()                 run the timers now (after a re-render)
-//   price({ coins, acorns }, { big? }) / stars(n) / chip(item, { have, need, n }) / bar(pct, label?, cls?)
+//   price({ coins, acorns }, { big? }) / stars(n) / chip(item, { have, need, n }) / bar(pct, label?, cls?, name?)
 //   section(title, ...children) / empty(text, glyph?) / pill(text, cls?) / ribbonTag(text, cls?)
 import { h, icon, svgIcon, fmt, fmtShort, fmtDuration, playerMark } from '../index.js';
 import { itemOf } from '../../../../shared/content/index.js';
@@ -21,13 +23,48 @@ export { h, icon, svgIcon, fmt, fmtShort, fmtDuration, playerMark };
 const val = (v) => (typeof v === 'function' ? v() : v);
 
 /**
- * A panel title that fits a phone's title ribbon (about 14 letters): Bulgarian runs longer, so a narrow screen gets the
- * short key; English always reads the long one (unchanged).
+ * A panel title that fits a phone's title ribbon (about 13 letters): a narrow screen gets the short key in every
+ * language (release P7: "Restoration Ledger", "Decor sets & Masterwork" were cut with an ellipsis at 360 in English).
+ * A phone on its side counts as narrow too: at 640x360 the ribbon is 216 px ("Поръчките на Мейбъл" was cut).
  */
 export function phoneTitle(longKey, shortKey, params) {
-  const narrow = typeof globalThis.matchMedia === 'function' && globalThis.matchMedia('(max-width: 520px)').matches;
-  return narrow && lang() !== 'en' ? t(shortKey, params) : t(longKey, params);
+  const narrow = typeof globalThis.matchMedia === 'function' && globalThis.matchMedia('(max-width: 520px), (max-height: 500px)').matches;
+  return narrow ? t(shortKey, params) : t(longKey, params);
 }
+
+/**
+ * A list only while it holds its items: an empty one (a note, "nothing here yet") is a plain box, never a list with no
+ * item (QA r1 P-19: axe aria-required-children, critical, on a first-time player's Market, Barn and Orders).
+ */
+export function listRole(el, role = 'list', item = role === 'listbox' ? 'option' : 'listitem') {
+  if (!el) return el;
+  if (el.querySelector(`[role="${item}"]`)) el.setAttribute('role', role); else el.removeAttribute('role');
+  return el;
+}
+
+/**
+ * A place's name as a panel title (a workshop, a home): on a narrow screen a long name takes its short form ("Мелница
+ * за подправки" -> "Подправки", QA r1 P-03: cut with an ellipsis on the iPhone in Bulgarian). The same 16-letter
+ * budget as the tree title (tree.js treeTitle); a name without a short form stays whole.
+ */
+export function placeTitle(id, full) {
+  const narrow = typeof globalThis.matchMedia === 'function' && globalThis.matchMedia('(max-width: 520px), (max-height: 500px)').matches;
+  if (!narrow || String(full).length <= 16) return full;
+  return cname(id, { form: 'short' }) || full;
+}
+
+/**
+ * A phone sheet (upright or on its side): the same media query as css/mobile.css's phone block. Panels that reorder
+ * their DOM for a phone (the action first, ux-phone#15) ask this when they render, so the reading and Tab order follow
+ * what the eye sees (a CSS `order` would not).
+ */
+export const phoneSheet = () => typeof globalThis.matchMedia === 'function' && globalThis.matchMedia('(max-width: 600px), (max-height: 500px)').matches;
+
+/**
+ * How a panel scrolls a card into view: at once when the player's motion is reduced (body.motion-reduced, settings.js),
+ * else smoothly. A JS smooth scroll ignores the CSS motion rules (QA r2 S2-15 sibling: the player's pick wins).
+ */
+export const scrollBehavior = () => (globalThis.document?.body?.classList?.contains('motion-reduced') ? 'auto' : 'smooth');
 
 /**
  * A whole catalog sentence as h() children: Node-valued params (a player's mark, a price chip) stay nodes, the rest is
@@ -40,6 +77,18 @@ export function tParts(key, params = {}) {
     if (v && typeof v === 'object' && typeof v.nodeType === 'number') { const m = `\u0001${k}\u0001`; marks.set(m, v); p[k] = m; } else p[k] = v;
   }
   return t(key, p).split(/(\u0001[\w$]+\u0001)/).filter(Boolean).map((x) => marks.get(x) ?? x);
+}
+
+/**
+ * The button a reward came from (life-feel's flights start there, `meta.from`): `hh:act-from` on window, detail
+ * { from: Element, type }, fired synchronously right BEFORE the panel's ctx.act(type, args), so the fx events that the
+ * act's prediction raises in the same tick can take `from` as their start (feel#1, release-scope M4). Sell, Deliver,
+ * Claim and Buy buttons pass it (kit.button `from: true`).
+ */
+export function actFrom(el, type) {
+  const w = globalThis.window;
+  if (!w || typeof w.dispatchEvent !== 'function' || typeof globalThis.CustomEvent !== 'function') return;
+  try { w.dispatchEvent(new CustomEvent('hh:act-from', { detail: { from: el, type } })); } catch { /* an old browser */ }
 }
 
 export function createKit(ctx) {
@@ -84,6 +133,9 @@ export function createKit(ctx) {
       on: { click: (e) => {
         e.stopPropagation();
         if (el.disabled) return;
+        // a press the panel says to ignore (a row that moved under the finger a moment ago: orders.js, QA r1 P-17)
+        if (spec.guard && spec.guard(e)) return;
+        if (spec.from) actFrom(el, val(spec.type));
         if (spec.onClick) { spec.onClick(e); refreshAll(); return; }
         const r = ctx.act(val(spec.type), val(spec.args) || {});
         if (spec.after) spec.after(r);
@@ -271,12 +323,21 @@ export function hintable(el, item, { need, more, cls, tab = true } = {}) {
   return el;
 }
 
-/** A progress bar: `pct` 0..1 drives a transform (cheap); optional centred label "4/10". */
-export function bar(pct, label = null, cls = '') {
+/**
+ * A progress bar: `pct` 0..1 drives a transform (cheap); optional centred label "4/10". `name` is what the bar
+ * measures, for a screen reader ("Barn space 943 / 800"; perf-a11y#8): without it the label names it.
+ */
+export function bar(pct, label = null, cls = '', name = null) {
   const fill = h('span.pn-bar-fill');
-  const el = h(`span.pn-bar${cls ? `.${cls.trim().split(/\s+/).join('.')}` : ''}`, { role: 'progressbar', 'aria-valuemin': '0', 'aria-valuemax': '100',
-    'aria-valuenow': String(Math.round(Math.max(0, Math.min(1, pct)) * 100)), style: { '--p': String(Math.max(0, Math.min(1, pct))) } },
-  fill, label !== null ? h('span.pn-bar-label', label) : null);
+  const said = name ?? label;
+  const named = said !== null && said !== undefined && said !== '';
+  const p = Math.max(0, Math.min(1, pct));
+  // a bar with nothing to say is a picture of the text beside it ("4m 10s", "3/10"): hidden from a screen reader
+  // rather than a nameless progress bar (axe aria-progressbar-name, perf-a11y#8)
+  const a11y = named ? { role: 'progressbar', 'aria-valuemin': '0', 'aria-valuemax': '100', 'aria-label': String(said), 'aria-valuenow': String(Math.round(p * 100)) }
+    : { 'aria-hidden': 'true' };
+  const el = h(`span.pn-bar${cls ? `.${cls.trim().split(/\s+/).join('.')}` : ''}`, { ...a11y, style: { '--p': String(p) } },
+    fill, label !== null ? h('span.pn-bar-label', label) : null);
   el.fill = fill;
   return el;
 }
@@ -299,8 +360,9 @@ export const ribbonTag = (text, cls = '') => h(`span.pn-ribbon${dots(cls)}`, tex
 export function who(state, pid, { me } = {}) {
   const p = state?.players?.[pid];
   if (!p) return h('span.pn-who.pn-sys', pid === 'sys' ? t('market.kit.theFarm') : t('market.kit.someone'));
+  // the name in a span of its own: a narrow column (Journal › Ledger on a phone) shows the mark alone (QA r1 P-12)
   return h('span.pn-who', { style: { '--who': p.color }, dataset: { slot: pid } }, playerMark(pid, p),
-    pid === me ? t('market.kit.youName', { name: p.name }) : p.name);
+    h('span.pn-who-name', pid === me ? t('market.kit.youName', { name: p.name }) : p.name));
 }
 
 /** "3m ago" style relative time from server-clock timestamps. */

@@ -1,6 +1,6 @@
 {
  "version": 1,
- "hash": "c4329e7f8a",
+ "hash": "d4fe4bf650",
  "units": "metres; 1 tile = 2 m; origin = footprint centre on the ground; +Z forward",
  "files": {
   "animals/alpaca.glb": {
@@ -241,10 +241,10 @@
    "bytes": 39404
   },
   "crops/wheat.glb": {
-   "bytes": 51600
+   "bytes": 51636
   },
   "debris/debris.glb": {
-   "bytes": 34392
+   "bytes": 35496
   },
   "decor/arbor_of_lights.glb": {
    "bytes": 136788
@@ -917,6 +917,9 @@
   },
   "props/fair.glb": {
    "bytes": 120516
+  },
+  "props/gift-box.glb": {
+   "bytes": 14484
   },
   "props/loot-crate.glb": {
    "bytes": 26064
@@ -1771,6 +1774,12 @@
    "family": "decor",
    "keys": [
     "decor:giant_trophy"
+   ]
+  },
+  "gift_box": {
+   "family": "prop",
+   "keys": [
+    "prop:gift_box"
    ]
   },
   "glasshouse_garden_souvenir": {
@@ -13711,19 +13720,19 @@
    "doubleSided": true,
    "part": true,
    "size": [
-    1.54,
-    1.503,
-    1.434
+    1.698,
+    1.623,
+    1.586
    ],
    "min": [
-    -0.803,
+    -0.888,
     0.12,
-    -0.819
+    -0.903
    ],
    "max": [
-    0.738,
-    1.623,
-    0.615
+    0.81,
+    1.743,
+    0.683
    ],
    "tris": 60
   },
@@ -13949,21 +13958,21 @@
     1
    ],
    "size": [
-    0.65,
-    0.26,
-    0.641
+    1.202,
+    0.745,
+    1.439
    ],
    "min": [
-    -0.361,
-    -0.004,
-    -0.283
+    -0.672,
+    0,
+    -0.719
    ],
    "max": [
-    0.289,
-    0.256,
-    0.359
+    0.53,
+    0.745,
+    0.72
    ],
-   "tris": 124
+   "tris": 130
   },
   "decor:arbor_of_lights": {
    "file": "decor/arbor_of_lights.glb",
@@ -22952,6 +22961,122 @@
     1.169
    ],
    "tris": 738
+  },
+  "prop:gift_box": {
+   "file": "props/gift-box.glb",
+   "node": "prop-gift_box",
+   "kind": "static",
+   "scale": 1,
+   "yOffset": 0,
+   "family": "prop",
+   "def": "gift_box",
+   "footprint": [
+    1,
+    1
+   ],
+   "size": [
+    0.908,
+    0.66,
+    0.908
+   ],
+   "min": [
+    -0.454,
+    0,
+    -0.454
+   ],
+   "max": [
+    0.454,
+    0.66,
+    0.454
+   ],
+   "tris": 108
+  },
+  "prop:gift_box:band": {
+   "file": "props/gift-box.glb",
+   "node": "prop-gift_box-band",
+   "kind": "static",
+   "scale": 1,
+   "yOffset": 0,
+   "family": "prop",
+   "footprint": [
+    1,
+    1
+   ],
+   "part": true,
+   "size": [
+    0.932,
+    0.66,
+    0.932
+   ],
+   "min": [
+    -0.466,
+    0,
+    -0.466
+   ],
+   "max": [
+    0.466,
+    0.66,
+    0.466
+   ],
+   "tris": 48
+  },
+  "prop:gift_box:bow": {
+   "file": "props/gift-box.glb",
+   "node": "prop-gift_box-bow",
+   "kind": "static",
+   "scale": 1,
+   "yOffset": 0,
+   "family": "prop",
+   "footprint": [
+    1,
+    1
+   ],
+   "part": true,
+   "size": [
+    1.012,
+    0.388,
+    1.012
+   ],
+   "min": [
+    -0.506,
+    0,
+    -0.506
+   ],
+   "max": [
+    0.506,
+    0.388,
+    0.506
+   ],
+   "tris": 376
+  },
+  "prop:gift_box:lid": {
+   "file": "props/gift-box.glb",
+   "node": "prop-gift_box-lid",
+   "kind": "static",
+   "scale": 1,
+   "yOffset": 0,
+   "family": "prop",
+   "footprint": [
+    1,
+    1
+   ],
+   "part": true,
+   "size": [
+    0.98,
+    0.15,
+    0.98
+   ],
+   "min": [
+    -0.49,
+    0,
+    -0.49
+   ],
+   "max": [
+    0.49,
+    0.15,
+    0.49
+   ],
+   "tris": 12
   },
   "prop:grass_tuft": {
    "file": "props/props.glb",

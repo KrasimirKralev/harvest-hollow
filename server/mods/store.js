@@ -3,7 +3,7 @@
 //   H/mods/active.json               { n, hash, appliedAt, by }        (absent = no mod)
 //   H/mods/versions/<n>/files/...    the mod folder of that version (one JSON file per path)
 //   H/mods/versions/<n>/overlay.json the compiled overlay
-//   H/mods/versions/<n>/meta.json    { n, parent, kind: 'candidate' | 'apply' | 'undo' | 'suspend', at, by, jobId, prompt,
+//   H/mods/versions/<n>/meta.json    { n, parent, kind: 'candidate' | 'apply' | 'undo' | 'revive' | 'rebuild' | 'suspend', at, by, jobId, prompt,
 //                                      summary, title, modHash, hash, changes }
 //   H/mods/versions/<n>/report.json  the ValidationResult it passed with
 //   H/mods/versions/<n>/icons/{128,64}/<id>.png
@@ -17,6 +17,8 @@ import { mkdirp, writeJson, readJson, appendLine, writeFileAtomic } from './fsut
 import { LIMITS } from '../../shared/mod/format.js';
 
 const FAMS = ['crops', 'trees', 'recipes', 'animals', 'decor', 'items'];
+/** Versions the game made, not a farmer (a rebuild for a new game version, a pause): undo looks through them. */
+const SEE_THROUGH = new Set(['rebuild', 'suspend']);
 const N_RE = /^[1-9][0-9]{0,8}$/;
 const PATH_RE = /^(mod\.json|tuning\.json|look\.json|text\/(letters|tips)\.json|content\/(crops|trees|recipes|animals|decor)\/x_[a-z0-9_]{1,30}\.json)$/;
 
@@ -53,10 +55,15 @@ export class ModStore {
     return a ? this.overlay(a.n) : null;
   }
 
-  /** The files map of version n ({} when none). */
-  files(n) {
-    const out = {};
-    if (!n) return out;
+  /**
+   * The files of version n: { files, problems }. A file that does not read as JSON (a torn write, a bad disk) is left
+   * out of `files` and reported as a BAD_JSON problem (QA r1 H-01: a null spec once reached compileMod and the throw
+   * stopped the server from starting). Whoever compiles stored files treats a problem as a failed compile.
+   */
+  readFiles(n) {
+    const files = {};
+    const problems = [];
+    if (!n) return { files, problems };
     const root = path.join(this.vdir(n), 'files');
     const walk = (d, rel) => {
       let ents = [];
@@ -64,11 +71,28 @@ export class ModStore {
       for (const e of ents) {
         const p = rel ? `${rel}/${e.name}` : e.name;
         if (e.isDirectory()) walk(path.join(d, e.name), p);
-        else if (e.isFile() && PATH_RE.test(p)) out[p] = readJson(path.join(d, e.name));
+        else if (e.isFile() && PATH_RE.test(p)) {
+          const v = readJson(path.join(d, e.name), undefined);
+          if (v === undefined || v === null) {
+            problems.push({ stage: 'schema', code: 'BAD_JSON', file: p, path: '', message: `stored file of version ${n} does not read as JSON` });
+          } else files[p] = v;
+        }
       }
     };
     walk(root, '');
-    return out;
+    return { files, problems };
+  }
+
+  /** The readable files map of version n ({} when none; see readFiles for the ones that do not read). */
+  files(n) { return this.readFiles(n).files; }
+
+  /** Copy stored files byte for byte from version `from` to version `to` (a suspended version keeps an unreadable file). */
+  copyFiles(from, to, paths) {
+    for (const p of paths) {
+      if (!PATH_RE.test(p)) continue;
+      const src = path.join(this.vdir(from), 'files', ...p.split('/'));
+      try { writeFileAtomic(path.join(this.vdir(to), 'files', ...p.split('/')), fs.readFileSync(src)); } catch { /* gone: nothing to keep */ }
+    }
   }
 
   /** The farm's graveyard ids: { id: { family, n } }. */
@@ -146,18 +170,82 @@ export class ModStore {
     try { fs.rmSync(path.join(this.root, 'active.json'), { force: true }); } catch { /* gone */ }
   }
 
+  /**
+   * Where "Undo the last change" goes from version n: { to, last, revive }. A version the game made (a rebuild for a
+   * new game version, a pause) is see-through: the last change is the farmer's own below it (QA r2 H2-01: undoing a
+   * rebuild went back to the version it rebuilt, the same files, and told the farmer a change was undone). `last` is
+   * that version, `to` its parent (0: the game as it was), `revive` true when `last` is an undo (the target brings the
+   * undone change back: "Bring back {title}").
+   */
+  undoTarget(n) {
+    let last = n;
+    let m = this.meta(last);
+    for (let i = 0; i < 64 && m && SEE_THROUGH.has(m.kind) && Number.isSafeInteger(m.parent) && m.parent > 0; i++) {
+      const pm = this.meta(m.parent);
+      if (!pm) break;                                   // pruned: the old rule (its parent) below
+      last = m.parent;
+      m = pm;
+    }
+    let to = m && Number.isSafeInteger(m.parent) && m.parent >= 0 ? m.parent : 0;
+    // QA r3 H3-05: undoing an undo brings back what it took away; when that was a pause, the change to bring back is the
+    // farmer's own below the pause (the pause holds that change's files and never works on its own)
+    if (m && m.kind === 'undo') {
+      for (let i = 0; i < 64 && to > 0; i++) {
+        const pm = this.meta(to);
+        if (!pm || pm.kind !== 'suspend' || !Number.isSafeInteger(pm.parent) || pm.parent <= 0 || !this.meta(pm.parent)) break;
+        to = pm.parent;
+      }
+    }
+    return { to, last, revive: Boolean(m && m.kind === 'undo' && to > 0) };
+  }
+
+  /**
+   * The number History shows for each version (QA r2 H2-07): the versions the farm committed, counted in order from 1
+   * (history.jsonl, one line per commit); a discarded candidate takes none. The stored `n` stays internal.
+   */
+  ordinals() {
+    const out = new Map();
+    let lines = [];
+    try { lines = fs.readFileSync(path.join(this.root, 'history.jsonl'), 'utf8').split('\n'); } catch { /* none yet */ }
+    for (const line of lines) {
+      if (!line.trim()) continue;
+      let r = null;
+      try { r = JSON.parse(line); } catch { continue; }
+      if (r && Number.isSafeInteger(r.n) && r.n > 0 && !out.has(r.n)) out.set(r.n, out.size + 1);
+    }
+    // a store older than its history file (or one that lost it): the committed versions on disk, in order, after those
+    for (const n of this.versions()) {
+      if (out.has(n)) continue;
+      const m = this.meta(n);
+      if (m && m.kind !== 'candidate') out.set(n, out.size + 1);
+    }
+    return out;
+  }
+
   /** The history list (newest first, at most `limit`): every applied, undone or suspended version. */
   history(limit = 50) {
     const a = this.active();
     const out = [];
+    const no = this.ordinals();
     for (const n of this.versions().reverse()) {
       const m = this.meta(n);
       if (!m || m.kind === 'candidate') continue;
-      out.push({ n, at: m.at, by: m.by ?? null, kind: m.kind, title: m.title ?? null, prompt: m.prompt ?? null,
+      // release 1.0 (harvey#17): every prompt of the job (History shows the first and "+1 change"), the version it was
+      // built on and, for an undo, the version it went back to ("Bring back {title}")
+      out.push({ n, no: no.get(n) ?? null, at: m.at, by: m.by ?? null, kind: m.kind, title: m.title ?? null, prompt: m.prompt ?? null,
+        prompts: Array.isArray(m.prompts) ? m.prompts : null, parent: Number.isInteger(m.parent) ? m.parent : null,
+        undoTo: Number.isInteger(m.undoTo) ? m.undoTo : null,
+        // a rebuild for a new game version: the parts it left out ('palette', 'tips': QA r1 H-14)
+        ...(Array.isArray(m.leftOut) && m.leftOut.length ? { leftOut: m.leftOut } : {}),
+        // a pause: why (QA r2 H2-02: 'BAD_JSON' a file that does not read, else the change no longer fits the game)
+        ...(typeof m.reason === 'string' && m.reason ? { reason: m.reason } : {}),
         summary: m.summary ?? null, changes: m.changes ?? [], state: a && a.n === n ? 'active' : 'past' });
       if (out.length >= limit) break;
     }
-    return { active: a ? a.n : null, versions: out };
+    // where "Undo the last change" goes from the active version (H2-01), and the number shown for it
+    const u = a ? this.undoTarget(a.n) : null;
+    const undo = u ? { ...u, toNo: u.to > 0 ? no.get(u.to) ?? null : 0, lastNo: no.get(u.last) ?? null } : null;
+    return { active: a ? a.n : null, undo, versions: out };
   }
 
   /** Versions beyond LIMITS.versions (oldest non-active first) are removed; the graveyard keeps their ids. */

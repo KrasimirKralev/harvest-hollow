@@ -11,6 +11,8 @@
 //                                          the bus's key (main.js fills it at each welcome), else this page's own: multi
 //                                          mode the member secret (net/farm.js session), single mode the slot's token
 
+import { lazyImport } from '../../net/lazy.js';
+
 /** Does the page's import map name this module (server-versioned, so it exists)? */
 export function inImportMap(url, doc = globalThis.document) {
   try {
@@ -25,7 +27,7 @@ export function inImportMap(url, doc = globalThis.document) {
 export async function loadBus(doc) {
   if (!inImportMap('/js/harness/bus.js', doc)) return null;
   try {
-    const m = await import('../../harness/bus.js');
+    const m = await lazyImport('harvey-bus', () => import('../../harness/bus.js'));
     return typeof m.onHarness === 'function' ? m : null;
   } catch (err) {
     console.warn('helper: the harness bus did not load', err);
@@ -36,7 +38,7 @@ export async function loadBus(doc) {
 export async function loadOverlayApi(doc) {
   if (!inImportMap('/shared/mod/install.js', doc)) return null;
   try {
-    const m = await import('../../../../shared/mod/install.js');
+    const m = await lazyImport('mod-install', () => import('../../../../shared/mod/install.js'));
     return typeof m.installedOverlay === 'function' ? m : null;
   } catch {
     return null;

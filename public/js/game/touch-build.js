@@ -14,13 +14,18 @@
 import { svgIcon } from '../ui/dom.js';
 import { footprint } from '../../../shared/rules/grid.js';
 import { defOf } from '../../../shared/content/index.js';
-import { t, onLang } from '../i18n/index.js';
+import { t, onLang, fmtNum } from '../i18n/index.js';
+import { placeWhy } from '../ui/toolbar.js';
 
 const CSS = `
 .touch-build { position: fixed; left: 0; top: 0; z-index: 20; display: flex; gap: 14px; align-items: center;
   padding: 7px 10px; border-radius: 999px; background: rgba(62, 38, 18, .38); backdrop-filter: blur(3px);
-  -webkit-backdrop-filter: blur(3px); pointer-events: auto; touch-action: manipulation; will-change: transform;
+  -webkit-backdrop-filter: blur(3px); pointer-events: none; touch-action: manipulation; will-change: transform;
   animation: touch-build-in 180ms cubic-bezier(.34, 1.56, .64, 1) both; }
+/* release 1.0: only the buttons take a finger; the tinted band between and under them lets it through to the farm (on
+   a 360 x 640 phone the band lay over the piece just picked up, and a finger that meant to carry it scrolled the band:
+   pointercancel, the e2e-mobile 'Small 360' step 9) */
+.touch-build .btn { pointer-events: auto; }
 .touch-build[hidden], .touch-build .btn[hidden] { display: none; }
 .touch-build .btn--round { width: 52px; height: 52px; }
 .touch-build .tb-place { width: 60px; height: 60px; }
@@ -32,8 +37,12 @@ const CSS = `
   font-size: 11px; font-weight: 700; line-height: 1.2; white-space: nowrap; color: #fff8e6; text-shadow: 0 1px 2px rgba(40, 22, 8, .9);
   pointer-events: none; letter-spacing: .01em; }
 .touch-build .tb-place .tb-cap { margin-top: -2px; }   /* the bigger ✓ hangs 4 px lower: one line for the three words */
+/* a red ghost says why under the bar, as a mouse player's hint does (QA r4 S4-06, S4-12) */
+.touch-build .tb-why { position: absolute; left: 50%; top: 100%; transform: translateX(-50%); width: max-content; max-width: min(300px, 92vw);
+  padding: 3px 10px; border-radius: 999px; font: 700 13px/1.25 var(--font-ui); text-align: center; color: #fff; background: rgba(150, 30, 20, .9); }
 @keyframes touch-build-in { from { opacity: 0; scale: .7; } to { opacity: 1; scale: 1; } }
-@media (prefers-reduced-motion: reduce) { .touch-build { animation: none; } }
+@media (prefers-reduced-motion: reduce) { body:not(.motion-set) .touch-build { animation: none; } }
+body.motion-reduced .touch-build { animation: none; }
 `;
 
 /**
@@ -110,7 +119,11 @@ export function createTouchBuild({ controller, view, ui = null, doc = document }
   onLang(relabel);
   el.hidden = true;
   away.hidden = true;
-  el.append(away, turn, cancel, place);
+  const why = doc.createElement('span');
+  why.className = 'tb-why';
+  why.setAttribute('role', 'status');
+  why.hidden = true;
+  el.append(away, turn, cancel, place, why);
   doc.body.append(el);
 
   let last = null;                // the controller's latest 'build' event
@@ -142,9 +155,16 @@ export function createTouchBuild({ controller, view, ui = null, doc = document }
       avoidAt = -Infinity;                                       // measure the HUD again when the bar comes up
     }
     if (!show) return;
-    // a red ghost cannot go down: the ✓ says so (the ghost's own badge says why)
+    // a red ghost cannot go down: the ✓ says so, and the line under the bar says why
     place.setAttribute('aria-disabled', String(!b.valid));
-    place.setAttribute('aria-label', t(b.moveId ? 'game.build.putHere' : 'game.build.placeHere'));
+    const w = placeWhy(b);
+    if (why.textContent !== w) { why.textContent = w; why.hidden = !w; lastT = ''; }
+    // a bought piece says its price on the ✓ ("Place · 270", QA r1 S-06): ✓ again must never spend in silence
+    const priced = !b.moveId && Number.isFinite(b.cost) && b.cost > 0;
+    const cap = priced ? t('dock.build.placeCost', { coins: fmtNum(b.cost) }) : t(place.dataset.caption);
+    if (place.querySelector('.tb-cap').textContent !== cap) place.querySelector('.tb-cap').textContent = cap;
+    place.setAttribute('aria-label', priced ? t('dock.build.placeCostLabel', { coins: fmtNum(b.cost) })
+      : t(b.moveId ? 'game.build.putHere' : 'game.build.placeHere'));
     cancel.setAttribute('aria-label', t(b.moveId ? 'game.build.leave' : 'common.cancel'));
     // only decor goes back into the tray (a Masterwork piece neither): a building or a landmark has no "Put it away"
     const canAway = Boolean(b.moveId) && typeof controller.storeHeld === 'function' && b.storable === true;
@@ -165,7 +185,8 @@ export function createTouchBuild({ controller, view, ui = null, doc = document }
     const vh = globalThis.visualViewport ? globalThis.visualViewport.height : globalThis.innerHeight;
     const shun = avoidRects();
     const reserve = bottom !== null ? bottom + 8 : vh < 500 ? 70 : 110;
-    const spot = barSpot(rect, { width: el.offsetWidth || 200, height: el.offsetHeight || 66 }, { width: vw, height: vh, bottomReserve: reserve }, shun);
+    const h = (el.offsetHeight || 66) + (why.hidden ? 0 : why.offsetHeight);
+    const spot = barSpot(rect, { width: el.offsetWidth || 200, height: h }, { width: vw, height: vh, bottomReserve: reserve }, shun);
     const t = `translate3d(${Math.round(spot.x - (el.offsetWidth || 200) / 2)}px, ${spot.y}px, 0)`;
     if (t !== lastT) { el.style.transform = t; lastT = t; }
   }

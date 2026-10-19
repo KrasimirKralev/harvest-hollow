@@ -20,6 +20,7 @@ import * as interiorA from '../../../../shared/rules/actions/interior.js';
 import * as grandmaA from '../../../../shared/rules/actions/grandma.js';
 import { projectDone } from '../../../../shared/rules/economy.js';
 import { levelOf } from './core.js';
+import { assetUrl } from '../../net/asset-base.js';
 import { ledgerView } from './restoration.js';
 import { h, fmt, createKit, svgIcon, playerMark, fill, bar, pill, price } from './kit.js';
 import { homeScene, furnitureArt, roomPlan } from './home-art.js';
@@ -366,7 +367,7 @@ function homeTab(body, ctx, kit) {
       h('div', h('b', v.live ? t('home.fh.lock') : t('home.fh.lockLater')),
         h('small', p ? (p.open ? t('home.fh.lockStage', { stage: p.stage, n: p.bundles.length }) : t('home.fh.lockFrom', { n: p.unlock })) : ''),
         p ? bar(p.pct, null, 'pn-thin pn-go') : null),
-      p && v.live ? h('button.btn.btn--sky.pn-sm', { type: 'button', on: { click: () => ctx.open('restoration', { id: p.id }) } }, t('home.fh.ledger')) : null));
+      p && v.live ? h('button.btn.btn--sky.pn-sm', { type: 'button', 'data-sfx': 'own', on: { click: () => ctx.open('restoration', { id: p.id }) } }, t('home.fh.ledger')) : null));
   }
 
   function renderAll() { drawLock(); drawBar(); drawPlan(); drawSide(); kit.refresh(); }
@@ -409,7 +410,7 @@ function restoreTab(body, ctx, kit) {
             h('small', b.done ? t('home.fh.given') : t('collect.rest.anyOf', { need: b.need, of: b.of })), bar(b.done ? 1 : b.doneSlots / Math.max(1, b.need), null, `pn-thin${b.done ? ' pn-go' : ''}`)))),
           p.done ? null : h('div.fh-proj-foot',
             h('small', p.open ? t('home.fh.openNow') : p.lockReason ?? ''),
-            p.live ? h('button.btn.btn--sky.pn-sm', { type: 'button', dataset: { open: p.id }, on: { click: () => ctx.open('restoration', { id: p.id }) } },
+            p.live ? h('button.btn.btn--sky.pn-sm', { type: 'button', 'data-sfx': 'own', dataset: { open: p.id }, on: { click: () => ctx.open('restoration', { id: p.id }) } },
               p.open ? t('home.fh.give') : t('home.fh.look')) : null))))));
     kit.refresh();
   };
@@ -421,7 +422,7 @@ function restoreTab(body, ctx, kit) {
 // ---- the Grandma tab ---------------------------------------------------------------------------------------------------
 
 function grandmaTab(body, ctx, kit) {
-  const portrait = (cls = '') => h(`img.fh-gran${cls}`, { src: '/assets/art/npc/hazel.webp', alt: cname('hazel'), width: 160, height: 160, decoding: 'async' });
+  const portrait = (cls = '') => h(`img.fh-gran${cls}`, { src: assetUrl('/assets/art/npc/hazel.webp'), alt: cname('hazel'), width: 160, height: 160, decoding: 'async' });
   const render = () => {
     const st = ctx.store.state;
     const v = visitView(st, ctx.store.pid, ctx.now());

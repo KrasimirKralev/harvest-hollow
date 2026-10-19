@@ -8,13 +8,16 @@ import { capFps, startLoop, LOOP, WANT } from '../public/js/render/renderer.js';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-test('CL-03: calm and idle caps apply to slow ambient only; a change at idle shows at the calm rate', () => {
+test('CL-03: calm and idle caps; a change at idle shows at the calm rate (release 1.0 F6a: travelling ambient calms after the idle time too)', () => {
   const base = { input: false, feedback: false, lastWant: WANT.AMBIENT, dirty: false, blurred: false, ambientFps: 20, interactiveFps: 60,
     calmFps: LOOP.calmFps };
   assert.equal(capFps(base), LOOP.calmFps, 'slow ambient alone: the calm rate');
   assert.equal(capFps({ ...base, idle: true }), LOOP.idleFps, 'and a frame every 500 ms once nobody gave input');
   assert.equal(capFps({ ...base, idle: true, dirty: true }), LOOP.calmFps, 'a store change or a presence row still shows at once');
-  assert.equal(capFps({ ...base, lastWant: WANT.MOVING, idle: true }), 20, 'the partner walking: the ambient rate, idle or not');
+  assert.equal(capFps({ ...base, lastWant: WANT.MOVING }), 20, 'the partner walking: the ambient rate while someone plays');
+  // release 1.0 (F6a, perf-a11y#15): after the idle time travelling ambient draws at the calm rate, at 6 after two minutes
+  assert.equal(capFps({ ...base, lastWant: WANT.MOVING, idle: true }), LOOP.calmFps, 'nobody touched it for a while: the calm rate');
+  assert.equal(capFps({ ...base, lastWant: WANT.MOVING, idle: true, idleLong: true }), LOOP.idleMovingFps, 'two minutes: 6 fps');
   assert.equal(capFps({ ...base, lastWant: WANT.INTERACTIVE, idle: true }), 60, 'feedback: interactive');
   assert.equal(capFps({ ...base, input: true, idle: true }), 60, 'input: interactive');
   assert.equal(capFps({ ...base, lastWant: 0, idle: true }), LOOP.pollFps, 'static: the poll');

@@ -202,8 +202,8 @@ test('asking: the request goes out with the provider and language, the pill show
   click(p.$('[data-act="ask"]'));
   await tick();
   assert.deepEqual(p.api.called('start')[0][1], { prompt: 'A pale blue melon that glows, and a pie', provider: 'mock', model: null, lang: 'en' });
-  assert.match(textOf(p.shell.body('helper')), /The helper is on it/);
-  assert.match(textOf(p.shell.body('helper')), /Your helper is working on/);
+  assert.match(textOf(p.shell.body('helper')), /Harvey is on it/);
+  assert.match(textOf(p.shell.body('helper')), /Harvey is working on/);
   // the player closes the panel ("Keep playing") and plays; the pill tells the steps
   click(p.shell.body('helper').querySelector('[data-act="play"]'));
   assert.equal(p.shell.panels.top(), null);
@@ -296,7 +296,7 @@ test('ask for changes, rebuild on a stale farm, discard with a confirm', async (
   let body = p.shell.body('helper-ready');
   click(body.querySelector('[data-act="apply"]'));
   await tick();
-  assert.match(textOf(body), /Your farm changed while the helper worked/);
+  assert.match(textOf(body), /Your farm changed while Harvey worked/);
   click(body.querySelector('[data-act="rebuild"]'));
   await tick();
   assert.deepEqual(p.api.called('revise')[0], ['revise', 'j1', 'Please build the same changes again on top of the farm\'s newest version.']);
@@ -359,7 +359,8 @@ test('consent is asked once, before the first change; the request then goes out 
   await tick();
   assert.equal(api.called('start').length, 0, 'nothing goes before the answer');
   const card = p.$('.hx-consent');
-  assert.match(textOf(card), /Share my requests and mods with the Harness Hollow team to improve the game for everyone\./);
+  // M17c (copy#10): "Harvey's changes", never "mods"
+  assert.match(textOf(card), /Share my requests and Harvey's changes with the Harness Hollow team, to make the game better for everyone\./);
   assert.equal(p.$('.hx-form').hidden, true);
   click(card.querySelector('[data-consent="no"]'));
   await tick();
@@ -379,6 +380,11 @@ test('not signed in: the request waits for Claude Code\'s own sign-in (open the 
   click(p.$('[data-act="ask"]'));
   await tick();
   assert.equal(p.shell.entry('helper').inst !== undefined && p.shell.panels.top(), 'helper');
+  // release 1.0 (H4): two plans and none chosen: Sign-in opens and asks; nothing starts by itself
+  assert.equal(api.called('signIn').length, 0, 'no sign-in the player did not choose');
+  assert.match(textOf(p.shell.body('helper')), /Choose who runs Harvey/);
+  click(p.$('[data-provider="claude"] [data-act="signin"]'));
+  await tick();
   assert.deepEqual(api.called('signIn')[0], ['signIn', 'claude', {}]);
   const flow = p.$('[data-signin="claude"]');
   assert.ok(flow, 'the sign-in steps show');
@@ -392,7 +398,9 @@ test('not signed in: the request waits for Claude Code\'s own sign-in (open the 
   click(flow.querySelector('[data-act="continue"]'));
   await tick(6);
   assert.deepEqual(api.called('signInContinue')[0], ['signInContinue', 'claude', { code: 'ABCD-1234' }]);
-  assert.match(textOf(p.shell.body('helper')), /Signed in to Claude/);
+  // signed in: back on Ask, where the waiting request went (H4: never left on Sign-in with a stale "sign in first")
+  assert.equal(p.shell.entry('helper').args.tab, 'ask');
+  assert.doesNotMatch(textOf(p.shell.body('helper')), /Sign in first/);
   assert.equal(api.called('start').length, 1, 'the waiting request went out');
   assert.equal(api.called('start')[0][1].provider, 'claude');
   p.helper.destroy();
@@ -475,13 +483,13 @@ test('the partner: a passive pill, no pop-up, the request box waits its turn, an
   p.shell.panels.close('helper');
   p.helper.receive({ t: 'hx', e: 'job', job: readyJob() });
   assert.equal(p.shell.panels.top(), null, 'no pop-up for the partner');
-  assert.equal(textOf(p.$('.hx-pill-line')), 'Rowan\'s helper has changes ready');
+  assert.equal(textOf(p.$('.hx-pill-line')), 'Rowan\'s changes are ready, waiting for Rowan');
   p.helper.receive({ t: 'hx', e: 'applied', by: 'p1', n: 3, names: [{ id: 'x_moon_melon', en: 'Moon Melon' }] });
   p.helper.receive({ t: 'hx', e: 'applied', by: 'p1', n: 3, names: [{ id: 'x_moon_melon', en: 'Moon Melon' }] });
   assert.deepEqual(p.shell.toasts, ['Rowan\'s helper added Moon Melon']);
   assert.equal(p.$('.hx-pill').hidden, true);
   p.helper.receive({ t: 'hx', e: 'undone', by: 'p1', n: 2, to: 2 });
-  assert.equal(p.shell.toasts.at(-1), 'Rowan undid a helper change.');
+  assert.equal(p.shell.toasts.at(-1), 'Rowan undid one of Harvey\'s changes.');
   p.helper.receive({ t: 'hx', e: 'suspended', n: 4 });
   assert.match(p.shell.notices.at(-1), /paused after a game update/);
   p.helper.destroy();
@@ -496,7 +504,7 @@ test('a failed job is told honestly: what went wrong in plain words, nothing cha
   assert.equal(p.$('#hx-btn').dataset.state, 'fail');
   click(p.$('.hx-pill-main'));
   const text = textOf(p.shell.body('helper'));
-  assert.match(text, /The helper could not finish this one\./);
+  assert.match(text, /Harvey could not finish this one\./);
   assert.match(text, /The change did not pass the tests, even after fixing\./);
   assert.match(text, /Melon Pie: It would have earned more than the game allows\./);
   assert.match(text, /Nothing on your farm changed\./);
@@ -540,7 +548,7 @@ test('stop the helper: one press, it says so, the pill goes', async () => {
   click(p.shell.body('helper').querySelector('[data-act="cancel"]'));
   await tick();
   assert.deepEqual(p.api.called('cancel')[0], ['cancel', 'j1']);
-  assert.deepEqual(p.shell.toasts, ['The helper stopped. Nothing on your farm changed.']);
+  assert.deepEqual(p.shell.toasts, ['Harvey stopped. Nothing on your farm changed.']);
   assert.equal(p.$('.hx-pill').hidden, true);
   p.helper.destroy();
 });
@@ -559,7 +567,7 @@ test('history and undo: the versions, the last change undone or an older version
   assert.match(p.shell.confirms[0].lead, /The farm goes back to version 2\./);
   assert.deepEqual(p.api.called('undo')[0], ['undo', undefined]);
   await new Promise((r) => setTimeout(r, 20));
-  assert.ok(p.shell.toasts.includes('You undid a helper change.'), 'said even if the push is lost');
+  assert.ok(p.shell.toasts.includes('You undid one of Harvey\'s changes.'), 'said even if the push is lost');
   click(p.shell.body('helper').querySelector('[data-n="1"] [data-act="goBack"]'));
   await tick();
   assert.deepEqual(p.api.called('undo')[1], ['undo', 1]);
@@ -581,7 +589,7 @@ test('Settings › Helper: the sharing switch (off by default), the install id, 
   const sw = wrap.querySelector('[data-harness="share"]');
   assert.equal(sw.getAttribute('role'), 'switch');
   assert.equal(sw.getAttribute('aria-checked'), 'false', 'never asked = off');
-  assert.match(textOf(wrap), /Install id \(quote it to ask us to delete what was shared\): feedc0de/);
+  assert.match(textOf(wrap), /Your install code \(quote it to ask us to delete what you shared\): feedc0de/);
   click(sw);
   await tick();
   assert.deepEqual(p.api.called('setConsent')[0], ['setConsent', true]);
@@ -664,6 +672,9 @@ test('the agent lane\'s shapes: the paste box named in step.paste, the hx signin
   await tick();
   assert.equal(shell.panels.top(), 'helper-letter', 'the letter the welcome brought, from the bus\'s last content event');
   shell.panels.close('helper-letter');
+  // QA r2 H2-04: a letter is read when its farmer closes it, a moment later (a sheet that takes its place in the same
+  // moment leaves it unread); the farmer's next tap comes after that moment
+  await tick();
   helper.open('accounts');
   click(document.body.querySelector('[data-provider="mock"] [data-act="signin"]'));
   await tick();

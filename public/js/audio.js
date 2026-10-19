@@ -69,7 +69,9 @@
 // included (iOS Safari does not let a touchstart or a touch pointerdown start audio), and comes back after an iOS
 // interruption (a call, Siri) on the next touch. On a touch-first device the context is suspended while the page is
 // hidden (a locked phone must not play music in a pocket) and resumed when it shows again.
+import { assetUrl } from './net/asset-base.js';
 import { fromPack } from './net/packs.js';
+import { pending as modelsPending } from './render/assets.js';
 import { dayPhase } from './game/daycycle.js';
 
 const DEFAULTS = Object.freeze({ master: 0.8, music: 0.35, ambience: 0.5, sfx: 0.7, ui: 0.6 });
@@ -98,7 +100,8 @@ const S = {
   timer: null,
   reverb: null, forced: null, loops: new Map(),
   trace: null, traceT0: 0,
-  dir: null, q: '',
+  dir: null, q: '', farmAt: null, initAt: 0,
+  jingle: null, jingleLive: [], jingleLog: [],   // F1: the last jingle booked, the ones still sounding, the decisions
 };
 
 // ---- music director: the pure part (test/audio-music.test.js) -------------------------------------------------------
@@ -135,21 +138,64 @@ export function musicPool(tracks, context) {
 /**
  * The next track for a scene: one of its pool, else of its fallbacks (MUSIC_FALLBACK) in order, never `last` (no track
  * twice in a row) and never one in `failed`; null when none is left (the generative engine plays a piece instead).
- * Deterministic for a given `random` (() => 0 <= r < 1). Pure.
+ * Release 1.0 F4 (feel#10 b): `recent` (the director's last picks, newest last) widens "never `last`": no track repeats
+ * within MUSIC_HISTORY picks while the scene's pool can avoid it (a short pool then lets the oldest of them back, never
+ * `last`). Deterministic for a given `random` (() => 0 <= r < 1). Pure.
  * @param {Array<{ id: string, moods: string[] }>} tracks
  * @param {string} context
- * @param {{ last?: string|null, failed?: Iterable<string>, random?: () => number }} [o]
+ * @param {{ last?: string|null, recent?: string[], failed?: Iterable<string>, random?: () => number }} [o]
  */
-export function pickTrack(tracks, context, { last = null, failed = [], random = Math.random, prefer = [] } = {}) {
+export function pickTrack(tracks, context, { last = null, recent = [], failed = [], random = Math.random, prefer = [] } = {}) {
   const bad = new Set(failed);
-  // a farm's mod may prefer some tracks (Harness Hollow look.json): one of them when it fits this scene
-  const liked = prefer.length ? musicPool(tracks, context).filter((t) => prefer.includes(t.id) && t.id !== last && !bad.has(t.id)) : [];
-  if (liked.length) return liked[Math.min(liked.length - 1, Math.floor(random() * liked.length))];
-  for (const c of [context, ...(MUSIC_FALLBACK[context] ?? [])]) {
+  const hist = [...recent.slice(-(MUSIC_HISTORY - 1)), ...(last ? [last] : [])];
+  // avoid the whole history first, then less of it (the oldest pick may come back first), never the last one
+  for (let keep = hist.length; keep >= Math.min(1, hist.length); keep--) {
+    const avoid = new Set(hist.slice(hist.length - keep));
+    if (last) avoid.add(last);
+    // a farm's mod may prefer some tracks (Harness Hollow look.json): one of them when it fits this scene
+    const liked = prefer.length ? musicPool(tracks, context).filter((t) => prefer.includes(t.id) && !avoid.has(t.id) && !bad.has(t.id)) : [];
+    if (liked.length) return liked[Math.min(liked.length - 1, Math.floor(random() * liked.length))];
+    const pool = musicPool(tracks, context).filter((t) => !avoid.has(t.id) && !bad.has(t.id));
+    if (pool.length) return pool[Math.min(pool.length - 1, Math.floor(random() * pool.length))];
+    if (keep <= 1) break;
+  }
+  for (const c of MUSIC_FALLBACK[context] ?? []) {
     const pool = musicPool(tracks, c).filter((t) => t.id !== last && !bad.has(t.id));
     if (pool.length) return pool[Math.min(pool.length - 1, Math.floor(random() * pool.length))];
   }
   return null;
+}
+
+/** F4 (feel#10 b): picks a track may not repeat within (with three day tracks: every one before the first again). */
+export const MUSIC_HISTORY = 3;
+/** F4 (feel#10 a): the scenes whose composed tracks alternate with a generative piece (day, night, rain). */
+export const GEN_BETWEEN = Object.freeze(new Set(['day', 'night', 'rain']));
+/**
+ * After a piece ends, does a generative piece play next instead of a track (feel#10 a: the variety doubles for 0
+ * bytes)? Yes after a composed track in a GEN_BETWEEN scene, so the day reads track, piece, track, piece ...; the
+ * evening, the Fair and the title always play their tracks. Pure.
+ */
+export function genNext({ lastKind = null, context = 'day' } = {}) {
+  return lastKind === 'track' && GEN_BETWEEN.has(context);
+}
+
+/**
+ * F1 (feel#5): the long reward jingles in order. Rank: levelup / fanfare 6 > quest 5 > achievement, duet 4 > mastery 3
+ * > order 2 > register 1. A jingle arriving while another plays: a higher one takes over at once (the one playing fades
+ * out in 0.12 s: the biggest moment stays in step with its picture); an equal or lower one starts JINGLE.lead s before
+ * the playing one ends, unless it is lower and would have overlapped it by more than JINGLE.overlap of its own length
+ * (stale: dropped). cur: { rank, start, end } | null (s), next: { rank, dur }, now (s) -> { at: s | null, cut }. Pure.
+ */
+export const JINGLE_RANK = Object.freeze({ levelup: 6, fanfare: 6, quest: 5, achievement: 4, duet: 4, mastery: 3, order: 2, register: 1 });
+export const JINGLE = Object.freeze({ lead: 0.15, overlap: 0.6, cutS: 0.12, coinsUnder: 0.6, sfxUnderLevelup: 0.63 });
+export function jinglePlan(cur, next, now) {
+  if (!cur || cur.end <= now) return { at: now, cut: false };
+  if (next.rank > cur.rank) return { at: now, cut: true };
+  if (next.rank < cur.rank) {
+    const overlap = Math.max(0, Math.min(cur.end, now + next.dur) - now);
+    if (overlap / Math.max(0.01, next.dur) > JINGLE.overlap) return { at: null, cut: false };
+  }
+  return { at: Math.max(now, cur.end - JINGLE.lead), cut: false };
 }
 
 /**
@@ -185,7 +231,12 @@ function buildGraph(ctx) {
   const ambience = g(0);
   ambience.connect(master);
   const sfx = g(0);
-  sfx.connect(master);
+  // F1: the sfx bus dips -4 dB under the level-up fanfare (sfxDuck), the way `duck` dips the music under it
+  const sfxDuck = g(1);
+  sfx.connect(sfxDuck).connect(master);
+  // the long reward jingles (F1) at the sfx volume but outside the dip: the fanfare itself never ducks
+  const jingle = g(0);
+  jingle.connect(master);
   const ui = g(0);
   ui.connect(master);
   // music reverb send (a generated hall: softens plucks into "cozy")
@@ -197,7 +248,7 @@ function buildGraph(ctx) {
   const far = ctx.createBiquadFilter();
   far.type = 'lowpass'; far.frequency.value = 1400;
   far.connect(ambience);
-  S.bus = { master, music, duck, ambience, sfx, ui, verbIn, far };
+  S.bus = { master, music, duck, ambience, sfx, sfxDuck, jingle, ui, verbIn, far };
   applyVolumes(0.05);
 }
 
@@ -210,6 +261,7 @@ function applyVolumes(ramp = 0.15) {
   set(S.bus.music, v.music);
   set(S.bus.ambience, v.ambience);
   set(S.bus.sfx, v.sfx);
+  if (S.bus.jingle) set(S.bus.jingle, v.sfx);
   set(S.bus.ui, v.ui);
 }
 
@@ -506,7 +558,7 @@ function musicTick(lookahead) {
 }
 
 // ---- music director: tracks on two streaming decks (see the header) -------------------------------------------------
-const MUSIC_DIR = '/assets/audio/music/';
+const MUSIC_DIR = assetUrl('/assets/audio/music/');
 const REST_S = [30, 60];         // GDD §8.5: silence between tracks
 const SOON_S = 3;                // after the Fair's piece, or an event that arrives during a rest
 const XFADE_S = 4;               // a scene change while a track plays
@@ -548,6 +600,7 @@ function makeDecks() {
   try {
     for (let i = 0; i < 2; i++) {
       const el = new Audio();
+      el.crossOrigin = 'anonymous';
       el.preload = 'none';
       el.setAttribute('playsinline', '');               // iOS: never the full-screen player
       const gain = S.ctx.createGain();
@@ -633,6 +686,8 @@ function playTrack(t, context, fade) {
   Object.assign(deck, { track: t, context, fmt: D.formats[0], fmtIdx: 0, fade, started: false, held: false });
   D.active = deck;
   D.last = t.id;
+  D.recent = [...(D.recent ?? []), t.id].slice(-MUSIC_HISTORY);
+  D.lastKind = 'track';
   D.restUntil = Infinity;
   S.music.pieces++;
   deck.el.preload = 'auto';
@@ -755,14 +810,22 @@ function startNext(context, fade) {
   const D = S.dir;
   const now = S.ctx.currentTime;
   let t = null;
-  if (D.mode === 'tracks' && !D.blocked && !D.forceGen && D.decks.length) {
+  if (D.mode === 'tracks' && !D.blocked && !D.forceGen && D.decks.length && (D.booted || D.pin || context === 'title')) {
     const failed = failedIds(now);
     if (D.pinTrack) t = D.list.find((x) => x.id === D.pinTrack && !failed.includes(x.id)) ?? null;
     D.pinTrack = null;
-    t ??= pickTrack(D.list, context, { last: D.last, failed, prefer: preferred });
+    // F4 (feel#10 a): after a composed track of the day, the night or the rain, a generative piece of that scene
+    if (!t && !D.pin && genNext({ lastKind: D.lastKind, context })) {
+      if (D.active) releaseDeck(D.active, fade);
+      D.lastKind = 'gen';
+      armGenerative(Math.min(fade, 1));
+      return;
+    }
+    t ??= pickTrack(D.list, context, { last: D.last, recent: D.recent ?? [], failed, prefer: preferred });
   }
   if (t) { playTrack(t, context, fade); return; }
   if (D.active) releaseDeck(D.active, fade);
+  D.lastKind = 'gen';
   armGenerative(Math.min(fade, 1));
 }
 
@@ -794,6 +857,16 @@ function holdDeck(hold) {
   else if (!hold && a.held) { a.held = false; startDeck(a); }
 }
 
+/** QA r4 L4-03: tracks wait for the boot's models (pending() 0 for 1 s after the farm's first scene, or 120 s): a
+ *  1.6 MB stream held them back 40 s at 85 KB/s. Generative pieces (0 bytes) play meanwhile. */
+function bootGate(D, now) {
+  if (D.booted) return;
+  let busy = false;
+  try { busy = modelsPending() > 0; } catch { /* none */ }
+  D.zeroAt = S.farmAt === null || busy ? null : D.zeroAt ?? now;
+  if ((D.zeroAt !== null && now - D.zeroAt >= 1) || performance.now() - (S.farmAt ?? S.initAt) >= 120_000) D.booted = true;
+}
+
 function directorTick() {
   const D = S.dir;
   const ctx = S.ctx;
@@ -804,6 +877,7 @@ function directorTick() {
   const now = ctx.currentTime;
   if (now < D.nextCheck) return;
   D.nextCheck = now + 0.25;
+  bootGate(D, now);
   const want = wantedContext();
   if (want !== D.want) {
     D.urgent = D.want !== null && urgentChange(D.want, want);
@@ -935,14 +1009,20 @@ function ambienceTick() {
   }
 }
 
+/** F4 (release 1.0): the scheduler's own main-thread time (audio.info().prof): two clock reads per tick, so the budget
+ *  "no long task over 50 ms from the music scheduler, at CPU x4 on a phone" is measured, not guessed. */
+const PROF = { ms: 0, max: 0, n: 0, since: typeof performance !== 'undefined' ? performance.now() : 0 };
 function tick() {
   const look = document.hidden ? 1.6 : 0.25;
+  const t0 = performance.now();
   try {
     musicTick(look);
     ambienceTick();
   } catch (err) {
     console.warn('audio tick failed', err);
   }
+  const dt = performance.now() - t0;
+  PROF.ms += dt; PROF.n++; if (dt > PROF.max) PROF.max = dt;
 }
 
 /** Run `fn` until it resolves: up to 5 more tries, 1.5 s, 3 s, 6 s ... apart (a server restarting during the boot). */
@@ -987,6 +1067,46 @@ async function loadTracks(q) {
   }
 }
 
+// ---- F1 (feel#5): the reward jingles, one at a time (jinglePlan) ------------------------------------------------
+/** Play jingle `name` by the plan: now, chained after the one playing, or dropped; the levelup dips the sfx bus. */
+function jingle(name, { pan = 0, rate, gain = 1, partner = false } = {}) {
+  const buf = S.buffers.get(name);
+  if (!buf) return false;
+  const t = S.ctx.currentTime;
+  const r = rate ?? 1 + rand(-0.02, 0.02);
+  const dur = buf.duration / r;
+  const rank = JINGLE_RANK[name];
+  const cur = S.jingle && S.jingle.end > t ? S.jingle : null;
+  const plan = jinglePlan(cur, { rank, dur }, t);
+  S.jingleLog.push({ name, t, at: plan.at, cut: plan.cut });
+  if (S.jingleLog.length > 40) S.jingleLog.shift();
+  if (plan.at === null) return false;
+  if (plan.cut) {
+    // every smaller moment still sounding (the one playing and one booked after it) bows out in a 0.12 s fade
+    for (const j of S.jingleLive) {
+      if (j.end <= t) continue;
+      const g = j.v.gain.gain;
+      g.cancelScheduledValues(t);
+      g.setTargetAtTime(0, t, JINGLE.cutS / 3);
+      try { j.v.src.stop(t + JINGLE.cutS + 0.05); } catch { /* already stopped */ }
+      j.end = Math.min(j.end, t + JINGLE.cutS);
+    }
+  }
+  const v = voice(name, { rate: r, gain: gain * (partner ? 0.5 : 1), pan, at: plan.at > t + 0.005 ? plan.at : 0, dest: S.bus.jingle || S.bus.sfx });
+  if (!v) return false;
+  S.jingle = { name, rank, start: plan.at, end: plan.at + dur, v };
+  S.jingleLive = [...S.jingleLive.filter((j) => j.end > t), S.jingle];
+  S.last.set(name, t);
+  if (rank >= JINGLE_RANK.levelup && S.bus.sfxDuck) {
+    // everything else on the sfx bus dips -4 dB under the fanfare (the way duck() dips the music)
+    const d = S.bus.sfxDuck.gain;
+    d.cancelScheduledValues(t);
+    d.setTargetAtTime(JINGLE.sfxUnderLevelup, plan.at, 0.03);
+    d.setTargetAtTime(1, plan.at + dur, 0.2);
+  }
+  return true;
+}
+
 // ---- public API -----------------------------------------------------------------------------------------------
 /** Track ids a farm's mod prefers (Harness Hollow look.json music.prefer; audio.prefer). */
 let preferred = [];
@@ -999,6 +1119,7 @@ export const audio = {
     if (S.ctx) return;
     if (typeof now === 'function') S.now = now;
     if (dayMode) S.dayMode = dayMode;
+    S.initAt = performance.now();
     S.settings = { ...DEFAULTS, muted: false, ...load() };
     const AC = window.AudioContext || window.webkitAudioContext;
     if (!AC) return;
@@ -1029,7 +1150,9 @@ export const audio = {
       });
     }
     // the wind chimes ring when the cursor brushes them (render/ambient-life.js, at most once per 1.2 s per chime)
-    window.addEventListener('hh:chime', () => audio.play('note', { gain: 0.45, rate: 1.5 + Math.random() * 0.25 }));
+    // (release 1.0, harvey H7) Harvey's ready round rings the workshops' "ready" chime ('done'), not the wind chime
+    window.addEventListener('hh:chime', (e) => (e?.detail?.from === 'harvey' ? audio.play('done', { gain: 0.7 })
+      : audio.play('note', { gain: 0.45, rate: 1.5 + Math.random() * 0.25 })));
     S.music = { piece: null, bar: 0, nextAt: 0, pieces: 0, wasGolden: false, armed: false };
     // the build hash the server stamped into the page versions the samples and the music: `?v=` URLs are cached for a
     // year (SV-05: a warm reload revalidates nothing; a new build gets new URLs)
@@ -1038,10 +1161,15 @@ export const audio = {
     S.q = q;
     // the director runs from now on (it needs no samples): the track list loads next to the samples, not after them
     loadTracks(q);
-    S.dirTimer = setInterval(() => { try { directorTick(); } catch (err) { console.warn('audio: music director failed', err); } }, 250);
+    S.dirTimer = setInterval(() => {
+      const t0 = performance.now();
+      try { directorTick(); } catch (err) { console.warn('audio: music director failed', err); }
+      const dt = performance.now() - t0;
+      PROF.ms += dt; PROF.n++; if (dt > PROF.max) PROF.max = dt;
+    }, 250);
     try {
       S.manifest = await retrying(async () => {
-        const res = await fetch(`/assets/audio/manifest.json${q}`);
+        const res = await fetch(assetUrl(`/assets/audio/manifest.json${q}`));
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         return res.json();
       });
@@ -1051,7 +1179,7 @@ export const audio = {
         // every Ogg sound in one request (qa2 SV-03, server/static.js packs), else the single file
         let buf = await fromPack(`/assets/audio/${file}`);
         if (!buf) {
-          const r = await fetch(`/assets/audio/${file}${q}`);
+          const r = await fetch(assetUrl(`/assets/audio/${file}${q}`));
           if (!r.ok) throw new Error(`HTTP ${r.status}`);
           buf = await r.arrayBuffer();
         }
@@ -1115,10 +1243,15 @@ export const audio = {
     const last = S.last.get(name) ?? -1;
     if (!force && !at && t - last < MIN_GAP_S) return false;
     if (S.voices >= MAX_VOICES && !force) return false;
+    // F1: the long reward jingles go through the queue (one at a time, in rank order)
+    if (Object.hasOwn(JINGLE_RANK, name) && bus === 'sfx' && !at) return jingle(name, { pan, rate, gain, partner });
     S.last.set(name, t);
     const r = rate ?? 1 + rand(-0.04, 0.04);
     return Boolean(voice(name, { rate: r, gain: gain * (partner ? 0.5 : 1), pan, at: at ? t + at : 0, dest: S.bus[bus] || S.bus.sfx }));
   },
+
+  /** (release 1.0 F1, dev/test) the last jingle decisions: [{ name, t, at (null: dropped), cut }]. */
+  jingles() { return S.jingleLog.slice(); },
 
   /** step 0, 1, 2 ... climbs C D E G A c d e g a ... (wraps after two octaves). */
   ladder(step, { pan = 0, partner = false, gain = 0.9, at = 0 } = {}) {
@@ -1135,7 +1268,10 @@ export const audio = {
 
   coins(n, { pan = 0, partner = false } = {}) {
     const k = clamp(Math.round(n), 1, 8);
-    for (let i = 0; i < k; i++) audio.play('coin', { at: i * 0.04 + 0.001, rate: 1 + i * 0.015 + rand(-0.02, 0.02), gain: 0.8, pan, partner, force: true });
+    // F1: coins chink at 0.6 under a jingle (a sale that finishes a quest was louder than the level-up)
+    const t = S.ctx ? S.ctx.currentTime : 0;
+    const under = S.jingle && S.jingle.end > t && S.jingle.start <= t + 0.4 ? JINGLE.coinsUnder : 1;
+    for (let i = 0; i < k; i++) audio.play('coin', { at: i * 0.04 + 0.001, rate: 1 + i * 0.015 + rand(-0.02, 0.02), gain: 0.8 * under, pan, partner, force: true });
   },
 
   duck(seconds = 1.5) {
@@ -1149,6 +1285,7 @@ export const audio = {
 
   setScene({ golden, rain, wet, birdbath, animals, createdAt, water, village, interior, title } = {}) {
     if (title !== undefined) S.scene.title = typeof title === 'boolean' ? title : null;   // null: the slot picker decides
+    if (S.farmAt === null && title !== true) S.farmAt = performance.now();
     if (Number.isFinite(createdAt)) S.createdAt = createdAt;      // the sky's clock starts at the farm's birth (RD-04)
     if (golden !== undefined) {
       const was = S.scene.golden;
@@ -1307,6 +1444,15 @@ export const audio = {
 
   /** Dev/test: the notes scheduled since force(v, { trace: true }) ({ t, bar, role, inst, midi, gain, chord, key }). */
   trace() { return S.trace ? S.trace.slice() : null; },
+
+  /** (release 1.0 F4, dev/test) the scheduler's time since the last reset: { msPerS, max, n }; reset: true starts again. */
+  prof({ reset = false } = {}) {
+    const now = performance.now();
+    const secs = Math.max(0.001, (now - PROF.since) / 1000);
+    const out = { msPerS: +(PROF.ms / secs).toFixed(3), max: +PROF.max.toFixed(2), n: PROF.n, secs: +secs.toFixed(1) };
+    if (reset) Object.assign(PROF, { ms: 0, max: 0, n: 0, since: now });
+    return out;
+  },
 
   info() {
     const m = S.music;

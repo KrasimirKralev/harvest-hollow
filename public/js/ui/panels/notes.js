@@ -4,7 +4,7 @@
 import { COOP } from '../../../../shared/content/index.js';
 import { START } from '../../../../shared/content/config.js';
 import { spawnAt } from '../../../../shared/rules/grid.js';
-import { h, svgIcon, fmt, createKit, empty, who, ago } from './kit.js';
+import { h, svgIcon, fmt, createKit, empty, who, ago, scrollBehavior } from './kit.js';
 import { I } from './intents.js';
 import { t as tr } from '../../i18n/index.js';
 
@@ -65,7 +65,7 @@ export const notesPanel = {
       requestAnimationFrame(() => {
         const el = list.querySelector(`[data-note="${CSS.escape(String(want))}"]`);
         if (!el) return;
-        el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        el.scrollIntoView({ block: 'center', behavior: scrollBehavior() });
         el.classList.add('pn-focus-ring');
         setTimeout(() => el.classList.remove('pn-focus-ring'), 2000);
       });

@@ -1,5 +1,5 @@
 // i18n engine (lane A, docs/agent-notes/i18n-core.md): the active language, the catalogs, t()/tn()/tNodes() and the
-// locale formatters. No dependency, no DOM at import (node tests import it), no catalogs of its own: the game's entry
+// locale formatters. One leaf dependency (net/lazy.js), no DOM at import (node tests import it), no catalogs of its own: the game's entry
 // (i18n/index.js) registers every area, the landing page registers only its own (i18n/multi.js, i18n/front.js; the way
 // back's i18n/keep.js on demand), so the front door never downloads the game's text.
 //
@@ -25,12 +25,15 @@
 // Placeholders: {name} or {name:form}; {name:omit} renders nothing (a translation that drops a param on purpose: the
 // parity test then knows it was not forgotten). A number param is formatted for the locale (47 219, 1,5); a content-name ref
 // (i18n/names.js N(id) / Q(id, n)) renders in the asked form ({crop:def}, {crop:count}); a string takes :cap / :lc.
+// {x:a} / {x:A} put the English article before any param ("an Apple Tree", "An 8% chance"); Bulgarian ignores them.
 // A catalog value may be an object: { one, other } (plural, by params.n) or { m, f, n, pl, other } (gender, by
 // params.$g, else by the gender of the first content-name ref in params), or { touch, other } (a line that names a key:
 // its words for a finger, by params.$touch; see touchOf). The forms nest: { touch: { one, other }, other: { … } }.
 //
 // Formatters: fmtNum(n) (integers, like ui/dom.js fmt), fmtDec(n, digits), fmtShort(n), fmtDuration(ms, opts),
 // fmtDate(ts, style | Intl options, tz?), fmtPct(n), list(items, 'and' | 'or'), ordinal(n, g).
+
+import { lazyImport } from '../net/lazy.js';
 
 export const LANGS = Object.freeze(['en', 'bg']);
 /** Each language in its own words: the picker's labels, never translated. */
@@ -85,7 +88,7 @@ export const wantedLang = () => want;
 function loadArea(a) {
   if (a.bg || !a.load) return Promise.resolve();
   if (!a.loading) {
-    a.loading = Promise.resolve().then(a.load).then((m) => {
+    a.loading = lazyImport(`bg/${a.name}`, a.load).then((m) => {
       a.bg = (m && (m.default ?? m.catalog)) || {};
       Object.assign(BG, a.bg);
     }).catch((err) => {
@@ -98,7 +101,7 @@ function loadArea(a) {
 function loadData(d) {
   if (d.value.bg !== undefined || !d.load) return Promise.resolve();
   if (!d.loading) {
-    d.loading = Promise.resolve().then(d.load).then((m) => { d.value.bg = (m && (m.default ?? m)) || null; })
+    d.loading = lazyImport(`bg/${d.name}`, d.load).then((m) => { d.value.bg = (m && (m.default ?? m)) || null; })
       .catch((err) => { d.loading = null; console.warn(`i18n: '${d.name}' did not load`, err); });
   }
   return d.loading;
@@ -250,8 +253,35 @@ function pick(v, params) {
 function cap(s) { return s ? s[0].toLocaleUpperCase(cur) + s.slice(1) : s; }
 function lc(s) { return s ? s[0].toLocaleLowerCase(cur) + s.slice(1) : s; }
 
+/**
+ * English "a" / "an" before a word or a number as it is said: "an Apple Tree", "a Unicorn", "an hour", "an 8", "an 11",
+ * "an 18,000", "a 5". Words: a vowel letter, except the "yoo"/"w" sounds (uni-, use, eu-, one); a silent h (hour, honest,
+ * heir). Numbers: eight, eleven and eighteen, also as the first group of a bigger number (11,000 / 18 million).
+ */
+export function anArticle(text) {
+  const s = String(text ?? '').trim();
+  const num = /^[+]?(\d[\d,.]*)/.exec(s);
+  if (num) {
+    const whole = num[1].split('.')[0];
+    const lead = whole.split(',')[0];
+    const digits = whole.replace(/,/g, '');
+    const group = lead.length > 0 && whole.includes(',') ? lead : digits.slice(0, ((digits.length - 1) % 3) + 1);
+    return digits[0] === '8' || group === '11' || group === '18' ? 'an' : 'a';
+  }
+  if (/^(uni|use|usu|uti|eu|ewe|one\b|once\b|ur[aeio])/i.test(s)) return 'a';
+  if (/^(hour|honest|honou?r|heir)/i.test(s)) return 'an';
+  return /^[aeiou]/i.test(s) ? 'an' : 'a';
+}
+
 /** One param as text, in the asked form ('omit': a translation that deliberately leaves a param out says so). */
 function paramText(v, form) {
+  // English-only articles: {x:a} "an Apple Tree", {x:A} at the start of a sentence; Bulgarian has none (the text only)
+  if (form === 'a' || form === 'A') {
+    const s = paramText(v, null);
+    if (cur !== 'en' || !s) return s;
+    const art = anArticle(s);
+    return `${form === 'A' ? art[0].toUpperCase() + art.slice(1) : art} ${s}`;
+  }
   if (v === null || v === undefined || form === 'omit') return '';
   if (isRef(v)) return refRender ? refRender(v, form) : String(v.$name ?? v.$qty);
   if (typeof v === 'number') return Number.isInteger(v) ? fmtNum(v) : fmtDec(v, 2);
@@ -352,7 +382,13 @@ export function tNodes(key, params = {}) {
     if (!Object.hasOwn(params, k)) continue;
     if (m.index > at) frag.append(str.slice(at, m.index));
     const p = params[k];
-    frag.append(p && typeof p === 'object' && typeof p.nodeType === 'number' ? p : paramText(p, form));
+    const isNode = p && typeof p === 'object' && typeof p.nodeType === 'number';
+    // a node keeps itself; its English article ({actor:a}) goes in front of it as text
+    if (isNode && (form === 'a' || form === 'A') && cur === 'en' && p.textContent) {
+      const art = anArticle(p.textContent);
+      frag.append(`${form === 'A' ? art[0].toUpperCase() + art.slice(1) : art} `);
+    }
+    frag.append(isNode ? p : paramText(p, form));
     at = m.index + whole.length;
   }
   if (at < str.length) frag.append(str.slice(at));

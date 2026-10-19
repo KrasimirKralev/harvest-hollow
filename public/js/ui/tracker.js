@@ -21,13 +21,28 @@
 //   cardsFromGoals(res, state, pid, now) -> [card]      card = { slot, kind, title, sub, icon?, glyph?, progress?, target? }
 //   localGoals(state, pid, now) -> [card]                (pure; tests)
 //   storyCards(state, now) -> [{ id, title, sub, icon, progress, done }]   (pure; tests)
+//   coachCard(state, pid, now) -> card | null             (pure; tests) the NOW card that mirrors Grandma's coach step
+//   withNowPriority(goals, coach) -> [card]               (pure; tests) the one NOW priority (release 1.0, M29)
+//
+// Release 1.0 (features lane; M1b, M6, M29; ux-first#1, #6; ux-phone#4, #11; critique#32): ONE voice at a time.
+//   - While Grandma's coach card is on screen (tutorial.js coachVisible(), else S.tutorial.active()), the NOW card IS
+//     the coach's step: the same message (data-msg "TUTORIAL:step.<id>") and the same counts (data-params
+//     {"have","need"}); the rules' NOW card steps aside and SOON / BIG / STORY stay folded behind the chevron (the
+//     phone chip shows the coach's step too).
+//   - Otherwise the NOW order is the rules' (shared/rules/goals.js NOW_SCORE): Golden Hour ready with both online >
+//   collect (the biggest group with its own verb and the Hand) > Plant for later > All done for now.
+//   - The collect card's click pans to its group with the Hand in hand (the rules' target).
 import {
-  CONTENT, defOf, cropOf, liveAt, levelFromXp, xpForLevel, SAFETY, isLive,
+  CONTENT, defOf, cropOf, itemOf, liveAt, levelFromXp, xpForLevel, SAFETY, isLive,
 } from '../../../shared/content/index.js';
 import { sortedKeys } from '../../../shared/rules/order.js';
+import { isBigSpend } from '../../../shared/rules/economy.js';
+import { ERR } from '../../../shared/net/protocol.js';
 import * as questsR from '../../../shared/rules/actions/quests.js';
-import { goals as rulesGoalsFn } from '../../../shared/rules/goals.js';
-import { taskLabelMsg } from '../../../shared/rules/goal-text.js';
+import { goals as rulesGoalsFn, togetherHalf, halfMsg, halvesOf, needsPartner } from '../../../shared/rules/goals.js';
+import { taskLabelMsg, msg as rmsg } from '../../../shared/rules/goal-text.js';
+import { stepWords } from '../../../shared/rules/actions/tutorial.js';
+import * as tutorialMod from './tutorial.js';
 import { chainArt } from './chains.js';
 import { goalText } from './goal-text.js';
 import { t, tn, ctext, N, qty, nameEntry } from '../i18n/index.js';
@@ -37,7 +52,14 @@ export const journalTabOf = (q) => {
   const t = q && typeof questsR.tabOf === 'function' ? questsR.tabOf(q) : 'story';
   return t === 'together' ? 'stats' : t === 'week' ? 'week' : 'story';
 };
+/**
+ * What a letter on the tracker opens (QA r3 F3-06, coop#4): the Journal page that lists it, the way the quest cards
+ * already did; "Helping Hands" opened Letters on "Breakfast in a Basket" (the Together letters live on the Together
+ * page). Pure.
+ */
+export const storyArgs = (g) => ({ tab: journalTabOf(g && g.id ? CONTENT.quests.get(g.id) : null), focus: g?.id ?? null });
 import { h, icon, svgIcon, fmtDuration, kv, touchPlayer } from './dom.js';
+import { softCopy } from './dialogs.js';
 import { nextUnlocks, PHONE_Q } from './hud.js';
 import { TOOL_CONTENT } from './toolbar.js';
 import { treasures, savingOf, relicIcon } from './panels/w4b-rules.js';
@@ -86,16 +108,44 @@ const tr = (key, params) => t(key, params);
 const nmText = (id, en, family) => (nameEntry(id, family) ? t('goals.tr.name', { x: N(id, family) }) : en);
 
 /**
+ * QA r2 F2-05 (fe#5): the words of the rules a quest task may name instead of a content id, and the art that says them.
+ * A content ref (a crop, a good, an animal, a building) is its own icon; these had no icon file, so 31 tasks of 30 quests
+ * (every Together task the owners have on their tracker among them) showed the grey "?" crate.
+ */
+const TASK_ICON = Object.freeze({
+  bench: 'bench_swing', duet: 'duet_table', giant: 'giant_trophy', dock: 'pond_dock', help_flag: 'hearts',
+  order: 'order_board', debris: 'stump', demand: 'market_stand', forage: 'flower_bed', slot: 'hammer',
+  bundle: 'hammer', project: 'hammer', town_project: 'ferry_landing_souvenir', beauty_star: 'flower_cart',
+  crate: 'wooden_crate', row: 'wooden_crate', fair: 'ribbon_rosette', prized: 'blue_rosette',
+  fair_silver: 'silver_rosette', league: 'purple_rosette', hamper: 'hamper_rosette',
+});
+/** By verb, for a word the table above does not know yet (a new quest): never the "?" crate. */
+const VERB_ICON = Object.freeze({
+  fill: 'order_board', sell: 'market_stand', expand: 'picket_fence', upgrade: 'hammer', complete: 'hammer',
+  load: 'wooden_crate', enter: 'ribbon_rosette', reach: 'ribbon_rosette', together: 'hearts', place: 'hammer',
+});
+const isContentRef = (id) => typeof id === 'string' && Boolean(defOf(id) || itemOf(id) || cropOf(id));
+/** The icon of a quest task (the tracker's quest and story cards): its content ref, else the art for its word. Pure. */
+export function questIcon(task) {
+  if (!task) return null;
+  if (isContentRef(task.ref)) return task.ref;
+  return TASK_ICON[task.ref] ?? VERB_ICON[task.verb] ?? null;
+}
+
+/**
  * Split "A — B" / "A: B" / "Build the X (2,600). You have 3,292" texts into a short title and a sub line. Bulgarian
  * writes the dash as " – " and runs about a quarter longer, so its title may be longer before the colon.
+ * QA r3 F3-02 (fe#2): a sentence that ends before the colon is the title ("Добави място в компостера (4000). В касата:
+ * 31 628" was cut at the colon into "… (4000). В касата" over "31 628"); a long name past 40 characters still ends its
+ * sentence there (the slot cards of the Preserves Kitchen, the Spice Mill, did not split at all). Exported for tests.
  */
-function splitText(text) {
+export function splitText(text) {
   const dash = text.search(/ [—–] /);
   if (dash > 0) return [text.slice(0, dash), cap(text.slice(dash + 3))];
   const colon = text.indexOf(': ');
-  if (colon > 0 && colon < (/[а-я]/i.test(text) ? 44 : 34)) return [text.slice(0, colon), cap(text.slice(colon + 2))];
   const stop = text.indexOf('. ');
-  if (stop > 0 && stop < 40 && text.length > 40) return [text.slice(0, stop), cap(text.slice(stop + 2))];
+  if (stop > 0 && (colon < 0 || stop < colon) && stop < 64 && text.length > 24) return [text.slice(0, stop), cap(text.slice(stop + 2))];
+  if (colon > 0 && colon < (/[а-я]/i.test(text) ? 44 : 34)) return [text.slice(0, colon), cap(text.slice(colon + 2))];
   return [text, ''];
 }
 
@@ -145,26 +195,56 @@ export function cardsFromGoals(res, state, pid, now) {
     const ruleTarget = g.target && typeof g.target === 'object' ? g.target : null;
     switch (g.kind) {
       case 'collect': {
-        // a ripe field first, then any Hand thing; an axe tree (a Pine) last: the Hand only opens its panel (PT-03)
-        const axe = (o) => defOf(o.def)?.tool === 'axe';
-        const t = firstOf(state, (o) => o.def === 'plot' && o.crop && o.crop.readyAt <= now)
-          ?? firstOf(state, (o) => o.def !== 'plot' && Number.isSafeInteger(o.readyAt) && o.readyAt <= now && !axe(o))
-          ?? firstOf(state, (o) => o.def !== 'plot' && Number.isSafeInteger(o.readyAt) && o.readyAt <= now);
-        card.icon = t ? (t.o.crop ? t.o.crop.def : t.o.def) : 'basket';
-        if (t && Number.isFinite(t.o.x)) card.target = { tile: { x: t.o.x, z: t.o.z }, ...(t && axe(t.o) ? { tool: 'axe' } : {}) };
-        card.sub = card.sub || tr(t && t.o.crop ? 'goals.tr.collect.sickle' : t && axe(t.o) ? 'goals.tr.collect.axe'
-          : (touchPlayer() ? 'goals.tr.collect.tap' : 'goals.tr.collect.click'));
+        // release 1.0 (M6): the rules name the biggest group and where the Hand goes (target.id: a plot, a home, a
+        // tree or a building); the icon is what stands there, the sub line the one tool that does it all
+        const at = ruleTarget && ruleTarget.id ? state.farm.objects[ruleTarget.id] : null;
+        const animal = at && g.ref === 'barnyard'
+          ? Object.values(state.farm.objects).find((o) => o.home === ruleTarget.id && Number.isSafeInteger(o.readyAt) && o.readyAt <= now) : null;
+        card.icon = at ? (at.crop ? at.crop.def : animal ? animal.def : at.def) : 'basket';
+        card.sub = card.sub || tr(ruleTarget && ruleTarget.tool === 'axe' ? 'feat.tr.handAxe'
+          : (touchPlayer() ? 'feat.tr.handTouch' : 'feat.tr.hand'));
         break;
       }
       case 'plant': {
         const level = levelFromXp(state.farm.xp);
         const fast = liveAt('crops', level).reduce((a, c) => (!a || c.growMs < a.growMs ? c : a), null);
         const t = firstOf(state, (o) => o.def === 'plot' && !o.crop);
-        card.icon = fast ? fast.id : 'seed_bag';
-        card.sub = card.sub || (fast ? tr('goals.tr.readyIn', { crop: nm(fast.id, fast.name, 'crops'), d: fmtDuration(fast.growMs) }) : '');
-        if (t) card.target = { tile: { x: t.o.x, z: t.o.z }, tool: 'seed' };
+        // QA r2 F2-07: after 19:00 the rules name the crop that fills the field nearest the morning, with its clock and
+        // cost (g.sub); before bed "Wheat · ready in 1 min" was the wrong advice
+        const named = g.sub && typeof g.sub === 'object' && g.ref && cropOf(g.ref) ? cropOf(g.ref) : null;
+        const crop = named ?? fast;
+        card.icon = crop ? crop.id : 'seed_bag';
+        // copy#9: a fixed length says "1 min", never "1 min 00 s" (a countdown keeps the padding)
+        card.sub = card.sub || (named ? goalText(g.sub)
+          : fast ? tr('goals.tr.readyIn', { crop: nm(fast.id, fast.name, 'crops'), d: fmtDuration(fast.growMs, { trim: true }) }) : '');
+        // QA r2 S2-07 (ui-shell's patch): the card hands the Hand its crop, so the next drag plants a row
+        if (t) card.target = { tile: { x: t.o.x, z: t.o.z }, tool: 'seed', ...(crop ? { crop: crop.id } : {}) };
         break;
       }
+      // release 1.0 (D3): Plant for later / Before bed; its target plants the empty plots in one stroke. The title is
+      // the whole sentence (never cut at "Before bed:"), the sub line when it is ready and what it costs; `cost` lets a
+      // click ask first when the stroke is a BIG_SPEND (QA r1 F-01)
+      case 'later':
+        card.title = g.msg ? goalText(g.msg) : String(g.text || '');
+        card.sub = g.sub ? goalText(g.sub) : '';
+        card.icon = g.ref || 'seed_bag';
+        card.cost = g.cost;
+        break;
+      // release 1.0 (D2): Golden Hour with both of you here
+      case 'golden':
+        card.icon = g.id && state.farm.objects[g.id] ? state.farm.objects[g.id].def : null;
+        card.glyph = 'heart';
+        card.sub = card.sub || tr('feat.tr.goldenSub');
+        break;
+      // only long timers left: the calm card (its sub line from the rules: "Next ready in 2:15 h")
+      case 'calm':
+        card.glyph = 'sprout';
+        card.icon = null;
+        break;
+      // D3: a bigger brush for little money
+      case 'brush':
+        card.icon = g.id && CONTENT.tools.has(g.id) ? g.id : 'sickle';
+        break;
       case 'order': case 'help':
         card.icon = 'order_board';
         card.target = { panel: 'orders', args: { slot: g.ref } };
@@ -185,15 +265,30 @@ export function cardsFromGoals(res, state, pid, now) {
       case 'quest': {
         const q = CONTENT.quests.get(g.id);
         const task = q && q.tasks[Number(g.ref)];
-        card.icon = task ? task.ref : null;
+        card.icon = questIcon(task);          // QA r2 F2-05: never the "?" crate
         card.glyph = 'letter';
         if (q) {
           card.title = questTitle(g.id, q);
           card.sub = task ? tr('goals.tr.quest.sub', { task: goalText(taskLabelMsg(task)), have: g.have ?? 0, need: g.need ?? 0 })
             : tr('goals.tr.quest.n', { have: g.have ?? 0, need: g.need ?? 0 });
+          // D2 (h4): a Giant keeps its chops: say the partner can finish it later
+          if (task && task.verb === 'together' && task.ref === 'giant') card.sub = laterHint(state, pid);
         }
         // chains F / G live on "This week" and chain H on "Together" (GDD §5.3); A-E on Letters
         card.target = { panel: 'journal', args: { tab: journalTabOf(q), focus: g.id } };
+        break;
+      }
+      // QA r3 F3-05 (coop#3): today's half of a same-day Together task ("Mia ✓ · you: sit on any bench before
+      // midnight"); for the one still to do it a tap walks to the bench and sits (the rules' target), else the letter
+      case 'half': {
+        const q = CONTENT.quests.get(g.id);
+        const task = q && q.tasks[Number(g.ref)];
+        card.icon = questIcon(task);
+        card.glyph = 'heart';
+        // F4-C1: as NOW its own words lead with the verb ("Sit on any bench before midnight" / "Mia ✓ · <title>")
+        if (q && slot !== 'now') card.title = questTitle(g.id, q);
+        if (g.half && slot !== 'now') card.sub = goalText(g.half);
+        if (!ruleTarget && q) card.target = { panel: 'journal', args: { tab: journalTabOf(q), focus: g.id } };
         break;
       }
       case 'try': {
@@ -273,7 +368,10 @@ export function cardsFromGoals(res, state, pid, now) {
         break;
       }
       case 'town': card.icon = g.ref && CONTENT.items.has(g.ref) ? g.ref : 'ferry_landing_souvenir'; break;
-      case 'giant': card.icon = g.ref && CONTENT.items.has(g.ref) ? g.ref : 'axe'; break;
+      case 'giant':
+        card.icon = g.ref && CONTENT.items.has(g.ref) ? g.ref : 'axe';
+        card.sub = card.sub || laterHint(state, pid);
+        break;
       case 'pet': card.icon = g.ref && CONTENT.items.has(g.ref) ? g.ref : 'dog_house'; break;
       case 'restore': card.icon = g.ref && CONTENT.items.has(g.ref) ? g.ref : 'hammer'; break;
       case 'beauty': card.glyph = 'star'; break;
@@ -304,12 +402,64 @@ export function cardsFromGoals(res, state, pid, now) {
         card.glyph = 'star';
     }
     if (ruleTarget && !(ruleTarget.panel === 'relics' && card.target)) card.target = ruleTarget;
+    // release 1.0: a rules card may carry its own sub line as a message (the later, calm cards)
+    if (!card.sub && g.sub && typeof g.sub === 'object') card.sub = goalText(g.sub);
     card.sub = withNumbers(g, card.sub || '');
     if (card.sub) card.sub = cap(card.sub);
     out.push(card);
   }
-  void pid;
   return out;
+}
+
+/** "Chop it, Mia can finish it later" (D2, h4): the partner's name from state, never a literal. */
+function laterHint(state, pid) {
+  const other = Object.keys(state.players).sort().find((p) => p !== pid);
+  const who = other ? state.players[other]?.name : null;
+  return goalText(who ? rmsg('feat.r.giant.later', { name: who }) : rmsg('feat.r.giant.laterPartner'));
+}
+
+/**
+ * Grandma's words for a coach step (the same source as tutorial.js: content TUTORIAL through ctext); QA r3 F3-10: the
+ * words that depend on the farm now (the flour step once the Windmill stands, or on a farm of one) come from the rules'
+ * stepWords, the same call Grandma's card makes. Exported for tests.
+ */
+export function coachText(step, state = null) {
+  if (step.id === 'choose') return tr('moments.coach.choose');
+  const w = state ? stepWords(state, step) : null;
+  return w ? goalText(w) : ctext('TUTORIAL', `step.${step.id}`, 'text', step.text);
+}
+
+/**
+ * The NOW card that mirrors Grandma's coach (release 1.0, M1b): her step's words and counts, the same message key and
+ * params the coach card carries (msg 'TUTORIAL:step.<id>', params { have, need }), her pointer's target. null when
+ * the coach has no step for this player. Pure.
+ */
+export function coachCard(state, pid, now) {
+  let c = null;
+  try { c = tutorialMod.coachStep(state, pid); } catch { c = null; }
+  if (!c || !c.step) return null;
+  const have = Math.max(0, Math.min(c.have ?? 0, c.need ?? 1));
+  const need = Math.max(1, c.need ?? 1);
+  const [title, sub0] = splitText(coachText(c.step, state));
+  let target = null;
+  try {
+    const tg = tutorialMod.targetOf ? tutorialMod.targetOf(state, c.step, now) : null;
+    if (tg && tg.tile) target = { tile: tg.tile, ...(c.step.tool ? { tool: c.step.tool } : {}) };
+  } catch { target = null; }
+  const counts = need > 1 ? tr('goals.tr.quest.n', { have, need }) : '';
+  return { slot: 'now', kind: 'coach', id: c.step.id, title, sub: [sub0, counts].filter(Boolean).join(' · '),
+    glyph: 'letter', progress: need > 1 ? have / need : undefined, target,
+    msg: `TUTORIAL:step.${c.step.id}`, params: { have, need } };
+}
+
+/**
+ * The one NOW priority (release 1.0, M29): with the coach speaking, its card is NOW and every other NOW candidate
+ * steps aside (nothing else claims NOW; the rest stay as they are below it). Without the coach, the rules' ranking
+ * stands (shared/rules/goals.js NOW_SCORE). Pure.
+ */
+export function withNowPriority(goals, coach) {
+  if (!coach) return goals;
+  return [coach, ...goals.filter((g) => g.slot !== 'now')];
 }
 
 /** The GDD §5.1 fallback chain: three cards, never empty. Pure. */
@@ -325,15 +475,15 @@ export function localGoals(state, pid, now) {
   } else if (f.empty.length) {
     const first = f.empty[0];
     goals.push({ slot: 'now', title: tn('goals.tr.local.plant', f.empty.length),
-      sub: tr('goals.tr.readyIn', { crop: nm(fastest.id, fastest.name, 'crops'), d: fmtDuration(fastest.growMs) }), icon: fastest.id,
-      target: { tile: { x: first.x, z: first.z }, tool: 'seed' } });
+      sub: tr('goals.tr.readyIn', { crop: nm(fastest.id, fastest.name, 'crops'), d: fmtDuration(fastest.growMs, { trim: true }) }), icon: fastest.id,
+      target: { tile: { x: first.x, z: first.z }, tool: 'seed', crop: fastest.id } });
   } else if (f.debris.length) {
     const first = f.debris[0];
     goals.push({ slot: 'now', title: tr('goals.tr.local.tidy'), sub: tr('goals.tr.local.tidySub', { n: f.debris.length }), icon: first.def,
       target: { tile: { x: first.x, z: first.z } } });
   } else {
     const next = f.growing.reduce((a, g) => (!a || g.readyAt < a.readyAt ? g : a), null);
-    const tip = { crop: nm(fastest.id, fastest.name, 'crops'), g: fmtDuration(fastest.growMs) };
+    const tip = { crop: nm(fastest.id, fastest.name, 'crops'), g: fmtDuration(fastest.growMs, { trim: true }) };
     goals.push({ slot: 'now', title: tr('goals.tr.local.growing'), glyph: 'sprout',
       sub: next ? tr('goals.tr.local.nextTip', { d: fmtDuration(next.readyAt - now), ...tip }) : tr('goals.tr.local.tip', tip),
       target: next ? { tile: { x: next.x, z: next.z } } : null });
@@ -369,8 +519,8 @@ export function localGoals(state, pid, now) {
   return goals;
 }
 
-/** Active story cards with their first unfinished task. Pure. */
-export function storyCards(state, now) {
+/** Active story cards with their first unfinished task. Pure. (`pid`: whose screen, for the partner's name in h4.) */
+export function storyCards(state, now, pid = null) {
   const q = state.farm.quests;
   if (!q || !q.active) return [];
   const ids = sortedKeys(q.active).sort((a, b) => (q.active[a].at - q.active[b].at) || (a < b ? -1 : 1));
@@ -393,10 +543,17 @@ export function storyCards(state, now) {
     if (next && typeof questsR.blockerOf === 'function') {
       try { blocker = questsR.blockerOf(state, next.t, now); } catch { blocker = null; }
     }
+    // QA r4 F4-05: a farm of one is not offered what only two can do (each sits on a bench, …)
+    if (next && needsPartner(next.t) && Object.keys(state.players).length < 2) continue;
+    // QA r3 F3-05: today's half of a same-day Together task, on the letter too
+    const half = next && pid ? togetherHalf(state, pid, now, next.t) : null;
     const sub = !next ? tr('goals.tr.story.done')
       : blocker && blocker.text ? cap(blocker.msg ? goalText(blocker.msg) : blocker.text)
-        : tr('goals.tr.quest.sub', { task: goalText(taskLabelMsg(next.t)), have: next.p.have, need: next.p.need });
-    out.push({ id, title: questTitle(id, def), sub, icon: next ? (blocker && blocker.ref && defOf(blocker.ref) ? blocker.ref : next.t.ref) : null,
+        : half ? goalText(halfMsg(state, half))
+        // D2 (h4): a Giant keeps its chops, so the card says the partner can finish it later
+          : next.t.verb === 'together' && next.t.ref === 'giant' ? laterHint(state, pid)
+            : tr('goals.tr.quest.sub', { task: goalText(taskLabelMsg(next.t)), have: next.p.have, need: next.p.need });
+    out.push({ id, title: questTitle(id, def), sub, icon: next ? (blocker && blocker.ref && defOf(blocker.ref) ? blocker.ref : questIcon(next.t)) : null,
       giver: def.giver, chain: def.chain || null, progress: need ? have / need : 1, done: !next, waiting: Boolean(blocker) });
   }
   return out;
@@ -473,6 +630,34 @@ export function restSummary(rest, story) {
   return { segs, label: tr('goals.tr.rest', { words: words.join('. ') }) };
 }
 
+/**
+ * What a click on an action card sends (pure): `{ ask: 'BIG_SPEND', type, args }` when the card's stroke costs more than
+ * GDD §6.3's BIG_SPEND line for this farmer now (QA r1 F-01: Plant for later, like every other big purchase, asks
+ * first), else `{ type, args }`; null for a card without an action.
+ */
+export function cardAction(card, state, pid, now) {
+  const t = card && card.target;
+  if (!t || !t.act) return null;
+  const args = t.args || {};
+  if (card.cost > 0 && state && isBigSpend(state, pid, now, card.cost)) return { ask: ERR.BIG_SPEND, type: t.act, args };
+  return { type: t.act, args };
+}
+
+/**
+ * The "are you sure?" card of a big planting stroke (QA r2 F2-03, fe#1): the shell's BIG_SPEND card (dialogs.softCopy)
+ * with a planting's own fine print. Its generic line promised "Undo works for 10 minutes" and a heads-up; a planting has
+ * no Undo chip: it comes back by pulling the crops up inside their 10-minute refund window (farming.js uprootRefund),
+ * and the partner's heads-up is the rules' `bigSpend` of the confirmed stroke. (How to pull a crop up is the uproot
+ * drip card's, which shows while a crop is inside that window: the fine print names no key.) Pure (tests).
+ */
+export function plantAskCopy(card, state, pid, now) {
+  const base = softCopy(ERR.BIG_SPEND, { state, pid, args: card?.target?.args ?? {}, cost: { coins: card?.cost ?? 0 }, now });
+  return { ...base, icon: card?.icon || base.icon, ok: tr('feat.later.ok'), fine: tr('feat.later.bigFine') };
+}
+
+/** A card press this soon after a card acted is the tail of a double click (QA r2 F2-09): it waits. */
+export const ACT_GUARD_MS = 500;
+
 export function createTracker(S) {
   const { store, view, ui } = S;
   const box = document.getElementById('tracker');
@@ -484,28 +669,64 @@ export function createTracker(S) {
   const shown = new Map();        // card kind -> last time shown (GDD §5.1 novelty: "not shown in the last 10 min")
   const recentKinds = (now) => [...shown.entries()].filter(([, t]) => now - t < 600_000).map(([k]) => k);
 
+  /** The pids online now (this player always; the partner per the HUD's presence): goals() opts.online (D2). */
+  const onlinePids = (state) => Object.keys(state.players).filter((p) => p === store.pid || Boolean(S.hud?.isOnline?.(p)));
+  /** True while Grandma's coach card is on screen (ui-shell's tutorial.js coachVisible(), else its instance). */
+  const coachSpeaks = () => {
+    try {
+      if (typeof tutorialMod.coachVisible === 'function') return Boolean(tutorialMod.coachVisible());
+      return Boolean(S.tutorial?.active?.());
+    } catch { return false; }
+  };
   const seenKey = () => `hh.story.${store.pid}`;
+  // the first look's marks are written once per page and key: a key that vanishes mid-session was forgotten on purpose
+  // (main.js forgetFarm when the farm was deleted), and the next render must not write it back (QA r3, e2e-multi's
+  // "deleted: … forget the farm (list and keys)" found `story.p1` on the partner's screen)
+  const seeded = new Set();
   const modeKey = () => `hh.tracker.${store.pid}`;
   const allOpen = () => kv.get(modeKey(), 'compact') === 'all';
 
   let actedAt = -Infinity;        // a card just did its thing: the phone drop-down closes behind it
-  function act(g) {
+  let lastActAt = -Infinity;      // F2-09: when the press that made a card act came in (the double-click guard)
+  function act(g, stamp = performance.now()) {
     const t = g.target;
     if (!t) return;
     actedAt = performance.now();
+    lastActAt = stamp;
     if (t.act) {
-      // an action card (Grandma's seed basket, a balloon crate): the controller predicts it like any click; a card with
-      // a place on the farm shows it first (the crate's lid pops where the camera looks)
+      // an action card (Grandma's seed basket, a balloon crate, Plant for later): the controller predicts it like any
+      // click; a card with a place on the farm shows it first (the crate's lid pops where the camera looks)
       if (t.tile && typeof view.focus === 'function') view.focus(t.tile.x, t.tile.z);
-      S.controller.do(t.act, t.args || {});
+      const a = cardAction(g, store.state, store.pid, store.now());
+      // a big stroke asks first: a planting with its own fine print (F2-03), any other through the shell's "are you
+      // sure?" card (dialogs.softConfirm); on yes the same stroke goes confirmed
+      if (a.ask && a.type === 'plant' && typeof ui.confirm === 'function') {
+        const copy = plantAskCopy(g, store.state, store.pid, store.now());
+        Promise.resolve(ui.confirm(copy)).then((ok) => {
+          if (ok) S.controller.do(a.type, { ...a.args, confirm: [...new Set([...(a.args.confirm ?? []), a.ask])] });
+        }).catch((err) => console.error('tracker: the planting\'s "are you sure?" failed', err));
+      } else if (a.ask) ui.toast(a.ask, { type: a.type, args: a.args });
+      else S.controller.do(a.type, a.args);
     } else if (t.panel && ui.panels.has(PANEL_ALIAS[t.panel] ?? t.panel)) {
       ui.panels.open(PANEL_ALIAS[t.panel] ?? t.panel, t.args || {});
     } else if (t.tool === 'fertilizer' && !t.tile) {
       spreadFertilizer();
+    } else if (t.ping && t.tile && typeof S.controller.ping === 'function') {
+      // F4-02: on the bench already: call the partner over
+      view.focus(t.tile.x, t.tile.z);
+      S.controller.ping(t.tile.x + 0.5, t.tile.z + 0.5);
+    } else if (t.sit && typeof S.controller.sitOn === 'function') {
+      // D2: Golden Hour's card walks to the bench and sits; the camera shows the bench first (M6, verify-1 D-1)
+      if (t.tile && typeof view.focus === 'function') view.focus(t.tile.x, t.tile.z);
+      S.controller.sitOn(t.sit);
     } else if (t.tile) {
       view.focus(t.tile.x, t.tile.z);
       S.tutorial?.flash({ x: t.tile.x, z: t.tile.z });
-      if (t.tool && S.controller.tool.id !== t.tool && S.controller.TOOLS.some((x) => x.id === t.tool)) S.controller.setTool(t.tool);
+      // QA r2 S2-07 (ui-shell's patch; fbp#3, jde#9): a plant card hands the Hand its crop, so the next drag across the
+      // empty plots plants a row (a bare Hand panned the camera and planted nothing)
+      const crop = t.tool === 'seed' && t.crop && cropOf(t.crop) ? t.crop : null;
+      if (crop) S.controller.setTool('hand', { crop, plant: true });
+      else if (t.tool && S.controller.tool.id !== t.tool && S.controller.TOOLS.some((x) => x.id === t.tool)) S.controller.setTool(t.tool);
     }
   }
 
@@ -547,6 +768,7 @@ export function createTracker(S) {
       const open = !restWrap.classList.contains('open');
       restWrap.classList.toggle('open', open);
       restSum.setAttribute('aria-expanded', String(open));
+      if (open) sayOpen();
     } } }, h('span.segs'), h('span.chev', { 'aria-hidden': 'true' }, '▾'));
   const restPop = h('div.goal-rest-pop');
   const restWrap = h('div.goal-rest', { dataset: { slot: 'rest' } }, restSum, restPop);
@@ -563,8 +785,24 @@ export function createTracker(S) {
     box.classList.toggle('m-open', open);
     chip.setAttribute('aria-expanded', String(open));
     if (!open) { restWrap.classList.remove('open'); restSum.setAttribute('aria-expanded', 'false'); }
+    else sayOpen();
   }
-  box.addEventListener('click', () => { if (performance.now() - actedAt < 80) setDrop(false); });
+  /**
+   * QA r3 S3-19 (ui-shell's patch; oib#5): the tracker's list opened (the phone chip's drop-down, the folded row): a
+   * window event `tracker-open`, so whatever floats over the HUD (the phone's tool pop-up) can close; the list is not a
+   * panel and a tap on it is not a farm tap.
+   */
+  function sayOpen() {
+    try { globalThis.dispatchEvent?.(new CustomEvent('tracker-open')); } catch { /* no window */ }
+  }
+  // the click that made a card act closes the phone's list behind it: the same event (its timeStamp is the card's
+  // lastActAt), however long the action took (QA r3, seen in the e2e frame e2e-iphone13-bg-later-planted.png: Before bed's
+  // 82-plot stroke ran past the 80 ms window and the list stayed over the planted field); 80 ms remains for a browser or
+  // a test without time stamps
+  box.addEventListener('click', (e) => {
+    const same = Number.isFinite(e?.timeStamp) && e.timeStamp > 0 && e.timeStamp === lastActAt;
+    if (same || performance.now() - actedAt < 80) setDrop(false);
+  });
   box.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && box.classList.contains('m-open')) { e.stopPropagation(); setDrop(false); chip.focus(); }
   });
@@ -579,7 +817,7 @@ export function createTracker(S) {
     chipTitle.textContent = g.title;
     chip.querySelector('.slot-tag').textContent = slotLabel('now');
     const n = goals.length - 1 + story.length;
-    chipMore.textContent = n > 0 ? `+${n}` : '';
+    chipMore.textContent = n > 0 ? tr('feat.tr.chipMore', { n }) : '';
     chipMore.hidden = n === 0;
     chip.classList.toggle('bang', goals.some((x) => x.bang && !cardEls.get(keyOf(x))?._el._seen) || story.some((x) => x.bang));
     chip.setAttribute('aria-label', n > 0 ? tr('goals.tr.chip.more', { title: g.title, n }) : tr('goals.tr.chip', { title: g.title }));
@@ -602,8 +840,15 @@ export function createTracker(S) {
         type: 'button', dataset: { slot: g.slot, goal: g.id || g.slot }, style: { animationDelay: `${i * 60}ms` },
         on: {
           pointerdown: (e) => { el._touch = e.pointerType === 'touch'; },
-          click: () => {
+          click: (e) => {
             const cur = el._g;
+            // QA r2 F2-09 (br#2): the second click of a double click, or a press right after a card acted, waits: the
+            // card under the pointer may already be another one (the planting made the crate's card NOW, and the
+            // second click opened the crate; or it planted again and said "Something is already growing there").
+            // Measured from when each press came in (event.timeStamp): a big stroke's long frame delays the handler of
+            // the second click by half a second or more, never its time stamp
+            const stamp = Number.isFinite(e?.timeStamp) && e.timeStamp > 0 ? e.timeStamp : performance.now();
+            if (stamp - lastActAt < ACT_GUARD_MS || (e?.detail >= 2 && stamp - lastActAt < 1000)) return;
             // a tap on a closed chip opens it first; the second tap does what it says (UI-06)
             if (el._touch && wrap.classList.contains('chip') && !wrap.classList.contains('open') && !allOpen()) {
               if (touchOpen && touchOpen !== wrap) touchOpen.classList.remove('open');
@@ -611,7 +856,7 @@ export function createTracker(S) {
               touchOpen = wrap;
               return;
             }
-            if (cur.slot === 'story') openStory(cur); else act(cur);
+            if (cur.slot === 'story') openStory(cur); else act(cur, stamp);
           },
         },
       }, g.slot === 'story' ? strip(g) : null, h('span.slot-tag', { 'aria-hidden': 'true' }),
@@ -630,6 +875,9 @@ export function createTracker(S) {
     gs.textContent = g.sub || '';
     gs.hidden = !g.sub;
     el.setAttribute('aria-label', tr('goals.tr.card', { slot: tag, title: g.title, sub: g.sub || '' }));
+    // M1b: the coach mirror carries the coach's message key and counts (a DOM check compares them with the coach card)
+    if (g.msg) { el.dataset.msg = g.msg; el.dataset.params = JSON.stringify(g.params ?? {}); }
+    else { delete el.dataset.msg; delete el.dataset.params; }
     el.classList.toggle('done', Boolean(g.done));
     el.classList.toggle('waiting', Boolean(g.waiting));
     const art = el.querySelector('.art');
@@ -655,10 +903,36 @@ export function createTracker(S) {
     kv.set(seenKey(), s);
   }
 
+  // QA r4 F4-C1: the partner did their half while I was away: one line once the farm is in view, once a farm day
+  // (kv: a reload too); with the partner here the bench chip says it
+  const halfKey = () => `hh.half.${store.pid}`;
+  let firstAt = null;
+  function arrival(state, now, goals) {
+    firstAt ??= now;
+    if (now - firstAt < 3000 || ui.panels.top?.() || coachSpeaks()) return;
+    if (document.getElementById('boot')?.hidden === false) return;
+    const d = state.farm.coop?.days?.d;
+    const was = kv.get(halfKey(), null);
+    const said = was && was.d === d && Array.isArray(was.k) ? was.k : [];
+    const n = said.length;
+    for (const { qid, half } of halvesOf(state, store.pid, now)) {
+      const key = `${qid}:${half.kind}`;
+      if (half.mine || said.includes(key)) continue;
+      said.push(key);
+      if (S.hud?.isOnline?.(half.other)) continue;
+      const q = CONTENT.quests.get(qid);
+      const p = { name: state.players[half.other]?.name ?? '', title: q ? questTitle(qid, q) : '' };
+      const card = goals.find((g) => g.kind === 'half' && g.id === qid);
+      ui.toast(() => tr(`feat.tr.half.${half.kind}`, p), { kind: 'love', ms: 9000,
+        action: { label: () => tr('moments.showMe'), fn: () => (card ? act(card) : openStory({ id: qid })) } });
+    }
+    if (said.length > n) kv.set(halfKey(), { d, k: said });
+  }
+
   function openStory(g) {
     actedAt = performance.now();
     for (const name of ['quests', 'journal']) {
-      if (ui.panels.has(name)) { ui.panels.open(name, { tab: 'story', focus: g.id }); return; }
+      if (ui.panels.has(name)) { ui.panels.open(name, storyArgs(g)); return; }
     }
   }
 
@@ -668,7 +942,7 @@ export function createTracker(S) {
     const now = store.now();
     let goals = null;
     try {
-      const res = (rulesGoals || rulesGoalsFn)(state, store.pid, now, { recent: recentKinds(now), keep: lastNow });
+      const res = (rulesGoals || rulesGoalsFn)(state, store.pid, now, { recent: recentKinds(now), keep: lastNow, online: onlinePids(state) });
       lastNow = res && res.now ? { kind: res.now.kind, id: res.now.id ?? null, ref: res.now.ref ?? null } : null;
       goals = cardsFromGoals(res, state, store.pid, now);
     } catch (err) {
@@ -682,13 +956,20 @@ export function createTracker(S) {
     // (the rules rank one too when nobody picked; a farmer's own pick always shows, once)
     const save = savingCard(state, store.pid, localSaving(store.pid));
     if (save && !goals.some((g) => g.kind === 'relic' && (g.id === save.id || g.target?.args?.focus === save.id))) goals.push(save);
+    // release 1.0 (M1b, M29): while Grandma speaks, the NOW card is her step (one voice)
+    goals = withNowPriority(goals, coachSpeaks() ? coachCard(state, store.pid, now) : null);
     for (const g of goals) shown.set(g.kind || g.slot, now);
     const seen = kv.get(seenKey(), null);
     const first = seen === null;
-    // a quest already on the NOW/SOON/BIG cards is not repeated as a story card
-    const onCards = new Set(goals.filter((g) => g.kind === 'quest' && g.target && g.target.args).map((g) => g.target.args.focus));
-    const story = storyCards(state, now).filter((c) => !onCards.has(c.id)).map((c) => ({ ...c, slot: 'story', bang: !first && !(seen || {})[c.id] }));
-    if (first) kv.set(seenKey(), Object.fromEntries(story.map((c) => [c.id, 1])));
+    // a quest already on the NOW/SOON/BIG cards is not repeated as a story card (QA r3 F3-05: nor today's half of a
+    // Together task, whose target is the bench, not the letter: its id is the quest's)
+    const onCards = new Set(goals.filter((g) => (g.kind === 'quest' && g.target && g.target.args) || (g.kind === 'half' && g.id))
+      .map((g) => (g.kind === 'half' ? g.id : g.target.args.focus)));
+    const story = storyCards(state, now, store.pid).filter((c) => !onCards.has(c.id)).map((c) => ({ ...c, slot: 'story', bang: !first && !(seen || {})[c.id] }));
+    if (first && !seeded.has(seenKey())) {
+      seeded.add(seenKey());
+      kv.set(seenKey(), Object.fromEntries(story.map((c) => [c.id, 1])));
+    }
     // a phone opens the tracker as its own drop-down: every card open there (the folded row would be a third tap)
     const phone = Boolean(phoneMq?.matches);
     const compact = !phone && !allOpen();
@@ -720,7 +1001,8 @@ export function createTracker(S) {
       sum.querySelector('.slot-tag').textContent = slotLabel('story');
       sum.setAttribute('aria-label', tr('goals.tr.part', { slot: slotLabel('story'), title: story.map((x) => x.title).join(', ') }));
       sum.classList.toggle('bang', story.some((x) => x.bang));
-      storyPop.replaceChildren(...storyEls);
+      // moved only when the list changed: a re-render never takes the keyboard focus off a letter (ui-shell QA r1 S-11)
+      if (storyEls.some((el, k) => storyPop.children[k] !== el) || storyPop.children.length !== storyEls.length) storyPop.replaceChildren(...storyEls);
       if (sum.parentNode !== storyGroup) storyGroup.replaceChildren(sum, storyPop);
       els = [...goalEls, storyGroup];
     } else {
@@ -769,6 +1051,7 @@ export function createTracker(S) {
     modeBtn.setAttribute('aria-pressed', String(!compact));
     if (!more.hidden) box.append(foot); else foot.remove();
     renderChip(goals, story);
+    arrival(state, now, goals);
   }
   // a tap elsewhere closes a chip opened by a tap
   document.addEventListener('pointerdown', (e) => {

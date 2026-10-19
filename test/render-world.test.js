@@ -418,17 +418,22 @@ test('batches grow by doubling, swap keys in place and keep their bookkeeping', 
   assert.equal(b.keyOf(again), 'k:a');
 });
 
-test('auto quality follows the GPU, not the frame interval: drop after 5 s over 12 ms, climb after 30 s under 6 ms (RD-26)', () => {
+test('auto quality follows the GPU and the missed frames (RD-26, release 1.0 G1): drop after 8 s over 17 ms with frames missed, climb after 30 s under 11 ms', () => {
+  // release 1.0 (G1, graphics#1): HEAD's 12 ms line put a 60 fps laptop at Low; the line is now the 60 Hz budget and a
+  // drop also needs the interactive frames to come slower than 18 ms (test/rel-look.tier.test.js has the full rules)
   const a = createAutoTier('high');
   let t = null;
-  // a loaded CPU makes 33 ms frames, but the GPU takes 5 ms: the tier stays (the old interval tier dropped here)
-  for (let i = 0; i < 30 * 60 && !t; i++) t = a.feed(5, 1 / 30);
+  // a loaded CPU makes 33 ms frames, but the GPU takes 5 ms: the tier stays
+  for (let i = 0; i < 30 * 60 && !t; i++) { a.interval(33); t = a.feed(5, 1 / 30); }
   assert.equal(t, null, 'GPU headroom: no downgrade whatever the frame rate');
   let secs = 0;
-  for (let i = 0; i < 400 && !t; i++) { t = a.feed(14, 1 / 30); secs += 1 / 30; }
+  for (let i = 0; i < 400 && !t; i++) { a.interval(30); t = a.feed(19, 1 / 30); secs += 1 / 30; }
   assert.equal(t, 'medium');
-  assert.ok(secs >= 5 && secs < 6.5, `dropped after ${secs.toFixed(2)} s over budget`);
-  for (let i = 0; i < 400 && a.tier !== 'low'; i++) a.feed(20, 1 / 30);
+  assert.ok(secs >= 8 && secs < 9.5, `dropped after ${secs.toFixed(2)} s over budget`);
+  // a desktop at medium keeps it below 25 ms; past that it may go to low
+  for (let i = 0; i < 600 && a.tier !== 'low'; i++) { a.interval(30); a.feed(22, 1 / 30); }
+  assert.equal(a.tier, 'medium', 'the desktop floor');
+  for (let i = 0; i < 600 && a.tier !== 'low'; i++) { a.interval(40); a.feed(30, 1 / 30); }
   assert.equal(a.tier, 'low');
   assert.equal(a.feed(40, 5), null, 'nothing below low');
   let up = null;
@@ -437,14 +442,14 @@ test('auto quality follows the GPU, not the frame interval: drop after 5 s over 
   const b = createAutoTier('low');
   let climbed = null;
   secs = 0;
-  for (let i = 0; i < 60 * 60 && !climbed; i++) { climbed = b.feed(4, 1 / 30); secs += 1 / 30; }
-  assert.equal(climbed, 'medium', 'a GPU at < 6 ms for 30 s climbs a tier');
+  for (let i = 0; i < 60 * 60 && !climbed; i++) { climbed = b.feed(9, 1 / 30); secs += 1 / 30; }
+  assert.equal(climbed, 'medium', 'a GPU at < 11 ms for 30 s climbs a tier');
   assert.ok(secs >= 30 && secs < 32, `climbed after ${secs.toFixed(1)} s`);
   assert.equal(b.feed(Number.NaN, 1), null, 'garbage times are ignored');
   // a long idle gap between two frames is not 10 s over budget
   const c = createAutoTier('high');
-  for (let i = 0; i < 10; i++) c.feed(15, 1 / 30);
-  assert.equal(c.feed(15, 10), null, 'one gap counts at most 0.25 s');
+  for (let i = 0; i < 10; i++) { c.interval(30); c.feed(25, 1 / 30); }
+  assert.equal(c.feed(25, 10), null, 'one gap counts at most 0.25 s');
   // the fallback without a timer: only a sustained sub-30 fps drops, and never climbs
   const f = createIntervalTier('high');
   let ft = null;

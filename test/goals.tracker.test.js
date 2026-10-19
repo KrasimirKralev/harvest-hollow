@@ -36,7 +36,8 @@ test('NOW suggests spending: the cheapest building the farm can afford, a slot, 
   s.farm.wallet.coins = 3292;
   for (const id of Object.keys(s.farm.objects)) {
     const o = s.farm.objects[id];
-    if (o.def === 'plot') o.crop = { def: 'wheat', plantedAt: T0, readyAt: T0 + 30 * MIN, by: 'p1', cycle: 0 };
+    // ripe within CALM_MIN_MS (release 1.0): a longer wait would show the calm "All done for now" card instead
+    if (o.def === 'plot') o.crop = { def: 'wheat', plantedAt: T0, readyAt: T0 + 15 * MIN, by: 'p1', cycle: 0 };
     if (CONTENT.debris.has(o.def)) delete s.farm.objects[id];
   }
   for (const p of Object.values(s.players)) p.almanac.tasks = {};

@@ -33,7 +33,8 @@ const CSS = `
   .mode-chip { top: calc(var(--sat, 0px) + 108px); padding: 4px 6px 4px 12px; gap: 8px; }
   .mode-chip .mc-text { font-size: .9375rem; line-height: 1.2; }
 }
-@media (prefers-reduced-motion: reduce) { .mode-chip { animation: none; } }
+@media (prefers-reduced-motion: reduce) { body:not(.motion-set) .mode-chip { animation: none; } }
+body.motion-reduced .mode-chip { animation: none; }
 `;
 
 /** Small glyphs (SVG, 26 x 26) in the game's palette. */

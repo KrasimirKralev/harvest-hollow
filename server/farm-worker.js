@@ -48,7 +48,7 @@ class WsProxy {
   ping() { if (this.readyState === 1) post({ k: 'ping', c: this.id }); }
 }
 
-const { cfg, dir, harnessDir, meta, persistOpts, pendingHx } = workerData;
+const { cfg, dir, harnessDir, meta, persistOpts, pendingHx, build } = workerData;
 let hh = null;
 const conns = new Map();               // id -> { ws, conn }
 let lastStatus = '';
@@ -75,7 +75,9 @@ async function open() {
     },
     onLeave: () => pushStatus({ e: 'leave' }),
   };
-  hh = await openFarm(cfg, { log, dir, persistOpts, harnessDir, makeSessions: (o) => new FarmSessions(o, hooks) });
+  // the main thread serves the files: its build hash goes into the welcome (the worker only reads `.build`)
+  hh = await openFarm(cfg, { log, dir, persistOpts, harnessDir, makeSessions: (o) => new FarmSessions(o, hooks),
+    staticFiles: build ? { build } : null });
   hh.parse = parseHello(parseClientMessage);
   hh.presence.start();
   hh.sessions.startHeartbeat();

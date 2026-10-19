@@ -7,6 +7,7 @@
 //     cam.update(dt) -> 2 while moving, else 0     cam.resize(aspect, { w, h }?)  (CSS px of the canvas)
 //     cam.rotate(dir) / cam.pan(right, forward) / cam.zoom(factor, anchor?: {x, z} metres) / cam.focus(x, z tiles)
 //     cam.setBounds({ x0, z0, x1, z1 } tiles) / cam.get() -> { tx, tz, dist, yaw, pitch, k }
+//     cam.setMotion('full'|'reduced'|'still'): a focus is a cut (no glide) under reduced or still motion
 //   pitchFor(dist, add?) / clampTarget(t, bounds, inset?) / zoomToward(target, anchor, factor)   pure (tested)
 //
 // Mobile wave (render lane), touch devices only (a desktop keeps every number above):
@@ -114,6 +115,7 @@ export function createCamera(target = { x: 28 * TILE_M, z: 32 * TILE_M }, { touc
   s.goalDist = s.dist;
   let bounds = { x0: 0, z0: 0, x1: WORLD_TILES, z1: WORLD_TILES };
   let moved = true;
+  let motion = 'full';                   // view.setMotion: a focus under reduced / still motion is a cut
   let saveAt = 0;
   let frame = framingFor({ touch: false });
   let aspect = 1;
@@ -297,13 +299,16 @@ export function createCamera(target = { x: 28 * TILE_M, z: 32 * TILE_M }, { touc
       }
       moved = true; save();
     },
-    /** Ease to a point given in tiles. */
+    /** Ease to a point given in tiles (a cut under reduced or still motion: QA r1 R-06). */
     focus(x, z) {
       s.goalT = null;
       s.glide = null;
       const c = clampTarget({ x: x * TILE_M, z: z * TILE_M }, bounds, inset());
+      if (motion !== 'full') { s.focus = null; s.tx = c.x; s.tz = c.z; moved = true; save(); return; }
       s.focus = { fx: s.tx, fz: s.tz, tx: c.x, tz: c.z, t0: performance.now() };
     },
+    /** The player's motion setting ('full' | 'reduced' | 'still'): the camera's own glides follow it. */
+    setMotion(mode) { motion = mode === 'reduced' || mode === 'still' ? mode : 'full'; },
     setBounds(b) { bounds = b; clamp3(); moved = true; },
     get: () => ({ tx: s.tx, tz: s.tz, dist: s.dist, yaw: s.yaw, pitch: pitchNow(), k: s.k, tilt: s.tilt, tilted: s.tilt !== null }),
     /** The framing in force (tests, dev tools). */

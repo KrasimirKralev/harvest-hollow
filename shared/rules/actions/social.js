@@ -12,7 +12,10 @@
 // by tutDone (tutorial.js).
 import { ERR } from '../../net/protocol.js';
 import { V } from '../schema.js';
-import { CONTENT, COOP, DRIP_FEED, TUTORIAL, STORY_BEATS, isLive, levelFromXp, animalOf } from '../../content/index.js';
+import { CONTENT, COOP, DRIP_FEED, TUTORIAL, STORY_BEATS, SAFETY, isLive, levelFromXp, animalOf } from '../../content/index.js';
+import { BRUSH_TIP_PLOTS } from '../../content/features.js';
+import { coachRetired } from './tutorial.js';
+import { playerIds } from '../coop.js';
 import { inWorld } from '../grid.js';
 import { ceremonyQueue } from './fair.js';
 
@@ -68,9 +71,12 @@ export const nameAnimal = {
   },
   apply(tx, a, ctx) {
     const o = tx.get(['farm', 'objects', a.id]);
-    const first = !Object.hasOwn(tx.state.farm.names, a.id);
+    const old = Object.hasOwn(tx.state.farm.names, a.id) ? tx.state.farm.names[a.id] : null;
+    const first = !old;
     tx.set(['farm', 'names', a.id], { name: a.name, by: ctx.pid, at: ctx.now });
-    tx.emit({ e: 'named', what: 'animal', id: a.id, species: o.def, text: a.name, first, by: ctx.pid });
+    // QA r4 F4-03: a rename says which name it replaced, and whose
+    tx.emit({ e: 'named', what: 'animal', id: a.id, species: o.def, text: a.name, first, by: ctx.pid,
+      ...(old ? { was: old.name, wasBy: old.by } : {}) });
   },
 };
 
@@ -144,9 +150,53 @@ export function unseenLevels(state, pid) {
   return out;
 }
 
-/** Extra conditions some system cards wait for (GDD §7.4 F3). */
-function cardReady(state, pid, f) {
+/**
+ * A save from before 1.0 at L5 or more (release 1.0, M29; critique#34): farm.coop.born is absent (createFarm writes it,
+ * and the boot's backfill never looks inside farm.coop). Its farmers get "New in 1.0" instead of the separate gift
+ * introduction (QA r2 F2-06: the brush tip still comes, after its long stroke).
+ */
+export const newsFarm = (state) => state.farm.coop?.born === undefined && levelFromXp(state.farm.xp) >= 5;
+
+/** A bigger sickle (a brush upgrade of the Sickle) the farm has unlocked and not bought. */
+function sickleToBuy(state) {
+  const L = levelFromXp(state.farm.xp);
+  return [...CONTENT.tools.values()].some((t) => t.upgrades === 'sickle' && isLive(t) && t.unlock <= L
+    && !Object.hasOwn(state.farm.tools ?? {}, t.id));
+}
+
+/**
+ * QA r3 F3-08 (fbp#11): the cards whose whole point is the other farmer ("Say hello: press G to ping a spot for your
+ * partner", "High five!", Golden Hour on the bench together, help flags your partner fills) wait for a second farmer,
+ * as the gift introduction does: on a farm of one they named controls that are not there. They come once a partner
+ * joins (they are still unseen).
+ */
+const PARTNER_CARDS = new Set(['pings', 'high_five', 'golden_hour', 'help_flags']);
+
+/**
+ * QA r3 F3-01 (fe#1): a pre-1.0 farm at L16 or more whose Ribbon Track opened at its first 1.0 boot (D5 moved the
+ * track from L24 to L16: the owners at L21 got it by the system catch-up, with no word anywhere): its card comes right
+ * after "New in 1.0", ahead of the queue of older cards (the owners had 14 waiting: the track's card was 8.75 h of play
+ * away for one of them and never came for the other).
+ */
+const trackOpen = (state) => typeof state.farm.track?.s === 'string';
+
+/** Extra conditions some system cards wait for (GDD §7.4 F3; release 1.0's drip cards: content `drip`). */
+function cardReady(state, pid, f, opts) {
+  if (PARTNER_CARDS.has(f.id) && playerIds(state).length < 2) return false;
+  switch (f.drip) {
+    case 'news': return newsFarm(state);
+    case 'gift': return !newsFarm(state) && playerIds(state).length >= 2;
+    case 'harvey': return opts.helper === true && coachRetired(state, pid);
+    // QA r2 F2-06 (fe#6): the brush tip comes to a pre-1.0 farm too: the brushes are new to those farmers as well
+    // (it was barred there, and the owners at L21 with a 30-plot stroke never heard of them)
+    case 'brush': return (state.players[pid]?.stats?.bestHarvestStroke ?? 0) >= BRUSH_TIP_PLOTS && sickleToBuy(state);
+    default: break;
+  }
   switch (f.id) {
+    // the uproot tip only while one of this farmer's crops is inside the refund window (ui-shell #27, ux-first#10;
+    // ui-shell P-09): `opts.now` is the client's server-clock estimate
+    case 'uproot': return Number.isFinite(opts.now) && Object.values(state.farm.objects)
+      .some((o) => o.crop?.by === pid && opts.now - o.crop.plantedAt < SAFETY.undoMs);
     case 'couple_challenge': return Boolean(state.farm.challenge?.cur);
     case 'mabel_meter': return Boolean(state.farm.orders?.meter);
     case 'almanac': return (state.players[pid]?.almanac?.d ?? -1) >= 0;
@@ -157,17 +207,26 @@ function cardReady(state, pid, f) {
 /**
  * The next system card this player should see, or null (GDD §7.4 drip-feed: at most one new SYSTEM card per
  * DRIP_FEED.minGapMs of this player's play; cards that unlock sooner wait in a queue, oldest unlock first).
+ * Release 1.0 (M29): the one-time introductions of the new things are cards of this same drip (content FEATURES with
+ * `drip`); `opts.helper` (additive): this farm's server offers Harvey (the client knows), so "Meet Harvey" may come;
+ * `opts.now` (additive): the server time, so the uproot tip waits for a crop still inside its refund window.
+ * @param {object} state @param {string} pid @param {{ helper?: boolean, now?: number }} [opts]
  */
-export function nextSystemCard(state, pid) {
+export function nextSystemCard(state, pid, opts = {}) {
   const p = state.players[pid];
   if (!p || !p.seen || !p.play) return null;
   const L = levelFromXp(state.farm.xp);
   const gapMin = Math.floor(DRIP_FEED.minGapMs / 60_000);
   const anySeen = Object.keys(p.seen.cards).length > 0;
   if (anySeen && p.play.n - p.play.card < gapMin) return null;
+  const due = (f) => Boolean(f) && isLive(f) && Boolean(f.card) && f.unlock <= L && !p.seen.cards[f.id]
+    && cardReady(state, pid, f, opts);
+  // F3-01: what a pre-1.0 farm met at its first 1.0 boot comes first: what moved, then the track that opened
+  if (newsFarm(state) && trackOpen(state)) {
+    for (const id of ['new_1_0', 'seasonal_track']) if (due(CONTENT.features.get(id))) return id;
+  }
   for (const f of [...CONTENT.features.values()].sort((x, y) => x.unlock - y.unlock)) {
-    if (!isLive(f) || !f.card || f.unlock > L || p.seen.cards[f.id] || !cardReady(state, pid, f)) continue;
-    return f.id;
+    if (due(f)) return f.id;
   }
   return null;
 }

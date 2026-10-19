@@ -16,10 +16,11 @@
 // working and nothing new can be bought. `shop` keeps its compiled value (contract: shop: false) because
 // validateContent ties it to the prices (docs/agent-notes/hh-mods.md); a shop list hides `retired` defs.
 import { isLive, MILESTONE, MILESTONES } from '../content/index.js';
-import { FORMAT, LIMITS, VALUE_BP, PALETTE_VARS, parseContentPath, ID_RE } from './format.js';
+import { FORMAT, LIMITS, VALUE_BP, parseContentPath, ID_RE } from './format.js';
+import { stripRemoved } from './removed.js';
 import { cropNumbers, treeNumbers, recipeNumbers, productSell, bounds, cropPerMin, treePerMin, recipePerMin } from './econ.js';
 import { overlayHash, modHash } from './hash.js';
-import { luminance, contrast, hueOf } from './colour.js';
+import { luminance, hueOf } from './colour.js';
 
 export const FAMILIES = ['crops', 'trees', 'recipes', 'animals', 'decor'];
 const OUT_FAMILIES = [...FAMILIES, 'items'];
@@ -31,8 +32,6 @@ const MIN = 60_000;
 /** Ground colour a new hue must stand out from (style.css --grass-lit) and the UI text colour (--wood-900). */
 export const GROUND_HEX = '#7CC243';
 export const TEXT_HEX = '#5A3215';
-/** Palette keys drawn behind UI text (>= 3:1 against --wood-900); the barn is only ever a 3D tint. */
-const TEXT_PALETTE = ['grass', 'leaf', 'skyTop', 'skyHorizon'];
 
 const BG_ARTICLES = { m: ['ът', 'ят'], f: ['та'], n: ['то'], pl: ['те'] };
 
@@ -73,11 +72,17 @@ export function overlayDefs(overlay) {
 /**
  * @returns {{ ok: boolean, overlay?: object, problems: object[], warnings: object[], numbers: object }}
  */
-export function compileMod(base, files, { n = 1, prevOverlay = null, tracks = null, bgNames = null, groundHex = GROUND_HEX } = {}) {
+export function compileMod(base, given, { n = 1, prevOverlay = null, tracks = null, bgNames = null, groundHex = GROUND_HEX } = {}) {
   const T = base.tables;
   const problems = [];
   const warnings = [];
   const numbers = {};
+  // release 1.0 (M24): a version stored before 1.0 may use a knob the format no longer takes (the schema refuses it in
+  // a new mod); it is ignored, so the owners' mod keeps compiling on every later build
+  const { files, removed } = stripRemoved(given);
+  for (const r of removed) {
+    warnings.push(problem('IGNORED', r.file, r.path, `${r.file}${r.path ? ` ${r.path}` : ''} is no longer part of the format: ignored`, r.hint));
+  }
   const B = Object.fromEntries(['crops', 'trees', 'recipes', 'animals', 'decor', 'items', 'buildings', 'homes', 'feeds']
     .map((f) => [f, byId(T[f])]));
   const prev = overlayDefs(prevOverlay);
@@ -416,15 +421,6 @@ export function compileMod(base, files, { n = 1, prevOverlay = null, tracks = nu
   const look = { models, icons };
   const lk = files['look.json'];
   if (lk) {
-    if (lk.palette) {
-      for (const [k, v] of Object.entries(lk.palette)) {
-        if (!Object.hasOwn(PALETTE_VARS, k)) continue;
-        if (/^#(000000|FFFFFF)$/i.test(v) || (TEXT_PALETTE.includes(k) && contrast(v, TEXT_HEX) < 3)) {
-          problems.push(problem('LOW_CONTRAST', 'look.json', `palette.${k}`, `${v} leaves the game's brown text hard to read`, 'pick a lighter colour (3:1 against #5A3215)'));
-        }
-      }
-      look.palette = { ...lk.palette };
-    }
     if (lk.sky) look.sky = lk.sky;
     if (lk.music) {
       for (const id of lk.music.prefer) {
@@ -438,9 +434,10 @@ export function compileMod(base, files, { n = 1, prevOverlay = null, tracks = nu
     if (!art.has(l.art)) problems.push(problem('UNKNOWN_REF', 'text/letters.json', `${i}.art`, `"${l.art}" is not letter art`, 'art: from docs/catalog/letterArt.json'));
     return { id: l.id, from: l.from, art: l.art, en: { ...l.en }, bg: { ...l.bg }, n: prevOverlay?.text?.letters?.find((x) => x.id === l.id)?.n ?? n };
   });
-  const tips = (files['text/tips.json'] ?? []).map((tp) => ({ id: tp.id, en: tp.en, bg: tp.bg }));
+  // tips (release 1.0: never shown, removed from the format) stay an empty list: the overlay's shape is unchanged
+  const tips = [];
   const textIds = new Set();
-  for (const x of [...letters, ...tips]) {
+  for (const x of letters) {
     if (textIds.has(x.id) || liveIds.has(x.id)) problems.push(problem('NAME_TAKEN', x.id.startsWith('x_') ? 'text' : '', 'id', `"${x.id}" is used twice`));
     textIds.add(x.id);
   }
@@ -451,12 +448,25 @@ export function compileMod(base, files, { n = 1, prevOverlay = null, tracks = nu
   for (const f of Object.keys(patch)) sort(patch[f]);
   const mj = files['mod.json'] ?? { title: { en: 'My changes', bg: 'Моите промени' } };
   const overlay = {
-    format: FORMAT, n, hash: '', base: base.hash, rules: base.rules, modHash: modHash(files),
+    format: FORMAT, n, hash: '', base: base.hash, rules: base.rules, modHash: modHash(given),
     title: { en: mj.title.en, bg: mj.title.bg },
     defs: out, patch, graveyard, names: { bg: names }, look, text: { letters, tips },
+    // the speed knobs as written (release 1.0, H3: the change list says "All crops grow 20 % faster", one row)
+    tuning: tuningOf(files['tuning.json']),
   };
   overlay.hash = overlayHash(overlay);
   return { ok: true, overlay: freezeDeep(overlay), problems, warnings, numbers };
+}
+
+/** The knobs of a tuning.json as plain data ({} when none). */
+function tuningOf(t) {
+  if (!t || typeof t !== 'object') return {};
+  const out = {};
+  for (const [k, v] of Object.entries(t)) {
+    if (k === 'crops' && v && typeof v === 'object') out.crops = Object.fromEntries(Object.entries(v).map(([id, c]) => [id, c.growMin]));
+    else if (Number.isInteger(v)) out[k] = v;
+  }
+  return out;
 }
 
 /** Value names the guide documents (kept here so the compiler and the guide test share them). */

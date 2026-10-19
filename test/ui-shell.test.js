@@ -150,7 +150,7 @@ test('Goal Tracker: NOW is never empty and follows the GDD fallback chain', () =
   const ids = plots(s);
   let g = localGoals(s, 'p1', T0);
   assert.equal(g[0].slot, 'now');
-  assert.match(g[0].title, /^Plant 16 empty plots$/);
+  assert.match(g[0].title, /^Plant 16 (empty )?plots$/);                 // features' M6 shorter line: "Plant 16 plots"
   for (const id of ids) must(s, 'plant', { id, crop: 'wheat' });
   g = localGoals(s, 'p1', T0 + 1000);
   assert.ok(['Tidy up the yard', 'Everything is growing'].includes(g[0].title), g[0].title);
@@ -193,16 +193,11 @@ test('story cards show the first unfinished task with its progress', () => {
   assert.ok(after.progress > 0 && after.progress < 1);
 });
 
-test('tutorial coach: welcome, name, then the first deed picks the track', () => {
+test('tutorial coach (1.0 M1a): planting first, the first deed picks the track; naming is never a step', () => {
   const s = makeFarm();
   let c = coachStep(s, 'p1');
-  assert.equal(c.step.id, 'welcome');
-  must(s, 'tutDone', { step: 'welcome' });
-  c = coachStep(s, 'p1');
-  assert.equal(c.step.id, 'name_farm');
-  must(s, 'nameFarm', { name: 'Sunny Acres' });
-  c = coachStep(s, 'p1');
-  assert.equal(c.step.id, 'choose', 'no track yet: both first steps are offered');
+  assert.equal(c.step.id, 'plant_wheat', 'the first instruction is planting');
+  assert.equal(c.unassigned, true, 'no track yet: the first deed picks it');
   const t = targetOf(s, c.step, T0);
   assert.ok(t && t.tile, 'the pointer goes to an empty plot');
   must(s, 'plant', { id: plots(s)[0], crop: 'wheat' });
@@ -222,8 +217,8 @@ test('tutorial coach: welcome, name, then the first deed picks the track', () =>
   assert.ok(coachStep(s, 'p2'));
   const fresh = makeFarm();
   must(fresh, 'tutSkip', { all: 'yes' }, { pid: 'p2' });
-  assert.equal(coachStep(fresh, 'p2'), null, 'a skip before the welcome also silences the start steps');
-  assert.equal(coachStep(fresh, 'p1').step.id, 'welcome');
+  assert.equal(coachStep(fresh, 'p2'), null, 'a skip before any deed silences the coach');
+  assert.equal(coachStep(fresh, 'p1').step.id, 'plant_wheat');
 });
 
 test('seed tray: live crops, the next two locked previews, prices from content', () => {

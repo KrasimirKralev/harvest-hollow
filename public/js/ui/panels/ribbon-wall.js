@@ -216,7 +216,7 @@ export const ribbonWallPanel = {
       ...v.tiers.map((x) => h(`span.pc-trail-stop${x.open ? '.open' : ''}`,
         { style: { '--at': String((x.i + 1) / v.tiers.length) } },
         h('b', fmt(x.points)))));
-      const head = h('header.pc-wall-head',
+      const head = h('div.pc-wall-head',
         h('div.pc-plaque', h('span', t('collect.wall.points')), h('b', fmt(v.points)),
           h('small', v.next ? t('collect.wall.moreFor', { n: v.toNext, name: v.next.name.toLowerCase() }) : t('collect.wall.allUp'))),
         h('div.pc-wall-ladder', trail, h('ol.pc-tiers', ...v.tiers.map((x) => tierCard(x, v)))));
@@ -246,7 +246,7 @@ export const ribbonWallPanel = {
           t('collect.wall.foot1', { a: v.pointsPerTier[0], b: v.pointsPerTier[1], c: v.pointsPerTier[2] }),
           t('collect.wall.foot2', { n: v.earnedTiers, total: v.possible }),
           ctx.ui.panels.has('journal') ? h('button.pn-chipbtn',
-            { type: 'button', on: { click: () => ctx.open('journal', { tab: 'ribbons' }) } },
+            { type: 'button', 'data-sfx': 'own', on: { click: () => ctx.open('journal', { tab: 'ribbons' }) } },
               t('collect.wall.journal')) : null));
       kit.refresh();
     }

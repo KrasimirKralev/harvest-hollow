@@ -1851,7 +1851,7 @@ Masterwork × 1.5 / × 2) + 3 per building + 2 per tree. Stars: 1★ 50 · 2★ 
 **Showcase points** (= score − 1,800) for ribbons. Each new star: 3 Acorns and **+1 % order coins** (max +5 %).
 Recomputed on every placement (pure function).
 
-**Seasonal Ribbon Track (L24).** One free 30-tier track per real season. Points = XP earned; each tier needs
+**Seasonal Ribbon Track (L16; L24 before release 1.0).** One free 30-tier track per real season. Points = XP earned; each tier needs
 `nice(1 × XP/h at the farm level when the season started)` (v2: ≈ 1 hour of play per tier, so the reference couple, who
 plays ~39 hours a season, finishes in about 10 weeks; daily players finish early). Rewards: decor, outfit pieces, Golden
 Seed Packets, Acorns (5 at tiers 10/20/30), a season-exclusive animal coat. Points left at season end convert to coins
@@ -1956,7 +1956,7 @@ ripen as one Giant: yield **2 × 9 × (yield + 1)** units (v2, X3: was 1.5 × 9 
 together, its nine harvests and its Fair points are shared by chop share (wave-2 QA RC-09). Big stumps and boulders on expansions use the same chop rule. | 6 chops alone | combo only with two distinct players; R13 | M1b |
 | 9 | **Golden Hour** (L4) | Once per **together session** (≥ 8 h after the last; v2, G3), both avatars sit on a two-seat bench (Sunset Bench, Porch Swing, Gazebo, Sweetheart Arbor, Koi Pond, Treehouse, Arbor of Lights; a farmer sits only when their avatar stands within 3 tiles of it, as the server sees it, wave-1 QA RC-31) for **10 s**: for **30 min** (40 at the Sunset Hill gazebo, +5 with the Love Notes set) everything *started* — crops planted, animals fed, recipes queued — takes **10 % less time**. +1 Heart each, Memory Book page offered. | none — the one purely together bonus; nothing requires it | period counter | yes |
 | 10 | **High-five** | Both press the high-five emote within **1.5 s** with avatars within 2 tiles: a "Spark" gives both **+10 % personal XP for 10 min**; 30-min cooldown; +1 Heart each for the first 3 a day | — | cooldown; server-observed `near` | yes |
-| 11 | **Keepsake gift** (v2, C9) | Once a day each player wraps a keepsake for the partner: a bouquet from a flower crop or a farm-produced good. It goes to the partner's **keepsake shelf** in the farmhouse (and the Memory Book), leaves the Barn (a small goods sink), and gives **+1 Heart each**. No coins: a gift from a shared barn to a shared barn used to be pure minted money. | — | first gift per giver per day; only produced goods | yes |
+| 11 | **Keepsake gift** (v2, C9) | Once a day each player wraps a keepsake for the partner: a bouquet from a flower crop or a farm-produced good. Since release 1.0 (D1, M30) it waits wrapped on the porch until the partner opens it (a Memory Book page), or goes to their **keepsake shelf** after two days; it leaves the Barn (a small goods sink) and gives no Hearts. No coins: a gift from a shared barn to a shared barn used to be pure minted money. | — | first gift per giver per day; only produced goods | yes |
 | 12 | **Partner bottle** (v2) | Anyone's Baby Bottle cuts 30 % of the remaining growth; once per baby per hour the *other* player's bottle cuts **20 % more** | your bottles at 30 % | once per baby per hour | M2 |
 | 13 | **Petting together** | A drag pets everything under the stroke; a pet lasts the real day: +10 % bonus-product chance, **+20 % if both petted** it | +10 % alone | once per player per animal per day | M2 |
 | 14 | **Pets' treasure** | If both players petted both pets in a day, they dig up a second find next morning | each pet's normal find | once per day | M2 |
@@ -2011,7 +2011,9 @@ pennant once.
 Nothing in the game requires the partner. Every Together mechanic is a bonus on top of a base anyone gets (§6.2, R17).
 Weekly targets (Fair, barge rows, Couple Challenge, Mabel's meter, the townsfolk board) are sized for the reference
 couple's ~3 hours a week, so a solo player at 60 minutes an evening reaches Gold and loads most crates. Quests never
-need both. Duets slow-cook. Golden Hour is the only bonus with no solo version, by design: it is the ritual. Simulated:
+need both online at once: the Together chain also counts what the two of you do on the same farm day (each sits on a
+bench, each casts a line), a duet slow-cooked alone, a surprise opened or a help flag filled. Golden Hour's 30-minute
+buff and the together Hearts stay with doing it at the same moment: it is the ritual (release 1.0, M22). Simulated:
 a solo player at 60 minutes a day reaches L20 on day ~15 and L40 on day ~125 (Appendix E).
 
 ### 6.6 Three or four players

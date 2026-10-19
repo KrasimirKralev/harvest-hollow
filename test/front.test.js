@@ -148,7 +148,8 @@ test('front: the landing page as served: no game data, a small first view, the r
   assert.match(landing, /href="\/css\/landing\.css\?v=[0-9a-f]+"/);
   assert.equal((landing.match(/<link[^>]+rel="stylesheet"/g) || []).length, 1, 'css/landing.css only: the game styles come with the sheets');
   assert.equal((landing.match(/<link[^>]+rel="preload"[^>]+as="font"/g) || []).length, 1, 'one font');
-  assert.match(landing, /<img src="\/assets\/landing\/logo-wide_560\.webp\?v=[0-9a-f]+" srcset="[^"]*logo-wide_880\.webp 880w/);
+  // the carved wordmark of the game's farmer picker (release 1.0 O7: one logo from the landing page into the game)
+  assert.match(landing, /<img src="\/assets\/art\/logo-wide\.webp\?v=[0-9a-f]+" srcset="[^"]*logo-wide_880\.webp 880w, \/assets\/art\/logo-wide\.webp 1400w"/);
   assert.match(landing, /<img class="ld-orb-still" src="\/assets\/landing\/farm-orbit\.webp\?v=[0-9a-f]+"/);
   // the video, the sheets and the screenshots never ride in the page: they come after the first paint, when asked
   assert.ok(!/<video|\.webm\b|\.mp4\b|shot-\d/.test(landing.replace(/<!--[\s\S]*?-->/g, '')), 'no video or screenshot in the first view');
@@ -170,4 +171,38 @@ test('front: the landing assets stay small (the first view and the lazy video)',
   assert.ok(kb('farm-orbit.webp') <= 40, `the orb's still: ${kb('farm-orbit.webp').toFixed(1)} KB`);
   assert.ok(kb('logo-wide_560.webp') <= 35 && kb('logo-wide_880.webp') <= 50, 'the logo');
   for (const f of ['farm-orbit.webm', 'farm-orbit.mp4']) assert.ok(kb(f) <= 1536, `${f}: ${kb(f).toFixed(0)} KB (at most 1.5 MB)`);
+});
+
+// release 1.0 O7 (astra#9, copy#18, copy#19): Play is the one big button; Star us and GitHub are pills in the quiet row
+// beside "Already have a farm?"; one line under Play says how the partner joins; a Bulgarian display line keeps to one
+// face (no Latin word or digit beside the Cyrillic); Bulgarian compounds keep their non-breaking hyphen.
+test('front O7: one big Play, the invite line under it, Star us and GitHub in the pill row', async () => {
+  const html = fs.readFileSync(path.join(ROOT, 'public/landing.html'), 'utf8');
+  const acts = /<div class="ld-acts">([\s\S]*?)<\/div>/.exec(html)[1];
+  assert.deepEqual([...acts.matchAll(/class="ld-act ([^"]+)"/g)].map((m) => m[1]), ['ld-act--play'], 'one big button');
+  const dock = /<section class="ld-dock"[\s\S]*?<\/section>/.exec(html)[0];
+  assert.ok(dock.indexOf('id="ld-invite"') > dock.indexOf('id="ld-start"'), 'the invite line under Play');
+  assert.match(dock, /data-i18n="front\.act\.invite"/);
+  const more = /<nav class="ld-more"[\s\S]*?<\/nav>/.exec(html)[0];
+  const order = [...more.matchAll(/id="(ld-[a-z-]+)"/g)].map((m) => m[1]).filter((id) => id !== 'ld-star-n');
+  assert.deepEqual(order.slice(0, 3), ['ld-back-open', 'ld-star-btn', 'ld-repo'], 'Star us and GitHub beside "Already have a farm?"');
+  assert.match(more, /id="ld-star-btn"[^>]*class|class="ld-link ld-link--star" id="ld-star-btn"/);
+  assert.match(more, /class="ld-link ld-link--gh" id="ld-repo"[^>]*aria-label="Open GitHub" data-i18n-attr="aria-label:front\.act\.github"/);
+  assert.match(more, /id="ld-star-n"/, 'the live count stays with the star');
+  const { default: en } = await import('../public/js/i18n/en/front.js');
+  const { default: bg } = await import('../public/js/i18n/bg/front.js');
+  assert.equal(en['front.act.invite'], 'Invite your partner with a link from inside the farm.');
+  for (const k of ['front.hero.tag', 'front.act.play', 'front.act.playSub', 'front.act.invite', 'front.act.star', 'front.act.ttl',
+    'front.more.back', 'front.more.ideas', 'front.more.shots', 'front.more.privacy', 'front.more.host']) {
+    assert.ok(typeof bg[k] === 'string', k);
+    assert.ok(!/[A-Za-z0-9]/.test(bg[k]), `copy#19: the Bulgarian display line ${k} mixes faces: ${bg[k]}`);
+  }
+  assert.equal(bg['front.more.github'], 'GitHub', 'a Latin-only pill: one face too');
+  for (const [k, v] of Object.entries(bg)) {
+    for (const x of typeof v === 'string' ? [v] : Object.values(v)) {
+      assert.ok(!/(^|[^\u0400-\u04FF])([Пп]о|[Нн]ай)-[\u0400-\u04FF]/.test(x), `copy#18: ${k} uses an ASCII hyphen in a по‑/най‑ compound`);
+    }
+  }
+  const css = fs.readFileSync(path.join(ROOT, 'public/css/landing.css'), 'utf8');
+  assert.ok(!/\.ld-act--(star|gh)\b/.test(css), 'the old three-button styles are gone');
 });

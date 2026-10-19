@@ -48,6 +48,7 @@ docker run -p 3000:3000 -v hh-data:/data harvest-hollow      # http://localhost:
 | `HH_IDEAS_PER_DAY` | `200` | Ideas accepted in any 24 hours, from everyone together (on top of 5 an hour and 20 a day per address). |
 | `HH_DELETE_PER_HOUR` | `10` | "Delete this farm now" requests per client address an hour. |
 | `HH_STARS_URL` | GitHub API | Where the server asks for the landing page's GitHub star count (at most once an hour; visitors' browsers never call GitHub). `off` = no count. |
+| `HH_ASSET_HOST` | `on` | Option 2: serve this build's static game files under `/b/<build>/` to other origins (CORS on those files only). `off` is the kill switch: every farm server's handshake then says "mismatch" and its pages take their files from the farm server again. |
 
 Never set `HH_DEV=1` in production (time-warp and other test routes, loopback only). With `NODE_ENV=production`
 (the image sets it) the server refuses to start in multi mode when `HH_DEV=1` is set: behind a reverse proxy on the
@@ -78,6 +79,11 @@ same machine every visitor would look like loopback to those routes.
 3. Variables: nothing is required. Optional: `HH_MAX_FARMS`, `HH_TZ`.
 4. Settings -> Networking -> Generate Domain. Settings -> Deploy -> Healthcheck Path: `/api/status`.
 5. Keep **Replicas = 1** (a volume can be attached to one replica only anyway).
+
+Option 2 (release 1.0): a self-hosted farm with `HH_ASSET_ORIGIN` set loads its game files from this host when it
+runs the SAME build. Deploy both with `tools/deploy-both.sh <commit>` (the farm server first, one export for both). A
+deploy of this host alone strands the open option-2 pages' lazy loads (their old `/b/<build>/` answers 404): set
+`HH_ASSET_HOST=off` first, or use deploy-both.
 
 ## Fly.io
 

@@ -31,6 +31,23 @@ const kindName = (kind) => {
 const line = (key, en) => ctext('DUEL', 'lines', key, DUEL?.lines?.[key] ?? en);
 const fill = (t, o) => t.replace(/\{(\w+)\}/g, (_, k) => (o[k] ?? ''));
 
+/**
+ * The week's close of a duel in words for farmer `me`: a tie, the partner's crown, or mine in the second person ("You
+ * win the Order Rush! The crown is yours for a week.": QA r3 S3-21, coop#5, the winner read "Ana wins the Order
+ * Rush! The crown is theirs for a week." about herself). The content's `winYou` line in the language in effect; in
+ * a language that has not translated it yet, the third-person line (never English inside Bulgarian). Pure.
+ */
+export function duelEndLine(state, ev, me) {
+  const lines = DUEL?.lines ?? {};
+  if (ev.tie) return ctext('DUEL', 'lines', 'tie', lines.tie ?? tr('game.duel.tie'));
+  const duel = kindName(ev.kind);
+  if (ev.win === me && lines.winYou) {
+    const you = ctext('DUEL', 'lines', 'winYou', lines.winYou);
+    if (lang() === 'en' || you !== lines.winYou) return fill(you, { duel });
+  }
+  return fill(ctext('DUEL', 'lines', 'win', lines.win ?? tr('game.duel.win')), { name: nameOf(state, ev.win), duel });
+}
+
 /** The partner's invitation in words (DUEL.lines.invite: "{name} challenges you to a {duel}! ..."). */
 export function inviteLine(state, cur) {
   const duel = kindName(cur.kind);
@@ -167,9 +184,7 @@ export function createM2Moments({ store, ui, controller, audio = null }) {
     if (ev.e === 'levelUp' && ev.scope === 'player' && ev.pid === me()) perkPoint();
     if (ev.e === 'duelEnded' && ev.scored) {
       const s = store.state;
-      const lines = DUEL?.lines ?? {};
-      const text = () => (ev.tie ? ctext('DUEL', 'lines', 'tie', lines.tie ?? tr('game.duel.tie'))
-        : fill(ctext('DUEL', 'lines', 'win', lines.win ?? tr('game.duel.win')), { name: nameOf(s, ev.win), duel: kindName(ev.kind) }));
+      const text = () => duelEndLine(s, ev, me());
       ui?.toast?.(text, { kind: 'ok', ms: 7000 });
     }
   }));

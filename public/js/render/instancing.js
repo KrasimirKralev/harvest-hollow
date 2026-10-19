@@ -16,12 +16,37 @@
 //   key's footprint stands in and is swapped in place when models.ready(key) resolves. Capacity grows by
 //   doubling (BatchedMesh.setInstanceCount / setGeometrySize), never by rebuilding the batch.
 //   The batch draws everything in one multi-draw call (plus one per shadow pass when it casts shadows).
+//   QA r3 R3-01: a placeholder whose model failed to load is asked for again (every live batch, after retryDelay, on a
+//   wake, on a late manifest): batch.retryPlaceholders(), batch.placeholderAt(h) -> bool, retryAllPlaceholders()
 import * as THREE from 'three';
-import { models } from './models.js';
+import { models, retryDelay, onWake } from './models.js';
+
+// R3-01: one shared retry timer (a failure anywhere arms it; a success resets the backoff)
+const liveBatches = new Set();
+let retryN = 0;
+let retryTimer = null;
+export function retryAllPlaceholders() {
+  if (retryTimer) { clearTimeout(retryTimer); retryTimer = null; }
+  for (const b of [...liveBatches]) b.retryPlaceholders();
+}
+function scheduleRetry() {
+  if (retryTimer) return;
+  retryTimer = setTimeout(() => { retryTimer = null; retryAllPlaceholders(); }, retryDelay(retryN++));
+  if (retryTimer && typeof retryTimer === 'object') retryTimer.unref?.();
+}
+let retryWired = false;
+function wireRetry() {
+  if (retryWired) return;
+  retryWired = true;
+  // QA r4 R4-02: a wake starts the backoff over
+  onWake(() => { retryN = 0; retryAllPlaceholders(); });
+  models.onManifest(retryAllPlaceholders);
+}
 
 /**
  * Mirror every instance of `src` into `dst` under `mapKey(key)` (RD-13, QA wave 2: the static shadow map is drawn from
- * the buildings' far-band twins, a quarter of their triangles, in a pass of its own). add / setKey / setMatrix /
+ * the twins in a pass of its own; release 1.0 QA r1 R-03: the objects view maps each key to itself, so a building casts
+ * through the model it draws, never a far-band stand-in whose roof stripes the real one). add / setKey / setMatrix /
  * setVisible / remove / define on `src` are wrapped in place; `dst` keeps one twin per live `src` handle.
  * `src.setMatrixOwn(h, m)` moves only the source instance (animated parts: the twin's shadow stays static).
  */
@@ -159,7 +184,7 @@ export function createBatch({ name, material, instances = 256, vertices = 1 << 1
 
   function swapToReal(key) {
     const g = geoIds.get(key);
-    if (!g || g.real) return;
+    if (!g || g.real || !mesh) return;
     const geo = models.geometryFor(key);
     if (!geo) return;
     const id = addGeo(geo);
@@ -170,6 +195,14 @@ export function createBatch({ name, material, instances = 256, vertices = 1 << 1
     for (const fn of swapFns) fn(key);
   }
 
+  // a failure keeps the placeholder (live instances use its id) and arms the retry; assets.js warns once per file
+  function request(key) {
+    if (pendingReady.has(key) || !models.has(key)) return;
+    pendingReady.add(key);
+    models.ready(key).then(() => { pendingReady.delete(key); retryN = 0; swapToReal(key); },
+      () => { pendingReady.delete(key); if (mesh) scheduleRetry(); });
+  }
+
   function geometryId(key) {
     let g = geoIds.get(key);
     if (g) return g.id;
@@ -178,11 +211,7 @@ export function createBatch({ name, material, instances = 256, vertices = 1 << 1
       g = { id: addGeo(real), real: true };
     } else {
       g = { id: addGeo(models.placeholder(key)), real: false };
-      if (!pendingReady.has(key) && models.has(key)) {
-        pendingReady.add(key);
-        models.ready(key).then(() => { pendingReady.delete(key); swapToReal(key); },
-          (err) => { pendingReady.delete(key); console.error(`batch ${name}: model ${key} failed; keeping its placeholder`, err); });
-      }
+      request(key);               // without the manifest: asked again when it arrives
     }
     geoIds.set(key, g);
     return g.id;
@@ -201,9 +230,23 @@ export function createBatch({ name, material, instances = 256, vertices = 1 << 1
     keyOfHandle.delete(handle);
   }
 
-  return {
+  wireRetry();
+  const batch = {
     get mesh() { return mesh; },
     get count() { return live; },
+    retryPlaceholders() {
+      if (!mesh) return;
+      for (const [key, g] of geoIds) {
+        if (g.real || pendingReady.has(key) || !models.has(key)) continue;
+        if (models.geometryFor(key)) swapToReal(key); else request(key);
+      }
+    },
+    /** This instance draws a placeholder box now (its drawn key, a far twin included). */
+    placeholderAt(h) {
+      const k = keyOfHandle.get(h);
+      const g = k === undefined ? null : geoIds.get(k);
+      return Boolean(g && !g.real);
+    },
     /** Register a procedural geometry under a key of our own (same attribute set as the models). */
     define(key, geometry) {
       if (geoIds.has(key)) return;
@@ -245,6 +288,8 @@ export function createBatch({ name, material, instances = 256, vertices = 1 << 1
     onSwap(fn) { swapFns.add(fn); return () => swapFns.delete(fn); },
     onChange(fn) { changeFns.add(fn); return () => changeFns.delete(fn); },
     stats() { return { instances: live, maxInstances, geometries: geoIds.size, vertices: usedVertices, maxVertices }; },
-    dispose() { mesh.dispose(); mesh = null; },
+    dispose() { liveBatches.delete(batch); mesh.dispose(); mesh = null; },
   };
+  liveBatches.add(batch);
+  return batch;
 }

@@ -66,7 +66,7 @@ export const upgradesPanel = {
       return h('div.up-strip', { role: 'tablist', 'aria-label': t('farm.upg.what') }, ...v.list.map((x) => h('button.up-tab', {
         type: 'button', role: 'tab', 'aria-selected': String(x.id === v.cur.id), dataset: { key: `up:${x.id}` },
         on: { click: () => { picked = x.id; update(true); } },
-      }, icon(x.def, { size: 36, alt: '' }), h('span.up-tab-name', x.defName), pips(x.tier, x.max))));
+      }, icon(x.def, { size: 36, alt: '' }), h('span.up-tab-name', { title: x.defName }, x.shortName ?? x.defName), pips(x.tier, x.max))));
     }
 
     function hero(c) {

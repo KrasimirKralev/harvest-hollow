@@ -136,7 +136,7 @@ export function addFoliageTint(material, { autumn = 1, winter = 1 } = {}) {
       .replace('#include <color_fragment>', `#include <color_fragment>
         {
           vec3 c = diffuseColor.rgb;
-          float green = clamp( ( c.g - max( c.r, c.b ) ) * 5.0, 0.0, 1.0 );    // only leafy greens shift
+          float green = clamp( ( c.g - max( c.r, c.b ) ) * 7.0, 0.0, 1.0 );    // only leafy greens shift (1.0: *7, was *5)
           green *= smoothstep( 0.1, 0.19, dot( c, vec3( 0.3, 0.59, 0.11 ) ) );  // dark evergreens (pines) stay green
           // spring: new leaves, lighter and a touch yellow-green (visual-after: spring looked like summer)
           float spring = ( 1.0 - smoothstep( 0.4, 0.9, uSeason ) ) * step( 0.01, uAutumnK );
@@ -153,19 +153,25 @@ export function addFoliageTint(material, { autumn = 1, winter = 1 } = {}) {
           vec3 copper = vec3( 0.479, 0.145, 0.041 );
           vec3 red = vec3( 0.392, 0.108, 0.059 );
           vec3 fall = ( pick < 0.32 ? ochre : pick < 0.56 ? copper : red ) * lv;
-          float turned = pick < 0.7 ? 0.92 : 0.3;
+          // release 1.0 (G6, graphics#7: most crowns still read green at play zoom): the turned crowns turn fully, the
+          // rest well begun
+          float turned = pick < 0.7 ? 1.0 : 0.5;
           c = mix( c, pick < 0.7 ? fall : mix( c, ochre * lv, 0.6 ), autumn * green * turned );
           float winter = smoothstep( 2.5, 3.0, uSeason ) * ( 1.0 - smoothstep( 3.6, 4.0, uSeason ) );
           float up = smoothstep( 0.55, 0.9, hhWorldN.y );
           c = mix( c, vec3( 0.93, 0.96, 1.0 ), winter * up * 0.8 * uWinterK );
           c *= 1.0 - 0.1 * uWet;
-          // moonlight grade: colours cool and quieten at night (the light alone keeps greens too green)
+          // moonlight grade: colours cool and quieten at night (the light alone keeps greens too green); release 1.0 (G3,
+          // astra#2): red paint (a red roof, a brick wall) keeps its hue: it quietens far less and the tint is blue-grey,
+          // not violet (HEAD turned the red barn 283 degrees purple)
           float lum = dot( c, vec3( 0.3, 0.59, 0.11 ) );
-          c = mix( c, vec3( lum ) * vec3( 0.92, 0.88, 1.12 ), uNight * 0.55 );
+          // red paint only (orange and brown wood quieten like the rest: Astra's night critique, verified)
+          float hhWarm = clamp( ( c.r - 2.2 * c.g - c.b ) * 6.0, 0.0, 1.0 );
+          c = mix( c, vec3( lum ) * vec3( 0.93, 0.94, 1.08 ), uNight * mix( 0.55, 0.08, hhWarm ) );
           // Golden Hour: greens stay green (RD-05: the warm key light does the work, no yellow paint)
           diffuseColor.rgb = c;
         }`);
-  }, 'v10');
+  }, 'v11');
   material.userData.autumn = uAutumnK;
   return material;
 }

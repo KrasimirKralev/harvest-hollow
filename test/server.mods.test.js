@@ -45,7 +45,8 @@ test('single mode: apply hot to both farmers, mh journaling, a crash replays und
     assert.equal(v.checks.render.icons, 4, 'two things (their items share the id): 128 and 64 px');
     const staged = await mods.stage('local', moonlight(), { by: 'p1', prompt: 'moon melons', summary: { en: 'Moon Melons!', bg: 'Лунни пъпеши!' } });
     assert.equal(staged.candidate, 1);
-    assert.deepEqual(staged.changes.map((c) => `${c.op}:${c.id}`), ['add:x_moon_melon', 'add:x_melon_pie']);
+    // release 1.0 (H3): the letter is a row of its own (by its title)
+    assert.deepEqual(staged.changes.map((c) => `${c.op}:${c.id}`), ['add:x_moon_melon', 'add:x_melon_pie', 'add:x_letter_melons']);
     assert.equal(staged.changes[0].icon, `/mods/${staged.hash}/icons/128/x_moon_melon.png`);
     assert.equal((await mods.preview('local', moonlight())).changes[0].icon, staged.changes[0].icon, 'the preview lists the staged candidate');
 

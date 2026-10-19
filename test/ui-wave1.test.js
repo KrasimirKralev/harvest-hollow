@@ -116,7 +116,7 @@ test('UI-11: feed lines name wishes, slots and Hurry; "You keep", plurals', () =
   assert.match(t({ k: 'wish', what: 'bought', def: 'bakery' }).text, /The Bakery bought itself/);
   assert.equal(t({ k: 'wish', what: 'bought', def: 'bakery' }).actor, null);
   assert.match(t({ k: 'wish' }).text, /made a wish/, 'an old row without a def never says "undefined"');
-  assert.match(t({ k: 'buy', what: 'slot', def: 'bakery', c: 1200 }).text, /^added a Bakery slot for 1,200 coins$/);
+  assert.match(t({ k: 'buy', what: 'slot', def: 'bakery', c: 1200 }).text, /^added a slot to the Bakery for 1,200 coins$/);
   assert.match(t({ k: 'buy', what: 'hurry', acorns: 2 }).text, /hurried a batch for 2 Acorns/);
   assert.match(t({ k: 'buy', def: 'apple_tree', c: 100 }).text, /^bought an Apple Tree/);
   const mine = feedText({ at: T0, by: me, k: 'keep', item: 'egg', q: 6 }, s, me);

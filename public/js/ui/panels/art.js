@@ -3,6 +3,7 @@
 // ribbon rosettes, chests, the land map. Everything is built with createElementNS from data (content), never
 // from strings that came from players.
 import { isLive } from '../../../../shared/content/index.js';
+import { assetUrl } from '../../net/asset-base.js';
 import { t, lang, fmtNum, name as cname } from '../../i18n/index.js';
 import { landUnits, unitOwned, landFamily, outlinePath, mainRect, rectsPath } from './w5-rules.js';
 
@@ -33,6 +34,9 @@ const MAP = { x0: 8, z0: 8, size: 48 };
  */
 export function landMap(state, cards, { selected = null, onPick = null } = {}) {
   const svg = root(`${MAP.x0 - 2} ${MAP.z0 - 3} ${MAP.size + 4} ${MAP.size + 8}`, { label: t('farm.art.mapLabel'), cls: 'pn-map' });
+  // parcels you can pick are buttons: their map is a group, never an image (an image's insides are skipped by screen
+  // readers; QA r1 P-18, axe nested-interactive)
+  if (onPick) svg.setAttribute('role', 'group');
   const defs = s('defs', {},
     s('pattern', { id: 'pn-mow', width: 4, height: 4, patternUnits: 'userSpaceOnUse', patternTransform: 'rotate(35)' },
       s('rect', { width: 4, height: 4, fill: '#7CC243' }), s('rect', { width: 2, height: 4, fill: '#86CB4B' })),
@@ -104,7 +108,8 @@ export function landMap(state, cards, { selected = null, onPick = null } = {}) {
       const lines = w < 12 && words.length > 1 ? words : [name];
       lines.forEach((ln, i) => labels.append(s('text', { x: cx, y: cz + 0.8 + (i - (lines.length - 1) / 2) * 2.2, class: 'pn-map-label mine' }, ln)));
     } else if (liveOne) {
-      labels.append(s('text', { x: cx, y: cz + 0.9, class: 'pn-map-label lvl' }, t('farm.art.lvl', { n: e.unlock })));
+      // pn-map-lvl, never .lvl (css/panels.css)
+      labels.append(s('text', { x: cx, y: cz + 0.9, class: 'pn-map-label pn-map-lvl' }, t('farm.art.lvl', { n: e.unlock })));
     }
   }
   svg.append(layer, labels);
@@ -140,7 +145,7 @@ export function portrait(npc, size = 72) {
   const file = size <= 64 ? `${npc.id}_face` : size <= 128 ? `${npc.id}_128` : npc.id;
   const img = document.createElement('img');
   img.className = 'pn-portrait pn-portrait-img';
-  img.src = `/assets/art/npc/${file}.webp`;
+  img.src = assetUrl(`/assets/art/npc/${file}.webp`);
   img.width = size;
   img.height = size;
   img.alt = cname(npc.id);
@@ -231,8 +236,8 @@ export function svgPortrait(npc, size = 72) {
 // ---- rosettes (ribbons) -----------------------------------------------------------------------------------------
 
 const TIER_COLORS = [
-  { face: '#E3D7BE', ring: '#CDBB97', tail: '#C9B48C', ink: '#8A6440' },     // none yet
-  { face: '#D9925A', ring: '#B8692F', tail: '#A85A28', ink: '#5A3215' },     // bronze
+  { face: '#E3D7BE', ring: '#CDBB97', tail: '#C9B48C', ink: '#6B4A2A' },     // none yet
+  { face: '#D9925A', ring: '#B8692F', tail: '#A85A28', ink: '#3E2612' },     // bronze (#5A3215 was 4.3:1: QA r2 a11y gate)
   { face: '#DCE3EA', ring: '#9FB0C0', tail: '#7F93A6', ink: '#3E4C5A' },     // silver
   { face: '#FFD45C', ring: '#E3A21E', tail: '#C8841A', ink: '#7A4E08' },     // gold
 ];

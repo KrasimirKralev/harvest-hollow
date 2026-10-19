@@ -6,7 +6,7 @@
 //                                                (the icon's dominant hue when null) rotated to `to`; 'tint': pale,
 //                                                unsaturated parts (a coat) tinted toward `to`
 import zlib from 'node:zlib';
-import { makeShifter, makeTinter, dominantHue } from '../../shared/mod/colour.js';
+import { makeShifter, makeTinter, dominantHue, hueGap, rgbHex } from '../../shared/mod/colour.js';
 
 const SIG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 
@@ -95,19 +95,26 @@ export function encodePng({ width, height, data }) {
   return Buffer.concat([SIG, chunk('IHDR', ihdr), chunk('IDAT', zlib.deflateSync(raw, { level: 9 })), chunk('IEND', Buffer.alloc(0))]);
 }
 
-/** Recolour an icon: { png: Buffer, alpha: count of visible pixels, changed: count of shifted pixels }. */
+/**
+ * Recolour an icon: { png: Buffer, alpha: count of visible pixels, changed: count of shifted pixels, mean: '#RRGGBB'
+ * of the shifted pixels (or null) }. Release 1.0 (harvey#12): when the def's colour is far (> 25 degrees) from the
+ * icon's own dominant hue, the icon's hue is what moves (a watermelon icon is darker green than its def's colour).
+ */
 export function recolorPng(buf, from, to, kind = 'recolor') {
   const img = decodePng(buf);
   const d = img.data;
   let src = from;
-  if (!src || kind === 'tint') {
-    const triples = [];
-    for (let i = 0; i < d.length; i += 4) if (d[i + 3] > 128) triples.push([d[i] / 255, d[i + 1] / 255, d[i + 2] / 255]);
-    src = dominantHue(triples, kind === 'tint' ? 0.1 : 0.25);
+  const triples = [];
+  for (let i = 0; i < d.length; i += 4) if (d[i + 3] > 128) triples.push([d[i] / 255, d[i + 1] / 255, d[i + 2] / 255]);
+  if (!src || kind === 'tint') src = dominantHue(triples, kind === 'tint' ? 0.1 : 0.25);
+  else {
+    const own = dominantHue(triples, 0.25);
+    if (own && hueGap(own, src) > 25) src = own;
   }
   const shift = kind === 'tint' ? makeTinter(to, src) : src ? makeShifter(src, to) : null;
   let alpha = 0;
   let changed = 0;
+  const acc = [0, 0, 0];
   for (let i = 0; i < d.length; i += 4) {
     if (d[i + 3] === 0) continue;
     alpha++;
@@ -116,8 +123,8 @@ export function recolorPng(buf, from, to, kind = 'recolor') {
     const nr = Math.round(r * 255);
     const ng = Math.round(g * 255);
     const nb = Math.round(b * 255);
-    if (nr !== d[i] || ng !== d[i + 1] || nb !== d[i + 2]) changed++;
+    if (nr !== d[i] || ng !== d[i + 1] || nb !== d[i + 2]) { changed++; acc[0] += nr; acc[1] += ng; acc[2] += nb; }
     d[i] = nr; d[i + 1] = ng; d[i + 2] = nb;
   }
-  return { png: encodePng(img), alpha, changed };
+  return { png: encodePng(img), alpha, changed, mean: changed ? rgbHex(acc.map((v) => v / changed)) : null };
 }

@@ -7,10 +7,12 @@ import * as I from '../public/js/i18n/index.js';
 import EN_FEED from '../public/js/i18n/en/feed.js';
 import BG_FEED from '../public/js/i18n/bg/feed.js';
 import TEXT_C from '../public/js/i18n/bg/text-c.js';
+import FEAT_EN from '../public/js/i18n/en/feat.js';
+import FEAT_BG from '../public/js/i18n/bg/feat.js';
 import { CONTENT, QUEST_VERBS, TUTORIAL, STORY_BEATS, GRANDMA_VISIT, COUPLE_CHALLENGE, ALMANAC, RIBBON_WALL, isLive }
   from '../shared/content/index.js';
 import { goals, taskText } from '../shared/rules/goals.js';
-import { enText, taskMsg, taskLabelMsg, moreMsg, almanacMsg, GOALS_RULES_EN } from '../shared/rules/goal-text.js';
+import { enText, taskMsg, taskLabelMsg, moreMsg, almanacMsg, GOALS_RULES_EN, FEAT_RULES_EN } from '../shared/rules/goal-text.js';
 import { goalText } from '../public/js/ui/goal-text.js';
 import { feedText } from '../public/js/ui/feed.js';
 import * as G from '../public/js/ui/panels/goals-model.js';
@@ -61,8 +63,10 @@ test('the rules: every card\'s message says exactly its English text (the old `t
   for (const q of CONTENT.quests.values()) {
     for (const t of q.tasks) {
       assert.equal(enText(taskMsg(t)), taskText(t));
-      assert.ok(Object.hasOwn(GOALS_RULES_EN, taskMsg(t).key), `${q.id}: ${taskMsg(t).key}`);
-      assert.ok(Object.hasOwn(GOALS_RULES_EN, taskLabelMsg(t).key), `${q.id}: ${taskLabelMsg(t).key}`);
+      // release 1.0 (features M22): the Together chain's task lines live in the rules' `feat` table
+      const known = (k) => Object.hasOwn(GOALS_RULES_EN, k) || Object.hasOwn(FEAT_RULES_EN, k);
+      assert.ok(known(taskMsg(t).key), `${q.id}: ${taskMsg(t).key}`);
+      assert.ok(known(taskLabelMsg(t).key), `${q.id}: ${taskLabelMsg(t).key}`);
     }
   }
 });
@@ -166,6 +170,14 @@ test('the content texts: real ids, every letter and card covered, the glossary\'
   }
   for (const f of CONTENT.features.values()) {
     if (!f.card) continue;
+    if (f.card.key) {
+      // a release-1.0 drip card says its words through a catalog area (features' `feat`): English and Bulgarian there
+      for (const field of ['title', 'text', ...(f.card.touchText ? ['touchText'] : [])]) {
+        assert.ok(FEAT_EN[`${f.card.key}.${field}`], `feature ${f.id}: ${f.card.key}.${field} in en/feat.js`);
+        assert.ok(FEAT_BG[`${f.card.key}.${field}`], `feature ${f.id}: ${f.card.key}.${field} in bg/feat.js`);
+      }
+      continue;
+    }
     const b = T.features[f.id]?.card;
     assert.ok(b && b.title && b.text, `feature ${f.id}`);
     if (f.card.touchText) assert.ok(b.touchText, `feature ${f.id} touchText`);

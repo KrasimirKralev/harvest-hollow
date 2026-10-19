@@ -137,16 +137,21 @@
 //        parcel, `view.pick()` adds `parcel` on a piece of a parcel for sale, an old parcel's features show once its
 //        land is owned (world-state ownedLand); bison, quail, the spices and the Spice Mill: models and icons
 //   view.portrait(spec) -> Promise<url|null>   (hud lane, render/portrait.js): a farmer's portrait drawn with this renderer
+// Release 1.0 (render-look, additive; rel-render-look.md): view.ready({ timeoutMs }) -> Promise<{ reason, ms }> (G12:
+//   the first view's models loaded and drawn); view.on('ripened', fn({ id, crop, pos, screen })) -> off (G11a);
+//   view.pulse(tiles | null) (P-05); view.fx.float(pos, text, opts) (P-07); pick().gift; ?stats=1 (G14);
+//   stats() adds { ready, placeholders, halos, home } (home: QA r2 I2-C1, the farmhouse and barn in view still tan; null
+//   with neither in view)
 import * as THREE from 'three';
 import { TILE_M } from '../../../shared/content/config.js';
 import { defOf } from '../../../shared/content/index.js';
 import { seasonOf } from '../../../shared/rules/calendar.js';
 import { createRenderer, startLoop, noteAutoTier, applyTier, createAutoTier, createIntervalTier, createGpuTimer, QUALITY, LOOP, WANT,
-  qualityOf, deviceProfile, bootTier, gpuName } from './renderer.js';
+  qualityOf, deviceProfile, bootTier, gpuName, warmupCompile, SHADOW_INTENSITY, PHONE_SHADOW_TAPS } from './renderer.js';
 import { createScene, buildBackdrop } from './scene.js';
 import { createCamera, CAM } from './camera.js';
-import { createGround, addOcclusionFade, cheapShadows, OCCLUSION, GROUND_BOOT } from './ground.js';
-import { createObjectsView, homeTier } from './objects-view.js';
+import { createGround, addOcclusionFade, cheapShadows, shadowKernelKey, SHADOW_KERNEL, SHADOW_WIDE, OCCLUSION, GROUND_BOOT } from './ground.js';
+import { createObjectsView, homeTier, createRings } from './objects-view.js';
 import { createPicker, pickNear, TOUCH_PICK } from './picking.js';
 import { createGhost } from './ghost.js';
 import { createBadges } from './badges.js';
@@ -175,8 +180,12 @@ import { createGrandmaVisit } from './grandma-view.js';
 import * as worldState from './world-state.js';
 import { createBirdBaths } from './birdbath-view.js';
 import { createCrates } from './crates-view.js';
+import { createGiftView } from './gift-view.js';
 import { createFrogs } from './frogs-view.js';
 import { drawPortrait } from './portrait.js';
+import { createReadyGate } from './ready.js';
+/** The home buildings' model keys (QA r2 I2-C1): 'building:farmhouse', 'building:barn:3' ... */
+const HOME_KEY = /^(?:building|missing):(farmhouse|barn)(:|$)/;    // R3-01: missing: = no manifest yet
 
 // The rules own the weather (rain waters crops, GDD §5.10): the sky draws exactly what the rules decide, including a
 // new farm's sunny first hours (the rules read the farm's creation time, shared/rules/time.js FRESH_SUNNY_HOURS).
@@ -184,6 +193,10 @@ setWeatherSource((seed, hour) => rulesWeatherAt(seed, hour, R?.state?.meta?.crea
 
 let R = null;            // internals, created by init()
 let dirty = true;
+// release 1.0 (render-look): the first reveal's gate (G12) and the facade's event listeners (G11a), made before init so a
+// caller can wait or subscribe at any time
+const gate = createReadyGate();
+const ripenSubs = new Set();
 const frameFns = new Set();
 const v3 = new THREE.Vector3();
 const BASE_WIND = WORLD.uWind.value;
@@ -218,6 +231,66 @@ export function shadowHalf(dist) {
   return Math.min(75, Math.max(24, 0.52 * dist + 9));
 }
 
+/** G4: a phone's 1024 map covers just its own view (`reach`: metres to the farthest ground corner), so its texels stay
+ *  small; a desktop keeps shadowHalf (RD-13). Pure (tested). */
+export function shadowHalfFor(dist, { kind = 'desktop', reach = null } = {}) {
+  if (kind === 'desktop' || !Number.isFinite(reach)) return shadowHalf(dist);
+  return Math.min(shadowHalf(dist), Math.max(16, reach * 1.04));
+}
+
+/** QA r3 R3-02: under a low sun each shadow texel lies longer on the ground: 4 taps spread with it (x sin 45 / sin el,
+ *  1-2); 2 taps would only split, so they fade to 0.6 below 30 degrees instead. -> { radiusK, intensity }. Pure. */
+export function shadowSoftness(el, taps = 4) {
+  const s = Math.sin(Math.max(1, Math.min(90, el)) * Math.PI / 180);
+  if (taps === 4) return { radiusK: Math.max(1, Math.min(2, Math.SQRT1_2 / s)), intensity: SHADOW_INTENSITY };
+  const t = Math.max(0, Math.min(1, (30 - el) / 10));
+  return { radiusK: 1, intensity: SHADOW_INTENSITY - 0.2 * t * t * (3 - 2 * t) };
+}
+
+/** QA r4 R4-01: the shadow radius (texels): the R3-02 spread, from the base up to the kernel's maxRadius. Pure. */
+export function shadowRadiusFor(base, el, kernel = SHADOW_KERNEL) {
+  return Math.max(base, Math.min(kernel.maxRadius ?? Infinity, base * shadowSoftness(el, kernel.taps).radiusK));
+}
+
+/** G10: the rainbow never crosses the farm's own land (a per-pixel fade, depth-tested, `marginM` round the land). */
+export const RAINBOW = Object.freeze({ depthTest: true, farmFade: true, marginM: 6 });
+/**
+ * QA r1 R-04 (owner wish 12): where the rainbow stands on screen. G10 keeps it off the farm's own land, and on a big farm
+ * that land fills most of the view (the old arc in the middle of the view faded out entirely): the arc goes where the
+ * view shows land the farm does not own (the woods beyond it), its crown in the top half. Screen units: x in
+ * [-aspect, aspect], y in [-1, 1] (round circles); `freeAt(x, y)` = the ground behind that point is not the farm's.
+ * Returns the circle { cx, cy, r } (the arc is its upper half, the band 0.88-1 r) or null when no arc fits. Pure (tested).
+ */
+export function rainbowArc(freeAt, aspect = 16 / 9) {
+  let best = null;
+  for (const r of [0.45, 0.65, 0.9, 1.25, 1.7, 2.1]) {
+    for (const top of [0.95, 0.75, 0.55]) {
+      for (let i = 0; i <= 8; i++) {
+        const cx = -aspect + (2 * aspect * i) / 8; const cy = top - r;
+        let vis = 0; let free = 0;
+        for (let k = 0; k < 24; k++) {
+          const a = Math.PI * (0.12 + 0.76 * (k + 0.5) / 24);     // the part of the half circle the end fade leaves
+          const x = cx + Math.cos(a) * r * 0.94; const y = cy + Math.sin(a) * r * 0.94;
+          if (Math.abs(x) > aspect || Math.abs(y) > 1) continue;
+          vis++; if (freeAt(x, y)) free++;
+        }
+        // the longest stretch over free land; the part over the farm fades out per pixel, so the arc rises from behind the
+        // farm's edge like a rainbow behind a tree line (a little weight against it, so the free part wins)
+        const score = r * (free - 0.25 * (vis - free));
+        if (free >= 6 && (!best || score > best.score)) best = { cx, cy, r, score };
+      }
+    }
+  }
+  return best && { cx: best.cx, cy: best.cy, r: best.r };
+}
+/** Two rainbow places read as the same arc (screen circle within 5 % of its radius): no cross-fade. */
+const samePlace = (a, b) => Boolean(a && b) && Math.abs(a.r - b.r) <= 0.05 * a.r && Math.hypot(a.cx - b.cx, a.cy - b.cy) <= 0.05 * a.r;
+
+/** G1 (graphics#2): blob shadows wherever there is no shadow map (every profile), none where there is. Pure. */
+export function blobShadowDir(castShadow, sunDir) {
+  return castShadow ? null : sunDir;
+}
+
 /** The environment a device profile is read from (mobile wave). */
 function readEnv() {
   const mm = (q) => { try { return typeof matchMedia === 'function' && matchMedia(q).matches; } catch { return false; } };
@@ -246,7 +319,8 @@ function fingerTarget(q) {
 
 export const view = {
   async init(canvas, { quality = 'high', now = () => Date.now(), overlay = document.body } = {}) {
-    try { await models.init(); } catch (err) { console.error('model manifest unavailable: placeholders only', err); }
+    // R3-01: a lost manifest (assets.js warns) is asked for again by models.js; _lateManifest re-syncs when it comes
+    try { await models.init(); } catch { /* said by assets.js */ }
     initIcons().catch(() => {});
     // 'auto' boots high unless two sessions in a row settled lower (MSAA can only be chosen now); an explicit
     // tier (?quality=high|medium|low, a slow partner PC) is respected as asked (performance-09)
@@ -268,13 +342,17 @@ export const view = {
     const gpu = gpuName(renderer);
     if (profile.kind !== 'desktop') profile = deviceProfile({ ...env, gpu });
     const tier = QUALITY[quality] ? tier0 : bootTier('auto', profile);
+    // R3-02: the shadow taps, before any program compiles
+    SHADOW_KERNEL.taps = profile.kind === 'desktop' ? 4 : PHONE_SHADOW_TAPS;
+    // R4-01: the desktop's wide lookup (ground.js SHADOW_WIDE)
+    Object.assign(SHADOW_KERNEL, profile.kind === 'desktop' ? SHADOW_WIDE : { wideAbove: 0, maxRadius: Infinity });
     const q0 = qualityOf(tier, profile.kind);
     const { scene, layers, sun, hemi, sky, fireflies } = createScene();
     if (profile.kind !== 'desktop') applyTier(renderer, sun, tier, profile.kind);
     // the decorative world and the farm's outer fence share one static batch
     const sceneryMat = models.createMaterial();
     sceneryMat.shadowSide = THREE.BackSide;   // closed crowns and rocks: no self-shadow acne (visual-16)
-    addShaderPatch(sceneryMat, 'hh-shadow2', cheapShadows, 'v1');   // and no noisy weave on their terminators
+    addShaderPatch(sceneryMat, 'hh-shadow2', cheapShadows, shadowKernelKey);   // and no noisy weave on their terminators
     addSway(sceneryMat, { stiffness: 1.4, push: 0.6 });
     addFoliageTint(sceneryMat, { autumn: 1 });
     const occMap = { value: null };          // the ground map, once the ground exists (below)
@@ -331,11 +409,14 @@ export const view = {
     // The world places (wave 2): static parts in the scenery batches, moving parts (the barge, its crates, the mill
     // wheel) in one small dynamic batch that costs a draw call only while something of it is in view
     const dynMat = models.createMaterial({ side: THREE.DoubleSide });
+    addShaderPatch(dynMat, 'hh-shadow2', cheapShadows, shadowKernelKey);      // G4: every receiver takes the cheap lookup
     addSway(dynMat, { stiffness: 1.2, push: 0.4 });
     const dyn = createBatch({ name: 'worldDyn', material: dynMat, instances: 32, vertices: 1 << 16, castShadow: false, receiveShadow: true });
     layers.objects.add(dyn.mesh);
     // wave 4b (owner wish 1): the balloon's loot crates fall, wait and open in the same dynamic batch (no draw of their own)
     const crates = createCrates({ dyn, fx });
+    // release 1.0 D1 (life-feel): the surprise gift boxes on the porch, in the same dynamic batch (no draw of their own)
+    const gifts = createGiftView({ dyn, fx });
     const wctx = { scenery, glows: objects.glows, fx };
     const river = createRiver(wctx);
     const land = createLandFeatures({ ...wctx, mid: sceneryMid });
@@ -344,7 +425,8 @@ export const view = {
     for (const b of [scenery, sceneryFar]) b.onChange(() => { if (R) { R.shadowDirty = true; R.cullDirty = true; } dirty = true; });
     sceneryMid.onChange(() => { if (R) R.cullDirty = true; dirty = true; });
     let proxyCache = null;
-    objects.onStaticChange(() => { proxyCache = null; if (R) { R.proxyBoxes = null; R.shadowDirty = true; R.cullDirty = true; } });
+    // QA r4 S4-01: a model swapped in for a box asks for a frame, as the scenery and twins do
+    objects.onStaticChange(() => { proxyCache = null; dirty = true; if (R) { R.proxyBoxes = null; R.shadowDirty = true; R.cullDirty = true; } });
     // RD-13 (QA wave 2: a 27.7 ms static shadow refresh on the L25 farm): the shadow map is drawn in a pass of its own
     // (renderShadows below) from the buildings' far-band twins, which live only in this scene
     const shadowScene = new THREE.Scene();
@@ -353,7 +435,7 @@ export const view = {
     objects.batches.shadowTwins.onChange(() => { if (R) R.shadowDirty = true; });
     const pick = createPicker(cam.camera, {
       // a landed loot crate is a pick target too (only while one is on the farm: no allocation otherwise)
-      proxies: () => { const p = proxyCache || (proxyCache = objects.proxies()); const c = crates.proxies(); return c.length ? p.concat(c) : p; },
+      proxies: () => { const p = proxyCache || (proxyCache = objects.proxies()); const c = crates.proxies(); const g = gifts.proxies(); return c.length || g.length ? p.concat(c, g) : p; },
       animals: () => call(animals, 'pickables') || [],
       ground,
       places: () => world.flatMap((m) => m.places()),
@@ -362,10 +444,10 @@ export const view = {
     const weather = createWeather();
     const lod = createLod();
     const gpuTimer = createGpuTimer(renderer);
-    const auto = gpuTimer ? createAutoTier(tier) : createIntervalTier(tier);
+    const auto = gpuTimer ? createAutoTier(tier, { kind: profile.kind }) : createIntervalTier(tier, { kind: profile.kind });
     const motionPref = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches ? 'reduced' : 'full';
     R = {
-      renderer, scene, layers, sun, hemi, sky, fireflies, cam, ground, scenery, sceneryFar, objects, avatars, animals, fx, ghost, badges, pick, world, dyn, worldState, land, baths, crates, frogs,
+      renderer, scene, layers, sun, hemi, sky, fireflies, cam, ground, scenery, sceneryFar, objects, avatars, animals, fx, ghost, badges, pick, world, dyn, worldState, land, baths, crates, gifts, frogs,
       daynight, weather, lod, auto, gpuTimer, life, canvas, now, state: null, me: null, fps: 0, frames: 0, fpsAt: 0, lastFed: 0, calm: 1,
       lastCam: null, cullDirty: true, duets: new Map(), staticBatches: [scenery, sceneryMid, sceneryFar, objects.batches.trees, objects.batches.statics, objects.batches.smalls],
       tier, tierMode: QUALITY[quality] ? 'fixed' : 'auto', motion: motionPref, dayMode: 'cycle', clockOverride: null,
@@ -397,12 +479,29 @@ export const view = {
       renderer.shadowMap.needsUpdate = false;
       movers.forEach((o, i) => { if (parents[i]) parents[i].add(o); else shadowScene.remove(o); });
     };
+    // G11a: a plot that turns ripe ON SCREEN is a moment (life-feel adds the sparkle and the sound): tiles at the facade
+    objects.onRipened(({ id, x, z, crop }) => {
+      if (!ripenSubs.size) return;
+      const sp = toScreenM(x, z, 0.4);
+      if (!sp.visible) return;
+      const ev = { id, crop, pos: { x: x / TILE_M, z: z / TILE_M }, screen: { x: sp.x, y: sp.y } };
+      for (const fn of ripenSubs) { try { fn(ev); } catch (err) { console.error('view ripened listener', err); } }
+    });
+    // ui-shell P-05 (M9, ux-first#9): a soft breathing ring on the tiles a guide step points at (view.pulse), apart from
+    // the controller's brush (view.highlight); one instanced draw only while a tile pulses
+    R.pulse = createRings(layers.gridFx, { color: '#FFF1B8', name: 'pulseRings', breath: 0.38, speed: 0.75 });
+    // G14: ?stats=1 shows fps, tier and draw calls in a corner (the module loads only with the parameter)
+    if (typeof location !== 'undefined' && /(?:^|[?&])stats=1(?:&|$)/.test(location.search)) {
+      import('./stats-hud.js').then((m) => { R.statsHud = m.mountStatsHud({ stats: () => this.stats() }); }, () => {});
+    }
     this.setMotion(motionPref);
     this._watchViewport(canvas);
     this._watchPointer(canvas);
     this._watchContext(canvas);
     // scenery and the first shadow pass once the backdrop models arrive
     scenery.onSwap(() => { R.shadowDirty = true; dirty = true; });
+    // R3-01: a late manifest re-syncs what was drawn without it
+    R.offManifest = models.onManifest(() => this._lateManifest());
     R.loop = startLoop({
       renderer,
       // at rest (qa2 CL-03): ambient that travels at most LOOP.restFps, slow ambient alone at LOOP.calmFps, and a frame
@@ -446,7 +545,11 @@ export const view = {
         else renderer.render(scene, cam.camera);
         if (timed) timer.end(t);
         R.frames++;
+        gate.frame();                            // G12: a frame drawn (counts once the first view's models are in)
         if (t - R.fpsAt >= 1000) { R.fps = Math.round((R.frames * 1000) / (t - R.fpsAt)); R.frames = 0; R.fpsAt = t; }
+        // G1: the auto tier drops only on frames really missed: the interval between two interactive rendered frames
+        if (mode === 2 && R.lastMode === 2 && R.lastFrameT) call(R.auto, 'interval', t - R.lastFrameT);
+        R.lastMode = mode; R.lastFrameT = t;
         for (const fn of frameFns) fn(dt, now());
         if (R.tierMode === 'auto') this._feedAuto(t, mode);
       },
@@ -461,8 +564,8 @@ export const view = {
     try {
       call(fx, 'warmup', true);
       const hold = call(ghost, 'warmup', true);
-      const extra = [call(R.avatars, 'warmup'), call(R.animals, 'warmup'), call(R.life, 'warmup'), call(R.baths, 'warmup'), call(R.crates, 'warmup'), call(R.frogs, 'warmup')].flat().filter(Boolean);
-      if (typeof renderer.compileAsync === 'function') await renderer.compileAsync(scene, cam.camera);
+      const extra = [call(R.avatars, 'warmup'), call(R.animals, 'warmup'), call(R.life, 'warmup'), call(R.baths, 'warmup'), call(R.crates, 'warmup'), call(R.gifts, 'warmup'), call(R.frogs, 'warmup')].flat().filter(Boolean);
+      await warmupCompile(renderer, scene, cam.camera);       // F6a: no warning without KHR_parallel_shader_compile
       for (const o of extra) if (o && o.removeFromParent) o.removeFromParent();
       void hold;
     } catch (err) {
@@ -491,42 +594,112 @@ export const view = {
     if (changed) { noteAutoTier(changed); this.setQuality(changed, { keepMode: true }); }
   },
 
-  /** A gentle rainbow (wave 4, owner wish 12): after some showers, by day, an arc standing over the far fields facing
-   *  the camera (one transparent ring, drawn only while it shows; buildings and trees stand in front of it). */
-  _rainbow(wx) {
+  /** A gentle rainbow (wave 4, owner wish 12): after some showers, by day, an arc facing the camera (one transparent ring,
+   *  drawn only while it shows). G10: each pixel fades out where the ground behind it (or within RAINBOW.marginM) is the
+   *  farm's own land, so it never crosses a field. QA r1 R-04: the arc stands where the view shows land the farm does
+   *  not own (rainbowArc), just in front of that ground (depth-tested: nearer trees and roofs stand before it); it is
+   *  placed again when the camera comes to rest, with a cross-fade (a cut under reduced motion). */
+  _rainbow(wx, dt = 1 / 60) {
     const day = R.sky0 ? 1 - R.sky0.night : 1;
-    const k = (wx.rainbow || 0) * Math.max(0, day * 1.4 - 0.4) * (R.inside ? 0 : 1);
-    if (!(k > 0.01)) { if (R.rainbow) R.rainbow.visible = false; return; }
+    // 1.0: a crate's Rainbow Watering Can at work raises the same rainbow
+    const can = R.state?.farm?.powerups?.rainbow?.until > R.now() ? 0.85 : 0;
+    const k = Math.max(wx.rainbow || 0, can) * Math.max(0, day * 1.4 - 0.4) * (R.inside ? 0 : 1);
+    R.rbWant = 0;
+    if (!(k > 0.01)) { if (R.rainbow) R.rainbow.visible = false; R.rbArc = null; R.rbAlpha = 0; R.rbSwap = false; R.rbPose = null; return; }
     if (!R.rainbow) {
       const mat = new THREE.ShaderMaterial({
-        transparent: true, depthWrite: false, fog: false, uniforms: { uK: { value: 0 } },
-        vertexShader: 'varying vec3 vP; void main() { vP = position; gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 ); }',
-        fragmentShader: `uniform float uK; varying vec3 vP;
+        transparent: true, depthWrite: false, depthTest: RAINBOW.depthTest, fog: false,
+        uniforms: { uK: { value: 0 }, uGroundMap: R.ground.uniforms.uGroundMap, uMargin: { value: RAINBOW.marginM } },
+        vertexShader: 'varying vec3 vP; varying vec3 vW; void main() { vP = position; vec4 w = modelMatrix * vec4( position, 1.0 ); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }',
+        fragmentShader: `uniform float uK; uniform sampler2D uGroundMap; uniform float uMargin; varying vec3 vP; varying vec3 vW;
           vec3 bow( float t ) { return clamp( vec3( abs( t * 6.0 - 3.0 ) - 1.0, 2.0 - abs( t * 6.0 - 2.0 ), 2.0 - abs( t * 6.0 - 4.0 ) ), 0.0, 1.0 ); }
+          float owned( vec2 g ) { vec2 uv = g / ${(128).toFixed(1)}; return ( uv.x < 0.0 || uv.y < 0.0 || uv.x > 1.0 || uv.y > 1.0 ) ? 0.0 : texture2D( uGroundMap, uv ).b; }
           void main() {
             float r = length( vP.xy ); float t = clamp( ( r - 0.88 ) / 0.12, 0.0, 1.0 );
             float a = atan( vP.y, vP.x ) / 3.14159265;
             float edge = smoothstep( 0.0, 0.2, t ) * smoothstep( 1.0, 0.8, t ) * smoothstep( 0.04, 0.3, a ) * smoothstep( 0.96, 0.7, a );
-            gl_FragColor = vec4( mix( bow( 1.0 - t ) * 0.95, vec3( 1.0 ), 0.2 ), uK * 0.24 * edge );
+            // the ground behind this pixel (the camera ray to y = 0) and its surroundings: the farm's land fades the arc out
+            vec3 d = normalize( vW - cameraPosition );
+            float farm = 0.0;
+            if ( d.y < -1e-3 ) {
+              vec2 g = cameraPosition.xz + d.xz * ( -cameraPosition.y / d.y );
+              farm = max( owned( g ), max( max( owned( g + vec2( uMargin, 0.0 ) ), owned( g - vec2( uMargin, 0.0 ) ) ), max( owned( g + vec2( 0.0, uMargin ) ), owned( g - vec2( 0.0, uMargin ) ) ) ) );
+            }
+            float keep = 1.0 - smoothstep( 0.02, 0.25, farm );
+            if ( keep * edge < 0.002 ) discard;
+            gl_FragColor = vec4( mix( bow( 1.0 - t ) * 0.95, vec3( 1.0 ), 0.2 ), uK * 0.24 * edge * keep );
           }`,
       });
       R.rainbow = new THREE.Mesh(new THREE.RingGeometry(0.88, 1, 72, 1, 0, Math.PI), mat);
       R.rainbow.frustumCulled = false;
       R.rainbow.renderOrder = 3;
       R.layers.fx.add(R.rainbow);
+      R.rbAlpha = 0;
     }
-    // the farm camera never sees the horizon: the arc stands in the view itself, at 90 % of the way to the target, its
-    // crown a little below the top of the screen (nearer things stand in front of it, the far fields show through it)
-    const cam = R.cam.camera; const c = R.cam.get();
-    const D = c.dist * 0.9; const halfH = D * Math.tan((cam.fov / 2) * Math.PI / 180); const halfW = halfH * cam.aspect;
-    const rad = Math.max(halfW * 1.08, halfH * 1.5);
-    const fwd = R.rbF || (R.rbF = new THREE.Vector3()); const upv = R.rbU || (R.rbU = new THREE.Vector3());
-    fwd.set(0, 0, -1).applyQuaternion(cam.quaternion); upv.set(0, 1, 0).applyQuaternion(cam.quaternion);
-    R.rainbow.position.copy(cam.position).addScaledVector(fwd, D).addScaledVector(upv, halfH * 0.8 - rad);
+    const cam = R.cam.camera;
+    // placed again only at rest (a moving view keeps the arc where it stands in the world), at most twice a second
+    const pose = `${cam.position.x.toFixed(2)},${cam.position.y.toFixed(2)},${cam.position.z.toFixed(2)},${cam.quaternion.y.toFixed(4)},${cam.aspect.toFixed(3)}`;
+    const now = performance.now();
+    if (!R.camMoving && (pose !== R.rbPose || now - (R.rbAt || 0) > 2000) && now - (R.rbAt || 0) > 500) {
+      const moved = pose !== R.rbPose;
+      R.rbPose = pose; R.rbAt = now;
+      const next = this._rainbowPlace();
+      // a view that moved always gets its own place; an unmoved one only when the land changed under the arc
+      if ((next || R.rbArc) && (moved || !samePlace(R.rbArc, next))) { R.rbNext = next; R.rbSwap = true; }
+    }
+    if (R.rbSwap) {
+      // a new place: fade the old arc out, then the new one in (a cut under reduced motion)
+      R.rbAlpha = R.motion === 'full' && R.rbArc ? Math.max(0, R.rbAlpha - dt * 3) : 0;
+      if (R.rbAlpha <= 0) { R.rbArc = R.rbNext; R.rbSwap = false; }
+    } else if (R.rbArc) R.rbAlpha = R.motion === 'full' ? Math.min(1, R.rbAlpha + dt * 1.5) : 1;
+    if (!R.rbArc) { R.rainbow.visible = false; R.rbWant = R.rbSwap ? WANT.AMBIENT : 0; return; }
+    const A = R.rbArc;
+    R.rainbow.position.copy(A.pos);
     R.rainbow.quaternion.copy(cam.quaternion);
-    R.rainbow.scale.setScalar(rad);
-    R.rainbow.material.uniforms.uK.value = k;
-    R.rainbow.visible = true;
+    R.rainbow.scale.setScalar(A.scale);
+    R.rainbow.material.uniforms.uK.value = k * R.rbAlpha;
+    R.rainbow.visible = R.rbAlpha > 0.005;
+    if (R.rbSwap || R.rbAlpha < 1) R.rbWant = WANT.AMBIENT;
+  },
+
+  /** QA r1 R-04: the rainbow's place for this view: a coarse grid of camera rays to the ground (y = 0) marks where the
+   *  view shows land the farm does not own (the shader's margin included) and how deep that ground lies; rainbowArc
+   *  picks the arc; it stands at 0.85 of the nearest free ground under its band (so it is never behind the woods it
+   *  stands over). Returns { pos, scale, cx, cy, r } in world metres, or null when the view shows no free land. */
+  _rainbowPlace() {
+    const cam = R.cam.camera; const aspect = cam.aspect || 16 / 9;
+    const cols = Math.max(8, Math.round(14 * aspect)); const rows = 14;
+    const o = cam.position; const d = R.rbD || (R.rbD = new THREE.Vector3());
+    const fwd = R.rbF || (R.rbF = new THREE.Vector3()); fwd.set(0, 0, -1).applyQuaternion(cam.quaternion);
+    const M = RAINBOW.marginM; const own = (x, z) => R.ground.ownedAt(Math.floor(x / TILE_M), Math.floor(z / TILE_M));
+    const free = new Uint8Array(cols * rows); const depth = new Float32Array(cols * rows);
+    for (let j = 0; j < rows; j++) {
+      for (let i = 0; i < cols; i++) {
+        const n = j * cols + i;
+        d.set(((i + 0.5) / cols) * 2 - 1, ((j + 0.5) / rows) * 2 - 1, 0.5).unproject(cam).sub(o);
+        if (d.y >= -1e-4) { free[n] = 1; depth[n] = 1e6; continue; }      // above the horizon (this camera never sees it)
+        const t = -o.y / d.y; const x = o.x + d.x * t; const z = o.z + d.z * t;
+        free[n] = own(x, z) || own(x + M, z) || own(x - M, z) || own(x, z + M) || own(x, z - M) ? 0 : 1;
+        depth[n] = t * d.dot(fwd);
+      }
+    }
+    const cell = (x, y) => Math.min(rows - 1, Math.max(0, Math.floor(((y + 1) / 2) * rows))) * cols + Math.min(cols - 1, Math.max(0, Math.floor(((x / aspect + 1) / 2) * cols)));
+    const arc = rainbowArc((x, y) => free[cell(x, y)] === 1, aspect);
+    if (!arc) return null;
+    let near = Infinity;
+    for (let k = 0; k < 24; k++) {
+      const a = Math.PI * (0.12 + 0.76 * (k + 0.5) / 24);
+      const x = arc.cx + Math.cos(a) * arc.r * 0.94; const y = arc.cy + Math.sin(a) * arc.r * 0.94;
+      if (Math.abs(x) > aspect || Math.abs(y) > 1) continue;
+      const n = cell(x, y);
+      if (free[n]) near = Math.min(near, depth[n]);
+    }
+    const D = Math.min(Math.max(near * 0.85, R.cam.get().dist * 0.5), R.cam.get().dist * 4);
+    const halfH = D * Math.tan((cam.fov / 2) * Math.PI / 180);
+    const right = (R.rbR || (R.rbR = new THREE.Vector3())).set(1, 0, 0).applyQuaternion(cam.quaternion);
+    const up = (R.rbU || (R.rbU = new THREE.Vector3())).set(0, 1, 0).applyQuaternion(cam.quaternion);
+    const pos = new THREE.Vector3().copy(o).addScaledVector(fwd, D).addScaledVector(right, arc.cx * halfH).addScaledVector(up, arc.cy * halfH);
+    return { pos, scale: arc.r * halfH, ...arc };
   },
 
   /** The bird baths' per-tick options (one reused object: no garbage per tick). */
@@ -585,16 +758,28 @@ export const view = {
       const { sunMoved } = R.daynight.update(skyNow, { mode: R.dayMode, localHour, gold, weather: { rain: wx.rain, cloud: wx.cloud } });
       const s = R.daynight.current;
       R.sky0 = s;
-      // a phone or tablet without a shadow map: soft blob shadows painted beside tall objects (a desktop never)
-      if (R.profile.kind !== 'desktop') R.ground.setBlobShadows(R.sun.castShadow ? null : s.sunDir);
+      // without a shadow map (a phone below High, the desktop Low tier): soft blob shadows painted beside tall
+      // objects, on every profile (G1, graphics#2: desktop Low floated)
+      R.ground.setBlobShadows(blobShadowDir(R.sun.castShadow, s.sunDir));
       WORLD.uNight.value = s.night;
       R.fireflies.visible = s.night > 0.02 && R.motion !== 'still';
       R.ground.setHaze(s.fog);
       R.ground.setCloud(0.25 + wx.cloud * 0.55);
       call(R.life, 'setSky', s, wx, gold);
-      // night water is deep blue under the moon, never the brightest thing on screen (visual-after D3)
+      // night water is deep blue under the moon, never the brightest thing on screen (visual-after D3); the sun's strength
+      // relative to noon's (3.14 since G2: noon water keeps HEAD's brightness)
       const wn = 1 - 0.5 * s.night;
-      R.ground.water.setLight([(0.55 + 0.45 * s.sunI / 2.8) * wn * 0.9, (0.58 + 0.42 * s.sunI / 2.8) * wn * 0.95, (0.7 + 0.3 * s.sunI / 2.8) * wn]);
+      const si = Math.min(1.15, s.sunI / 3.14);
+      R.ground.water.setLight([(0.55 + 0.45 * si) * wn * 0.9, (0.58 + 0.42 * si) * wn * 0.95, (0.7 + 0.3 * si) * wn]);
+      // G7 (graphics#8): glints in the sun's (moon's) colour, the horizon at grazing angles, warm at golden hour
+      const el = Math.asin(Math.max(-1, Math.min(1, s.sunDir[1]))) * 180 / Math.PI;
+      // R3-02: soft edges under a low sun (uniforms: no shadow redraw; from the tier's base, applyTier resets it)
+      const soft = shadowSoftness(el, SHADOW_KERNEL.taps);
+      R.sun.shadow.radius = shadowRadiusFor(qualityOf(R.tier, R.profile.kind).shadowRadius, el);
+      R.sun.shadow.intensity = soft.intensity;
+      const warm = (1 - s.night) * Math.min(1, Math.max(0, (32 - el) / 12));
+      const gk = Math.min(1.2, s.sunI / 3.14) * (1 - 0.75 * s.night);
+      R.ground.water.setSun(s.sunDir, [s.sunColor[0] * gk, s.sunColor[1] * gk, s.sunColor[2] * gk], s.horizon, warm, R.tier !== 'low');
       R.sky.uniforms.uCloud.value = 0.3 + wx.cloud * 0.7;
       // rings round the jetty's piles and the barge's hull (RD-10)
       R.ground.water.setRipples(R.world.flatMap((m) => (typeof m.ripples === 'function' ? m.ripples() : [])));
@@ -623,7 +808,7 @@ export const view = {
     ro.strength = wx.strength ?? 1; ro.wind.x = wd.x * sl; ro.wind.z = wd.y * sl;
     call(R.fx, 'rain', snowing ? 0 : wx.rain * (R.motion === 'still' ? 0 : 1), ro);
     call(R.ground, 'setRain', snowing ? 0 : wx.puddle ?? 0, snowing || R.motion === 'still' ? 0 : wx.rain);
-    this._rainbow(wx);
+    this._rainbow(wx, dt);
     call(R.animals, 'setWeather', snowing ? 1 : wx.rain);       // bees stay in their hives in rain and snow
     if (snowing && wx.rain > 0.01 && R.motion !== 'still') {
       R.snowAcc = (R.snowAcc || 0) + dt * 45 * wx.rain;
@@ -646,6 +831,8 @@ export const view = {
     } else if (R.camMoving) { R.camMoving = false; OCCLUSION.moving.value = 0; this._fitShadow(); }
     // wave 4 (owner wish 11): the lamps nearest the view light their surroundings at night (models.js LAMPS)
     this._lamps(c);
+    // G8: the night halos, screen-stable (their size follows the camera's focal length); nothing drawn by day
+    if (R.objects.halos) R.objects.halos.update(R.cam.camera, R.cssH || 768);
     const band = R.lod.update(lodDistance(c.dist, { kind: R.profile.kind, lodK: R.q.lodK, cssH: R.cssH }));
     if (band) { R.objects.setBand(band); R.ground.setBand(band); }
     // per instance: buildings and crops beyond the far band's distance of the eye draw their twins (wave 3, §8.6)
@@ -668,9 +855,12 @@ export const view = {
       R.inside ? 0 : call(R.baths, 'update', dt, now, this._bathOpts(c, wx)) || 0,
       R.inside ? 0 : call(R.frogs, 'update', dt, now, this._frogOpts(c, wx)) || 0,
       R.inside ? 0 : R.crates.update(dt, R.now(), this._crateOpts()),
+      R.inside ? 0 : R.gifts.update(dt, R.now(), this._crateOpts()),
       R.inside ? R.interior.update(dt, now, R.sky0, { motion: R.motion }) : 0,
       R.ghost.tick(dt) ? 2 : 0,
       isAnimating() ? 2 : 0,
+      R.pulseOn ? WANT.AMBIENT : 0,                // a guide pulse breathes at the calm rate
+      R.rbWant || 0,                               // QA r1 R-04: the rainbow's cross-fade
     );
     // Farm Beauty ambience: the score and the complete decor sets (after objects.update re-checked the sets; at most
     // once a second, and only after a change)
@@ -745,13 +935,14 @@ export const view = {
   _fitShadow(force = false) {
     const { sun } = R;
     const c = R.cam.get();
-    const half = shadowHalf(c.dist);
     const s = R.sky0 ? R.sky0.sunDir : [-0.57, 0.8, 0.23];
     const fit = R.shadowFit;
     // the view's ground footprint lies ~0.12 dist beyond the target: centre the box there
     const p = R.cam.camera.position;
     const vx = c.tx - p.x; const vz = c.tz - p.z; const vl = Math.hypot(vx, vz) || 1;
     const ox = c.tx + (vx / vl) * 0.12 * c.dist; const oz = c.tz + (vz / vl) * 0.12 * c.dist;
+    // G4: a phone's map covers exactly its own view (the farthest ground corner from the box centre)
+    const half = R.profile.kind === 'desktop' ? shadowHalf(c.dist) : shadowHalfFor(c.dist, { kind: R.profile.kind, reach: this._groundReach(ox, oz) });
     if (!force && fit && Math.hypot(ox - fit.x, oz - fit.z) < 0.5 && Math.abs(half - fit.half) < 0.5) return;
     // snap the centre to whole metres so repeated refits of a resting view render the identical map
     const cx = Math.round(ox);
@@ -767,7 +958,24 @@ export const view = {
     dirty = true;
   },
 
+  /** The farthest point of the view's ground footprint from (cx, cz), metres (the four screen corners on y = 0; a
+   *  corner above the horizon counts as far). */
+  _groundReach(cx, cz) {
+    const cam = R.cam.camera;
+    const o = cam.position;
+    const d = R.reachV || (R.reachV = new THREE.Vector3());
+    let far = 0;
+    for (const [nx, ny] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
+      d.set(nx, ny, 0.5).unproject(cam).sub(o);
+      if (d.y > -1e-3) return Infinity;
+      const t = -o.y / d.y;
+      far = Math.max(far, Math.hypot(o.x + d.x * t - cx, o.z + d.z * t - cz));
+    }
+    return far;
+  },
+
   setState(state, { me } = {}) {
+    const first = !R.state;
     R.state = state;
     if (me) R.me = me;
     R.ground.setState(state);
@@ -780,6 +988,7 @@ export const view = {
     call(R.baths, 'setState', state);
     call(R.frogs, 'setState', state);
     R.crates.setState(state, R.now());
+    R.gifts.setState(state, R.now());
     call(R.fx, 'setMe', R.me);
     const wnow = R.clockOverride ?? R.now();
     for (const m of R.world) m.setState(state, wnow);
@@ -790,7 +999,29 @@ export const view = {
     R.seasonAt = 0;
     R.skyAt = 0;
     this._fitShadow(true);
+    // G12: the first state's in-view models gate the reveal (a generous view: the boot may still ease the camera a little);
+    // R3-01: a lost manifest is waited for (after the late re-sync; the curtain's timeout caps it)
+    if (first) gate.models(models.whenLoaded().then(() => models.ready(R.objects.keysWhere((x, z) => this._nearView(x, z)))));
     dirty = true;
+  },
+
+  /** Inside the current view, with a margin (metres in, NDC test |x|, |y| <= 1.3). */
+  _nearView(x, z) {
+    v3.set(x, 0, z).project(R.cam.camera);
+    return v3.z < 1 && Math.abs(v3.x) <= 1.3 && Math.abs(v3.y) <= 1.3;
+  },
+
+  /** G12 (release 1.0, feel#4): resolves once the models of the first view have loaded and been drawn, or after
+   *  timeoutMs: { reason: 'ready' | 'timeout', ms } (ms since the render module loaded). ui-shell holds its painted
+   *  curtain on it. */
+  ready({ timeoutMs = 6000 } = {}) { return gate.wait({ timeoutMs }); },
+
+  /** Release 1.0 (additive): view events. 'ripened' -> fn({ id, crop, pos: { x, z } tiles, screen: { x, y } CSS px }) when
+   *  a plot turns ripe on screen (G11a: life-feel's sparkle and `find` sound). Returns an unsubscribe function. */
+  on(event, fn) {
+    if (event !== 'ripened' || typeof fn !== 'function') return () => {};
+    ripenSubs.add(fn);
+    return () => ripenSubs.delete(fn);
   },
 
   sync(ids, topics) {
@@ -806,6 +1037,7 @@ export const view = {
     call(R.baths, 'sync', ids, topics, R.state);
     call(R.frogs, 'sync', ids, topics, R.state);
     R.crates.sync(ids, topics, R.state, R.now());
+    R.gifts.sync(ids, topics, R.state, R.now());
     const wnow = R.clockOverride ?? R.now();
     for (const m of R.world) m.sync(ids, topics, R.state, wnow);
     if (topics.has('expansions') || topics.has('restore') || topics.has('*')) R.ground.setFeatures(R.land.owners());
@@ -821,6 +1053,11 @@ export const view = {
     const p = this._pickPointer(ndc);
     // wave 4b: a loot crate picked by its tile is flagged like one picked by its box (picking.js)
     if (p && p.kind === 'object' && !p.crate && R.crates.has(p.id)) p.crate = true;
+    // release 1.0 (features D1): a surprise gift box (content kind 'gift', drawn by life-feel's gift-view) is flagged too
+    if (p && p.kind === 'object' && !p.gift) {
+      const o = R.state && Object.hasOwn(R.state.farm.objects, p.id) ? R.state.farm.objects[p.id] : null;
+      if (o && defOf(o.def)?.kind === 'gift') p.gift = true;
+    }
     // hover is the wind: my cursor parts the crops; the hovered object lifts a little
     if (p) cursors.setA(p.px * TILE_M, p.pz * TILE_M, true);
     else cursors.setA(null, null, false);
@@ -1010,6 +1247,15 @@ export const view = {
   },
 
   highlight(tiles, style) { if (R) { R.ground.highlight(tiles || [], style); dirty = true; } },
+  /** Release 1.0 (additive; ui-shell P-05, M9): a soft breathing ring on each tile [[x, z], ...] (tiles), independent of
+   *  highlight(); null or [] clears it (no draw call while empty). */
+  pulse(tiles) {
+    if (!R) return;
+    const list = Array.isArray(tiles) ? tiles.filter((t) => Array.isArray(t) && Number.isFinite(t[0]) && Number.isFinite(t[1])) : [];
+    R.pulse.set(list.map(([x, z]) => ({ x: (x + 0.5) * TILE_M, z: (z + 0.5) * TILE_M, r: TILE_M * 0.62, k: 1 })));
+    R.pulseOn = list.length > 0;
+    dirty = true;
+  },
   /** The tool in hand (additive, wave 2): the water pins are loud only while the Watering Can is out. */
   setTool(id) { if (R) { R.objects.setTool(typeof id === 'string' ? id : null); dirty = true; } },
   grid(visible) { if (R) { R.ground.grid(Boolean(visible)); dirty = true; } },
@@ -1066,6 +1312,7 @@ export const view = {
     if (!R) return;
     const m = mode === 'still' || mode === 'reduced' ? mode : 'full';
     R.motion = m;
+    R.cam.setMotion(m);                          // QA r1 R-06: "Show me" and the NOW card cut, not glide
     R.objects.setMotion(m);
     R.badges.setMotion(m);
     call(R.animals, 'setMotion', m);
@@ -1125,6 +1372,13 @@ export const view = {
   },
 
   fx: {
+    /** A short text floating at a tile point ({ x, z } tiles, the object's centre): a refusal's reason (ui-shell P-07,
+     *  S7; life-feel's fx.float draws it). Additive. */
+    float(worldPos, text, opts = {}) {
+      if (!R || !worldPos || !text || !Number.isFinite(worldPos.x) || !Number.isFinite(worldPos.z)) return;
+      call(R.fx, 'float', new THREE.Vector3(worldPos.x * TILE_M, 1.2, worldPos.z * TILE_M), String(text), { color: '#3E2612', ...opts });
+      dirty = true;
+    },
     play(event, worldPos, meta = {}) {
       if (!R || !event) return;
       // wave 4b: a mass action (the Golden Watering Can, the Farmhand) emits one event per crop or animal and then its
@@ -1140,8 +1394,11 @@ export const view = {
       let pos = null;
       // a loot crate's opening / store starts in its own view (the object has already left the state) and gives its place
       const cpos = R.crates.onEvent(event, meta);
+      // a surprise's box pops in (keepsake) or opens (giftOpened: the object has already left the state) and gives its place
+      const gpos = R.gifts.onEvent(event, meta);
       if (worldPos) pos = new THREE.Vector3(worldPos.x * TILE_M, 0, worldPos.z * TILE_M);
       else if (cpos) pos = cpos;
+      else if (gpos) pos = gpos;
       else if (event.id) pos = R.objects.worldPosOf(event.id) || call(R.animals, 'positionOf', event.id) || null;
       if (!pos && (event.e === 'levelUp' || event.e === 'bloomed' || event.e === 'goldenHour' || event.e === 'relicBought')) { const c = R.cam.get(); pos = new THREE.Vector3(c.tx, 0, c.tz); }
       // the Time Turner (wave 4b): a golden swirl over every workshop it finished
@@ -1281,7 +1538,7 @@ export const view = {
         R.interior = createInterior({ renderer: R.renderer });
         R.interior.resize((R.cssW || 16) / (R.cssH || 9));
         if (R.state) R.interior.setState(R.state, { me: R.me, now: R.now() });
-        try { if (typeof R.renderer.compileAsync === 'function') await R.renderer.compileAsync(R.interior.scene, R.interior.camera); } catch { /* compiles on first draw */ }
+        try { await warmupCompile(R.renderer, R.interior.scene, R.interior.camera); } catch { /* compiles on first draw */ }
       }
       R.inside = true;
       R.interior.focus();
@@ -1362,6 +1619,26 @@ export const view = {
       rainStrength: R.wx ? +((R.wx.rain || 0) * (R.wx.strength ?? 1)).toFixed(3) : 0, puddle: R.wx ? +(R.wx.puddle || 0).toFixed(3) : 0, rainbow: R.wx ? +(R.wx.rainbow || 0).toFixed(3) : 0,
       nightLights: { lit: R.lamps ? R.lamps.n : 0, sources: R.objects.lampSources ? R.objects.lampSources().length : 0, k: +LOOK.uLampK.value.toFixed(2), glow: +LOOK.uGlow.value.toFixed(2) },
       frogs: call(R.frogs, 'stats') || null,                                       // wave 5: { frogs, visible, puddles }
+      // release 1.0 (render-look): the first reveal (G12), the night halos (G8)
+      ready: gate.ready, placeholders: R.state ? R.objects.placeholdersWhere((x, z) => this._nearView(x, z)) : null,
+      halos: R.objects.halos && R.objects.halos.mesh.visible ? R.objects.halos.count : 0,
+      home: R.state ? this._homeTan() : null,
     };
+  },
+
+  /** QA r2 I2-C1 (infra's patch): the home buildings in view (the farmhouse, the barn) still drawn as placeholders, or
+   *  null when neither is in view. The boot curtain lifts on a slow link once this is 0 and the dock answers. */
+  _homeTan() {
+    const near = (x, z) => this._nearView(x, z);
+    if (!R.objects.keysWhere(near, { all: true }).some((k) => HOME_KEY.test(k))) return null;
+    return R.objects.placeholdersWhere(near, (k) => HOME_KEY.test(k));
+  },
+
+  /** R3-01: the manifest came after a failed try: everything re-syncs (keys were chosen without it); the batches ask
+   *  for their placeholders on the same event (instancing.js). */
+  _lateManifest() {
+    if (!R || !R.state) return;
+    this.setState(R.state, { me: R.me });      // the full re-sync a '*' resync takes: ground blobs and animals too
+    R.shadowDirty = true;
   },
 };

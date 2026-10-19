@@ -128,6 +128,7 @@ export const COUPLE_CHALLENGE = {
 
 /** "While you were away" (GDD §5.8): the sections of the morning recap card, in display order. */
 export const RECAP = {
-  sections: ['ripened', 'partnerDid', 'keepsakes', 'notes', 'newUnlocks', 'storyBeats', 'fairAndBarge'],
+  // release 1.0 (D1): 'surprises' (boxes waiting on the porch for this farmer) first: the warmest line of the card
+  sections: ['surprises', 'ripened', 'partnerDid', 'keepsakes', 'notes', 'newUnlocks', 'storyBeats', 'fairAndBarge'],
   maxFeedLines: 12,
 };

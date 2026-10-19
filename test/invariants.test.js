@@ -42,6 +42,7 @@ import { ECON_FUZZED, M1B_FUZZED, M2_FUZZED, W4_FUZZED, W4B_FUZZED, W5_FUZZED, f
 
 // rules-goals runs its own actions through the same key-reversed-twin fuzz in test/goals.fuzz.test.js and lists
 // them in test/helpers/rules-goals.js; an optional goals-fuzz.js hook (goalsAction) would also mix them in here.
+import { REL_FUZZED } from './helpers/features.js';
 const GOALS = await import('./helpers/rules-goals.js').then((m) => m.GOALS_PLAYER_ACTIONS ?? []).catch(() => []);
 let goals = null;
 try {
@@ -71,7 +72,8 @@ test('every registered action is exercised by the fuzzer or is a system action',
     .filter(([k, v]) => v && typeof v === 'object'
     && typeof v.apply === 'function' && !k.startsWith('_')).map(([k]) => k));
   assert.deepEqual(econ.filter((type) => !ECON_FUZZED.has(type)), [], 'add these to randomAction()');
-  const fuzzed = new Set([...ECON_FUZZED, ...GOALS, ...(goals ? goals.GOALS_FUZZED : [])]);
+  // release 1.0: the features lane's actions are fuzzed in test/goals.fuzz.test.js (test/helpers/features.js)
+  const fuzzed = new Set([...ECON_FUZZED, ...GOALS, ...REL_FUZZED, ...(goals ? goals.GOALS_FUZZED : [])]);
   const missing = Object.keys(ACTIONS).filter((type) => !type.startsWith('_') && !fuzzed.has(type));
   assert.deepEqual(missing, [],
     'fuzz these (randomAction here, or rules-goals: GOALS_PLAYER_ACTIONS + test/goals.fuzz.test.js)');

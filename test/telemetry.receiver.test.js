@@ -153,7 +153,7 @@ test('telemetry receiver: admin list / delete one / delete an install, behind th
     const body = await list.json();
     assert.equal(body.total, 3);
     assert.deepEqual(body.events.map((e) => e.id), [c.id, b.id, a.id], 'newest first');
-    assert.deepEqual(body.counts, { 'job.ready': 0, 'job.applied': 1, 'job.discarded': 0, 'job.failed': 1, 'mod.undone': 1 });
+    assert.deepEqual(body.counts, { 'job.ready': 0, 'job.applied': 1, 'job.discarded': 0, 'job.failed': 1, 'job.answered': 0, 'mod.undone': 1 });
     assert.deepEqual((await (await r.admin('?event=job.failed')).json()).events.map((e) => e.id), [b.id]);
     assert.deepEqual((await (await r.admin(`?install=${'f'.repeat(32)}&limit=1`)).json()).events.map((e) => e.id), [c.id]);
     assert.deepEqual((await (await r.admin(`?since=${T0 + 1500}`)).json()).events.map((e) => e.id), [c.id]);

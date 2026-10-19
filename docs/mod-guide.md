@@ -5,18 +5,30 @@ everything you write, then boots a copy of the farm with your mod and plays it: 
 player. Prices, seed costs and XP are computed by the game from its economy model. You choose *what* and *how long*.
 
 ## Your workflow
-1. Read `request.md` (the request, the game language, the farm level, any errors from the last round).
-2. Look up what exists in `docs/catalog/*.json` (crops, trees, recipes, buildings, animals, decor, items, npcs,
-   letterArt, music, ladders, idsInUse). Every new thing copies the look of an existing one ("like").
-3. Write or edit files in `mod/`. Keep the files already there unless the request asks to change or remove them
+1. Read `request.md` (the request, the game language, the farm level and the anchors usable at it, any errors from
+   the last round).
+2. Check `docs/game-features.md`: a wish for something the game already has gets a pointer ("Pigs are in the Market ›
+   Animals from level 17"), not a copy.
+3. Look up what exists in `docs/catalog/*.json` (crops, trees, recipes, buildings, animals, decor, items, npcs,
+   letterArt, music, ladders, idsInUse; one entry a line). A crop's or a recipe's own good has the same id and is
+   listed only there; `items` holds the other goods. Every new thing copies the look of an existing one ("like");
+   prefer anchors with `"usable": true` (unlock <= the farm level).
+4. Write or edit files in `mod/`. Keep the files already there unless the request asks to change or remove them
    (deleting a file retires that thing: what the farm already has keeps working, nothing new can be bought).
-4. Call `validate`. Fix every error (each has `file`, `path`, `code`, `hint`) and call it again until `ok` is true.
-5. Call `preview` and check names, icons and numbers read well in both languages.
-6. Write `summary.json`: `{ "en": "...", "bg": "..." }`, two short friendly sentences each.
+5. Call `validate`. Fix every error (each has `file`, `path`, `code`, `hint`) and call it again until `ok` is true.
+6. Call `preview` and check names, icons, numbers and "From level" read well in both languages.
+7. Write `summary.json`: `{ "en": "...", "bg": "...", "possible": true, "try": [] }`, at most two short friendly
+   sentences each, speaking to the player ("ти" in Bulgarian): what was added or changed, from which level, and what
+   you could not do. `try` (optional, at most 2): short wishes you can build instead, in the player's words.
+
+**When nothing can be built** (or it is already in the game): write no mod files at all. Write only `summary.json`
+with `"possible": false`, a kind reason and one or two things you can build instead (`try`). The player sees it as
+Harvey's answer; nothing on the farm changes. A mod that changes nothing is refused with NO_CHANGE.
 
 If part of the request cannot be done in this format, build the part that can and say what could not in the summary.
-Not possible: code, new 3D models or pictures, choosing prices or rewards, quests, events, weather odds, NPC lines,
-changing other farms or players, anything outside `mod/`.
+Not possible: code, new 3D models or pictures, choosing prices or rewards, coins or experience, quests, orders,
+events, weather, land, buildings, avatars, animal behaviour, colours of the farm (barn, grass, leaves), tips, NPC
+lines, removing or renaming the game's own things, changing other farms or players, anything outside `mod/`.
 
 ## Tools
 | tool | what |
@@ -34,8 +46,7 @@ mod/mod.json                    { "format": 1, "title": { "en": "Moonlight Harve
 mod/content/crops/<id>.json     a crop                  mod/content/trees/<id>.json    a fruit tree
 mod/content/recipes/<id>.json   a recipe                mod/content/animals/<id>.json  an animal breed
 mod/content/decor/<id>.json     a decoration            mod/tuning.json                speed knobs
-mod/look.json                   colours, sky, music     mod/text/letters.json          letters (<= 3)
-mod/text/tips.json              tips (<= 10)
+mod/look.json                   sky, music              mod/text/letters.json          letters (<= 3)
 ```
 The file name is `<id>.json`. No other files. At most 12 new things per request and 60 on a farm, 40 content files,
 16 KB a file and 128 KB in all. The mod's `title` is at most 40 characters in each language.
@@ -61,7 +72,7 @@ after a number: "3 лунни пъпеша") and `defObj` ("лунния пъп�
 ## Common fields
 - `like`: an existing thing of the same family whose look is copied (see "Anchors").
 - `hue`: the new main colour `#RRGGBB` (not too dark or too close to grass green).
-- `unlock`: the level it unlocks at, 1-40 (above the farm level means "coming later").
+- `unlock`: the level it unlocks at, 1-40 (above the farm level means "coming later": the summary says "from level N").
 - `value`: `"humble"` (-10 %), `"normal"`, or `"rich"` (+10 %).
 
 ## Crops
@@ -117,16 +128,18 @@ decorations are for beauty only (no bonuses).
   "crops": { "wheat": { "growMin": 2 } } }
 ```
 `*Bp` = basis points of the normal time, 8000-12500 (9000 = 10 % faster). `crops.<id>.growMin`: a crop ladder step
-from half to double that crop's time. Nothing else is tunable.
+from half to double that crop's time, and never shorter than its `fastestGrowMin` in `docs/catalog/crops.json` (on this
+farm the play test's economy guard refuses anything faster: ECON_GUARD names the crop and the step). Faster than that:
+offer a new, faster variety (a new crop: its price follows its time). Nothing else is tunable.
 
 ## look.json (all optional; only how the game looks and sounds)
 ```json
-{ "palette": { "grass": "#7CC243", "leaf": "#4C9A3E", "skyTop": "#4FA8EE", "skyHorizon": "#D6F1FF", "barn": "#C8473A" },
-  "sky": "pastel", "music": { "prefer": ["<a track id from docs/catalog/music.json>"] } }
+{ "sky": "golden", "music": { "prefer": ["<a track id from docs/catalog/music.json>"] } }
 ```
-`sky`: default golden pastel cool stormy. `music.prefer`: 1-3 track ids.
+`sky`: default golden pastel cool stormy (it tints the light on the farm). `music.prefer`: 1-3 track ids.
+`"palette"` is no longer part of the format (UNSUPPORTED): the colours of the barn, grass and leaves cannot be changed.
 
-## text/letters.json and text/tips.json
+## text/letters.json
 ```json
 [ { "id": "x_letter_melons", "from": "mabel", "art": "melon",
     "en": { "title": "Melons by moonlight", "body": "Dear both, I hear something pale and round is growing on your farm..." },
@@ -134,14 +147,17 @@ from half to double that crop's time. Nothing else is tunable.
 ```
 `from`: hazel or a townsperson from `docs/catalog/npcs.json` (mabel ollie fern juniper reed pemberton pip rosie tom
 lucia); `art`: from `letterArt`; title <= 40, body <= 600
-characters. Letters speak to both farmers ("вие" in Bulgarian). Tips: `[{ "id": "x_tip_moon", "en": "...",
-"bg": "..." }]`, <= 140 characters, speaking to one player ("ти").
+characters. Letters speak to both farmers ("вие" in Bulgarian) and are friendly news: never ask the farmers to deliver
+anything or promise a reward (the game cannot track it). `text/tips.json` is no longer part of the format
+(UNSUPPORTED): tips are not shown anywhere in the game.
 
 ## Error codes you may see
 Schema: BAD_JSON UNKNOWN_FILE UNKNOWN_FIELD MISSING_FIELD BAD_TYPE BAD_ID ID_TAKEN TOO_BIG TOO_MANY BAD_ENUM
 NOT_LADDER BAD_HEX BAD_TEXT UNSUPPORTED. Meaning: BAD_ANCHOR UNKNOWN_REF BAD_UNLOCK OUT_OF_RANGE ECON_BOUND CYCLE
-NAME_TAKEN LOW_CONTRAST BG_FORMS CONTENT_CHECK. Play test: BOOT_THROW ACTION_REJECTED STATE_INVALID ECON_GUARD
-RETIRE_FAILED TIMEOUT OOM. Look: NO_MODEL ICON_FAILED NAME_TOO_LONG. The `hint` says what to change.
+NAME_TAKEN LOW_CONTRAST BG_FORMS CONTENT_CHECK NO_CHANGE (nothing on the farm would change: build, or answer with
+`"possible": false`) IGNORED (a warning: an older version's removed knob was left out). Play test: BOOT_THROW ACTION_REJECTED STATE_INVALID ECON_GUARD
+RETIRE_FAILED TIMEOUT OOM. Look: NO_MODEL ICON_FAILED NAME_TOO_LONG COLOUR_FAR (a warning: the icon comes out far
+from the colour you chose; say so or pick a colour or anchor closer to it). The `hint` says what to change.
 
 ## Removing something
 Remove its file (write it with empty content). It is retired, never deleted: what the farm already has (crops in the ground, animals, decorations,

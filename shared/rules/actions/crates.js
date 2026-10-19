@@ -17,6 +17,7 @@
 // missing collection item, a reward decor piece). Extras the farm cannot use yet (Fertilizer before its level, a
 // finished album) drop out of the draw. Events: crateDropped (render: the parachute), crateOpened (the loot card, the
 // fly-to-HUD, the feed line; `auto` when the crate went to the Barn by itself).
+// 1.0: a crate a farmer opens may also hold a rare power-up, on its own roll (../powerups.js).
 import { CRATES, BOOSTS, levelFromXp, levelRow, eHours, itemOf, defOf, isLive, decorOf } from '../../content/index.js';
 import { ERR } from '../../net/protocol.js';
 import { V } from '../schema.js';
@@ -25,6 +26,7 @@ import { WORLD_TILES } from '../../content/config.js';
 import { grant, intake } from '../economy.js';
 import { giveObject } from '../progress.js';
 import { albumUnlocked, liveSets, missingOf, albumGive } from './album.js';
+import { powerupPick, grantPowerup, usePowerup, starOn } from '../powerups.js';
 
 const BP = 10_000;
 
@@ -112,8 +114,8 @@ function extrasFor(state, pid) {
 }
 
 /**
- * What opening crate `id` pays now (pure; check, apply and the loot card agree). Rolled on (crate, k).
- * @returns {{ coins, xp, extra: null | { k, n?, item?, set?, decor? } }}
+ * What opening crate `id` pays now (pure; check, apply and the loot card agree). Rolled on (crate, k); pu: 1.0.
+ * @returns {{ coins, xp, extra: null | { k, n?, item?, set?, decor? }, pu: string | null }}
  */
 export function crateLoot(state, id, ctx) {
   const o = objectOf(state, id);
@@ -146,7 +148,7 @@ export function crateLoot(state, id, ctx) {
       extra.decor = ids[Math.floor(rng('crate', o.k, 'decor') * ids.length)];
     }
   }
-  return { coins, xp, extra };
+  return { coins, xp, extra, pu: powerupPick(state, ctx, o.k) };
 }
 
 /** Pay crate `id`'s loot and remove it (inside an action: openCrate by a player, `_crate` by 'sys'). */
@@ -170,6 +172,10 @@ function payCrate(tx, ctx, id, auto) {
     }
     if (e.k === 'decor') { giveObject(tx, ctx, e.decor, 1); ev.decor = e.decor; }
   }
+  if (loot.pu) {
+    const g = grantPowerup(tx, ctx, loot.pu);
+    Object.assign(ev, { pu: loot.pu, puUntil: g.until }, g.n !== undefined ? { puN: g.n } : {});
+  }
   // progress.js credits the XP (farm XP; the opener's personal share) and writes the feed line from this event
   tx.emit(ev);
 }
@@ -189,14 +195,18 @@ export const _crate = {
     // roll and tile are keyed on the pass index, which this write makes replicated state
     tx.set(['farm', 'crates', 'k'], k);
     if (cratesOn(tx.state).length >= CRATES.maxOpen) return;
-    if (Math.floor(ctx.rng('crate', k) * BP) >= CRATES.dropBp) return;
+    // a Shooting Star (1.0): a sure crate, a use spent only when one drops
+    const star = starOn(tx.state, ctx.now);
+    if (!star && Math.floor(ctx.rng('crate', k) * BP) >= CRATES.dropBp) return;
     const spot = crateSpot(tx.state, k, ctx.rng);
     const id = `crate.${k.toString(36)}`;
     if (!spot || objectOf(tx.state, id)) return;
+    if (star) usePowerup(tx, 'star');
     tx.set(['farm', 'objects', id], { def: CRATES.def, x: spot[0], z: spot[1], rot: 0, placedAt: ctx.now, by: 'sys', k,
       until: ctx.now + CRATES.keepMs });
     tx.set(['farm', 'crates', 'n'], c.n + 1);
-    tx.emit({ e: 'crateDropped', id, def: CRATES.def, x: spot[0], z: spot[1], k, until: ctx.now + CRATES.keepMs });
+    tx.emit({ e: 'crateDropped', id, def: CRATES.def, x: spot[0], z: spot[1], k, until: ctx.now + CRATES.keepMs,
+      ...(star ? { star: true } : {}) });
   },
 };
 

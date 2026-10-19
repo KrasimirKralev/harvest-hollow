@@ -23,13 +23,35 @@
 //   - music scene: Golden Hour (rules coop.goldenHourBp), rain (view.stats().weather), the animals on the farm
 //   - the partner moves or stores MY things (pinned by me, or a building / decor / home / tree I placed; not plots):
 //     a notice with a one-click "Move it back" (GDD §6.3 "You moved my building", TRIAGE CL-05)
+//
+// Release 1.0 (life-feel lane, rel-life-feel.md):
+//   - M4: fxMeta adds `from`, the button a reward came from (ui-panels' window 'hh:act-from', within ACT_FROM_MS), so
+//     its coins and loot fly from that button above the panel (render/fx.js); the quest jingle plays when its card is
+//     really on screen (ui/toasts.js 'hh:card'), not under a panel that hides it; a pip on the panel's title ticks
+//   - F1 (feel#5, #14): one sound per press: no generic click on a control with a sound of its own (`data-sfx="own"` or
+//     OWN_SFX: dock, tools, seeds), no 'open' / 'tab' right after a generic click of the same press, a tool change
+//     that plants in the same moment plays only the planting; no toast blip for a refusal, a lost race or a line that
+//     came with a bonk; hover ticks on the dock and tool buttons only. The long jingles queue in audio.js (F1)
+//   - F4 (feel#9): 'done' at 0.6 when an on-screen workshop's tray turns ready (scene(), every 2 s; at most once per
+//     3 s, panned by screen x; crops stay silent)
+//   - G11b (feel#12): view.on('ripened'): a gold burst and `find` at 0.25, at most once per field per 5 s
+//   - F5 (feel#11): pulses for planting (every 3rd plot of a stroke), a bonk, coins, a reward (quest card, order)
+//   - M5: Mabel's board puffs (fx `stallDone`) once the Orders panel closes after an order was filled
+//   - feel#15: the 'open' blip when the seed popover opens at a plot
+// QA r1 (life-feel): L-01 opening a surprise (the box on the farm or the gift sheet's "Open it") raises one card above
+//   any open panel: who wrapped what, the giver's note in quotes, ♥ Thanks (giftCard); L-05 the opening has a soft reveal
+//   sound; L-11 the Farm book's dock button ticks on hover and opens with 'open' like the other dock buttons
 import { landRef } from '../ui/panels/w5-rules.js';
-import { defOf, itemOf, COOP, SAFETY, CONTENT, FAIR, isLive } from '../../../shared/content/index.js';
+import { defOf, itemOf, COOP, SAFETY, CONTENT, FAIR, isLive, levelFromXp } from '../../../shared/content/index.js';
 import { acornsToday } from '../../../shared/rules/economy.js';
 import { SOFT, ERR } from '../../../shared/net/protocol.js';
 import { goldenHourBp, comboActive } from '../../../shared/rules/coop.js';
 import { EMOTE_VIEW } from './controller.js';
-import { t, tn, list, N } from '../i18n/index.js';
+import { dropKeyHints } from './touch.js';
+import { feedRows } from '../../../shared/rules/feed.js';
+import { t, tn, list, N, name as cname } from '../i18n/index.js';
+import { noteText, goalText } from '../ui/goal-text.js';
+import { halvesOf, halfMsg } from '../../../shared/rules/goals.js';
 
 const LADDER = new Set(['planted', 'harvested', 'picked', 'collected', 'crafted']);
 const PRODUCTIVE = new Set(['harvested', 'picked', 'collected', 'crafted', 'fed', 'chopped', 'cleared']);
@@ -236,6 +258,8 @@ export function soundsOf(ev, state) {
     case 'questDelivered': return [['order', { gain: 0.6 }]];
     case 'noted': case 'unnoted': return [['note']];
     case 'thanked': case 'keepsake': return [['thanks']];
+    // QA r1 L-05 (jde#8): a surprise unwrapped: a soft reveal (a box the farm shelved by itself after 48 h stays quiet)
+    case 'giftOpened': return ev.auto ? [] : [['find', { gain: 0.7 }], ['thanks', { gain: 0.6, at: 0.25 }]];
     case 'gift': case 'almanacChest': case 'meterChest': case 'seedBasket': return [['acorn']];
     case 'almanacDone': return [['mastery', { gain: 0.7 }]];
     case 'almanacRerolled': return [['tab', { bus: 'ui' }]];
@@ -253,6 +277,88 @@ export function soundsOf(ev, state) {
 }
 
 const article = (name) => (/^[aeiou]/i.test(name) ? 'an' : 'a');
+
+/** QA r1 L-01: the reveal card comes this long after the box starts to open (its burst plays first when it is in view). */
+export const GIFT_CARD_MS = 700;
+
+/**
+ * QA r1 L-01 (jde#1, coop#1, fe#3): the card for a surprise its recipient `me` just opened, or null (the giver, a box
+ * the farm shelved by itself). "A surprise from {giver}!", "{giver} wrapped {item} for you", the giver's note in quotes
+ * and "♥ Thanks", which calls `thank(i)` with the giver's "left a surprise" feed line (the rules' thank; no button once
+ * that line was thanked). `over`: shown at once, above any open panel (ui/toasts.js). Words are functions (a language
+ * switch while the card is up says them again). Pure.
+ */
+export function giftCard(ev, state, me, { thank = null } = {}) {
+  if (!ev || ev.e !== 'giftOpened' || ev.auto || ev.to !== me || !state || !state.players) return null;
+  const giver = Object.hasOwn(state.players, ev.from) ? state.players[ev.from].name : null;
+  const who = () => giver ?? t('common.partner');
+  const item = typeof ev.item === 'string' && ev.item ? ev.item : null;
+  const known = Boolean(item && itemOf(item));
+  const ref = () => (known ? N(item, 'items') : item ? item.replace(/_/g, ' ') : t('feed.something'));
+  const note = typeof ev.note === 'string' && ev.note.trim() ? ev.note.trim() : null;
+  const left = feedRows(state).find(([, r]) => r.k === 'surprise' && r.what === 'left' && r.by === ev.from && r.at === ev.at);
+  const can = Boolean(left && !left[1].ty && typeof thank === 'function');
+  return {
+    id: `gift-open-${ev.id}`, kind: 'gift', over: true, ttl: 12_000,
+    // (QA r2 L2-09: a short ribbon: the message under it names the giver, and a 16-letter name ran it to three lines)
+    ribbon: () => t('cheer.gift.ribbon'),
+    message: () => t('cheer.gift.wrapped', { name: who(), item: ref() }),
+    // F2-02: a one-tap note ("#thanks") in this reader's language, a typed one as typed
+    quote: note ? () => t('cheer.gift.quote', { note: noteText(note) }) : null,
+    things: item ? [{ icon: item, name: () => (known ? cname(item, { family: 'items' }) : ref()) }] : [],
+    actions: can ? [{ label: () => t('cheer.gift.thanks'), kind: 'go', fn: () => thank(left[0]) }] : [],
+  };
+}
+
+/** M4: how long a pressed button stays the source of the reward it caused (ui-panels' 'hh:act-from' before its act). */
+export const ACT_FROM_MS = 1500;
+/** F1 (feel#14): controls whose press has a sound of its own (a tool's tab, a panel's open, a seed's planting). */
+// (QA r1 L-11: the Farm book, the dock's fifth button, sounds like the other four: a hover tick, 'open' on its press)
+export const OWN_SFX = '[data-sfx="own"], [data-dock], [data-farmbook], [data-tool], [data-tile], .dock-btn, .dock-mini, .m-menu-btn, .tool, .seed, .sp-seed, .ss-seed, .m-tile';
+/** F1: hover ticks only here (moving across a 45-button HUD made the interface chatter). */
+export const HOVER_SFX = '[data-dock], [data-farmbook], [data-tool], .dock-btn, .dock-mini, .m-menu-btn, .tool';
+/** A sound of its own within this long after a generic click is the same press (one sound per press). */
+export const SAME_PRESS_MS = 300;
+
+/**
+ * G11b (feel#12): a ripen sparkle at most once per field per `windowMs`: a ripe plot within `radius` tiles of one that
+ * sparkled less than windowMs ago belongs to that field. Returns allow(pos { x, z } tiles, nowMs) -> boolean. Pure.
+ */
+export function createRipenThrottle({ windowMs = 5000, radius = 6 } = {}) {
+  const shown = [];
+  return (pos, now) => {
+    if (!pos || !Number.isFinite(pos.x) || !Number.isFinite(pos.z)) return false;
+    for (let i = shown.length - 1; i >= 0; i--) if (now - shown[i].at >= windowMs) shown.splice(i, 1);
+    if (shown.some((p) => Math.abs(p.x - pos.x) <= radius && Math.abs(p.z - pos.z) <= radius)) return false;
+    shown.push({ x: pos.x, z: pos.z, at: now });
+    return true;
+  };
+}
+
+/** F4 (feel#9): how many finished items each workshop holds at `now` (queue items past their end + a composter's
+ *  `ready`), by object id. Crops are not workshops (they stay silent). Pure. */
+export function readyCounts(state, now) {
+  const out = new Map();
+  const objs = state && state.farm ? state.farm.objects : {};
+  for (const id of Object.keys(objs)) {
+    const o = objs[id];
+    if (!o || !Array.isArray(o.queue)) continue;
+    let n = 0;
+    for (const q of o.queue) if (Number.isFinite(q?.e) && q.e <= now) n++;
+    out.set(id, n + (Number.isFinite(o.ready) ? o.ready : 0));
+  }
+  return out;
+}
+/** The workshops whose tray grew from `prev` to `next` (a first look counts nothing). Pure. */
+export function turnedReady(prev, next) {
+  const ids = [];
+  for (const [id, n] of next) if (prev.has(id) && n > prev.get(id)) ids.push(id);
+  return ids;
+}
+/** F4: the 'done' chime's own throttle (at most once per gapMs). Pure. */
+export const DONE_GAP_MS = 3000;
+/** F3: the chisel taps start when the camera's glide to the sign ends (ui/naming.js CARVE.focusMs). */
+export const CARVE_MS = 600;
 
 /**
  * Did the Fair week of this ceremony have a horse show (M2, GDD §5.6: a blue-ribbon horse's Show Ribbon entered, the
@@ -309,7 +415,9 @@ export function bigSpendLine(events, state, by, now) {
       hurry: { who, coins, acorns, plot: h.kind === 'plot' || h.def === 'plot' } };
   }
   let text;
-  if (has('slotUpgraded')) text = def ? t('game.spend.slot', { who, thing: N(def.id), price }) : t('game.spend.slotAny', { who, price });
+  // QA r2 F2-03: a big planting stroke (the plant action emits bigSpend with what = the crop, n = plots) is no purchase
+  if (has('planted') && what && CONTENT.crops.has(what)) text = t('feat.later.headsUp', { who, n: big.n ?? 1, crop: N(what), price });
+  else if (has('slotUpgraded')) text = def ? t('game.spend.slot', { who, thing: N(def.id), price }) : t('game.spend.slotAny', { who, price });
   else if (has('homeUpgraded')) text = def ? t('game.spend.home', { who, thing: N(def.id), price }) : t('game.spend.homeAny', { who, price });
   else if (has('barnUpgraded')) text = t('game.spend.barn', { who, price });
   else if (has('expanded')) {
@@ -350,9 +458,19 @@ export const HURRY_BURST_MS = 1500;
 export function createFeedback({ store, controller, view, audio, ui }) {
   // -Infinity, never 0: performance.now() is small right after a page load, and 0 would read as "just now"
   const streak = { me: { n: 0, at: -Infinity }, partner: { n: 0, at: -Infinity } };
+  // M4: the button the latest reward came from (ui-panels' kit buttons announce it right before they act)
+  let actFrom = null;                                     // { el, at }
+  globalThis.addEventListener?.('hh:act-from', (e) => { if (e?.detail?.from) actFrom = { el: e.detail.from, at: performance.now() }; });
+  const fromNow = () => (actFrom && performance.now() - actFrom.at < ACT_FROM_MS && actFrom.el.isConnected !== false ? actFrom.el : null);
+  // F1: the moment of the last generic click and of the last bonk (one sound per press / no blip on a bonk)
+  let clickAt = -Infinity;
+  let bonkAt = -Infinity;
+  const bonk = (o) => { bonkAt = performance.now(); audio?.play('bonk', o); haptic('bonk'); };
+  const haptic = (k) => { try { if (typeof controller.haptic === 'function') controller.haptic(k); } catch { /* none */ } };
   const productive = { me: -Infinity, partner: -Infinity };     // performance.now() of the last confirmed productive action
   const race = { timer: null, by: null, code: null, n: 0, ids: [] };
   let lastGolden = false;
+  let goldenCardAt = -Infinity;               // L4-07: the Golden Hour banner says it
 
   const name = (pid) => (store.state && Object.hasOwn(store.state.players, pid) ? store.state.players[pid].name : t('common.partner'));
   const isMe = (by) => by === store.pid;
@@ -426,7 +544,10 @@ export function createFeedback({ store, controller, view, audio, ui }) {
   }
 
   // ---- store events ----------------------------------------------------------------------------------------
+  let lastFx = null;
   store.on('fx', ({ ev, by, local }) => {
+    lastFx = ev;
+    queueMicrotask(() => { if (lastFx === ev) lastFx = null; });
     // the Together Combo counts ACCEPTED actions (server-side), so a prediction never marks me productive: a lost
     // race would otherwise always look like a combo and swallow its toast
     if (!local && PRODUCTIVE.has(ev.e) && !isMe(by) && by !== 'sys') productive.partner = performance.now();
@@ -465,6 +586,19 @@ export function createFeedback({ store, controller, view, audio, ui }) {
     }
   });
 
+  // ---- QA r3 F3-05 (features' patch): my half of a same-day Together task is done ("Your half is done ✓ · Mia sits
+  // on a bench today"): once per task a farm day, on my own confirmed action (♥: no bench or rod icon exists)
+  const halfSaid = new Set();
+  store.on('delta', (d) => {
+    if (d.cid !== store.cid || !store.state || !(d.ev || []).some((ev) => ev.e === 'seated' || ev.e === 'fishCast')) return;
+    for (const { qid, half } of halvesOf(store.state, store.pid, store.now())) {
+      const key = `${qid}:${half.kind}:${store.state.farm.coop?.days?.d}`;
+      if (!half.mine || halfSaid.has(key)) continue;
+      halfSaid.add(key);
+      ui.toast(goalText(halfMsg(store.state, half)), { kind: 'love', ms: 6000 });
+    }
+  });
+
   // ---- Grandma's Farmhouse restored (M2): every Farm Kitchen gets a reward slot (`slotGranted`, one per Kitchen)
   let slotToastAt = -Infinity;
   store.on('fx', ({ ev, local }) => {
@@ -497,7 +631,12 @@ export function createFeedback({ store, controller, view, audio, ui }) {
     const d = defOf(ev.def ?? m.def);
     const thing = d ? N(d.id) : t('game.moved.thing');
     const pin = m.pin === store.pid ? 'Pinned' : '';
-    if (ev.e === 'stored') { ui.toast(t(`game.moved.stored${pin}`, { name: name(by), thing }), { kind: 'info', icon: ev.def ?? m.def, ms: 6000 }); return; }
+    if (ev.e === 'stored') {
+      const text = t(`game.moved.stored${pin}`, { name: name(by), thing });
+      // a finger has no B key (ui-shell QA r1 S-16)
+      ui.toast(controller.input === 'touch' ? dropKeyHints(text) : text, { kind: 'info', icon: ev.def ?? m.def, ms: 6000 });
+      return;
+    }
     const back = typeof controller.moveBack === 'function' && (controller.canMoveBack?.(ev.id) ?? true);
     if (back && typeof ui.notice === 'function') {
       ui.notice(t(`game.moved.moved${pin}`, { name: name(by), thing }), { action: { label: t('game.moved.back'), fn: () => controller.moveBack(ev.id) }, ms: 15000 });
@@ -509,20 +648,23 @@ export function createFeedback({ store, controller, view, audio, ui }) {
     switch (ev.e) {
       case 'levelUp':
         // a PERSONAL level (a new title) is a small chime for its owner only; the farm level is the big fanfare
-        if (ev.scope === 'player') { if (ev.pid === store.pid) audio.play('mastery', { force: true }); break; }
+        // (release 1.0 S6: personal titles stay quiet below farm level 5, like their cards in ui/levelup.js)
+        if (ev.scope === 'player') { if (ev.pid === store.pid && levelFromXp(store.state?.farm?.xp ?? 0) >= 5) audio.play('mastery', { force: true }); break; }
         audio.duck(1.8);
         audio.play('levelup', { force: true });
         break;
       case 'mastery': audio.play('mastery', { force: true }); break;
       case 'fairCeremony': ceremony(ev); break;
       case 'achievement': audio.play('achievement', { force: true }); break;
-      case 'questDone': audio.duck(1.2); audio.play('quest', { force: true }); break;
+      // M4: the quest jingle plays when its card is on screen ('hh:card' above), never under a panel that hides it
+      case 'questDone': break;
       case 'duet': audio.play('duet', { force: true }); break;
       case 'together':
         if (ev.kind === 'highFive') {
           audio.play('clap', { force: true });
           if (view.avatars?.highFive && ev.a && ev.b) view.avatars.highFive(ev.a, ev.b);
         } else if (ev.kind === 'goldenHour') {
+          goldenCardAt = performance.now();
           audio.duck(2.5);
           scene();                               // the music turns golden now (audio.setScene plays the swell once)
         } else if (ev.kind === 'task' || ev.kind === 'challenge') audio.play('quest', { force: true });
@@ -572,7 +714,7 @@ export function createFeedback({ store, controller, view, audio, ui }) {
     if (SOFT.has(r.code)) { ui.toast(r.code, { type: r.type, args: r.args, by: r.by }); return; }
     const lostRace = r.by && !isMe(r.by) && [ERR.EMPTY, ERR.OCCUPIED, ERR.NOT_READY, ERR.NOT_FOUND, ERR.NOT_HUNGRY, ERR.ALREADY_DONE, ERR.BLOCKED].includes(r.code);
     // type + args let the ui word a refusal per action ("Already cancelled or collected" for a stale cancel, RC-06)
-    if (!lostRace) { ui.toast(r.code, { by: r.by, type: r.type, args: r.args }); audio?.play('bonk', { gain: 0.6 }); return; }
+    if (!lostRace) { bonk({ gain: 0.6 }); ui.toast(r.code, { by: r.by, type: r.type, args: r.args }); return; }
     const t = performance.now();
     // the rules' combo meter is authoritative (server-observed: both productive within 3 s AND within 8 tiles);
     // the confirmed-actions check covers a server that does not track it
@@ -592,15 +734,33 @@ export function createFeedback({ store, controller, view, audio, ui }) {
     if (!race.timer) race.timer = setTimeout(flushRace, RACE_MS);
   });
 
-  controller.on('invalid', (e) => { if (!e || !e.race) audio?.play('bonk'); });   // a lost race is never an error
-  controller.on('tool', () => audio?.play('tab', { bus: 'ui' }));
+  controller.on('invalid', (e) => { if (!e || !e.race) bonk(); });   // a lost race is never an error
+  // F1: a tool change plays its tab, unless it is the same press as a generic click, or a planting follows in the same
+  // moment (a seed picked at a plot: the planting is that press's sound)
+  let tabTimer = null;
+  let plantedAt = -Infinity;
+  controller.on('tool', () => {
+    if (performance.now() - clickAt < SAME_PRESS_MS) return;
+    clearTimeout(tabTimer);
+    tabTimer = setTimeout(() => { tabTimer = null; if (performance.now() - plantedAt > 120) audio?.play('tab', { bus: 'ui' }); }, 0);
+  });
+  store.on('fx', ({ ev, local }) => { if (local && ev && ev.e === 'planted') { plantedAt = performance.now(); if (tabTimer) { clearTimeout(tabTimer); tabTimer = null; } } });
 
   // ---- haptics (mobile wave): a short pulse for my own harvests, collections and placements, a pattern for a farm
   // level-up (controller.haptic: touch players with haptics on; Android only, iOS has no vibration API) ------------
+  const plantRun = { n: 0, at: -Infinity };
   store.on('fx', ({ ev, local }) => {
     if (!local || !ev || typeof controller.haptic !== 'function') return;
     if (HAPTIC_HARVEST.has(ev.e)) controller.haptic('harvest');
     else if (ev.e === 'placed') controller.haptic('place');
+    else if (ev.e === 'planted') {
+      // F5: a soft tick on every third plot of a stroke (a 30-plot stroke is a purr, not a buzz)
+      const t = performance.now();
+      plantRun.n = t - plantRun.at > STREAK_MS ? 1 : plantRun.n + 1;
+      plantRun.at = t;
+      if (plantRun.n % 3 === 1) controller.haptic('plant');
+    } else if (ev.e === 'sold' && ev.coins > 0) controller.haptic('coins');
+    else if (ev.e === 'orderFilled' || ev.e === 'folkFilled') controller.haptic('reward');
   });
   store.on('celebrate', ({ ev }) => {
     if (ev && ev.e === 'levelUp' && ev.scope !== 'player' && typeof controller.haptic === 'function') controller.haptic('levelUp');
@@ -610,28 +770,139 @@ export function createFeedback({ store, controller, view, audio, ui }) {
   const doc = typeof document !== 'undefined' ? document : null;
   doc?.addEventListener('pointerdown', (e) => {
     const b = e.target && e.target.closest && e.target.closest('button, [role="button"], [role="tab"], summary');
-    if (b && !b.disabled) audio?.play(b.getAttribute('role') === 'tab' ? 'tab' : 'click', { bus: 'ui' });
+    if (!b || b.disabled) return;
+    // F1: a control with a sound of its own plays only that (the tool's tab, the panel's open, the seed's planting)
+    if (b.closest(OWN_SFX)) return;
+    clickAt = performance.now();
+    audio?.play(b.getAttribute('role') === 'tab' ? 'tab' : 'click', { bus: 'ui' });
   }, true);
   let hoverAt = 0;
   doc?.addEventListener('pointerover', (e) => {
     const b = e.target && e.target.closest && e.target.closest('button:not(:disabled), [role="button"]');
     const t = performance.now();
-    if (b && t - hoverAt > 90) { hoverAt = t; audio?.play('hover', { bus: 'ui' }); }
+    // F1: hover ticks on the dock and the tools only
+    if (b && b.closest(HOVER_SFX) && t - hoverAt > 90) { hoverAt = t; audio?.play('hover', { bus: 'ui' }); }
   }, true);
   if (ui?.panels?.on) {
-    ui.panels.on('open', () => audio?.play('open', { bus: 'ui' }));
-    ui.panels.on('close', () => audio?.play('close', { bus: 'ui' }));
+    ui.panels.on('open', () => { if (performance.now() - clickAt >= SAME_PRESS_MS) audio?.play('open', { bus: 'ui' }); });
+    ui.panels.on('close', (name) => {
+      if (performance.now() - clickAt >= SAME_PRESS_MS) audio?.play('close', { bus: 'ui' });
+      if (name === 'orders' || !ui.panels.top?.()) stall();
+    });
   }
-  const toasts = doc?.getElementById('toasts');
-  if (toasts && typeof MutationObserver === 'function') {
-    new MutationObserver((list) => {
-      if (list.some((m) => m.addedNodes.length)) audio?.play('toast', { bus: 'ui' });
-    }).observe(toasts, { childList: true });
+  // F1: a toast's blip, unless the line is a refusal or a lost race (their own sound, or none), or came with a bonk
+  globalThis.addEventListener?.('hh:toast', (e) => {
+    const d = e?.detail ?? {};
+    if (d.code || d.race || performance.now() - bonkAt < 60) return;
+    audio?.play('toast', { bus: 'ui' });
+  });
+  // M4: the quest jingle when its card is really on screen (a card held under a panel slides in when it closes)
+  globalThis.addEventListener?.('hh:card', (e) => {
+    if (e?.detail?.kind !== 'quest') return;
+    audio?.duck(1.2);
+    audio?.play('quest', { force: true });
+    haptic('reward');
+  });
+  // M4: the reward pip on an open panel's title: a small tick now, the jingle comes with the card
+  globalThis.addEventListener?.('hh:pip', () => audio?.play('xp', { gain: 0.6, bus: 'ui' }));
+  // feel#15: the seed popover at an empty plot opens with the panels' blip
+  // (the feedback layer starts before ui.init builds the popover: look for it once the HUD is up)
+  const watchSeedPop = (tries = 0) => {
+    const seedPop = doc?.querySelector?.('.seed-pop');
+    if (!seedPop) { if (tries < 20 && doc) setTimeout(() => watchSeedPop(tries + 1), 500); return; }
+    if (typeof MutationObserver !== 'function') return;
+    new MutationObserver(() => { if (!seedPop.hidden) audio?.play('open', { bus: 'ui', gain: 0.8 }); })
+      .observe(seedPop, { attributes: true, attributeFilter: ['hidden'] });
+  };
+  if (doc) setTimeout(watchSeedPop, 0);
+
+  // ---- F3 (feel#8): my farm carved: three chisel taps as the chips fly, then the mastery chime ------------------------
+  store.on('fx', ({ ev, by }) => {
+    if (!ev || ev.e !== 'named' || ev.what !== 'farm' || by !== store.pid) return;
+    setTimeout(() => {
+      for (let i = 0; i < 3; i++) audio?.play('chop1', { rate: 1.6, gain: 0.8, at: i * 0.12 + 0.001, force: true });
+      audio?.play('mastery', { force: true, gain: 0.9, at: 0.42 });
+    }, CARVE_MS);
+  });
+
+  // ---- QA r1 L-01: my surprise opened, through either door (the box on the farm, the gift sheet's "Open it"): the card
+  // with the giver's words, above whatever is open, a moment after the box starts to open; a reward pulse at once
+  store.on('fx', ({ ev, by }) => {
+    if (!ev || ev.e !== 'giftOpened' || ev.auto || ev.to !== store.pid || by !== store.pid) return;
+    haptic('reward');
+    setTimeout(() => {
+      const spec = giftCard(ev, store.state, store.pid, { thank: (i) => controller.do?.('thank', { i }) });
+      if (spec) ui?.banner?.(spec);
+    }, GIFT_CARD_MS);
+  });
+
+  // ---- QA r2 L2-07 (coop#6): the partner left me a surprise on the porch while I am here: say so, with the way there --
+  store.on('fx', ({ ev, by }) => {
+    if (!ev || ev.e !== 'keepsake' || ev.shelf || !ev.id || ev.to !== store.pid || by === store.pid) return;
+    const giver = store.state?.players?.[ev.by ?? by]?.name ?? t('common.partner');
+    const box = () => store.state?.farm.objects?.[ev.id] ?? null;
+    ui?.toast?.(() => t('cheer.gift.leftYou', { name: giver }), { kind: 'love', ms: 8000,
+      action: { label: () => t('moments.showMe'), fn: () => { const o = box(); if (o) view?.focus?.(o.x + 0.5, o.z + 0.5); } } });
+  });
+
+  // ---- D4: the name tags (render/name-tags.js) follow what the pointer is on and the home card that is open ----------
+  const say = (name, detail) => { try { globalThis.dispatchEvent?.(new CustomEvent(name, { detail })); } catch { /* no window */ } };
+  let hoverSaid;
+  controller.on('hover', (p) => {
+    const id = p && typeof p.id === 'string' ? p.id : null;
+    if (id !== hoverSaid) { hoverSaid = id; say('hh:world-hover', { id }); }
+  });
+  ui?.panels?.on?.('open', (name, args) => { if (name === 'animals') say('hh:home-card', { id: args?.id ?? null }); });
+  ui?.panels?.on?.('close', (name) => { if (name === 'animals') say('hh:home-card', { id: null }); });
+
+  // ---- M5: Mabel's board puffs once the Orders panel closes after an order was filled -------------------------------
+  let stallPending = false;
+  function stall() {
+    if (!stallPending || ui?.panels?.top?.()) return;
+    stallPending = false;
+    const objs = store.state?.farm.objects ?? {};
+    const id = Object.keys(objs).sort().find((k) => objs[k].def === 'order_board');
+    if (!id) return;
+    try { view.fx.play({ e: 'stallDone', id }, undefined, { by: store.pid, local: true }); } catch { /* fx not ready */ }
+    const { pan, visible } = placeOf({ id });
+    if (visible) audio?.play('crate', { gain: 0.5, pan });
   }
+  store.on('fx', ({ ev, local }) => {
+    if (!local || !ev || ev.e !== 'orderFilled') return;
+    stallPending = true;
+    if (!ui?.panels?.top?.()) setTimeout(stall, 400);
+  });
+
+  // ---- G11b: a plot turns ripe on screen (render-look's view.on('ripened')): a gold burst and a soft find ------------
+  const ripen = createRipenThrottle();
+  view.on?.('ripened', (r) => {
+    if (!r || !r.pos || !ripen(r.pos, performance.now())) return;
+    try { view.fx.play({ e: 'ripened', id: r.id, crop: r.crop }, r.pos, { by: null, local: true }); } catch { /* fx not ready */ }
+    const w = (typeof window !== 'undefined' && window.innerWidth) || 1;
+    const pan = r.screen && Number.isFinite(r.screen.x) ? Math.max(-0.8, Math.min(0.8, ((r.screen.x / w) * 2 - 1) * 0.8)) : 0;
+    audio?.play('find', { gain: 0.25, pan });
+  });
 
   // ---- the music scene: Golden Hour, rain, animals (cheap: every 2 s) ------------------------------------------
+  // F4: a workshop's tray that turns ready while on screen rings 'done' (crops stay silent, GDD §7.2)
+  let trays = new Map();
+  let doneAt = -Infinity;
+  function doneChime() {
+    const next = readyCounts(store.state, store.now());
+    const ids = turnedReady(trays, next);
+    trays = next;
+    if (!ids.length || performance.now() - doneAt < DONE_GAP_MS) return;
+    for (const id of ids) {
+      const { pan, visible } = placeOf({ id });
+      if (!visible) continue;
+      doneAt = performance.now();
+      audio?.play('done', { gain: 0.6, pan });
+      return;
+    }
+  }
   function scene() {
     if (!audio || !store.state) return;
+    doneChime();
     const golden = goldenHourBp(store.state, store.now()) > 0;
     const st = typeof view.stats === 'function' ? view.stats() : null;
     const species = new Set();
@@ -651,17 +922,23 @@ export function createFeedback({ store, controller, view, audio, ui }) {
     if (typeof view.waterNear === 'function') water = Math.max(water, Number(view.waterNear()) || 0);
     audio.setScene({ golden, rain: rainLevel(st), wet: Number.isFinite(st?.wet) ? st.wet : 0, birdbath, animals: [...species],
       createdAt: store.state.meta?.createdAt, water, village: villageBuilt(store.state, store.now()) });
-    if (golden && !lastGolden) ui.toast(t('game.golden.start'), {});
+    // QA r4 L4-07: one voice for the start: the banner when it came (both screens), else this line (a reload)
+    if (golden && !lastGolden) setTimeout(() => { if (performance.now() - goldenCardAt > 5000 && lastGolden) ui.toast(t('game.golden.start'), {}); }, 2500);
     lastGolden = golden;
   }
   const sceneTimer = setInterval(scene, 2000);
   sceneTimer?.unref?.();                                    // node tests: never keeps the process alive
   store.on('welcome', scene);
+  // the arrival chime plays when the shell tells the partner arrived (window 'hh:peer', ui/index.js peerNews): a
+  // welcome's first look, a reload or a server restart inside 10 s is no arrival (ui-shell QA r2 S2-02, jde#1: a restart
+  // played "arrived" with its sound though nobody left)
+  globalThis.addEventListener?.('hh:peer', (e) => {
+    if (e?.detail?.online && e.detail.pid !== store.pid) audio?.play('arrive', { force: true });
+  });
 
   return {
-    peer(pid, online) {
-      if (online && pid !== store.pid) audio?.play('arrive', { force: true });
-    },
+    /** MSG.PEER (main.js): the chime waits for the shell's word ('hh:peer' above). */
+    peer() {},
     partnerPing(pid, x, z, { visual = true } = {}) {
       if (visual && view.avatars?.ping) view.avatars.ping(pid, x, z);
       audio?.play('ping_partner', { force: true });
@@ -673,8 +950,11 @@ export function createFeedback({ store, controller, view, audio, ui }) {
       }
       audio?.play(id === 'high_five' ? 'clap' : 'emote', { partner: true });
     },
-    fxMeta(by, local) {
-      return { by, local, stroke: local && controller.stroke ? controller.stroke.count : 0 };
+    /** The meta main.js passes to view.fx.play. `ev` (additive): its named animal's name (D4); without it, the event
+     *  this layer just heard (its 'fx' listener runs before main.js's, in the same task). */
+    fxMeta(by, local, ev = lastFx) {
+      const name = ev && ev.e === 'collected' && typeof ev.id === 'string' ? store.state?.farm?.names?.[ev.id]?.name ?? null : null;
+      return { by, local, stroke: local && controller.stroke ? controller.stroke.count : 0, from: local ? fromNow() : null, ...(name ? { name } : {}) };
     },
     /** Stop the scene timer (tests). */
     dispose() { clearInterval(sceneTimer); clearTimeout(race.timer); },

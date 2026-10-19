@@ -16,9 +16,11 @@
 import * as THREE from 'three';
 import { iconUrl } from './icons.js';
 import { WORLD } from './world-uniforms.js';
+import { retryDelay, onWake } from './models.js';
 
 const SLOT = 128;
 const GRID = 8;                                  // 8 x 8 slots of 128 px = a 1024 px atlas
+const ICON_TRIES = 8;
 const STYLE = {
   ready: { fill: '#F3E6C8', ring: '#FFF8EA', edge: 'rgba(90,60,30,0.35)' },
   full: { fill: '#FFF1C4', ring: '#FFC83D', edge: 'rgba(150,100,10,0.55)' },
@@ -51,6 +53,44 @@ export function createBadges(layer) {
   const slots = new Map();                       // slotKey -> index
   const images = new Map();                      // icon id -> Image
   let nextSlot = 0;
+  // QA r4 S4-09: a failed icon (a blip) is asked for again on the models' backoff and at once on a wake, warned once;
+  // after ICON_TRIES it waits for a wake (no request storm for a missing icon)
+  const iconFails = new Map();                   // icon id -> failed tries in a row
+  const iconTimers = new Map();                  // icon id -> the retry timer
+  const iconWarned = new Set();
+  function loadIcon(icon) {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';               // option2#5: drawn into a WebGL canvas texture, maybe from the public host
+    img.decoding = 'async';
+    let settled = false;
+    img.onload = () => {
+      if (settled || images.get(icon) !== img) return;
+      settled = true;
+      iconFails.delete(icon);
+      for (const [k, v] of slots) if (k.startsWith(`${icon}|`)) drawBubble(v, k);
+    };
+    img.onerror = () => {
+      if (settled || images.get(icon) !== img) return;
+      settled = true;
+      const n = (iconFails.get(icon) || 0) + 1;
+      iconFails.set(icon, n);
+      if (!iconWarned.has(icon)) { iconWarned.add(icon); console.warn(`badge icon ${icon} failed to load: asking again`); }
+      if (n >= ICON_TRIES) return;
+      const t = setTimeout(() => { iconTimers.delete(icon); if (images.get(icon) === img) loadIcon(icon); }, retryDelay(n - 1));
+      iconTimers.set(icon, t);
+    };
+    img.src = iconUrl(icon, 128);
+    images.set(icon, img);
+  }
+  onWake(() => {
+    for (const [icon, n] of iconFails) {
+      if (!n) continue;
+      clearTimeout(iconTimers.get(icon));
+      iconTimers.delete(icon);
+      iconFails.set(icon, 0);
+      loadIcon(icon);
+    }
+  });
 
   /** The teardrop pin (FV2's blue water pins): a drop pointing down at the plot, a glossy highlight. */
   function drawDrop(st, style) {
@@ -133,14 +173,7 @@ export function createBadges(layer) {
     // a recycled slot loses its previous owner's picture: drop the stale mapping
     for (const [k, v] of slots) if (v === i) slots.delete(k);
     slots.set(key, i);
-    if (!images.has(icon) && !icon.startsWith('_')) {
-      const img = new Image();
-      img.decoding = 'async';
-      img.onload = () => { for (const [k, v] of slots) if (k.startsWith(`${icon}|`)) drawBubble(v, k); };
-      img.onerror = () => { console.error(`badge icon ${icon} failed to load`); };
-      img.src = iconUrl(icon, 128);
-      images.set(icon, img);
-    }
+    if (!images.has(icon) && !icon.startsWith('_')) loadIcon(icon);
     drawBubble(i, key);
     return i;
   }
@@ -178,7 +211,7 @@ export function createBadges(layer) {
       void main() {
         vec4 c = texture2D( uMap, vUv );
         if ( c.a < 0.02 ) discard;
-        c.rgb *= 1.0 - 0.18 * uNight;
+        c.rgb *= 1.0 - 0.32 * uNight;        // release 1.0: quieter at night, the windows and lamps lead (Astra night critique)
         gl_FragColor = c;
         #include <colorspace_fragment>
       }`,

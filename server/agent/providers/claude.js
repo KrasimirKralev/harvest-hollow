@@ -328,6 +328,15 @@ export function createProvider({ cfg, log, hostDir, mode = 'single', now = Date.
     return authStatus(user, p);
   }
 
+  /** Release 1.0 (H4, harvey#4): a sign-in the player did not finish (another plan was chosen) ends here: the waiting
+   *  `claude auth login` child is killed; an account already signed in stays signed in. */
+  async function cancelLogin(user) {
+    const e = logins.get(userKey(user));
+    if (e && !e.ended) endLogin(user, e, { provider: 'claude', state: 'signed_out' });
+    statusCache.delete(userKey(user));
+    return status(user);
+  }
+
   async function signOut(user) {
     const e = logins.get(userKey(user));
     if (e) endLogin(user, e, { provider: 'claude', state: 'signed_out' });
@@ -456,7 +465,7 @@ export function createProvider({ cfg, log, hostDir, mode = 'single', now = Date.
     id: 'claude',
     available,
     models,
-    signIn: { start, continue: cont, status, signOut },
+    signIn: { start, continue: cont, status, signOut, cancel: cancelLogin },
     run: runJob,
     cancel(jobId) { const c = runs.get(jobId); if (c) killTree(c, 2000); },
     forget(farmKey) {

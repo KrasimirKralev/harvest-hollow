@@ -20,6 +20,39 @@
   <!-- Fonts are vendored (public/assets/fonts, SIL OFL): LAN play may have no internet, and no public CDN (tech §12.1). -->
   <link rel="preload" href="/assets/fonts/fredoka-latin.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="/assets/fonts/baloo2-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <!-- release 1.0 S8 (feel#3): the boot painting and the logo before the 275 module preloads (at 85 KB/s the painting
+       came at 30.8 s, with these at 8 s); the slot picker's painting next. infra rewrites the hrefs for option 2 -->
+  <link rel="preload" as="image" href="/assets/art/welcome-couple.webp" fetchpriority="high" media="(min-width: 960px), (min-resolution: 1.5dppx)">
+  <link rel="preload" as="image" href="/assets/art/welcome-couple_960.webp" fetchpriority="high" media="(max-width: 959px) and (max-resolution: 1.49dppx)">
+  <link rel="preload" as="image" href="/assets/art/logo.webp" fetchpriority="high">
+  <!-- the slot picker's painting only for a page that shows the picker: no farmer's key stored for this farm (QA r1
+       S-12: a returning farmer's page logged "welcome.webp was preloaded but not used" all session). It sits beside the
+       logo: the server moves the logo preload to the asset host for option 2, the same place the stylesheet's
+       relative url() asks for the painting -->
+  <script>
+    (function () {
+      try {
+        var m = /^\/f\/([A-Za-z0-9_-]{6,64})\/?$/.exec(location.pathname);
+        var pre = m ? 'hh.f.' + m[1] + '.' : 'hh.';
+        var tk = JSON.parse(localStorage.getItem(pre + 'tokens') || 'null');
+        // a ?slot= with a name= claims at once (the e2e tools' fresh farms): the picker never shows (QA r2 S-17)
+        var q = location.search;
+        var known = (tk && Object.keys(tk).some(function (k) { return tk[k]; })) || localStorage.getItem(pre + 'key') || /[#&]k=/.test(location.hash)
+          || (/[?&]slot=[^&]/.test(q) && /[?&]name=[^&]/.test(q));
+        if (known) return;
+        var logo = document.querySelector('link[rel="preload"][href*="/assets/art/logo.webp"]');
+        var at = logo ? String(logo.getAttribute('href')) : '/assets/art/logo.webp';
+        var l = document.createElement('link');
+        l.rel = 'preload';
+        l.as = 'image';
+        // a hosted farm's page (/f/<id>) without a key shows the farm gate first, which paints this painting only on a
+        // wide screen (farm.css): a phone there preloaded it for nothing (QA r2 OBS-1, the multi host's warning gate)
+        l.media = m ? '(min-width: 961px)' : '(min-width: 960px), (min-resolution: 1.5dppx)';
+        l.href = at.replace(/\/assets\/art\/logo\.webp(?:\?.*)?$/, '/assets/art/welcome.webp');
+        document.head.appendChild(l);
+      } catch (e) { /* storage blocked: the picker paints its painting when it shows */ }
+    })();
+  </script>
   <link rel="stylesheet" href="/css/style.css">
   <link rel="stylesheet" href="/css/shell.css">
   <link rel="stylesheet" href="/css/panels.css">
@@ -27,8 +60,14 @@
   <link rel="stylesheet" href="/css/panels-collect.css">
   <link rel="stylesheet" href="/css/panels-league.css">
   <link rel="stylesheet" href="/css/panels-home.css">
-  <!-- phones and tablets last: every rule of it sits in a media query no desktop window matches -->
+  <!-- phones and tablets after the base sheets: every rule of it sits in a media query no desktop window matches -->
   <link rel="stylesheet" href="/css/mobile.css">
+  <!-- release 1.0 (release-scope §7.2): later files win the cascade. ui-panels' phone panels, then life-feel's feel -->
+  <link rel="stylesheet" href="/css/mobile-panels.css">
+  <link rel="stylesheet" href="/css/feel.css">
+  <!-- release 1.0 S8 (feel#3): a 32 x 18 copy of each painting (~350 B), the painting's first layer from the first paint
+       (css/shell.css #boot, #slot-picker use them under the real paintings) -->
+  <style>:root{--lqip-boot:url(data:image/webp;base64,UklGRv4AAABXRUJQVlA4IPIAAACwBQCdASogABIAPtFYpEuoJSOhsAgBABoJbACdMuupORUAtg3RJzwjZsQrv0TqIj+VIh05ITAA/u/KbA+61gjUSNAqStoBU0UTe41xehJbF4KwRvpeujbFJlSjuWivm396OdQehyy5u584jy6F8WCrXsmBv4M1rGisWnA71OOUAW+w8ep2+OTYeu5c+IfcPDDTS2H3Co9x8FCu/FBGCmC5zrV80XVh4o6YZIvEfGa55iIf0i1VijbRCKCb/k6rJ3vTqs6rKeWBiOu/RBbKK/d+BbM6KHxQ9J6AsTmhAZz6Nw+1cBr3fg3S82HTvwbwDIAAAA==);--lqip-slot:url(data:image/webp;base64,UklGRvwAAABXRUJQVlA4IPAAAAAQBgCdASogABIAPtFWpU0oJKOiMBgIAQAaCWwAnTLrrpQlyi9fsYLYv2BtfDiVystf4/8MoU4JdIAA/u/KbBLdjzEcdT0V5HAvTrg02munS2P03zAo0Bfo2xToB44pEFH4fLvv/inGOvqqHezVSDNkc+LBVrz3MIPmJ4wew1TYfwcEabj71le70x50VQRXXzewSI1uzUvo9E1KRfdejaiTjhhq0qlUOKGkMix95CfK7lSXb2lD07zSGxxDMI7Mf2MY6iV0DYCkO4aT9BIp1gitTqYZQwXiB+aXseu5NoQgQxGlCIu6wLSgM3xeQZ6eAAA=)}</style>
   <!-- never add modulepreload links here: the server renders this page with a versioned import map and preloads the
        whole static module graph right after it (server/static.js, QA wave 1 SV-05) -->
   <script type="importmap">
@@ -78,7 +117,7 @@
       <button class="pill pill-coins" id="hud-coins-pill" type="button" data-tip="Farm treasury (shared). Open the Market" data-i18n-attr="data-tip:shell.html.coinsTip">
         <img class="icon" src="/assets/icons/coins.png" alt="" width="50" height="50" draggable="false">
         <span class="num" id="hud-coins">0</span><span class="sr-only" data-i18n="shell.html.coinsSr"> coins</span>
-        <span class="more" aria-hidden="true">+</span>
+        <span class="more" aria-hidden="true"><svg viewBox="0 0 12 12" width="12" height="12"><path d="M4 2.5 7.5 6 4 9.5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
       </button>
       <button class="pill pill-acorns" id="hud-acorns-pill" type="button" data-tip="Acorns (shared). Rare treats for special things" data-i18n-attr="data-tip:shell.html.acornsTip">
         <img class="icon" src="/assets/icons/acorns.png" alt="" width="50" height="50" draggable="false">
@@ -91,7 +130,7 @@
       <button class="pill pill-barn" id="hud-barn-pill" type="button" data-tip="The Barn (I)" data-i18n-attr="data-tip:shell.html.barnTip">
         <img class="icon" src="/assets/icons/barn.png" alt="" width="50" height="50" draggable="false">
         <span class="num"><span id="hud-barn">0</span><span class="cap" id="hud-barn-cap"></span></span><span class="sr-only" data-i18n="shell.html.barnSr"> items in the barn</span>
-        <span class="more" aria-hidden="true">+</span>
+        <span class="more" aria-hidden="true"><svg viewBox="0 0 12 12" width="12" height="12"><path d="M4 2.5 7.5 6 4 9.5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
       </button>
     </section>
 
@@ -104,7 +143,7 @@
 
     <div class="tray-wrap" id="tray-wrap">
       <div class="coach-slot" id="coach-slot"></div>
-      <div class="seed-tray paper" id="seed-tray" role="listbox" aria-label="Seeds" data-i18n-attr="aria-label:shell.html.seeds" hidden></div>
+      <div class="seed-tray paper" id="seed-tray" role="group" aria-label="Seeds" data-i18n-attr="aria-label:shell.html.seeds" hidden></div>
       <div class="seed-tray build-tray paper" id="build-tray" role="menu" aria-label="Build" data-i18n-attr="aria-label:shell.html.build" hidden></div>
       <div class="stroke-chip" id="stroke-chip" role="status" hidden></div>
       <nav class="toolbar wood" id="toolbar" aria-label="Tools" data-i18n-attr="aria-label:shell.html.tools"></nav>
@@ -126,7 +165,9 @@
   <div class="tip" id="tip" role="tooltip" hidden></div>
 
   <!-- Boot: the painted title scene until the farm (or the slot picker) is ready; the shell updates its line. -->
-  <section class="modal-layer boot" id="boot" aria-live="polite">
+  <!-- QA r1 S-28 (ap#8): only the words are a live region; the percentage and the bar change with every file that
+       arrives (98 times on a slow phone) and are not read out -->
+  <section class="modal-layer boot" id="boot">
     <!-- the farmhouse chimney (and a village chimney) of the painting smoke gently (shell.css "welcome smoke"):
          pure CSS, locked to the cover-scaled painting at any window size; data-rest="keep": it never rests -->
     <div class="smoke" aria-hidden="true" data-rest="keep">
@@ -136,7 +177,8 @@
     <div class="boot-card">
       <h1 class="boot-title"><picture><source srcset="/assets/art/logo.webp" type="image/webp">
         <img class="boot-logo" src="/assets/art/logo.png" alt="Harness Hollow" width="1200" height="538"></picture></h1>
-      <p class="boot-line" id="boot-line"><span class="spin" aria-hidden="true"></span><span id="boot-text">Waking up the farm…</span></p>
+      <p class="boot-line" id="boot-line"><span class="spin" aria-hidden="true"></span><span id="boot-text" role="status" aria-live="polite">Waking up the farm…</span><span class="boot-pct" id="boot-pct" aria-hidden="true"></span>
+        <span class="boot-prog" aria-hidden="true"><i id="boot-prog"></i></span></p>
       <!-- the language toggle (i18n): works before any module has loaded (the inline script below), remembered per device -->
       <div class="lang-pick" role="group" aria-label="English / Български"><button type="button" class="lang-opt" data-lang="en" lang="en">English</button><span class="lang-dot" aria-hidden="true">·</span><button type="button" class="lang-opt" data-lang="bg" lang="bg">Български</button></div>
     </div>
@@ -161,6 +203,36 @@
         for (var i = 0; i < opts.length; i++) opts[i].setAttribute('aria-pressed', String(opts[i].getAttribute('data-lang') === l));
       }
       paint(L, true);
+      // release 1.0 S8 (feel#3): a real progress line: the game's files that arrived against the modules the page
+      // preloads (the server lists every one), until the farm's own code takes the line over (ui/index.js)
+      try {
+        var want = document.querySelectorAll('link[rel="modulepreload"]').length + 4;
+        var seen = 0;
+        var pct = document.getElementById('boot-pct');
+        var bar = document.getElementById('boot-prog');
+        var done = 0;
+        var shown = 0;
+        var show = function () {
+          if (window.__hhBootTaken || !pct) return;
+          // the files before the welcome are the first 52 %; the first view's models drive the rest (ui/index.js,
+          // QA r1 S-24: the line parked at "99 %" for 11 s while the farm still loaded). Once the files are in, the line
+          // creeps on toward 60 % while the welcome is on its way (QA r2 S-22: it stood at "60 %" for 3.7 s)
+          var files = Math.min(1, seen / Math.max(1, want));
+          var now = performance.now();
+          if (files >= 1 && !done) done = now;
+          var k = Math.min(0.6, 0.52 * files + (done ? 0.08 * Math.min(1, (now - done) / 8000) : 0));
+          if (k <= shown) return;
+          shown = k;
+          pct.textContent = ' ' + Math.round(k * 100) + (L === 'bg' ? ' %' : '%');
+          if (bar) bar.style.width = (k * 100).toFixed(1) + '%';
+        };
+        if (window.PerformanceObserver) {
+          var po = new PerformanceObserver(function (list) { seen += list.getEntries().length; show(); });
+          po.observe({ type: 'resource', buffered: true });
+          window.__hhBootObserver = po;
+          var creep = setInterval(function () { if (window.__hhBootTaken) clearInterval(creep); else show(); }, 400);
+        }
+      } catch (e) { /* no observer: the line stays words only */ }
       // the home-screen app's description in the chosen language (the name stays "Harness Hollow")
       var mf = document.querySelector('link[rel="manifest"]');
       if (mf && L === 'bg') mf.setAttribute('href', '/manifest.bg.webmanifest');
@@ -184,7 +256,7 @@
     <div class="slot-card wood">
       <!-- the carved wide logo above the card (art lane Hookup 4: the welcome painting keeps its sky free for it) -->
       <h1 class="slot-title" id="slot-title"><picture><source srcset="/assets/art/logo-wide.webp" type="image/webp">
-        <img class="slot-logo" src="/assets/art/logo-wide.png" alt="Harness Hollow" width="1400" height="336"></picture></h1>
+        <img class="slot-logo" src="/assets/art/logo-wide.png" alt="Harness Hollow" width="1400" height="336" loading="lazy"></picture></h1>
       <div class="slot-paper paper">
         <p class="slot-sub" id="slot-sub" data-i18n="shell.slot.who">Who is playing on this screen?</p>
         <div class="slots" id="slot-list"></div>

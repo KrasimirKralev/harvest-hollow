@@ -3,7 +3,7 @@
 // the capacity upgrade and buying more. Opened with args { id } = a home or one of its animals; args.focus 'room'
 // scrolls to the room step.
 import { itemOf, MASTERY, COOP, BOOSTS } from '../../../../shared/content/index.js';
-import { h, icon, fmt, fmtDuration, createKit, bar, chip, empty, pill, ribbonTag, stars, price } from './kit.js';
+import { h, icon, fmt, fmtDuration, createKit, bar, chip, empty, pill, ribbonTag, stars, price, placeTitle, listRole } from './kit.js';
 import { homeView, levelOf, starsOf, priceOf, durationText, placedOf, hurryQuote, blockerText } from './model.js';
 import { I } from './intents.js';
 import { rosette } from './art.js';
@@ -25,7 +25,10 @@ const STATUS = getters({
 const prodName = (id) => (itemOf(id) ? cname(id) : t('farm.ani.product'));
 
 export const animalsPanel = {
-  title: (args, state) => (state ? homeView(state, args.id, 0)?.name ?? t('farm.ani.title') : t('farm.ani.title')),
+  title: (args, state) => {
+    const v = state ? homeView(state, args.id, 0) : null;
+    return v ? placeTitle(v.def.id, v.name) : t('farm.ani.title');
+  },
   size: 'wide',
   topics: ['objects', 'inventory', 'wallet', 'xp', 'mastery', 'keep'],
   mount(body, ctx) {
@@ -45,7 +48,7 @@ export const animalsPanel = {
       body.replaceChildren();
       const v = view();
       if (!v) { body.append(empty(t('farm.ani.gone'), 'barn')); return; }
-      ctx.setTitle(v.name);
+      ctx.setTitle(placeTitle(v.def.id, v.name));
       const st = ctx.store.state;
       const sp = v.species[0];
       const mastery = sp ? starsOf(st, 'animals', sp.id) : null;
@@ -65,7 +68,8 @@ export const animalsPanel = {
             prize ? h('div.pn-ani-prize.pn-home-prize', { title: t('farm.ani.prizeTip', { n: prize.at }) },
               rosette(prize.next ? 1 : 2, 18), prize.next ? bar(prize.next.cycle / prize.at, null, 'pn-thin pn-ribbonbar') : null, h('small', prize.text)) : null)),
           h('div.pn-bhead-acts',
-            kit.button({ label: t('farm.ani.tendAll'), glyph: 'check', cls: 'btn--sun', ...lazy(() => I.tend(v.id)), data: { tend: v.id },
+            // a colony eats nothing: its one button collects (QA r1 P-21: "Feed all" beside "Bees need no feed")
+            kit.button({ label: sp && sp.feed === null ? t('farm.ani.collectAll') : t('farm.ani.tendAll'), glyph: 'check', cls: 'btn--sun', ...lazy(() => I.tend(v.id)), data: { tend: v.id },
               hint: () => {
                 const cur = view();
                 const left = cur && Number.isFinite(cur.nextAt) ? cur.nextAt - ctx.now() : null;
@@ -75,11 +79,13 @@ export const animalsPanel = {
               } }),
             sp && sp.feed === null ? null : kit.button({ label: t('farm.ani.petAll'), glyph: 'hand', cls: 'pn-sm btn--sky', ...lazy(() => I.pet(v.id)), data: { pet: v.id },
               hint: { done: t('farm.ani.allPetted') } }))),
-        pairSection(ctx, kit, v.id, pairSel),
-        animalGrid(v),
-        // the M1b species' own section: truffles, the pond, the goat, the horse (Ride), the hive's forage (ui-collect)
-        ...[m1bSection(v, ctx)].filter(Boolean),
-        footer(v));
+        // Element.append(null) prints "null": a colony has no ❤ card (QA r1 P-02), so every part that may be absent is
+        // filtered out
+        ...[pairSection(ctx, kit, v.id, pairSel),
+          animalGrid(v),
+          // the M1b species' own section: truffles, the pond, the goat, the horse (Ride), the hive's forage (ui-collect)
+          m1bSection(v, ctx),
+          footer(v)].filter(Boolean));
       kit.refresh();
       kit.tick();
     }
@@ -103,7 +109,7 @@ export const animalsPanel = {
           // then stays quiet about NO_ITEMS (it used to repeat "Need 1 more Chicken Feed" under "Wants 1 Chicken Feed")
           const feedName = itemOf(a.feed) ? cname(a.feed) : t('farm.ani.feed');
           const haveFeed = (v.feeds.find((f) => f.item === a.feed)?.have ?? 0) >= a.feedQty;
-          const wants = { n: a.feedQty, feed: feedName, q: itemOf(a.feed) ? Q(a.feed, a.feedQty) : `${feedName} ×${a.feedQty}` };
+          const wants = { n: a.feedQty, feed: feedName, q: itemOf(a.feed) ? Q(a.feed, a.feedQty) : `${feedName}\u00a0×${a.feedQty}` };
           line.textContent = a.status === 'ready' ? t('farm.ani.waiting', { prod: itemOf(a.def.product) ? cname(a.def.product) : t('farm.ani.productCap') })
             : haveFeed ? t('farm.ani.wants', wants) : t('farm.ani.wantsNone', wants);
         }
@@ -123,7 +129,7 @@ export const animalsPanel = {
         const prize = a.prized ? ribbonTag(t('farm.ani.blueRibbon'), 'pn-try') : null;
         // a chick is yellow whatever hen it grows into: its backdrop is a soft straw yellow
         const tint = a.baby ? (BABY_ICONS[a.def.id] ? '#F6DE7A' : null) : animalTint(a.id, a.def.id);
-        grid.append(h(`article.pn-ani.${a.status}`, { role: 'listitem', dataset: { animal: a.id } },
+        grid.append(h(`div.pn-ani.${a.status}`, { role: 'listitem', dataset: { animal: a.id } },
           h('div.pn-ani-art', { style: tint ? { '--tint': tint } : null, dataset: { tint: tint ? 'on' : 'off' } },
             icon(a.baby ? babyIcon(a.def.id) : a.def.id, { size: a.baby ? 50 : 60 }), a.baby ? h('span.pn-ani-baby', t('farm.ani.babyTag')) : null),
           h('div.pn-ani-main',
@@ -131,7 +137,7 @@ export const animalsPanel = {
             line, a.status === 'baby' || a.status === 'producing' ? fill : null, prize, paired.has(a.id) ? pairTag() : null),
           h('div.pn-ani-acts', act, hurry, sellBtn(a))));
       }
-      return grid;
+      return listRole(grid);          // a home with no animal says so: not a list (QA r1 P-19 sibling)
     }
 
     /** The animal's name: click to name it (shared; the tag records who named it, GDD §6.1). */
@@ -142,7 +148,9 @@ export const animalsPanel = {
         title: a.name ? t('farm.ani.namedBy', { name: st.players[a.namedBy]?.name ?? t('farm.ani.youTwo') })
           : t('farm.ani.giveName', { what: a.def.name.toLowerCase(), sp: N(a.def.id) }),
         on: { click: () => {
-          const input = h('input.pn-input.pn-name-input', { maxlength: '16', value: a.name || '', placeholder: t('farm.ani.namePh'),
+          // QA r3 S3-16 (ui-shell's patch): a field with no button of its own: keepInView keeps the field alone, not the
+          // animal's "Collect" after it
+          const input = h('input.pn-input.pn-name-input', { maxlength: '16', value: a.name || '', placeholder: t('farm.ani.namePh'), dataset: { keepInView: 'none' },
             'aria-label': t('farm.ani.nameFor', { what: a.def.name, sp: N(a.def.id) }) });
           let finished = false;
           const done = (save) => {
@@ -166,7 +174,10 @@ export const animalsPanel = {
         return kit.confirmButton({ label: t('farm.ani.undoBuy'), cls: 'pn-xs pn-ghost', confirm: t('farm.ani.refund', { n: a.paid }), ...lazy(() => I.refund(a.id)) });
       }
       const back = a.free ? 0 : Math.floor((a.paid * (a.prized ? 10_000 : 5000)) / 10_000);
-      return kit.confirmButton({ label: t('farm.ani.sell'), cls: 'pn-xs pn-ghost', confirm: back ? t('farm.ani.sellFor', { n: back }) : t('farm.ani.letGo'), ...lazy(() => I.sellObject(a.id)) });
+      // the rules keep an animal whose goods wait (decor.js removableCode: OCCUPIED): say so, not "Already busy" (QA r2 P2-07)
+      const item = itemOf(a.def.product) ? N(a.def.product) : t('farm.ani.product');
+      return kit.confirmButton({ label: t('farm.ani.sell'), cls: 'pn-xs pn-ghost', confirm: back ? t('farm.ani.sellFor', { n: back }) : t('farm.ani.letGo'), ...lazy(() => I.sellObject(a.id)),
+        hint: { texts: { OCCUPIED: t('farm.ani.collectFirst', { item }) } } });
     }
 
     function footer(v) {
@@ -199,7 +210,7 @@ export const animalsPanel = {
       const coins = () => buyQuote(ctx.store.state, sp.id, adult, v.id)?.coins ?? priceOf(ctx.store.state, sp.id, { adult }).coins;
       const g = homeGrowth(ctx.store.state, v.id);
       return h('div.pn-buyani-row', h('span', adult ? t('farm.ani.adultShort') : t('market.animal.baby')), price(q && q.code === null ? { coins: q.coins } : base),
-        kit.button({ label: t('market.card.buy'), cls: 'pn-xs', ...lazy(() => I.buyAnimal(sp.id, adult, v.id)), data: { buy: sp.id, adult: String(adult) },
+        kit.button({ from: true, label: t('market.card.buy'), cls: 'pn-xs', ...lazy(() => I.buyAnimal(sp.id, adult, v.id)), data: { buy: sp.id, adult: String(adult) },
           hint: () => ({ coins: Math.max(0, coins() - ctx.store.state.farm.wallet.coins), cap: g?.max ?? v.cap,
             texts: { BLOCKED: t('farm.ani.noRoom', { why: blockText(g) }), OUT_OF_BOUNDS: t('farm.ani.noRoomEdge', { home: N(v.def.id) }) } }) }));
     }

@@ -215,7 +215,8 @@ export class SyncStore {
     this.seq = seq;
     this.pending.push({ seq, type, args, now, undo: r.tx.inverse() });
     if (hold) this.unsent++;
-    else this.send({ t: MSG.ACT, seq, type, args });     // `now` is NOT sent: the server uses its own clock
+    // `at` only words a refusal (how far back rej.by looks, QA r3 I3-01); the rules use the server's own clock
+    else this.send({ t: MSG.ACT, seq, type, args, at: now });
     this.emitChange([r.tx.ops], 'local');
     this.notePending();
     for (const ev of r.tx.events) if (!CELEBRATIONS.has(ev.e)) this.emit('fx', { ev, by: this.pid, local: true });
@@ -250,7 +251,7 @@ export class SyncStore {
   /** Send the held actions (merged per stroke). Returns how many acts went out. */
   release() {
     const out = this.mergeHeld();
-    for (const p of out) this.send({ t: MSG.ACT, seq: p.seq, type: p.type, args: p.args });
+    for (const p of out) this.send({ t: MSG.ACT, seq: p.seq, type: p.type, args: p.args, at: p.now });
     return out.length;
   }
 
@@ -285,7 +286,7 @@ export class SyncStore {
       }
     }
     this.replayPending();
-    for (const p of this.pending) this.send({ t: MSG.ACT, seq: p.seq, type: p.type, args: p.args });
+    for (const p of this.pending) this.send({ t: MSG.ACT, seq: p.seq, type: p.type, args: p.args, at: p.now });
     this.emit('change', { ids: new Set(), topics: new Set([ALL]), source: 'welcome', pending: this.pending.length });
     this.notePending();
     this.emit('welcome', { pid: w.pid, peers: w.peers || [], v: w.v });

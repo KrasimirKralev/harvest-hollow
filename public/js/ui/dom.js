@@ -14,10 +14,12 @@
 //   svgIcon(name, size?) -> SVGElement       the shell's inline SVG glyphs (GDD §7.3 dock + right edge)
 //   touchPlayer(controller?) -> bool         the player is on a phone or tablet (a touch last, or a coarse pointer)
 //   touchText(text, touch) -> string         "click" reads "tap" and "(G)" key hints drop out for a touch player
+import { assetUrl, assetPath, assetIntegrity } from '../net/asset-base.js';
 import { iconUrl } from '../render/icons.js';
 import { portraitSpec, peekPortrait } from '../render/portrait.js';
 import { farm } from '../net/farm.js';
 import { fmtNum, fmtShort as i18nShort, fmtDuration as i18nDuration, lang, touchOf } from '../i18n/index.js';
+import { KEY_HINT } from '../game/touch.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
@@ -62,6 +64,31 @@ function append(el, children) {
     if (Array.isArray(c)) append(el, c);
     else el.append(c instanceof Node ? c : document.createTextNode(String(c)));
   }
+}
+
+// a picture that failed (a link blip) hides and asks again after 1-30 s or once the link is back (QA r4 S4-09)
+const IMG_RETRY = [1000, 2000, 4000, 8000, 16000, 30000, 30000, 30000];
+function imgRetry(img) {
+  const src = img?.tagName === 'IMG' ? img.getAttribute('src') ?? '' : '';
+  const n = Number(img?.dataset?.retry || 0);
+  if (!/\/assets\//.test(src) || n >= IMG_RETRY.length) return;
+  img.dataset.retry = String(n + 1);
+  img.style.visibility = 'hidden';
+  const go = () => { clearTimeout(t); removeEventListener('online', go); if (img.getAttribute('src') === src) img.src = src; };
+  const t = setTimeout(go, IMG_RETRY[n]);
+  addEventListener('online', go);
+}
+if (typeof addEventListener === 'function' && typeof document !== 'undefined') {
+  addEventListener('error', (e) => imgRetry(e.target), true);
+  addEventListener('load', (e) => { const img = e.target; if (img?.tagName === 'IMG' && img.dataset.retry) { img.style.visibility = ''; delete img.dataset.retry; } }, true);
+  // the page's own pictures (the pills' icons) can fail before this module runs
+  for (const img of document.images ?? []) if (img.complete && !img.naturalWidth) imgRetry(img);
+}
+
+/** .more-l / .more-r on a sideways strip with items past that edge: its css draws the cue (QA r4 S4-07). */
+export function tabCue(s) {
+  s.classList.toggle('more-l', s.scrollLeft > 2);
+  s.classList.toggle('more-r', s.scrollLeft + s.clientWidth < s.scrollWidth - 2);
 }
 
 export function icon(id, { size = 32, alt = '', cls = '' } = {}) {
@@ -196,6 +223,10 @@ const GLYPHS = {
   sun: `<g stroke="${INK}" stroke-width="2.5" stroke-linecap="round"><path d="M24 3v6M24 39v6M3 24h6M39 24h6M9 9l4.5 4.5M34.5 34.5L39 39M9 39l4.5-4.5M34.5 13.5L39 9"/></g>
     <circle cx="24" cy="24" r="11" fill="#FFC83D" stroke="${INK}" stroke-width="2.5"/>
     <path d="M18 20c1.5-3 4-4.5 7-4.5" fill="none" stroke="#fff" stroke-opacity=".6" stroke-width="2.5" stroke-linecap="round"/>`,
+  // release 1.0 (astra#8): Undo is a hooked arrow with a tail, never the camera's turn arrow
+  undo: `<path d="M17 20h15a9 9 0 0 1 0 18H22" fill="none" stroke="${INK}" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M17 20h15a9 9 0 0 1 0 18H22" fill="none" stroke="#FFE58A" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M20 11l-9 9 9 9" fill="#FFE58A" stroke="${INK}" stroke-width="3" stroke-linejoin="round"/>`,
   hand: `<path d="M17 25V12a3 3 0 0 1 6 0v10-13a3 3 0 0 1 6 0v13-10a3 3 0 0 1 6 0v12-6a3 3 0 0 1 6 0v12c0 10-6 16-14 16-6 0-9-3-13-8l-6-8a3 3 0 0 1 5-4z" fill="#FFD9B8" stroke="${INK}" stroke-width="2.5" stroke-linejoin="round"/>`,
 };
 
@@ -212,6 +243,8 @@ export function svgIcon(name, size = 28) {
 }
 
 export const GLYPH_NAMES = Object.freeze(Object.keys(GLYPHS));
+/** More glyphs from a lazy module (1.0: ui/powerups.js); svgIcon draws them once added. */
+export const addGlyphs = (more) => Object.assign(GLYPHS, more);
 
 /**
  * Link a stylesheet once. index.html links the panel sheets with a version (`/css/panels.css?v=<hash>`, rendered by
@@ -222,8 +255,15 @@ export function ensureStylesheet(href) {
   try {
     const doc = globalThis.document;
     if (!doc || !doc.head || typeof doc.querySelectorAll !== 'function') return;
-    const has = [...doc.querySelectorAll('link')].some((l) => String(l.getAttribute('href') || '').split('?')[0] === href);
-    if (!has) doc.head.append(Object.assign(doc.createElement('link'), { rel: 'stylesheet', href }));
+    // option 2 (option2#6): a host page links its sheets from the asset origin: compare paths, link the asset URL (with
+    // the server's own hash of the file on a host page)
+    const has = [...doc.querySelectorAll('link')].some((l) => assetPath(String(l.getAttribute('href') || '')).split('?')[0] === href);
+    if (!has) {
+      const link = Object.assign(doc.createElement('link'), { rel: 'stylesheet', href: assetUrl(href) });
+      const sri = assetIntegrity(href);
+      if (sri) Object.assign(link, { integrity: sri, crossOrigin: 'anonymous' });
+      doc.head.append(link);
+    }
   } catch { /* no DOM: nothing to link */ }
 }
 
@@ -269,7 +309,9 @@ export function playerMark(pid, player, { size = 18, title = null } = {}) {
   el.style.setProperty('--pcd', v['--pcd']);
   if (size !== 18) { el.style.width = `${size}px`; el.style.height = `${size}px`; }
   if (title) el.title = title;
-  el.textContent = ((player && player.name) || '?').slice(0, 1).toUpperCase();
+  // the first character, not the first UTF-16 unit: a name that starts with an emoji kept half of it ("\ud83d" drew
+  // as "�" in every feed mark; QA r1 S-36)
+  el.textContent = (Array.from((player && player.name) || '?')[0] ?? '?').toUpperCase();
   // a big mark (30 px and up: the duel's farmers) wears the farmer's portrait once this browser has drawn it
   // (peekPortrait reads the cache, it never draws); small marks (feed, orders, nursery) keep the initial
   const url = size >= 30 && player ? peekPortrait(portraitSpec(pid, player)) : null;
@@ -284,8 +326,9 @@ export function playerMark(pid, player, { size = 18, title = null } = {}) {
 export function rollNumber(el, to, { ms = 400, format = fmt } = {}) {
   const shown = Number.isFinite(el._rollAt) ? el._rollAt : Number(el.dataset.v ?? to);
   el.dataset.v = String(to);
+  // the player's choice once settings.js applied it (body.motion-set), the device's setting before (QA r2 S-15)
   const still = document.body.classList.contains('motion-reduced')
-    || globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    || (!document.body.classList.contains('motion-set') && Boolean(globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches));
   if (shown === to || still) {
     if (el._rollRaf) { cancelAnimationFrame(el._rollRaf); el._rollRaf = 0; }
     el._rollAt = to;
@@ -322,14 +365,61 @@ export function touchText(text, touch) {
   if (!touch || typeof text !== 'string') return text;
   const twin = touchOf(text);
   if (twin !== undefined) return twin;
-  // Bulgarian is written for both at once ("натисни" is a click and a tap; i18n glossary rule 9), and a line of it that
-  // names a key has touch words in its catalog: nothing to rewrite
-  if (lang() !== 'en') return text;
+  // Bulgarian is written for both at once ("натисни" is a click and a tap; i18n glossary rule 9): only a key hint in
+  // brackets goes, in every language ("Посочи място на другия фермер (G)": a phone has no G key; QA r1 S-16)
+  if (lang() !== 'en') return text.replace(KEY_HINT, '');
   return text
     // the Hammer's first tip (shared/content/tutorial.js): the touch build bar's buttons do it on a phone
     .replace(/\bR rotates, Esc cancels\./g, '⟳ turns it, ✕ cancels.') // i18n-ok: English only (Bulgarian has touch words)
     // the Hand's tip (shared/content/tools.js): a finger uproots with a long press on the crop
     .replace(/ Shift uproots\.$/, '') // i18n-ok: English only (Bulgarian has touch words)
     .replace(/\b([Cc])lick(s|ed|ing)?\b/g, (_, c, suf = '') => `${c === 'C' ? 'T' : 't'}ap${suf === 'ed' ? 'ped' : suf === 'ing' ? 'ping' : suf}`)
-    .replace(/ \((?:[A-Z0-9]|(?:Ctrl|Shift|Alt)\+\w+|wheel|Space|Esc|Del)\)(?=[\s.,:;!?)]|$)/g, '');
+    .replace(KEY_HINT, '');
+}
+
+/**
+ * The close hooks every HUD menu shares (QA r3 S3-11, jde#4, ap#4; the Together menu's since r1 S-27, the toolbar's
+ * flyouts' since r2 S2-11): a panel that comes up (`panels.on('open')`, even one that opened by itself), a press
+ * anywhere outside `wrap` (the menu and its button), the focus leaving `wrap` for something else, and Escape wherever the
+ * focus is. `isOpen()`; `close({ focus })`: focus true gives the focus back to the menu's button. `win` / `doc`: the
+ * event targets (tests pass their own). Returns nothing; the hooks live as long as the page.
+ */
+export function menuCloseHooks({ wrap, isOpen, close, panels = null, win = globalThis.window, doc = globalThis.document }) {
+  panels?.on?.('open', () => { if (isOpen()) close({ focus: false }); });
+  doc?.addEventListener?.('pointerdown', (e) => { if (isOpen() && !wrap.contains(e.target)) close({ focus: false }); }, true);
+  wrap.addEventListener('focusout', (e) => {
+    // a press that moves no focus (a click on an item) leaves relatedTarget null: the pointerdown hook decides that
+    if (!isOpen() || !e.relatedTarget || wrap.contains(e.relatedTarget)) return;
+    close({ focus: false });
+  });
+  win?.addEventListener?.('keydown', (e) => {
+    if (e.key !== 'Escape' || !isOpen() || e.defaultPrevented) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const active = doc?.activeElement;
+    close({ focus: !active || active === doc.body || wrap.contains(active) });
+  }, true);
+}
+
+/**
+ * Shrink a one-line label until it fits its box (QA r1 S-07: "Царевиц(а)" cut in the 360 phone bar's tool slot): the
+ * font size steps down to what the box holds, never under `min` of the CSS size. The label must be a block (or
+ * inline-block) with `max-width: 100%` so its clientWidth is the room it has. Measured once per text (a layout read:
+ * never per frame; whoever changes the room clears `data-fit`); false when the label is not on screen.
+ */
+export function fitLabel(el, { min = 0.72 } = {}) {
+  // the cache key is the text alone: no layout read on a render that changed nothing (qa2 CL-05); a size change
+  // clears `data-fit` (the toolbar's ResizeObserver) and the label is measured again
+  if (!el || el.dataset.fit === el.textContent) return true;
+  if (typeof el.getClientRects !== 'function' || !el.getClientRects().length) return false;
+  const key = el.textContent;
+  el.style.fontSize = '';
+  const cw = el.clientWidth;
+  const sw = el.scrollWidth;
+  if (cw > 0 && sw > cw) {
+    const fs = parseFloat(globalThis.getComputedStyle?.(el)?.fontSize) || 13;
+    el.style.fontSize = `${Math.max(fs * min, Math.floor(((fs * cw) / sw) * 10) / 10)}px`;
+  }
+  el.dataset.fit = key;
+  return true;
 }

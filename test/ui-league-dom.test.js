@@ -5,7 +5,7 @@
 import { test, before } from 'node:test';
 import assert from 'node:assert/strict';
 import { installDom, textOf } from './ui-qa2-dom.js';
-import { CONTENT, featureOf } from '../shared/content/index.js';
+import { CONTENT, featureOf, SEASONAL_TRACK } from '../shared/content/index.js';
 import { forceLiveForTests } from '../shared/rules/coop.js';
 import { farmAt, put, give, runDue, actOk, forceM2Goals, MONDAY, HOUR, DAY } from './helpers/rules-goals.js';
 
@@ -130,8 +130,10 @@ test('track panel: 30 tiers, the claimable ones claim themselves by tier, Claim 
   const one = buttons(body, 'Claim').filter((b) => textOf(b) === 'Claim');
   one[0].click();
   assert.deepEqual(acts.at(-1), ['trackClaim', { tier: 1 }]);
-  const locked = mount(P.track.seasonTrackPanel, farmAt(20), { name: 'seasonTrack' });
-  assert.match(locked.text, /Opens at farm level 24/);
+  // the level comes from content (release D5 moved it from 24 to 16): one below it, the track is shut
+  const at = SEASONAL_TRACK.unlock;
+  const locked = mount(P.track.seasonTrackPanel, farmAt(at - 1), { name: 'seasonTrack' });
+  assert.match(locked.text, new RegExp(`Opens at farm level ${at}`));
 });
 
 test('perks panel: points, four trees, Learn asks first, then sends the tree; the partner\'s choices are shown, never changed', async () => {
@@ -224,7 +226,8 @@ test('install: eight panels, ONE Progress dock button on the first open panel, t
   await new Promise((r) => setTimeout(r, 700));
   assert.deepEqual([...reg.keys()].sort(), ['duel', 'duelResult', 'horseShow', 'league', 'leagueResult', 'legacy', 'perks', 'seasonTrack']);
   const docks = [...reg.entries()].filter(([, spec]) => spec.dock).map(([n, spec]) => [n, spec.dock.label]);
-  assert.deepEqual(docks, [['seasonTrack', 'Progress']]);
+  // release 1.0 (ux-first#13): the one hub button says what it opens, here the Ribbon Track
+  assert.deepEqual(docks, [['seasonTrack', 'Ribbon Track']]);
   assert.equal(badges.get('seasonTrack')?.[0], '!', 'the invitation waits for p1');
   const chip = hud.querySelector('.lg-duel-chip');
   assert.ok(chip, 'the chip is in the HUD');

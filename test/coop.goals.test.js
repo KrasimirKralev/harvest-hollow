@@ -101,21 +101,29 @@ test('Golden Hour needs both seated: standing up or disconnecting (_seen) cancel
   assert.ok(!runDue(s, T0 + 6000 + COOP.goldenHour.seatMs).includes('_golden'), 'two different benches are not a pair');
 });
 
-test('keepsake: once a day per giver, a produced good onto the partner\'s shelf, a Heart each, no coins', () => {
+test('keepsake: once a day per giver, a produced good wrapped on the porch, opened onto the partner\'s shelf, no coins, no Hearts (release 1.0 D1, M30)', () => {
   const s = farmAt(4);
   assert.equal(act(s, 'keepsake', { item: 'wheat' }).code, ERR.NO_ITEMS);
   give(s, 'strawberry', 2);
   const coins = s.farm.wallet.coins;
   const r = actOk(s, 'keepsake', { item: 'strawberry' }, { pid: 'p1' });
-  assert.equal(evs(r, 'keepsake')[0].to, 'p2');
+  const ev = evs(r, 'keepsake')[0];
+  assert.equal(ev.to, 'p2');
   assert.equal(s.farm.inventory.strawberry, 1);
-  assert.equal(s.players.p2.shelf.n, 1);
-  assert.equal(s.players.p2.shelf.rows['0'].item, 'strawberry');
-  assert.equal(s.players.p1.hearts, 1);
-  assert.equal(s.players.p2.hearts, 1);
+  // it waits wrapped in front of the porch: not on the shelf yet
+  assert.equal(s.players.p2.shelf.n, 0);
+  assert.deepEqual(s.farm.gifts[ev.id], { by: 'p1', to: 'p2', item: 'strawberry', at: T0 });
+  assert.equal(s.farm.objects[ev.id].def, 'gift_box');
+  assert.equal(s.players.p1.hearts, 0, 'no Hearts (M30)');
+  assert.equal(s.players.p2.hearts, 0);
   assert.equal(s.farm.wallet.coins, coins, 'no coins (C9)');
   assert.equal(s.players.p1.stats.keepsakesGiven, 1);
-  assert.equal(act(s, 'keepsake', { item: 'strawberry' }, { pid: 'p1' }).code, ERR.COOLDOWN);
+  assert.equal(act(s, 'openGift', { id: ev.id }, { pid: 'p1' }).code, ERR.SELF_ONLY, 'the giver cannot open it');
+  actOk(s, 'openGift', { id: ev.id }, { pid: 'p2' });
+  assert.equal(s.players.p2.shelf.n, 1);
+  assert.equal(s.players.p2.shelf.rows['0'].item, 'strawberry');
+  assert.equal(s.players.p2.hearts, 0, 'opening pays no Hearts (M30)');
+  assert.equal(act(s, 'keepsake', { item: 'strawberry' }, { pid: 'p1' }).code, ERR.COOLDOWN, 'once a day');
   assert.ok(act(s, 'keepsake', { item: 'strawberry' }, { pid: 'p2' }).ok, 'the partner has their own daily gift');
   assert.equal(act(s, 'keepsake', { item: 'chicken_feed' }, { pid: 'p1', now: T0 + DAY }).code, ERR.BAD_ARGS, 'feed is not giftable');
   assert.equal(act(s, 'keepsake', { item: 'wheat', to: 'p1' }, { pid: 'p1', now: T0 + DAY }).code, ERR.SELF_ONLY);

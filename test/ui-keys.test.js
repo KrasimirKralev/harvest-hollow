@@ -276,7 +276,9 @@ test('Settings: a quiet "not saved yet" dot and row until "I saved it"; Farmers:
   btn.click();
   await tick(); await tick(); await tick();
   assert.equal(sh.confirms.length, 1);
-  assert.equal(sh.confirms[0].title, 'Make a new key for Mia?');
+  // the one-line title plaque carries no name (QA r4 integration: "Make a new key for K…" on an iPhone 13); the body does
+  assert.equal(sh.confirms[0].title, 'Make a new key?');
+  assert.match(sh.confirms[0].body, /opens the farm as Mia/);
   assert.match(sh.confirms[0].lead, /old phones will be signed out/);
   assert.deepEqual(sh.opened.at(-1), ['newkey', { pid: 'p2' }]);
   const card = mount(sh.panels.get('newkey'), { pid: 'p2' });

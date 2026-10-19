@@ -147,7 +147,7 @@ test('CL-04: with Grandma\'s welcome card up, the Hand on the bench walks over a
   assert.equal(h.a.store.act('place', { def: 'sunset_bench', ...spot, rot: 0 }).ok, true);
   h.flush();
   const id = tileOwner(h.state, spot.x, spot.z);
-  assert.equal(coachStep(h.a.store.state, 'p1')?.step.id, 'welcome', 'the welcome card is the coach\'s step');
+  assert.equal(coachStep(h.a.store.state, 'p1')?.step.id, 'plant_wheat', 'the coach\'s first step is planting (1.0 M1a)');
   const sent = [];
   const a = await fakeController(h.a);
   const realSend = h.a.store.send;

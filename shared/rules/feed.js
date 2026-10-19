@@ -12,7 +12,8 @@
 //   water     q (partner tends)              coalesced
 //   craft     item, q                        coalesced (goods collected from trays)
 //   sell      item, q, c (coins)             coalesced
-//   order     c (coins), x (xp), g (golden)  one per filled order
+//   order     c (coins), x (xp), g (golden), tk? one per filled order; tk (1.0) = the coins a crate's Golden Ticket
+//                                            paid on top
 //   level     level                          farm level-up (by = whoever's action crossed it)
 //   buy       what?, def, c (coins), a (acorns)  purchases over FEED.bigPurchase coins (or any Acorns); what =
 //                                            'slot' (a building slot of def) | 'hurry' (Acorns to finish def now;
@@ -20,7 +21,11 @@
 //   expand    def                            land expansion
 //   ribbon    id, t (tier)                   achievement (F, T, or the player's own P)
 //   quest     id                             quest completed
-//   keepsake  item, to                       a keepsake gift
+//   keepsake  item, to                       a keepsake gift (before 1.0: straight onto the shelf)
+//   surprise  what ('left' | 'opened' | 'shelved'), to, item?, from?, note?   release 1.0 (D1): a wrapped surprise
+//                                            left on the porch for `to` (no item: it is a surprise), opened by `to`,
+//                                            or shelved by itself after two days (by 'sys'); item, from and the
+//                                            giver's note once unwrapped (QA r1 L-01)
 //   note      x, z                           a note pinned to a tile
 //   golden    -                              Golden Hour started (by = 'sys', both players)
 //   hf        a, b                           a high-five
@@ -36,10 +41,11 @@
 //   giant     crop, q                        a Giant felled
 //   restore   project, bundle | project, done: 1   a Restoration bundle / project completed
 //   town      id                             a Town Project built (by 'sys')
-//   crate     c, a?, g?, item?, q?, def?, auto?   a balloon crate opened (wave 4b): coins, Acorns, Golden Seeds,
+//   crate     c, a?, g?, item?, q?, def?, auto?, pu?   a balloon crate opened (wave 4b): coins, Acorns, Golden Seeds,
 //                                            goods (item, q: Fertilizer) or a decor piece (a collection find has its own
 //                                            `album` line); auto: 1 = nobody opened it, its loot went to the Barn
-//                                            by itself (by 'sys')
+//                                            by itself (by 'sys'); pu (1.0) = the rare power-up found in it
+//                                            (shared/rules/powerups.js)
 //   relic     def, a? | def, q               an Acorn shop relic bought (a = Acorns), or a once-a-day relic used: def
 //                                            'farmhand' (q animals tended) / 'time_turner' (q queue items finished)
 //   pen       def (species), id               wave 5: a baby appeared in the pen (by = who paired the parents)
@@ -122,6 +128,10 @@ export function feedRows(state, limit = MAX) {
   return out;
 }
 
+/** QA r4 F4-03: the partner renamed an animal `pid` had named: no ♥ Thanks for that (rules and feed button). */
+export const renamedMine = (row, pid) => row?.k === 'name' && row.was !== undefined && row.wasBy === pid
+  && row.by !== pid;
+
 /** The row with absolute number `i`, if it is still in the ring. */
 export function feedRow(state, i) {
   const f = state.farm.feed;
@@ -164,11 +174,31 @@ export function recap(state, pid, now, extra = {}) {
   if (!me) return { since: 0, sections: [] };
   const since = extra.since ?? me.lastSeenAt;
   const rows = feedRows(state).filter(([, r]) => r.at > since && r.at <= now).reverse();
-  const partnerDid = rows.filter(([, r]) => r.by !== pid).slice(-RECAP.maxFeedLines).map(([i, r]) => ({ i, ...r }));
-  const keepsakes = rows.filter(([, r]) => r.k === 'keepsake' && r.to === pid).map(([i, r]) => ({ i, ...r }));
+  // release 1.0 (D1): the surprises waiting on the porch for this farmer (what is inside stays a surprise)
+  const surprises = Object.entries(state.farm.gifts ?? {}).filter(([, g]) => g.to === pid && g.at <= now)
+    .sort((a, b) => a[1].at - b[1].at || (a[0] < b[0] ? -1 : 1)).map(([id, g]) => ({ id, by: g.by, at: g.at }));
+  // QA r2 F2-11 (fe#9): the "left a surprise" line of a box still waiting is the surprises section's own (the same
+  // action wrote both: the same giver and moment); the card named it twice
+  const waiting = (r) => r.k === 'surprise' && r.what === 'left' && r.to === pid
+    && surprises.some((x) => x.by === r.by && x.at === r.at);
+  const shelvedForMe = (r) => (r.k === 'keepsake' || (r.k === 'surprise' && r.what === 'shelved')) && r.to === pid;
+  // QA r3 F3-11 (fe#4): a box the farm shelved after 48 h is the keepsakes section's (its "shelved" line); neither that
+  // line nor the giver's "left a surprise" line of the same box is told again under "While you were away" (one waiting
+  // box per giver: the giver's next "shelved" line for me after a "left" line is that box). A box I opened myself
+  // stays history like any other line (F2-11)
+  const settled = (r, i) => {
+    if (r.k !== 'surprise' || r.what !== 'left' || r.to !== pid) return false;
+    const next = rows.find(([j, x]) => j > i && x.k === 'surprise' && x.to === pid
+      && (x.what === 'left' ? x.by === r.by : x.from === r.by));
+    return Boolean(next && next[1].what === 'shelved');
+  };
+  const partnerDid = rows.filter(([i, r]) => r.by !== pid && !waiting(r) && !shelvedForMe(r) && !settled(r, i))
+    .slice(-RECAP.maxFeedLines).map(([i, r]) => ({ i, ...r }));
+  const keepsakes = rows.filter(([, r]) => shelvedForMe(r)).map(([i, r]) => ({ i, ...r, ...(r.k === 'surprise' ? { by: r.from } : {}) }));
   const notes = Object.entries(state.farm.notes ?? {}).filter(([, n]) => n.by !== pid && n.at > since)
     .sort((a, b) => a[1].at - b[1].at || (a[0] < b[0] ? -1 : 1)).map(([id, n]) => ({ id, ...n }));
   const parts = {
+    surprises,
     ripened: extra.ripened ?? null,
     partnerDid,
     keepsakes,

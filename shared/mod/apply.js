@@ -63,6 +63,7 @@ export function suspended(overlay) {
     graveyard,
     look: { models: { ...(overlay.look?.models ?? {}) }, icons: { ...(overlay.look?.icons ?? {}) } },
     text: { letters: [], tips: [] },
+    tuning: {},
     hash: '',
   };
   s.hash = overlayHash(s);

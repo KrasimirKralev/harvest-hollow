@@ -20,11 +20,13 @@
 //                                     farm's mod things: iconUrl() answers their server-made icons (immutable URLs by
 //                                     overlay hash), hasIcon() is true for them, iconIds() lists them; replaces the map
 import { ASSET_ROOT, pageBuild } from './assets.js';
+import { fetchAsset } from '../net/asset-base.js';
 
 export const FALLBACK_ICON = '_fallback';
 const BASE = `${ASSET_ROOT}icons/`;
 let manifest = null;
 let promise = null;
+let iconWarned = false;
 let fetcher = (url, opts) => fetch(url, opts);
 
 /** Test seam (Node has no fetch for local files). */
@@ -35,13 +37,17 @@ export function initIcons() {
     promise = (async () => {
       // versioned by the page's build hash (immutable, SV-05); without one, revalidated
       const build = pageBuild();
-      const res = await fetcher(`${BASE}manifest.json${build ? `?v=${build}` : ''}`, build ? {} : { cache: 'no-cache' });
+      // on a host page from the public host, from this server when that fails (option 2's data fallback)
+      const res = await fetchAsset(`${BASE}manifest.json${build ? `?v=${build}` : ''}`, build ? {} : { cache: 'no-cache' }, fetcher);
       if (!res.ok) throw new Error(`icon manifest: HTTP ${res.status}`);
       manifest = await res.json();
     })();
-    promise.catch((err) => {
-      console.error('icon manifest failed to load; icons are requested by id without a check', err);
+    promise.then(() => { iconWarned = false; }, (err) => {
       promise = null;
+      const link = err instanceof TypeError || /HTTP \d+/.test(String(err?.message));   // QA r3 R3-01: a warning, once
+      if (!link) console.error('icon manifest failed to load; icons are requested by id without a check', err);
+      else if (!iconWarned) console.warn('icon manifest failed to load; icons are requested by id without a check', err?.message || err);
+      iconWarned ||= link;
     });
   }
   return promise;

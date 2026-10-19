@@ -39,6 +39,8 @@
 // Wave 4b: a crate object { def: CRATES.def, x, z, rot: 0, placedAt, by: 'sys', k, until } (actions/crates.js); a home's
 // `up` may now reach its growth max and its footprint is grid.sizeOf(o) (bigger tiers past the old capacityMax);
 // player `save` = the relic they save for (null = the tracker picks).
+// Release 1.0 (owner request 2026-10-19): farm.powerups = { kind: { at, until, by, n? } }, the balloon crates' rare
+// power-ups at work (powerups.js); {} on a fresh farm, and on an older save through the boot's backfill.
 // Wave 4 object fields: landmark / decor `up` = upgrade tiers bought (upgrades.js); crop `fert` = who spread
 // Fertilizer; trash entries may be a tray copy { tray, paid, until, by, coins, acorns } (decor.js sellStored).
 //
@@ -58,6 +60,7 @@ import { interiorCells } from './interior-cells.js';
 import { UPGRADES, upgradeTargetOf } from './upgrades.js';
 import { avatarOk } from './actions/avatar.js';
 import { breedOk } from './actions/pets.js';
+import { powerupsOk } from './powerups.js';
 
 export const SCHEMA = 2;
 /** The farm's zone when the server passes none (server/config.js HH_TZ defaults to it too). */
@@ -75,7 +78,9 @@ const ECON_FARM_KEYS = ['barn', 'storage', 'keep', 'trash', 'demand', 'tools', '
   // wave 4: the weeded tiles of the farm's land (actions/weeds.js)
   'weeds',
   // wave 4b: the Acorn shop's relics (relics.js) and the balloon's crates (actions/crates.js)
-  'relics', 'crates'];
+  'relics', 'crates',
+  // release 1.0 (owner request 2026-10-19): the crates' rare power-ups at work (powerups.js)
+  'powerups'];
 /**
  * Player-level economy keys: `acornDay` = { day, n } Acorns spent on the farm-calendar day (BIG_SPEND); `pet` = the
  * player's pet or null (actions/pets.js; M1b); `fish` = { cast: null | { spot, at, bite, done? }, at, day } the Fishing
@@ -161,6 +166,7 @@ export function createFarm(farmSeed, now, tz = DEFAULT_TZ) {
     // the balloon pass already handled: a new farm (and an older save, through the backfill) starts at the pass of
     // its creation, so it never catches up crates for the time before it existed
     crates: { k: Math.floor((now - CRATES.dropAtMs) / CRATES.everyMs), n: 0 },
+    powerups: {},       // 1.0: { kind: { at, until, by, n? } } (powerups.js); an older save gets {} from the backfill
   };
   // >>> goals state (rules-goals): add the goals fields to `farm` here (farm.orders = ..., etc.)
   Object.assign(farm, createGoalsFarm(now, tz));
@@ -340,6 +346,9 @@ const FIELDS = {
   debris: new Set([...COMMON, 'origin', 'hp', 'lastChop', 'team']),
   // wave 4b: a balloon crate (actions/crates.js): k = the balloon pass that dropped it, until = it goes to the Barn
   crate: new Set(['def', 'x', 'z', 'rot', 'placedAt', 'by', 'k', 'until']),
+  // release 1.0 (D1): a wrapped surprise on the porch (actions/coop.js keepsake / openGift / _gift); its gift record is
+  // farm.gifts[id] (goals.js)
+  gift: new Set(['def', 'x', 'z', 'rot', 'placedAt', 'by']),
 };
 const CROP_FIELDS = new Set(['def', 'plantedAt', 'readyAt', 'by', 'cycle', 'cut', 'paid', 'packet', 'golden', 'water',
   'tend', 'season', 'forced', 'giant', 'hp', 'chop', 'fert']);
@@ -510,6 +519,9 @@ export function objectProblems(o, def, horizon = Infinity) {
     case 'crate':
       if (!Number.isSafeInteger(o.k) || !isCount(o.until) || o.by !== 'sys') bad('.k/until/by');
       break;
+    case 'gift':
+      if (!isPid(o.by) || o.rot !== 0) bad('.by/rot');
+      break;
     default:
       break;
   }
@@ -598,6 +610,7 @@ function validateEconomy(f, bad) {
  *   relics  { relicId: { at, by, d? } }   the Acorn shop's unique items bought (relics.js); d = the farm day a
  *           once-a-day relic was last used
  *   crates  { k, n }   the last balloon pass handled (any integer) and the crates dropped so far (actions/crates.js)
+ * and (release 1.0) powerups { kind: { at, until, by, n? } } the crates' rare power-ups (powerups.js powerupsOk)
  */
 function validateW4b(f, bad) {
   if (f.relics !== undefined && !(isObj(f.relics) && Object.entries(f.relics).every(([k, r]) => relicOf(k)
@@ -605,6 +618,7 @@ function validateW4b(f, bad) {
     && Object.keys(r).every((x) => x === 'at' || x === 'by' || x === 'd')))) bad('farm.relics');
   if (f.crates !== undefined && !(isObj(f.crates) && Number.isSafeInteger(f.crates.k) && isCount(f.crates.n)
     && Object.keys(f.crates).length === 2)) bad('farm.crates');
+  if (!powerupsOk(f.powerups, isPid)) bad('farm.powerups');
 }
 
 /**

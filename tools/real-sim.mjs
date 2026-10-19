@@ -443,7 +443,9 @@ function wrapUp() {
   let budget = Math.floor((coins0 * DECOR_BP) / 10_000);
   const a0 = { x: 20, z: 20 };
   for (let k = 0; k < 6 && budget > 0; k++) {
-    const g = goals(state, pid, t)?.now;
+    // the decoration the Goal Tracker suggests (its decor candidate: release 1.0's calm "All done for now" card may hold
+    // NOW while the decor card waits below it; the couple's taste purchase does not depend on which card is on top)
+    const g = (goals(state, pid, t, { all: true })?.all ?? []).find((c) => c.slot === 'now' && c.kind === 'decor');
     if (!g || g.kind !== 'decor') break;
     const cost = defOf(g.id)?.cost ?? 0;
     if (cost > budget) break;

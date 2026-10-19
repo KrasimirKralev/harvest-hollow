@@ -12,7 +12,7 @@ import { tParts } from './kit.js';
 const lazy = (f) => ({ type: () => f().type, args: () => f().args });
 
 /** "Apple Tree · 7 years" where the title ribbon has room for it (a phone keeps the name; the card says the age). */
-const narrow = () => Boolean(globalThis.matchMedia?.('(max-width: 520px)').matches);
+const narrow = () => Boolean(globalThis.matchMedia?.('(max-width: 520px), (max-height: 500px)').matches);
 export function treeTitle(v) {
   if (!v) return t('farm.tree.title');
   const line = ageLine(v.name, treeAgeOf(v.obj), v.sapling);
@@ -52,7 +52,7 @@ export const treePanel = {
       } else when.textContent = v.chop ? t('farm.tree.readyChop') : t('farm.tree.ripeShake');
       const give = v.yield + v.bonus + ageBonus;
       const why = [];
-      if (ageBonus) why.push(t('farm.tree.whyAge', { n: ageBonus, stage: age.stage.name.toLowerCase() }));
+      if (ageBonus) why.push(t('farm.tree.whyAge', { n: ageBonus }));
       if (v.grove) why.push(t('farm.tree.whyGrove', { n: GROWTH.grove.bonusUnits }));
       if (v.composted) why.push(t('farm.tree.whyCompost', { n: GROWTH.compost.treeBonusUnits }));
       const ageRow = v.sapling ? null : h('div.pn-tree-age', { dataset: { stage: age.stage.id } },

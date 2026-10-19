@@ -1,0 +1,251 @@
+/* Release 1.0, ui-panels lane: every panel on a phone (orders as rows, the market slip, workshop slots, heroes).
+   Linked right after mobile.css and before feel.css (docs/agent-briefs/release-scope.md §7.2): a later file wins
+   the cascade, so this one overrides mobile.css without editing it. The mobile.css panel rules it supersedes are
+   listed in docs/agent-notes/rel-ui-panels.md for ui-shell to delete at the end. */
+
+/* ======== every phone (upright or on its side) ==================================================================== */
+@media (max-width: 600px), (max-height: 500px) {
+  /* ---- Orders as rows (ux-phone#8, astra#7, release P1): Mabel on one line, the week as a 24 px strip, an order a row
+     of face, name, chips, pay and Deliver (or the "need" line), three and more on the first 360 x 640 screen ---- */
+  .pn-ordhead { gap: 6px; margin-bottom: 8px; }
+  .pn-ordhead .pn-mabel .pn-portrait, .pn-ordhead .pn-mabel > .ic { display: none; }
+  .pn-ordhead .pn-speech { padding: 4px 10px 6px; }
+  .pn-ordhead .pn-speech::before { display: none; }
+  .pn-ordhead .pn-speech b { display: inline; margin-right: 6px; font-size: .875rem; }
+  .pn-ordhead .pn-speech p { display: inline; margin: 0; font-size: .8125rem; line-height: 1.3; }
+  .pn-ordhead .pn-speech small { margin-top: 2px; }
+  /* QA r2 P2-08: the track keeps at least 80 px for its three chests (at 30, 60 and 100 %: 22 px chests need 24 px
+     apart; they piled up in a 22 px track at 360 BG): on a short row it takes a line of its own under the title */
+  .pn-meter { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 8px; min-height: 24px; padding: 2px 10px; }
+  .pn-meter-title { flex: none; margin: 0; }
+  .pn-meter-title b { font-size: .875rem; }
+  .pn-meter-title .pn-meter-of { display: none; }
+  .pn-meter-title .pn-meter-n { display: inline; margin-left: 6px; font: 700 .8125rem/1 var(--font-ui); color: var(--ink-700); font-variant-numeric: tabular-nums; }
+  .pn-meter-track { flex: 1 1 80px; height: 10px; margin: 6px 14px 6px 4px; }
+  .pn-meter-chest { transform: translate(-50%, -50%); }
+  .pn-meter-chest > svg, .pn-meter-chest > .chest { width: 22px; height: 22px; }
+
+  .pn-board { grid-template-columns: minmax(0, 1fr); grid-auto-rows: auto; gap: 8px; padding: 8px 6px; }
+  .pn-order-row { display: flex; flex-direction: column; align-items: stretch; gap: 6px; padding: 8px 10px; transform: none; min-height: 0; }
+  .pn-order-row:hover { transform: none; }
+  .pn-order-row .pn-order-head { display: flex; align-items: center; gap: 8px; }
+  .pn-order-row .pn-giver { flex: 1 1 auto; min-width: 0; }
+  .pn-order-row .pn-giver > div { min-width: 0; }
+  .pn-order-row .pn-giver .pn-portrait, .pn-order-row .pn-giver > .ic { flex: none; width: 40px; height: 40px; }
+  .pn-order-row .pn-giver b { font-size: .95rem; }
+  .pn-order-row .pn-giver small { font-size: .8125rem; }
+  .pn-order-row .pn-order-pay { flex: none; flex-direction: column; align-items: flex-end; justify-content: center; gap: 2px; }
+  .pn-order-row .pn-order-pay .pn-price { font-size: .95rem; gap: 4px; }
+  .pn-order-row .pn-order-pay .pn-price .glyph { width: 16px; height: 16px; }
+  .pn-order-row .pn-order-pay .pn-xp, .pn-order-row .pn-order-pay .pn-help-bonus { font-size: .8125rem; }
+  .pn-order-row .pn-order-pay .pn-help-bonus { flex-basis: auto; text-align: right; }
+  .pn-order-row .pn-order-pay .pn-order-status { max-width: 120px; }
+  .pn-order-row .pn-order-tools { flex: none; }
+  .pn-order-main { display: flex; align-items: center; gap: 8px; }
+  .pn-order-row .pn-order-items { flex: 1 1 auto; justify-content: flex-start; padding: 0; gap: 4px; min-width: 0; }
+  .pn-order-row .pn-order-items .pn-chip { flex-direction: row; gap: 4px; min-width: 0; padding: 2px 8px 2px 2px; }
+  .pn-order-row .pn-order-items .pn-chip .ic { width: 30px; height: 30px; }
+  .pn-order-row .pn-order-items .pn-tick { top: -5px; right: -5px; width: 16px; height: 16px; }
+  .pn-order-main > .pn-act { flex: 0 1 auto; max-width: 150px; }
+  .pn-order-row .pn-deliver { width: auto; min-height: 44px; padding-left: 12px; padding-right: 12px; }
+  /* not deliverable: the row says what is missing instead of a dead button */
+  .pn-order-row:not(.ready) .pn-order-main > .pn-act > .btn { display: none; }
+  .pn-order-row:not(.ready) .pn-order-main > .pn-act > .pn-why { display: block; max-width: 150px; text-align: right; }
+  .pn-order-row .pn-order-coop { justify-content: flex-start; }
+  .pn-order-later { display: flex; flex-direction: row; flex-wrap: wrap; align-items: center; justify-content: flex-start;
+    gap: 6px 10px; min-height: 0; padding: 8px 10px; text-align: left; }
+  .pn-order-later > .glyph { width: 32px; height: 32px; flex: none; }
+  /* QA r3 P3-03: every waiting row has one layout: the icon and "A new order is on its way" on the first line, the timer
+     and the new-order button on the second (a flex wrap put the timer left of the button on one row and above it on
+     the next, by the timer's width) */
+  .pn-order-wait { display: grid; grid-template-columns: 32px minmax(0, 1fr) auto; align-items: center; gap: 4px 10px;
+    min-height: 0; padding: 8px 10px; text-align: left; }
+  .pn-order-wait > .ic { grid-column: 1; grid-row: 1; width: 32px; height: 32px; }
+  .pn-order-wait > p { grid-column: 2 / -1; grid-row: 1; font-size: .875rem; }
+  .pn-order-wait > .pn-timer { grid-column: 1 / 3; grid-row: 2; font-size: 1rem; white-space: nowrap; }
+  .pn-order-wait > .pn-act { grid-column: 3; grid-row: 2; justify-self: end; }
+  .pn-order-wait > .pn-rush-note { grid-column: 1 / -1; grid-row: 3; text-align: right; }
+  .pn-board-closed { min-height: 0; }
+
+  /* ---- the Market's sell slip (ux-phone#7, astra#4, release P2): three whole stacks above it and Sell in view ---- */
+  .pn-chalk-lead { display: inline; font-size: .875rem; }
+  .pn-slip { gap: 4px 6px; padding: 6px 10px 8px; }
+  .pn-slip-head .ic, .pn-slip-have, .pn-slip-note { display: none; }
+  .pn-slip-qty { flex: 1 1 55%; }
+  .pn-slip > .pn-quick { flex: 1 1 100%; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+  .pn-slip > .pn-quick::-webkit-scrollbar { display: none; }
+  .pn-quick .pn-chipbtn { flex: none; }
+  .pn-slip > .pn-slip-sum { flex: 1 1 100%; flex-direction: row; align-items: baseline; justify-content: flex-end; gap: 6px; }
+  .pn-slip-each { font-size: .875rem; }
+  .pn-slip-total { font-size: 1.25rem; }
+  .pn-slip-wanted { margin: 0; flex: 1 1 100%; }
+  .pn-sell-btn { min-height: 46px; }
+
+  /* ---- workshops (ux-phone#9, astra#6, release P3): the queue is one row of 52 px slots, Make on the first screen ---- */
+  .pn-slot { flex: none; }
+  .pn-slots { --pn-slot-h: 52px; flex-wrap: nowrap; overflow-x: auto; gap: 6px; padding: 6px; margin-bottom: 10px; scrollbar-width: none; }
+  .pn-slots.pn-hurry-on { --pn-slot-h: 52px; }
+  .pn-slots::-webkit-scrollbar { display: none; }
+  .pn-slot.empty { width: 52px; min-width: 52px; height: 52px; min-height: 52px; padding: 0; }
+  .pn-slot.empty small { display: none; }
+  .pn-slot.pn-slot-strip { flex: 1 1 auto; width: auto; height: 52px; min-height: 52px; padding: 6px 12px; }
+  /* QA r4 (the P7 walk's first visit to the Packing Table): beside a buy card the strip is 113 px wide at 360 and
+     "+ Опашка 0/2" wrapped its count alone onto a line. The count is glued to its word (farm.bld.queueOf), and there the
+     strip drops its decorative "+" and some padding so "Опашка 0/2" holds one line */
+  .pn-slots:has(> .pn-slot.buy) > .pn-slot.pn-slot-strip { padding: 6px 8px; font-size: .875rem; }
+  .pn-slots:has(> .pn-slot.buy) > .pn-slot.pn-slot-strip > .pn-slot-plus { display: none; }
+  .pn-bhead-sub { font-size: .8125rem; }
+  /* QA r1 P-10 / P-11: a busy slot is a 52 px row card too (the item, its time over a thin bar, Hurry or the price,
+     the ✕): from the empty strip to the first batch the queue row keeps its height, so Make never moves under the
+     second tap, and the first Make stays on a phone's first screen, on its side too */
+  .pn-slot.running, .pn-slot.queued, .pn-slot.done { display: grid; grid-template-columns: 36px auto auto auto auto;
+    grid-template-rows: 1fr auto 1fr; align-items: center; column-gap: 6px; width: auto; height: 52px; padding: 4px 8px 4px 4px; }
+  .pn-slot.running > .ic, .pn-slot.queued > .ic, .pn-slot.done > .ic { grid-column: 1; grid-row: 1 / -1; width: 36px; height: 36px; }
+  .pn-slot.done .ic { animation: none; }
+  .pn-slot > .pn-slot-state { grid-column: 2; grid-row: 1 / -1; white-space: nowrap; }
+  /* a running batch: its time over a thin bar, both clear of the Hurry button */
+  .pn-slot.running > .pn-slot-state { grid-row: 2; }
+  .pn-slot.running > .pn-bar { grid-column: 2; grid-row: 3; align-self: start; width: auto; margin: 3px 0 0; }
+  .pn-slot > .pn-act { grid-column: 3; grid-row: 1 / -1; width: auto; }
+  .pn-slot .pn-act > .btn { min-height: 40px; }
+  .pn-slot .pn-act > .pn-why { display: none; }
+  .pn-slot.queued.picked > .pn-slot-move { grid-column: 4; grid-row: 1 / -1; width: auto; margin: 0; }
+  .pn-slot > .pn-slot-x, .pn-slot.queued > .pn-slot-x { grid-column: 5; grid-row: 1 / -1; position: relative; top: auto; right: auto; }
+  .pn-slot-out { top: auto; bottom: 1px; left: 22px; right: auto; }
+  .pn-slot-by { top: 1px; left: 1px; }
+  .pn-slot-tags { display: none; }
+  .pn-slot.buy { flex-direction: row; width: auto; height: 52px; padding: 4px 6px 4px 10px; gap: 8px; }
+  .pn-slot.buy small { text-align: left; }
+  /* QA r4 P4-01: a recipe's name keeps up to three lines on a phone (panels.css clamps at two). At 360 the name column of a
+     card with one Make is 129 px and four Bulgarian names need three lines there („Подаръчна кошница за закуска“ read
+     "Подаръчна / кошница за..."); every recipe name of the content fits in three (i18n-shots' recipe-name scan) */
+  .pn-recipe-name { -webkit-line-clamp: 3; }
+
+  /* ---- heroes and speeches (ux-phone#15, release P4): the hero is a 56 px strip with its countdown, the line under
+     the title waits behind "?", a host's speech is one line that opens with a tap ---- */
+  .wk-banner { flex-direction: row; flex-wrap: wrap; align-items: center; justify-content: flex-start; gap: 4px 8px;
+    height: auto; min-height: 56px; padding: 6px 8px 6px 12px; }
+  /* the title keeps 8.5rem before anything shares its line: a wide chip (the village's "Таблото на съселяните") goes to
+     the next line instead of squeezing the title to nothing and covering it (P7 "out of its column", 04:28) */
+  .wk-banner-text { flex: 1 1 8.5rem; min-width: 0; }
+  .wk-banner-title { font-size: 1.15rem; line-height: 1.1; }
+  .wk-banner-sub { display: none; }
+  .wk-banner.open .wk-banner-sub { display: block; }
+  .wk-banner.open .wk-banner-text { flex-basis: 100%; order: 3; }
+  .wk-banner-more { display: inline-flex; align-items: center; justify-content: center; flex: none; min-width: 32px; min-height: 32px; padding: 0 8px; }
+  .wk-banner .wk-clock { flex: none; padding: 4px 10px 4px 6px; }
+  .wk-banner .wk-clock .wk-clock-l { display: none; }
+  .wk-banner .wk-clock .wk-clock-t::before { content: none; }
+  .wk-banner-chips { flex-direction: row; flex: 0 1 auto; min-width: 0; }
+  /* a Village good: the Give buttons under the name on a phone ("Ванилов крем" ran under "Дай 1" at 360) */
+  .wk-good:has(> .wk-good-acts) { grid-template-columns: 48px minmax(0, 1fr); }
+  .wk-good > .wk-good-acts { grid-column: 1 / -1; justify-content: flex-end; flex-wrap: wrap; }
+  .wk-host { gap: 8px; }
+  .hh-panel-body > .wk-host { margin: 8px 0 12px; }
+  /* the small "?", "ⓘ" and "⋯" chips are finger targets too */
+  .pn-order-tools .pn-chipbtn, .pn-info, .wk-banner-more { min-height: 44px; min-width: 44px; }
+  .wk-host .pn-portrait { width: 40px; height: 40px; }
+  .wk-speech { padding: 6px 10px; min-width: 0; flex: 1 1 auto; }
+  .wk-speech::before { top: 12px; }
+  .wk-speech[data-fold] { cursor: pointer; }
+  .wk-speech[aria-expanded="false"] { display: flex; align-items: baseline; gap: 6px; }
+  .wk-speech[aria-expanded="false"] b { flex: none; }
+  .wk-speech[aria-expanded="false"] p { flex: 1 1 auto; min-width: 0; margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .wk-speech[aria-expanded="false"] small { display: none; }
+  .wk-speech[aria-expanded="false"]::after { content: '▾'; flex: none; color: var(--ink-500); font-weight: 800; }
+
+  /* the Barn's head: the upgrade card folds to one line of text, its cost and its button (ux-phone#15) */
+  .pn-cap > .ic { width: 44px; height: 44px; }
+  .pn-cap-n { font-size: 1.3rem; }
+  .pn-upgrade { grid-template-columns: minmax(0, 1fr) auto; padding: 8px 10px; gap: 4px 8px; }
+  .pn-upgrade-text { grid-column: 1; flex-direction: row; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; }
+  .pn-upgrade-text > span { display: none; }
+  .pn-upgrade-cost { grid-column: 1; flex-wrap: wrap; gap: 4px; }
+  .pn-upgrade-cost .pn-chip .ic { width: 24px; height: 24px; }
+  .pn-upgrade > .pn-act { grid-column: 2; grid-row: 1 / span 2; align-self: center; }
+  .pn-surplus-list { display: none; }
+  .pn-surplus-text span { font-size: .8125rem; }
+
+  /* a shop card's one button takes the card's width and may wrap ("Купи и сложи · 7105") */
+  .pn-card-foot .pn-act { flex: 1 1 100%; }
+  .pn-card-foot .pn-act .btn { width: 100%; white-space: normal; text-align: center; }
+  .pn-card-foot .pn-act .btn .pn-sep { display: none; }
+  .pn-card-foot .pn-act .btn .pn-cost { display: flex; justify-content: center; margin-top: 2px; }
+  /* a banner's chips (the village's button) wrap under the title instead of running past the strip */
+  .wk-banner-chips { flex-direction: row; flex-wrap: wrap; justify-content: flex-start; max-width: 100%; }
+  .wk-banner-chips .btn { white-space: normal; }
+
+  /* ---- copy#7: cards that pushed their text past the panel edge ---- */
+  .pc-pet, .pc-pet > *, .pc-set, .pc-set > *, .pc-set-body > *, .pc-page, .pc-page > * { min-width: 0; }
+  .pc-pet-head { flex-wrap: wrap; }
+  /* an album page's luck line may wrap ("сигурно до 41 изработки" ran 8 px past the card at 360, P7 05:13) */
+  .pc-luck small { white-space: normal; text-align: right; }
+  .pc-set-body { grid-template-columns: minmax(0, 1fr); }
+  .pc-page { grid-template-columns: minmax(0, 1fr); }
+  .wk-rung-pay { flex-wrap: wrap; white-space: normal; }
+  /* the Masterwork rows: six columns do not fit 360 px ("Upgrade" was cut): the price, "where" and the button wrap */
+  .pc-mw-copy { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
+  .pc-mw-copy .pc-mw-now { flex: 1 1 120px; }
+  .pc-mw-copy .pc-mw-next { flex: 1 1 auto; }
+
+  /* ---- QA r1 ---- */
+  /* P-12: Journal › Ledger on a phone (journal.js ledgerTable): Who is the farmer's mark (the name .sr-only), "The farm"
+     on one line, "when" under What, which takes the room (names broke letter by letter in a 64 px column) */
+  .pn-ledger-phone td:first-child, .pn-ledger-phone th:first-child { white-space: nowrap; width: 1%; padding-right: 4px; }
+  .pn-ledger-phone td:first-child { color: var(--ink-900); }
+  .pn-ledger-phone td:nth-child(2) { overflow-wrap: break-word; }
+  .pn-ledger-when { display: block; margin-top: 2px; font: 600 .8125rem/1.2 var(--font-ui); color: var(--ink-500); }
+  /* P-13: Market › Animals: each row as tall as its own cards (every card was stretched to the tallest, 388 px) */
+  .pn-cards.pn-cards-animals { grid-auto-rows: auto; }
+  /* P-14: the album's "COMPLETE!" stamp gets a row of its own above the title (it lay over the subtitle) */
+  .pc-page .pc-stamp { position: static; order: -1; justify-self: end; margin: -2px 6px -6px 0; }
+  /* P-15: a recipe's chips stack one per line on a narrow card: no separators to strand */
+  .pn-ins .pn-chip.pn-input .ic { width: 22px; height: 22px; }
+
+  /* ---- S9b (ux-phone#16): what opens a "where to get it" bubble is a 44 px target on a touch screen ---- */
+  .pn-task[data-hint-item], .pn-task-line[data-hint-item], [data-hint-item].pn-task-line { min-height: 44px; display: flex; align-items: center; }
+  .pn-chip[data-item] { min-height: 44px; }
+}
+
+/* ---- a phone on its side (ux-phone#7, release P2): the goods first, the slip beside them, nothing cut ----
+   The slip column is 216 px (mobile.css land block): "1 · 10 · Половината · Всички 39" cannot share one row with Sell
+   still on a 360 px screen, so the slider and its number do the counting and only "All" (and "All but the kept")
+   stay; the chalkboard goes under the goods without its title (the portrait compaction) and its items may wrap. */
+@media (max-height: 500px) and (min-width: 601px) {
+  /* QA r1 P-11: a workshop's head is one short line on a 390 px tall screen (the rule waits behind its ⓘ), so the first
+     Make is above the fold in every workshop (Packing Table, Kitchen, Compost Bin, Spice Mill were below it) */
+  .pn-bhead { flex-wrap: wrap; gap: 6px 8px; margin-bottom: 6px; }
+  .pn-bhead-art { width: 44px; height: 44px; }
+  .pn-bhead-art .ic { width: 36px; height: 36px; }
+  .pn-bhead-text { flex: 1 1 220px; min-width: 0; }
+  /* QA r2 P2-01: the ready items wrap one per line when they must, each kept whole ("Масло · готови: 1" ran 71 px past
+     the sheet: a flex row with no wrap shrank every item to its longest word) */
+  .pn-bhead-status { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 6px; font-size: .95rem; }
+  .pn-bhead-status .pn-ready { white-space: nowrap; max-width: 100%; margin-right: 8px; }
+  .pn-bhead-status .pn-ready-mini { gap: 2px; margin-right: 4px; font-variant-numeric: tabular-nums; }
+  .pn-bhead-status .pn-ready-lead { margin-right: 2px; }
+  .pn-bhead-status .pn-info { flex: none; margin-left: 0; }
+  .pn-bhead > .pn-act { flex: 0 1 auto; margin-left: auto; }
+  .pn-slots { margin-bottom: 6px; padding: 4px 6px; }
+  /* a recipe's Make at the top of its card (a tall card held it at its middle, under the fold) */
+  .pn-recipe-acts { align-self: start; }
+  /* the Compost Bin's batches: a 44 px row */
+  .pn-collector { gap: 6px; }
+  .pn-batch { padding: 2px 8px; flex-direction: row; gap: 4px; }
+  .pn-batch .ic { width: 28px; height: 28px; }
+  .pn-sell-main { display: flex; flex-direction: column; }
+  .pn-sell-main > .pn-chalk-wrap { order: 2; margin-top: 8px; }
+  .pn-chalk-title { display: none; }
+  .pn-chalk { margin: 0 0 6px; padding: 6px 8px 8px; }
+  .pn-chalk-body { margin-top: 0; gap: 4px 8px; }
+  .pn-chalk-item { flex-wrap: wrap; max-width: 100%; font-size: .875rem; }
+  .pn-slip > .pn-quick { flex-wrap: wrap; overflow: visible; }
+  .pn-slip > .pn-quick .pn-chipbtn:not(.pn-q-all, .pn-q-allbut) { display: none; }
+  /* QA r2 P2-02: a tree's buttons sit at the sheet's foot on their own paper, over the "more below" fade (shell.css
+     .scroll-fade, z-index 2), never washed out by it (Harvest, Water and Compost looked disabled at 390 px tall) */
+  .pn-tree-acts { position: sticky; bottom: 0; z-index: 3; margin: 10px -16px 0; padding: 8px 16px 10px;
+    background: var(--paper-100); box-shadow: 0 -8px 10px -8px rgba(62, 38, 18, .28); }
+  /* the Seeds tab's plot strip: the button keeps its words ("Сложи леха" ran 4 px out at 640x360), the count wraps */
+  .pn-plotstrip > .pn-act { flex: none; }
+  .pn-plotstrip-text { min-width: 0; }
+}

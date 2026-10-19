@@ -17,7 +17,7 @@ import { landCards, levelOf, placedOf } from './model.js';
 import { landUnits, unitOwned, landFamily, unitFeature, parcelPlots, parcelArea } from './w5-rules.js';
 import { proofLine, openProof } from './market.js';
 import { I } from './intents.js';
-import { h, fmt, fmtShort, createKit, price, pill, chip, svgIcon, icon, hintable, fill, bar } from './kit.js';
+import { h, fmt, fmtShort, createKit, price, pill, chip, svgIcon, icon, hintable, fill, bar, scrollBehavior } from './kit.js';
 import { atlasSvg } from './home-art.js';
 import { t, N, Q, ctext, list, name as cname } from '../../i18n/index.js';
 
@@ -135,7 +135,7 @@ const req = (ok, text, extra = null) => h(`li.pn-req${ok ? '.ok' : ''}`,
 function parcelCard(ctx, kit, p, v) {
   const st = ctx.store.state;
   const [pillKey, pillCls] = STATUS_PILL[p.status] ?? [null, ''];
-  const head = h('header.hm-card-head',
+  const head = h('div.hm-card-head',
     p.k ? h('span.hm-k', String(p.k)) : h('span.hm-k.hm-k-home', svgIcon(p.status === 'home' ? 'barn' : 'flower', 22)),
     h('div', h('h3', p.name), h('small', p.status === 'home' ? t('farm.map.began')
       : p.k ? t('farm.map.expansionOf', { k: p.k, total: v.total, n: p.unlock }) : t('farm.map.projectOf', { name: p.projectName, proj: N(p.project, 'restoration') }))),
@@ -154,7 +154,7 @@ function parcelCard(ctx, kit, p, v) {
     body = h('div.hm-meadow',
       h('p.hm-note', p.status === 'meadow-ours' ? t('farm.map.meadowOursNote')
         : t('farm.map.meadowLaterNote', { name: p.projectName, proj: N(p.project, 'restoration'), n: p.unlock })),
-      p.status === 'meadow-later' ? h('button.btn.btn--sky.pn-sm', { type: 'button', dataset: { open: 'restoration' },
+      p.status === 'meadow-later' ? h('button.btn.btn--sky.pn-sm', { type: 'button', 'data-sfx': 'own', dataset: { open: 'restoration' },
         on: { click: () => ctx.open('restoration', { id: p.project }) } }, svgIcon('book', 22), t('farm.unlock.restoration.label')) : null);
   } else if (p.status === 'ours') {
     body = h('p.hm-note', t('farm.map.oursNote'));
@@ -212,7 +212,7 @@ export const landmapPanel = {
     const pick = (id) => {
       sel = id;
       update(true);
-      body.querySelector(`.hm-card`)?.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' });
+      body.querySelector(`.hm-card`)?.scrollIntoView?.({ block: 'nearest', behavior: scrollBehavior() });
     };
     const sig = () => {
       const v = atlasView(ctx.store.state, env());

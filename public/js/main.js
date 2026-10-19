@@ -27,13 +27,19 @@ import { SyncStore } from './net/sync.js';
 import { Socket } from './net/socket.js';
 import { contentGate, pageBuild, reloadPlan, unsavedOf, noteUnsaved, unsavedText } from './net/content-gate.js';
 import { createPeerTools } from './net/peers.js';
+// option 2 (release 1.0): where the static game files come from, and what to do when the public host fails us
+import { ASSET_BASE, onHost, selfUrl, noteHostFailure } from './net/asset-base.js';
+import { importFailed, noteImportFailure, recoverPlan } from './net/lazy.js';
+import { setFirstView, firstViewPacks, firstViewFiles, modelPath, rememberFirstView, prefetchRemembered, setModelsBusy, packStats } from './net/packs.js';
+import { pending as assetsPending } from './render/assets.js';
+import { models } from './render/models.js';
 import { createController } from './game/controller.js';
 import { createAvatar } from './game/avatar.js';
 import { createFeedback } from './game/feedback.js';
 import { createMemory, forgetPictures } from './game/memory.js';
 import { createRest } from './game/rest.js';
 import { route } from './game/path.js';
-import { spawnAt } from '../../shared/rules/grid.js';
+import { spawnAt, objFootprint } from '../../shared/rules/grid.js';
 import { createWalkMarker } from './game/walk-marker.js';
 import { createViewport } from './game/viewport.js';
 import { createDevice } from './game/device.js';
@@ -43,11 +49,14 @@ import { createModeChip } from './game/mode-chip.js';
 import { createM2Moments } from './game/m2-moments.js';
 import { ClockSync } from '../../shared/net/clock.js';
 import { makeCid } from '../../shared/net/ids.js';
-import { MSG, ERR, PROTOCOL_VERSION, CAPS } from '../../shared/net/protocol.js';
+import { MSG, ERR, PROTOCOL_VERSION, CAPS, cleanName } from '../../shared/net/protocol.js';
 import { CONTENT_HASH, furnitureOf } from '../../shared/content/index.js';
 import { BRAND } from '../../shared/brand.js';
 import { RULES_VERSION } from '../../shared/rules/version.js';
-import { farm, session, readLaunch, cleanUrl, rememberFarm, forgetFarm, farmLabel, validSecret, ttlDays, isStandalone } from './net/farm.js';
+import {
+  farm, session, readLaunch, cleanUrl, rememberFarm, forgetFarm, farmLabel, validSecret, ttlDays, isStandalone,
+  inviteNotice,
+} from './net/farm.js';
 import { showFarmGate, installFarmManifest } from './ui/farm-gate.js';
 import { ready as i18nReady, t, N } from './i18n/index.js';
 import { FARM_DELETED_EVENT } from './ui/privacy.js';
@@ -56,6 +65,7 @@ import { setLookAudio } from './mod/look.js';
 import { emitHarness, setHarnessAuth } from './harness/bus.js';
 
 setLookAudio(audio);          // a farm's mod may prefer some music tracks (public/js/mod/look.js)
+setModelsBusy(() => assetsPending() > 0);   // the sound pack waits for every model (net/packs.js, release 1.0 O4)
 
 // a farm's own keys are namespaced per farm in multi mode (farm.key); unchanged in single mode
 const storage = {
@@ -79,7 +89,7 @@ const REJOIN = '*rejoin';
 const ident = {
   tokens: storage.get(localStorage, 'hh.tokens') || {},
   slot: params.get('slot') || storage.get(sessionStorage, 'hh.slot'),
-  name: params.get('name'),
+  name: cleanName(params.get('name')) || null,     // a link's name with nothing visible is none: the slot picker asks
   used: null,
   // multi mode only (null in single mode): the creator's or a personal link's secret, and an invite
   key: farm.multi ? launch.key ?? validSecret(storage.get(localStorage, 'hh.key')) : null,
@@ -118,6 +128,31 @@ const unsavedMemo = {
 };
 /** How long a stale tab waits for its re-sent actions to be answered before it reloads anyway (CL-02). */
 const RELOAD_SETTLE_MS = 8000;
+/** The home buildings a farmer spawns beside: their models come first on a slow boot (QA r2 I2-C1). */
+const HOME_BUILDINGS = Object.freeze(['farmhouse', 'barn']);
+/** A def's model file in the manifest ('buildings/farmhouse.glb'), or null. */
+const modelFileOf = (def) => models.info(models.keyOf(def))?.file ?? null;
+
+/**
+ * The first view's model files, once the view has framed the farmer (QA r2 I2-C1): the objects on screen, with the
+ * margin the view's own placeholder count uses (|NDC| <= 1.3); the farmhouse and the barn first and alone, the farmers
+ * next, then nearest the farmer. On the self path net/packs.js fetches them before any other model.
+ */
+function nameFirstFiles(pid) {
+  try {
+    const r = document.getElementById('world')?.getBoundingClientRect?.();
+    const ndc = (v, from, size) => ((v - from) / size) * 2 - 1;
+    const onScreen = (x, z) => {
+      const p = view.toScreen(x, z);
+      return Boolean(r && r.width && r.height && p) && Math.abs(ndc(p.x, r.left, r.width)) <= 1.3 && Math.abs(ndc(p.y, r.top, r.height)) <= 1.3;
+    };
+    const seen = (o) => { const [w, d] = objFootprint(o); return onScreen(o.x + w / 2, o.z + d / 2); };
+    const avatars = models.keys('avatar:').map((k) => models.info(k)?.file).filter(Boolean).map(modelPath);
+    const files = firstViewFiles(store.state, spawnAt(store.state, pid), modelFileOf, { lead: HOME_BUILDINGS, after: avatars, seen });
+    const lead = new Set(HOME_BUILDINGS.map(modelFileOf).filter(Boolean).map(modelPath));
+    setFirstView(null, files, files.filter((f) => lead.has(f)).length);
+  } catch (err) { console.warn('first-view files: the packs decide', err); }
+}
 let reloading = false;
 
 function hello(claim) {
@@ -184,7 +219,12 @@ function pickSlot(slots, pass) {
     creator: Boolean(ident.key && !ident.rejoin) } : {};
   // a new farm's creator is farmer 1 (the brief): one row, not a choice between two empty ones
   if (opts.creator && slots.every((s) => !s.claimed) && slots.some((s) => s.pid === 'p1')) slots = slots.filter((s) => s.pid === 'p1');
-  ui.showSlots(slots.map((s) => ({ ...s, mine: Boolean(ident.tokens[s.pid]), pass })), (slot, name, extra = {}) => {
+  ui.showSlots(slots.map((s) => ({ ...s, mine: Boolean(ident.tokens[s.pid]), pass })), (slot, typed, extra = {}) => {
+    // the name as the server will keep it (QA r2 I2-02): one with nothing visible (zero-width spaces) is refused here,
+    // as the server's deny BAD_ARGS used to say, since the server now drops such a hello as malformed. A reclaim
+    // never renames (server/sessions.js), so an old seat's invisible name never locks its farmer out
+    const name = typeof typed === 'string' ? (cleanName(typed) || (extra.reclaim === true ? slot : '')) : typed;
+    if (typed && !name) { ui.slotError(ERR.BAD_ARGS); return; }
     ident.slot = slot;
     const claim = name ? { slot, name } : null;
     if (claim && typeof extra.pass === 'string' && extra.pass) claim.pass = extra.pass;
@@ -228,8 +268,16 @@ function onWelcome(w) {
   syncOverlay(w.mod);
   setHarnessAuth({ pid: w.pid, token: farm.multi ? session.secret ?? ident.tokens[w.pid] : ident.tokens[w.pid] });
   store.reset(w);
+  const firstWelcome = !started;
   if (!started) {
     started = true;
+    // the model packs of what the camera shows first come first (release 1.0 O4: on a slow link the first view used to
+    // arrive last); the scheduler in net/packs.js takes it from here
+    try {
+      const first = firstViewPacks(store.state, spawnAt(store.state, w.pid), modelFileOf);
+      setFirstView(first);
+      rememberFirstView(first);                          // the next boot of this browser starts them before the welcome
+    } catch (err) { console.warn('first-view packs: the default order stands', err); }
     // the farmer goes round buildings and fences (game/path.js); the router reads the predicted farm
     avatar = createAvatar({ view, send: (m) => socket.raw(m), pid: w.pid, route: (from, to) => (store.state ? route(store.state, from, to) : null),
       at: spawnAt(store.state, w.pid) });
@@ -280,6 +328,7 @@ function onWelcome(w) {
     avatar.resync();
   }
   view.setState(store.state, { me: w.pid });
+  if (firstWelcome) nameFirstFiles(w.pid);             // the view has framed the farmer: what it shows comes first
   peerTools.welcome(w.peers);
   syncPresent();
   for (const p of w.peers || []) {
@@ -310,8 +359,12 @@ function welcomeFarm(w) {
     try { history.replaceState(history.state, '', cleanUrl(location, { rejoin: true })); } catch { /* the link stays visible */ }
   }
   if (ident.join) {
-    // my own farm opened from the invite I made: the invite stays for the friend it was meant for
-    if (!ident.sentJoin) setTimeout(() => ui.notice(t('multi.inviteOwn')), 1500);
+    // my own farm opened from the invite I made on this device: it stays for the friend it was meant for. The friend
+    // who taps the link they joined with again just comes in (QA r1 I-03: they were told it still waits for them)
+    const saved = storage.get(localStorage, 'hh.invite');
+    if (inviteNotice({ join: ident.join, sentJoin: ident.sentJoin, saved }) === 'own') {
+      setTimeout(() => ui.notice(t('multi.inviteOwn')), 1500);
+    }
     ident.join = null;
     try { history.replaceState(history.state, '', cleanUrl(location, { join: true })); } catch { /* the link stays visible */ }
   }
@@ -391,9 +444,9 @@ function syncPresent() {
 /**
  * A build-only deploy with actions pending (CL-02): count what the re-send does not save (rejected now, lost by a
  * server that forgot this cid) and reload once nothing is unconfirmed, or after RELOAD_SETTLE_MS with the rest
- * counted as unsure. Returns the function that starts the wait (after reset() has re-sent them).
+ * counted as unsure. Returns the function that starts the wait (after reset() has re-sent them). `go` reloads.
  */
-function watchUnsaved() {
+function watchUnsaved(go = () => location.reload()) {
   const u = { lost: 0, unsure: 0 };
   const offs = [
     store.on('reject', (r) => { if (!r.local) u.lost++; }),
@@ -407,7 +460,7 @@ function watchUnsaved() {
       if (left && performance.now() - t0 < RELOAD_SETTLE_MS) { setTimeout(check, 50); return; }
       for (const off of offs) off();
       noteUnsaved(unsavedMemo, { lost: u.lost, unsure: u.unsure + left });
-      location.reload();
+      go();
     };
     check();
   };
@@ -535,6 +588,64 @@ function startAudioSoon() {
   setTimeout(() => idle(startAudio), 800);
 }
 
+// ---- a game file that did not arrive: option 2's host, or any lazy import() (net/lazy.js, QA r4 I4-01) -------------
+// An <img> from the host that fails is asked for again from this server, once. A failed module cannot be retried in
+// place (the browser keeps the failure; a second URL would be a second module instance), so: while the boot curtain is
+// up the page reloads once the farm's server answers (at most twice in 5 min per tab), afterwards it offers "Reload".
+// Either way the CL-02 settle keeps unsent moves. The host path reloads onto this server's files (?assets=self and a
+// 10-minute cookie, as the inline watchdog does); the self path just reloads.
+function reloadSelf() {
+  try { document.cookie = 'hh_assets=self; Max-Age=600; Path=/; SameSite=Lax'; } catch { /* cookies blocked: the query does it */ }
+  const u = new URL(location.href);
+  u.searchParams.set('assets', 'self');
+  location.replace(u.href);
+}
+if (ASSET_BASE) {
+  addEventListener('error', (e) => {
+    const el = e.target;
+    if (!el || el.tagName !== 'IMG' || el.dataset?.hhSelf || !onHost(el.currentSrc || el.src)) return;
+    el.dataset.hhSelf = '1';
+    noteHostFailure(`image ${selfUrl(el.src)}`);
+    el.src = selfUrl(el.src);
+  }, true);
+}
+addEventListener('unhandledrejection', (e) => { if (importFailed(e.reason)) noteImportFailure('import', e.reason); });
+const reloadPage = () => (ASSET_BASE ? reloadSelf() : location.reload());
+/** The farm's server answers again (a reload into a dead link shows the browser's offline page instead). */
+async function untilReachable() {
+  for (let wait = 500; ; wait = Math.min(wait * 2, 5000)) {
+    try {
+      if ((await fetch(farm.api('/api/status'), { cache: 'no-store', signal: AbortSignal.timeout?.(8000) })).status < 500) return;
+    } catch { /* still away */ }
+    await new Promise((r) => setTimeout(r, wait));
+  }
+}
+const reloadWhenUp = () => untilReachable().then(() => { if (!reloading) watchUnsaved(reloadPage)(); });
+let assetsNotice = null;
+let assetsWait = false;             // a reload or the notice is on its way
+const lifted = () => started && window.__hh?.playableAt != null;
+function assetsFailedNotice() {
+  // after the lift: under the curtain nobody reads it, and over the welcome-back sheet it goes above the panels
+  if (!lifted()) { setTimeout(assetsFailedNotice, 500); return; }
+  assetsWait = false;
+  assetsNotice = ui.notice(() => t(ASSET_BASE ? 'boot.assets.failed' : 'boot.assets.retry'),
+    { action: { label: () => t('boot.assets.reload'), fn: reloadWhenUp }, ms: 10 * 60_000, urgent: true });
+}
+addEventListener('hh:assets-failed', async () => {
+  if (reloading || assetsWait || assetsNotice?.isConnected) return;
+  assetsWait = true;
+  const recent = storage.get(sessionStorage, 'hh.assetsReloads') || [];
+  if (recoverPlan({ lifted: lifted(), recent, now: Date.now() }) === 'reload') {
+    await untilReachable();
+    if (!lifted() && !reloading) {
+      storage.set(sessionStorage, 'hh.assetsReloads', [...recent, Date.now()].slice(-4));
+      watchUnsaved(reloadPage)();
+      return;
+    }
+  }
+  assetsFailedNotice();
+});
+
 async function boot() {
   // multi mode, nothing that could let this device in (no token, no key, no invite): the server can only say "private",
   // so say it now, without loading the world (a phone would fetch the whole farm's art for nothing)
@@ -556,6 +667,13 @@ async function boot() {
     fetch(farm.api('/api/status'), { cache: 'no-store' }).then((r) => r.json()).then((st) => { myBuild = pageBuild({ status: st }); })
       .catch(() => { /* unknown build: content hash only */ });
   }
+  // option 2's host path, a returning browser: last time's first-view model packs start now on the host's fast link,
+  // while the view sets up and the farm server says hello (release 1.0 O4; the boot curtain waits for those models). Not on
+  // the self path: there one slow link carries the welcome and the dock's code too
+  if (ASSET_BASE) {
+    const hint = document.querySelector('meta[name="hh-first-packs"]')?.getAttribute('content')?.split(',').filter(Boolean) ?? null;
+    prefetchRemembered(undefined, hint).catch(() => { /* the welcome's order takes over */ });
+  }
   // ?quality=low|medium|high|eco|auto (tests, a slow partner PC); otherwise the view's default / remembered tier
   const q = ['low', 'medium', 'high', 'eco', 'auto'].includes(params.get('quality')) ? params.get('quality') : 'auto';
   // eco is the low tier plus capped frame rates: the renderer's MSAA is chosen at init, so init low, then eco (UI-16)
@@ -563,7 +681,7 @@ async function boot() {
   await Promise.all([view.init(canvas, { quality: q === 'eco' ? 'low' : q, now: serverNow, overlay: document.getElementById('overlay') }), i18nReady()]);
   if (q === 'eco') view.setQuality('eco');
   store.on('change', (ch) => view.sync(ch.ids, ch.topics));
-  store.on('fx', ({ ev, by, local }) => view.fx.play(ev, undefined, feedback ? feedback.fxMeta(by, local) : { by, local }));
+  store.on('fx', ({ ev, by, local }) => view.fx.play(ev, undefined, feedback ? feedback.fxMeta(by, local, ev) : { by, local }));
   store.on('lost', () => ui.notice(t('game.lost')));
   // Watchdog (review-m0 H3): a resync that gets no welcome within 5 s reconnects; the reconnect's hello is
   // always answered with a welcome. The store also repeats its request every RESYNC_RETRY_MS.
@@ -624,6 +742,10 @@ function clockInfo() {
 // Test and debug hook (tech §9.1): the E2E and shot tools drive the game through this.
 window.__hh = {
   cid, store, view, ui, clock, audio, serverNow,
+  /** Model and texture files still loading (render/assets.js): tools/boot-perf.mjs reads "every model drawn" here. */
+  assetsPending: () => assetsPending(),
+  /** How the model packs loaded (net/packs.js): tools/e2e-assets.mjs records it beside a warm reload's bytes. */
+  packStats: () => packStats(),
   act: (type, args) => store.act(type, args),
   get state() { return store.state; },
   get pending() { return store.pending.length; },

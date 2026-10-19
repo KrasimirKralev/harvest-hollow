@@ -16,7 +16,7 @@ import { Presence } from './presence.js';
 import { Together } from './together.js';
 import { Scheduler } from './scheduler.js';
 import { handleMessage } from './router.js';
-import { createApp } from './http.js';
+import { createApp, WS_DEFLATE } from './http.js';
 import { StaticFiles } from './static.js';
 import { createLogger } from './log.js';
 import { Perf } from './perf.js';
@@ -254,7 +254,7 @@ export async function startServer(cfg = loadConfig()) {
   hh.harness = await createSingleHarness(hh);
   const app = createApp(hh);
   const server = http.createServer(app);
-  const wss = new WebSocketServer({ server, path: '/ws', maxPayload: LIMITS.MAX_PAYLOAD, perMessageDeflate: false,
+  const wss = new WebSocketServer({ server, path: '/ws', maxPayload: LIMITS.MAX_PAYLOAD, perMessageDeflate: WS_DEFLATE,
     // Same-origin only: a page from another origin must not drive the farm (tech §7 rule 8).
     verifyClient: ({ req }) => {
       const origin = req.headers.origin;
@@ -299,6 +299,7 @@ export async function startServer(cfg = loadConfig()) {
       await new Promise((r) => server.close(() => r()));
       await finishFarm(hh);
       await hh.harness?.stop();
+      hh.assetOrigin?.stop();
       hh.perf.stop();
     })();
     return closing;

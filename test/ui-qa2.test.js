@@ -168,7 +168,7 @@ test('UI-14: Grandma\'s welcome and the naming card show on a new farm only', as
   const { namingDue, coachStep, NAMING_MAX_LEVEL } = await import('../public/js/ui/tutorial.js');
   const fresh = farmAt(1);
   assert.equal(namingDue(fresh), true);
-  assert.equal(coachStep(fresh, 'p1')?.step.id, 'welcome');
+  assert.equal(coachStep(fresh, 'p1')?.step.id, 'plant_wheat', 'the first instruction is planting (1.0 M1a)');
   const old = farmAt(25);                          // an old save whose farmers were re-joined: tut still at the start
   assert.equal(old.farm.tut.s, 0);
   assert.equal(namingDue(old), false);

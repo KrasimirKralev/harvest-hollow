@@ -4,8 +4,9 @@
   <meta charset="utf-8">
   <!-- The multi-farm front door (docs/agent-briefs/multi-farm.md): served at / when HH_MODE=multi. The game page itself is
        /f/<farmId> (index.html). Static: it needs no build stamp. One screen (owner request 2026-10-05, "simpler, more
-       vibrant, more futuristic"): a golden-hour sky, the living farm in a glass orb, and three actions: Play (start a
-       new farm), Star us on GitHub, Open GitHub. Everything else is a small link that opens a sheet (js/landing.js).
+       vibrant, more futuristic"): a golden-hour sky, the living farm in a glass orb, and ONE big action, Play (start a new
+       farm; release 1.0 O7, astra#9), with how the partner joins under it. Everything else is a small pill in the row
+       below: the way back in, Star us and GitHub, ideas, screenshots, privacy, self-hosting (js/landing.js).
        First view: this file, css/landing.css, one font, the logo and the orb's still; the farm video, the sheets' styles
        and the star count come after the first paint. Words: the i18n catalogs ([data-i18n] keys: area 'front', the title
        and the description 'multi.ld.*'), English or Bulgarian with the English · Български toggle in the top corner; the
@@ -75,7 +76,9 @@
         <span class="ld-orb-shine"></span>
         <span class="ld-orbit ld-orbit--front"><i></i></span>
       </div>
-      <h1 class="ld-logo"><img src="/assets/landing/logo-wide_560.webp" srcset="/assets/landing/logo-wide_560.webp 560w, /assets/landing/logo-wide_880.webp 880w, /assets/landing/logo-wide_1120.webp 1120w"
+      <!-- the carved wordmark of the game's farmer picker (assets/art/logo-wide.webp: the same file, cached for the game);
+           smaller copies of it for phones -->
+      <h1 class="ld-logo"><img src="/assets/art/logo-wide.webp" srcset="/assets/landing/logo-wide_560.webp 560w, /assets/landing/logo-wide_880.webp 880w, /assets/art/logo-wide.webp 1400w"
         sizes="(max-width: 699px) 290px, (max-height: 760px) 440px, 520px" width="1400" height="336" alt="Harness Hollow" fetchpriority="high"></h1>
       <p class="ld-tag" data-i18n="front.hero.tag">A cozy 3D farm for two, live in your browser.</p>
     </div>
@@ -83,21 +86,12 @@
     <section class="ld-dock" id="ld-dock" aria-labelledby="ld-dock-title">
       <h2 class="sr-only" id="ld-dock-title" data-i18n="front.act.title">Play, or help Harness Hollow grow</h2>
       <div class="ld-acts">
-        <button class="ld-act ld-act--play" id="ld-start" type="button" aria-describedby="ld-ttl">
+        <button class="ld-act ld-act--play" id="ld-start" type="button" aria-describedby="ld-invite ld-ttl">
           <span class="ld-act-ic" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M8 5.6v12.8a1.2 1.2 0 0 0 1.8 1l10-6.4a1.2 1.2 0 0 0 0-2l-10-6.4A1.2 1.2 0 0 0 8 5.6Z"/></svg></span>
           <span class="ld-act-txt"><span class="ld-act-t" data-i18n="front.act.play">Play</span><span class="ld-act-s" id="ld-start-sub" data-i18n="front.act.playSub">Start a new farm</span></span>
         </button>
-        <a class="ld-act ld-act--star" id="ld-star-btn" href="https://github.com/KrasimirKralev/harvest-hollow" target="_blank" rel="noopener">
-          <span class="ld-act-ic" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M12 2.8l2.7 5.6 6.1.8-4.5 4.2 1.1 6.1L12 16.6l-5.4 2.9 1.1-6.1-4.5-4.2 6.1-.8L12 2.8Z"/></svg></span>
-          <span class="ld-act-txt"><span class="ld-act-t" data-i18n="front.act.star">Star us</span><span class="ld-act-s" data-i18n="front.act.starSub">on GitHub</span></span>
-          <span class="ld-star-n" id="ld-star-n" hidden></span>
-        </a>
-        <a class="ld-act ld-act--gh" id="ld-repo" href="https://github.com/KrasimirKralev/harvest-hollow" target="_blank" rel="noopener">
-          <span class="ld-act-ic" aria-hidden="true"><svg viewBox="0 0 16 16" focusable="false"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg></span>
-          <span class="ld-act-txt"><span class="ld-act-t" data-i18n="front.act.github">Open GitHub</span><span class="ld-act-s" data-i18n="front.act.githubSub">See how it is made</span></span>
-        </a>
       </div>
-      <p class="ld-why" data-i18n="front.act.why">Free and open source: a ⭐ helps other couples find it.</p>
+      <p class="ld-invite" id="ld-invite" data-i18n="front.act.invite">Invite your partner with a link from inside the farm.</p>
       <p class="ld-ttl" id="ld-ttl"><span class="ld-ttl-moon" aria-hidden="true"></span><span data-i18n="front.act.ttl">Farms idle for 7 days are deleted.</span></p>
       <p class="ld-status" id="ld-status" role="status" aria-live="polite"></p>
       <div class="ld-note" id="ld-full" hidden>
@@ -114,6 +108,15 @@
 
     <nav class="ld-more" aria-label="If you need more" data-i18n-attr="aria-label:front.more.nav">
       <button class="ld-link" id="ld-back-open" type="button" aria-haspopup="dialog" data-i18n="front.more.back">Already have a farm?</button>
+      <a class="ld-link ld-link--star" id="ld-star-btn" href="https://github.com/KrasimirKralev/harvest-hollow" target="_blank" rel="noopener">
+        <svg class="ld-link-ic" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 2.8l2.7 5.6 6.1.8-4.5 4.2 1.1 6.1L12 16.6l-5.4 2.9 1.1-6.1-4.5-4.2 6.1-.8L12 2.8Z"/></svg>
+        <span data-i18n="front.act.star">Star us</span><span class="sr-only"> </span><span class="sr-only" data-i18n="front.act.starSub">on GitHub</span>
+        <span class="ld-star-n" id="ld-star-n" hidden></span>
+      </a>
+      <a class="ld-link ld-link--gh" id="ld-repo" href="https://github.com/KrasimirKralev/harvest-hollow" target="_blank" rel="noopener" aria-label="Open GitHub" data-i18n-attr="aria-label:front.act.github">
+        <svg class="ld-link-ic" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>
+        <span data-i18n="front.more.github">GitHub</span>
+      </a>
       <button class="ld-link" id="ld-ideas-open" type="button" aria-haspopup="dialog" data-i18n="front.more.ideas">Suggest an idea</button>
       <button class="ld-link" id="ld-shots-open" type="button" aria-haspopup="dialog" data-i18n="front.more.shots">Screenshots</button>
       <a class="ld-link" id="ld-privacy" href="/privacy" data-i18n="front.more.privacy">Privacy</a>

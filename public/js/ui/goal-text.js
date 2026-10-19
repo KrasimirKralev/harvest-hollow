@@ -4,8 +4,19 @@
 // the content names in their Bulgarian forms.
 //
 //   goalText(msg) -> string     a message (or a plain string, passed through) as text
-import { enText } from '../../../shared/rules/goal-text.js';
+//   noteText(note) -> string    a gift's note in this screen's language (a one-tap token) or as typed (QA r2 F2-02)
+import { enText, giftNoteKey } from '../../../shared/rules/goal-text.js';
 import { lang, t, fmtNum, fmtDec, list, ctext, N, Q, name, qty, nameEntry } from '../i18n/index.js';
+
+/**
+ * A gift's note as this screen says it (QA r2 F2-02): a one-tap note ("#thanks") in the reader's language, a typed note
+ * as the giver typed it; null / '' stay as they are. Every place that shows a note says it through this: the reveal card
+ * (game/feedback.js giftCard), the feed (ui/feed.js giftNote), the toasts' quote, the recap and the Memory Book.
+ */
+export function noteText(note) {
+  const key = giftNoteKey(note);
+  return key ? t(key) : note;
+}
 
 /**
  * Bulgarian prepositions that grow before a like sound: "в" -> "във" before в / ф, "с" -> "със" before с / з ("във

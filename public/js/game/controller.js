@@ -17,6 +17,8 @@
 //   controller.actOn(pick, { shift }?)   what a click on `pick` (view.pick result) does with the current tool
 //   controller.do(type, args, at?)   store.act + feedback (toast + shake on a local refusal; a SOFT code opens the
 //                                    ui's confirm through toast(code, { type, args }))
+//   controller.canUndo() -> { id, verb, until, def } | null   (release 1.0) what Ctrl+Z would undo now (the Undo chip)
+//   controller.sitOn(benchId) -> bool  (release 1.0 D2) walk over and sit, as the Hand on a bench does
 //   controller.undo()                Ctrl+Z: refund my newest pristine purchase / move it back (10-minute window); with the
 //                                    Hammer over an object someone moved, Ctrl+Z moves THAT one back (CL-05); the object
 //                                    the Hammer hint names comes first (controller.setHint(id | null), ui/toolbar.js)
@@ -41,8 +43,11 @@
 //                                    ids: those copies, for the world's set glow)
 //   controller.keys                  the rebindable keymap (game/keys.js): keys.list() for the settings panel
 //   controller.plantWith(crop, plotId) -> result | null   (live requests 2026-10-04) the seed picker at an empty plot:
-//                                    plant that plot with `crop` now (the normal predicted path) and switch to the Seed
-//                                    Bag with that crop, so the next clicks / drags plant more of it
+//                                    plant that plot with `crop` now (the normal predicted path) and keep the HAND, armed
+//                                    with that crop (release 1.0 M2: tool.seeding): the next clicks / drags on empty
+//                                    plots plant more of it, a ripe plot still harvests, a building or a pen still opens.
+//                                    setTool('hand', { crop, plant: true }) arms it; setTool('hand') (H, 1, the Hand
+//                                    button, Esc) puts the seed away and the next empty plot asks again
 //   controller.walkTo(x, z) -> { x, z, reached } | null   my farmer walks to that point (float tiles) round everything
 //                                    solid (avatar.goTo); a Hand click on open ground does this
 //   controller.latency() -> { n, last, avg, p95, max }   input -> first rendered frame after the predicted change (ms)
@@ -134,6 +139,7 @@ import * as decorRules from '../../../shared/rules/actions/decor.js';
 import { animalPrice, animalBuyPlan } from '../../../shared/rules/actions/animals.js';
 import * as beauty from '../../../shared/rules/actions/beauty.js';
 import { MSG, LIMITS, ERR, SOFT, EMOTES } from '../../../shared/net/protocol.js';
+import { actionTargets, eventRow } from '../../../shared/net/targets.js';
 import {
   describe, verbsFor, resolve, resolveBatch, countDone, OPENS, CLIENT_VERBS, ONCE_VERBS, RIDEABLE, adultHorses, canRun,
 } from './targets.js';
@@ -141,7 +147,7 @@ import { RIDE_TOOL } from './avatar.js';
 import { createStroke, brushTiles } from './stroke.js';
 import { TOOL_LIST, ALIASES, toolUnlocked, brushOf, cursorFor } from './tools.js';
 import { createKeymap } from './keys.js';
-import { TOUCH, tapSlop, pair, angleDelta, twist, isDoubleTap, groundAt, flingStep } from './touch.js';
+import { TOUCH, tapSlop, pair, angleDelta, twist, isDoubleTap, groundAt, flingStep, dropKeyHints, createQuiet } from './touch.js';
 import { createHaptics } from './haptics.js';
 import { TILE_M } from '../../../shared/content/config.js';
 import { createFishing, pondSpots } from './fishing.js';
@@ -247,6 +253,27 @@ function sizeAt(state, defId, rot, moveId = null) {
   }
   return footprint(def, rot);
 }
+
+/**
+ * How a footprint `a` ({ x, z, w, d }: min corner and size in tiles) stands against a placed footprint `b` from a camera
+ * turned to `yaw` (render/camera.js: the eye is at the target + (sin yaw, cos yaw)): 'side' when they stand side by side
+ * on the screen (neither covers the other), 'behind' when `a` is further from the eye, 'partial' when `a` stands in front
+ * of a side of `b`, 'front' when it stands in front of `b`'s middle (QA r3 S3-01, fbp#1: the free Feed Mill's ghost
+ * started in front of the Coop, and the mill's silo took every tap on the hungry hens' Coop and opened the mill). Pure.
+ */
+export function standing(a, b, yaw = Math.PI / 4) {
+  const cam = [Math.sin(yaw), Math.cos(yaw)];
+  const lat = [Math.cos(yaw), -Math.sin(yaw)];
+  const dx = (a.x + a.w / 2) - (b.x + b.w / 2);
+  const dz = (a.z + a.d / 2) - (b.z + b.d / 2);
+  // each footprint's half width across the screen (its extent along the screen's horizontal axis on the ground)
+  const half = (f) => (f.w / 2) * Math.abs(lat[0]) + (f.d / 2) * Math.abs(lat[1]);
+  const across = Math.abs(dx * lat[0] + dz * lat[1]);
+  if (across >= half(a) + half(b) - 0.05) return 'side';
+  if (dx * cam[0] + dz * cam[1] <= 0) return 'behind';
+  return across < half(a) + 0.35 ? 'front' : 'partial';
+}
+
 export function createController({
   store, view, avatar, canvas, send, toast, ui = null, audio = null, peerTool = () => null,
 }) {
@@ -259,9 +286,13 @@ export function createController({
   };
   const savedCrop = session.get('hh.crop');
   // wave 4 (wish 2): what the Compost Scoop spreads, Compost or Fertilizer (the ui's strip over the toolbar picks it)
-  const tool = { id: 'hand', crop: savedCrop && cropOf(savedCrop) ? savedCrop : null, build: null,
+  // seeding (release 1.0 M2): the Hand holds the crop the seed picker gave it and plants it on empty plots
+  const tool = { id: 'hand', crop: savedCrop && cropOf(savedCrop) ? savedCrop : null, build: null, seeding: false,
     spread: session.get('hh.spread') === 'fertilizer' ? 'fertilizer' : 'compost' };
   const keys = createKeymap({ get: () => local.get('hh.keys'), set: (v) => local.set('hh.keys', v) });
+  // the tool (and the Hand's seed) held when build mode began: placing a piece gives it back (QA r2 S-07, fbp#3: after
+  // the free Coop the Hand had lost its Wheat and the next drag across empty plots panned)
+  let heldBefore = null;
   let hover = null;              // last pick under the cursor
   let lastNdc = null;
   let down = null;               // pointer gesture in progress
@@ -297,7 +328,7 @@ export function createController({
   const brush = () => (tool.id === 'hand' || tool.id === 'hammer' ? [1, 1] : brushOf(store.state, tool.id));
 
   function publicTool() {
-    return { id: tool.id, crop: tool.crop, spread: tool.spread, brush: brush(), build: tool.build ? { ...tool.build } : null };
+    return { id: tool.id, crop: tool.crop, seeding: tool.seeding, spread: tool.spread, brush: brush(), build: tool.build ? { ...tool.build } : null };
   }
 
   function setTool(id, opts = {}) {
@@ -314,7 +345,11 @@ export function createController({
     if (tid !== tool.id) { leaveDock('tool'); pairing.cancel(); if (tid !== 'hand' && tid !== 'hammer') interior.leave('tool'); }
     const leavingBuild = tool.id === 'hammer' && tid !== 'hammer';
     if (leavingBuild || (tid === 'hammer' && !opts.def)) endBuild();
+    if (tid === 'hammer' && tool.id !== 'hammer') heldBefore = { id: tool.id, crop: tool.crop, seeding: tool.seeding };
+    else if (tid !== 'hammer') heldBefore = null;
     tool.id = tid;
+    // the Hand keeps a seed only when it is handed one (the picker): any other choice of the Hand puts it away
+    tool.seeding = tid === 'hand' && opts.plant === true && Boolean(tool.crop);
     endStroke();
     if (tid === 'hammer' && opts.def) startBuild(opts.def, { rot: opts.rot ?? 0 });
     else if (tid === 'hammer' && !tool.build) startBuild('plot', { rot: 0, quiet: true });
@@ -329,7 +364,9 @@ export function createController({
   // race ("Mia got there first ♥", GDD §6.3), never an error with a shake and a bonk: on a LAN the partner's delta
   // usually lands before my click, so the server never sees my attempt and its `rej.by` cannot help.
   const RACE_WINDOW_MS = 10_000;
-  const RACE_CODES = new Set([ERR.EMPTY, ERR.NOT_READY, ERR.OCCUPIED, ERR.NOT_FOUND, ERR.ALREADY_DONE, ERR.NOT_HUNGRY]);
+  // BLOCKED (QA r2 I2-01): a spot the partner's object took a moment ago (blockerOf names it; its `placed` / `moved`
+  // event touched its id)
+  const RACE_CODES = new Set([ERR.EMPTY, ERR.NOT_READY, ERR.OCCUPIED, ERR.NOT_FOUND, ERR.ALREADY_DONE, ERR.NOT_HUNGRY, ERR.BLOCKED]);
   const touchedBy = new Map();   // objId -> { by, at: performance.now() }
   store.on('fx', ({ ev, by, local }) => {
     if (local || !by || by === me() || by === 'sys' || !ev) return;
@@ -340,6 +377,9 @@ export function createController({
       const o = store.state && Object.hasOwn(store.state.farm.objects, id) ? store.state.farm.objects[id] : null;
       if (o && typeof o.home === 'string') touchedBy.set(o.home, { by, at: t });    // an animal: its home too
     }
+    // a board row (an order, a townsfolk post, a barge crate) is raced like an object (QA r1 I-01)
+    const row = eventRow(ev);
+    if (row) touchedBy.set(row, { by, at: t });
     if (touchedBy.size > 400) for (const [id, r] of touchedBy) if (t - r.at > RACE_WINDOW_MS) touchedBy.delete(id);
   });
   /** The partner who touched one of `ids` in the last RACE_WINDOW_MS, when `code` reads as a lost race. */
@@ -356,7 +396,8 @@ export function createController({
   // ---- acting -------------------------------------------------------------------------------------------------
   /** Feedback for something that did not happen: shake, bonk (feedback.js listens), the reason. */
   function invalid(id, code, ctx = {}) {
-    const ids = id ? [id] : ctx.args && Array.isArray(ctx.args.ids) ? ctx.args.ids : ctx.args && typeof ctx.args.id === 'string' ? [ctx.args.id] : [];
+    // the targets the server names too (shared/net/targets.js): ids, and the board row of an order or a crate (I-01)
+    const ids = id ? [id] : actionTargets(ctx.type, ctx.args);
     const by = code ? raceBy(ids, code) : null;
     if (by) {                                              // a lost race: the friendly toast, no shake, no bonk
       emit('invalid', { id: id ?? null, code, by, race: true });
@@ -365,7 +406,46 @@ export function createController({
     }
     if (id) view.fx.play({ e: 'invalid', id });
     emit('invalid', { id: id ?? null, code });
-    if (code && code !== ERR.UNKNOWN_ACTION) toast(code, ctx);
+    // a refusal on an object says why AT the object (release 1.0 S7, feel#7: "Wheat · ready in 42 s", "Blocked by the
+    // Well"), through life-feel's floater (view.fx.float); without it, or with no specific reason, the toast as before.
+    // ctx.why: the caller's own reason for a refusal with no code (S3-09: a tool with nothing to do there)
+    const why = id && code ? whyText(code, id) : (ctx.why ?? null);
+    const at = why && typeof view.fx?.float === 'function' ? tileOfObject(id) : null;
+    if (at) { view.fx.float(at, why, { kind: 'why' }); return; }
+    if (code && code !== ERR.UNKNOWN_ACTION) toast(why ?? code, why ? {} : ctx);
+    else if (why) toast(why, {});
+  }
+
+  /** A line for the input in use: a finger has no number keys, so "(8)" goes (QA r1 S-16); a line with its own words
+   *  for a finger says those ("use the Axe (in Tools)", ui-panels' touch twin) */
+  const forFinger = (text) => (input === 'touch' ? (i18n.touchOf(text) ?? dropKeyHints(text)) : text);
+
+  /** The centre of an object's footprint, in tiles (null for a thing with no place: an animal in its home). */
+  function tileOfObject(id) {
+    const o = store.state && Object.hasOwn(store.state.farm.objects, id) ? store.state.farm.objects[id] : null;
+    if (!o || !Number.isFinite(o.x)) return null;
+    const def = defOf(o.def);
+    const [w, d] = def && def.size ? objSize(o, def) : [1, 1];
+    return { x: o.x + w / 2, z: o.z + d / 2 };
+  }
+
+  /**
+   * The specific reason of a refusal on object `id` (S7): what is not ready and when it is, what is full, what is in the
+   * way; null when the code has nothing more to say than its own sentence.
+   */
+  function whyText(code, id) {
+    const st = store.state;
+    const o = st && Object.hasOwn(st.farm.objects, id) ? st.farm.objects[id] : null;
+    if (!o) return null;
+    const t = now();
+    if (code === ERR.NOT_READY) {
+      if (o.crop && o.crop.readyAt > t) return i18n.t('dock.why.readyIn', { thing: i18n.name(o.crop.def), d: i18n.fmtDuration(o.crop.readyAt - t, { cut: 's' }) });
+      if (Number.isSafeInteger(o.readyAt) && o.readyAt > t) return i18n.t('dock.why.readyIn', { thing: i18n.name(o.def), d: i18n.fmtDuration(o.readyAt - t, { cut: 's' }) });
+      return null;
+    }
+    if (code === ERR.NOT_HUNGRY) return i18n.t('dock.why.full', { thing: i18n.name(o.def) });
+    if (code === ERR.BLOCKED || code === ERR.OCCUPIED && !o.crop) return i18n.t('dock.why.blocked', { thing: i18n.N(o.def) });
+    return null;
   }
 
   /**
@@ -420,6 +500,7 @@ export function createController({
 
   /** controller.do: a panel's or the ui's action with the same feedback as a click. */
   function doAct(type, args, at) {
+    const cost0 = type === 'place' && args ? placeCost(args.def) : null;
     args = withMax(type, args);
     const res = store.act(type, args);
     if (!res.ok) {
@@ -435,7 +516,7 @@ export function createController({
       const [w, d] = defOf(args.def)?.size ? footprint(defOf(args.def), args.rot ?? 0) : [1, 1];
       avatar.walkTo(args.x, args.z, w, d);
     }
-    afterPlaced(type, args);
+    afterPlaced(type, args, cost0);
     return res;
   }
 
@@ -477,16 +558,31 @@ export function createController({
     return [id];
   }
 
+  /**
+   * The Seed Bag holding a seed plants: a ripe plot it crosses is harvested first and planted again in the same stroke
+   * (QA r3 S3-06, fbp#7: a stroke along a ripe row only harvested it and left it bare; D3: "one stroke plants, harvest
+   * first if ripe"). The Hand keeps harvesting a ripe plot (M2).
+   */
+  const replanting = () => tool.id === 'seed_bag' && Boolean(tool.crop);
+  const replantable = (t) => Boolean(t && t.kind === 'plot' && t.ready && !t.giant);
+
   /** Start a stroke on a pick; acts on the first target(s). Returns false when nothing was runnable. */
   function beginStroke(p, e) {
     const base = p && p.kind === 'object' ? describe(store.state, p.id, now(), me()) : null;
     if (!base) return { started: false };
+    if (replanting() && replantable(base)) {
+      stroke = { verb: 'plant', item: tool.crop, count: 0, visited: new Set(), path: createStroke({ brush: brush() }), first: base,
+        shift: e.shiftKey, sent: false, replant: true };
+      const tiles = stroke.path.to(p.x, p.z);
+      apply([base, ...collect(tiles, 'plant').filter((x) => x.id !== base.id)], e.timeStamp);
+      return { started: true };
+    }
     let refusal = null;
     for (const t of [base]) {
       for (const verb of verbsFor(tool.id, t, { shift: e.shiftKey, spread: tool.spread })) {
         // the Hand on an empty plot asks which seed (the picker at the plot), whatever was planted before (live
         // requests 2026-10-04: "an easy mode for the seeds"); the Seed Bag plants its crop
-        if (verb === 'plant' && tool.id === 'hand') { refusal ??= { verb, code: 'PICK_SEED' }; continue; }
+        if (verb === 'plant' && tool.id === 'hand' && !tool.seeding) { refusal ??= { verb, code: 'PICK_SEED' }; continue; }
         if ((verb === 'plant') && !tool.crop) { refusal ??= { verb, code: 'NO_SEED' }; continue; }
         if (CLIENT_VERBS.has(verb)) {
           // the Fishing Dock (M2): sit down and cast; seated here already: cast again
@@ -523,7 +619,8 @@ export function createController({
         const r = resolve(store, verb, t, verbOpts(verb));
         if (r && r.type && r.code === undefined) {
           const item = verb === 'plant' ? tool.crop : t.crop || t.def?.product || null;
-          stroke = { verb, item, count: 0, visited: new Set(), path: createStroke({ brush: brush() }), first: t, shift: e.shiftKey, sent: false };
+          stroke = { verb, item, count: 0, visited: new Set(), path: createStroke({ brush: brush() }), first: t, shift: e.shiftKey, sent: false,
+            replant: verb === 'plant' && replanting() };
           const tiles = stroke.path.to(p.x, p.z);
           // the press acts on its brush; a press on ONE animal acts on that animal only (its home's tile stands for
           // every animal inside, which is what a drag across the yard should reach, not a click); a bench or a Giant
@@ -538,6 +635,59 @@ export function createController({
     return { started: false, base, refusal };
   }
 
+  /** The verb a field tool paints across plots: the Hand holding a seed and the Seed Bag plant, the Sickle harvests. */
+  function fieldVerb() {
+    if ((tool.id === 'seed_bag' || (tool.id === 'hand' && tool.seeding)) && tool.crop) return 'plant';
+    if (tool.id === 'sickle') return 'harvest';
+    return null;
+  }
+
+  /**
+   * A drag that starts on a plot the field tool cannot act on (a growing crop under the seed, an unripe one under the
+   * Sickle) is still a field stroke (QA r1 S-01, fbp#2): it plants or harvests every plot it crosses and never pans
+   * the camera. A first-timer starts the stroke on the plot just planted. True when the stroke started.
+   */
+  function fieldStroke(p, e) {
+    const verb = fieldVerb();
+    if (!verb || stroke || !p || p.kind !== 'object' || !store.ready) return false;
+    const base = describe(store.state, p.id, now(), me());
+    if (!base || base.kind !== 'plot' || base.giant) return false;
+    stroke = { verb, item: verb === 'plant' ? tool.crop : base.crop || null, count: 0, visited: new Set([base.id]),
+      path: createStroke({ brush: brush() }), first: base, shift: Boolean(e && e.shiftKey), sent: false,
+      replant: verb === 'plant' && replanting() };
+    apply(collect(stroke.path.to(p.x, p.z), verb), e && Number.isFinite(e.timeStamp) ? e.timeStamp : performance.now());
+    return true;
+  }
+
+  /**
+   * A Hand drag that starts on an animal (or its home) whose tend is refused (hungry, and no feed in the Barn) is still a
+   * tend stroke (QA r3 S3-13, jde#7: the drag panned the camera and tended nothing, though it crossed 8 ready sheep; a
+   * sibling of S-01's field stroke): it collects and feeds what it crosses, never pans, and says the press's refusal once
+   * when it ends. True when the stroke started.
+   */
+  function tendStroke(p, e, info) {
+    if (tool.id !== 'hand' || stroke || !p || p.kind !== 'object' || !store.ready) return false;
+    const base = info?.base ?? describe(store.state, p.id, now(), me());
+    if (!base || (base.kind !== 'animal' && base.kind !== 'home') || !verbsFor('hand', base).includes('tend')) return false;
+    const r = info?.refusal && info.refusal.verb === 'tend' ? info.refusal : null;
+    stroke = { verb: 'tend', item: null, count: 0, visited: new Set([base.id]), path: createStroke({ brush: brush() }), first: base,
+      shift: false, sent: false, refused: r ? { id: base.kind === 'animal' ? base.home : base.id, code: r.code, type: r.type, args: r.args } : null };
+    apply(collect(stroke.path.to(p.x, p.z), 'tend'), Number.isFinite(e?.timeStamp) ? e.timeStamp : performance.now());
+    return true;
+  }
+
+  /**
+   * A drag of the bare Hand (no seed in it) that starts on an empty plot asks which seed, there, like a tap: the drag
+   * a first-timer is told to make ("drag to plant a row") used to pan the farm and plant nothing (QA r2 S-07, jde#9).
+   * Once a seed is picked the Hand is armed and the next drag plants the row. True when the picker was asked for.
+   */
+  function seedFirst(info) {
+    const t = info?.base;
+    if (tool.id !== 'hand' || tool.seeding || info?.refusal?.code !== 'PICK_SEED' || !t) return false;
+    emit('command', { cmd: 'seedPicker', id: t.id, x: t.x, z: t.z, crop: tool.crop });
+    return true;
+  }
+
   /** Same-verb targets not yet visited on these tiles. */
   function collect(tiles, verb) {
     const out = [];
@@ -547,7 +697,7 @@ export function createController({
         if (stroke.visited.has(id) || seen.has(id)) continue;
         seen.add(id);
         const t = describe(store.state, id, now(), me());
-        if (t && verbsFor(tool.id, t, { shift: stroke.shift, spread: tool.spread }).includes(verb)) out.push(t);
+        if (t && (verbsFor(tool.id, t, { shift: stroke.shift, spread: tool.spread }).includes(verb) || (stroke.replant && replantable(t)))) out.push(t);
       }
     }
     return out;
@@ -596,9 +746,22 @@ export function createController({
       return;
     }
     const opts = verbOpts(verb);
-    const todo = targets.filter((t) => !stroke.visited.has(t.id));
+    let todo = targets.filter((t) => !stroke.visited.has(t.id));
     for (const t of todo) stroke.visited.add(t.id);
     leaveSeat(verb);
+    // the Seed Bag's stroke: the ripe plots it crossed are harvested first (predicted), then planted with the rest (S3-06)
+    const ripe = stroke.replant ? todo.filter(replantable) : [];
+    if (ripe.length) {
+      const hb = ripe.length > 1 ? resolveBatch(store, 'harvest', ripe, {}) : null;
+      if (hb) afterStrokeAct(perform(hb, ripe.at(-1), t0, stroke.sent));
+      else {
+        for (const t of ripe) {
+          const r = resolve(store, 'harvest', t, {});
+          if (r && r.type && r.code === undefined) afterStrokeAct(perform(r, t, t0, stroke.sent));
+        }
+      }
+      todo = todo.map((t) => (replantable(t) ? describe(store.state, t.id, now(), me()) ?? t : t));
+    }
     // The press goes out at once; the rest of the stroke is predicted at once too but HELD and sent merged every
     // STROKE_SEND_MS (the store merges a stroke's frames into one `ids` action: performance-16)
     // One action per frame for everything the stroke newly crossed (the rules apply it to every target that passes)
@@ -734,6 +897,11 @@ export function createController({
     stroke = null;
     releaseStroke();                                      // the rest of the stroke goes out now
     emit('stroke', { verb: s.verb, count: s.count, item: s.item, active: false });
+    // a tend stroke that began on a refused animal says why once (S3-13): with the shake when it did nothing at all
+    if (s.refused?.code) {
+      if (s.count === 0) invalid(s.refused.id, s.refused.code, { type: s.refused.type, args: s.refused.args });
+      else toast(s.refused.code, { type: s.refused.type, args: s.refused.args });
+    }
   }
 
   /**
@@ -831,6 +999,16 @@ export function createController({
       toast(input === 'touch' ? i18n.t('game.seedFirstTouch') : i18n.t('game.seedFirst'), {});
       return null;
     }
+    // the Sickle (or any tool but the seeds) on an empty plot: the plot's next deed is planting, so it asks which seed
+    // and the Hand comes back (QA r1 S-17: "Nothing to harvest there", then four taps to replant; M11's bar is two; QA
+    // r3 S3-09, fbp#10: the Feed on an empty plot said nothing at all, a 20 s stall); a tool's own reason (no compost in
+    // the Barn) still speaks; the partner harvested it a moment ago: that is their lost race, not a seed question
+    if (t.kind === 'plot' && t.empty && !t.giant && tool.id !== 'hand' && tool.id !== 'seed_bag'
+      && (!info?.refusal || info.refusal.code === ERR.EMPTY) && !raceBy([t.id], ERR.EMPTY)) {
+      setTool('hand');
+      emit('command', { cmd: 'seedPicker', id: t.id, x: t.x, z: t.z, crop: tool.crop });
+      return null;
+    }
     // The Smart Hand's watering is a bonus: a crop that cannot take it (too quick, already watered) just shows its
     // tooltip (time left), never a refusal. Explicit tools (the Watering Can) do explain why.
     if (tool.id === 'hand' && (t.kind === 'plot' || t.kind === 'tree') && t.growing && (!info?.refusal || info.refusal.verb === 'water')) {
@@ -863,7 +1041,10 @@ export function createController({
       openPanel('restoration', { id: project ? project.id : null });
       return null;
     }
-    if (tool.id === 'hand' || tool.id === 'basket' || tool.id === 'feed_scoop') {
+    // the Seed Bag too (release 1.0 M2): a tap on a building with seeds in hand opens it instead of doing nothing; so
+    // does any tool with no deed on it (QA r4 S4-05: the Axe refused the Feed Mill)
+    if (tool.id === 'hand' || tool.id === 'basket' || tool.id === 'feed_scoop' || tool.id === 'seed_bag'
+      || (tool.id !== 'hammer' && !['animal', 'tree', 'debris'].includes(t.kind) && !verbsFor(tool.id, t).length)) {
       const panel = OPENS[t.def.id] ?? OPENS[t.kind];
       if (panel && !(t.kind === 'plot')) {
         openPanel(panel, { id: t.kind === 'animal' ? t.home : t.id });
@@ -872,27 +1053,29 @@ export function createController({
       }
     }
     if (t.kind === 'plot' && t.giant && t.ready && !['axe', 'hand', 'sickle'].includes(tool.id)) {
-      toast(i18n.t('game.giant.fell', { crop: cropOf(t.crop) ? i18n.N(t.crop) : i18n.t('game.giant.crop') }), {});
+      toast(forFinger(i18n.t('game.giant.fell', { crop: cropOf(t.crop) ? i18n.N(t.crop) : i18n.t('game.giant.crop') })), {});
       invalid(t.id, null);
       return null;
     }
     if (t.kind === 'debris' && t.tool !== 'hand' && tool.id === 'hand') {
-      toast(i18n.t('game.debris.axe', { thing: i18n.N(t.def.id) }), {});
+      toast(forFinger(i18n.t('game.debris.axe', { thing: i18n.N(t.def.id) })), {});
       invalid(t.id, null);
       return null;
     }
-    invalid(t.id, null);
+    // a tool with nothing to do on this thing says so at the thing, never only a shake (QA r3 S3-09, fbp#10)
+    invalid(t.id, null, { why: i18n.t('dock.why.toolHere', { tool: i18n.N(tool.id) }) });
     return null;
   }
 
   /**
-   * The seed picker's choice: plant plot `id` with `crop` now (predicted, with the click's feedback) and keep that seed
-   * in the Seed Bag, so the next clicks and drags plant more of it.
+   * The seed picker's choice: plant plot `id` with `crop` now (predicted, with the click's feedback) and keep the Hand,
+   * armed with that seed (release 1.0 M2, ux-first#2, ux-phone#5): the next clicks and drags plant more of it, and
+   * everything else the Hand does still works (a ripe plot harvests, a building opens).
    */
   function plantWith(crop, id) {
     if (!store.ready || !cropOf(crop)) return null;
     const t = describe(store.state, id, now(), me());
-    setTool('seed_bag', { crop });
+    setTool('hand', { crop, plant: true });
     if (!t || t.kind !== 'plot') { invalid(null, ERR.NOT_FOUND); return null; }
     const r = resolve(store, 'plant', t, { crop });
     if (!r || !r.type || r.code !== undefined) {
@@ -1068,6 +1251,7 @@ export function createController({
     // storable: only decor goes back into the tray, and never a Masterwork piece (the touch bar's "Put it away")
     const held = moveId && Object.hasOwn(store.state?.farm.objects ?? {}, moveId) ? store.state.farm.objects[moveId] : null;
     tool.build = { def: defId, rot, moveId, storable: Boolean(held) && def.kind === 'decor' && held.mw === undefined };
+    if (!moveId && defId !== 'plot') startSpot(defId);
     touchGhostStart(moveId);
     view.ghost.show(defId, rot);
     ghostShown = true;
@@ -1075,6 +1259,35 @@ export function createController({
     if (moveId) view.objects.hidden(moveId, true);
     updateGhost();
     return true;
+  }
+
+  /**
+   * A new placement starts its ghost on the nearest valid spot round the middle of the view (release 1.0 S7,
+   * ux-first#15: four tries to place the free Feed Mill), the Feed Mill next to the Coop (the guided "next to it" step).
+   */
+  function startSpot(defId) {
+    if (!store.ready) return;
+    let c = null;
+    let rank = null;
+    if (defId === 'feed_mill') {
+      const coop = Object.values(store.state.farm.objects).find((o) => o.def === 'coop' && Number.isFinite(o.x));
+      if (coop) {
+        const [w, d] = objSize(coop, defOf('coop'));
+        c = { kind: 'tile', x: coop.x + Math.floor(w / 2), z: coop.z + Math.floor(d / 2) };
+        // never in front of the Coop's middle (QA r3 S3-01, fbp#1): the nearest spot that leaves it in sight
+        const yaw = Number(view.camera?.get?.()?.yaw);
+        const box = { x: coop.x, z: coop.z, w, d };
+        rank = (h) => {
+          const [mw, md] = sizeAt(store.state, defId, tool.build?.rot ?? 0);
+          const { x, z } = ghostTile(h);
+          return standing({ x, z, w: mw, d: md }, box, Number.isFinite(yaw) ? yaw : Math.PI / 4) === 'front' ? 1 : 0;
+        };
+      }
+    }
+    if (!c) { try { c = tileOf(view.pick({ x: 0, y: 0.1 })); } catch { c = null; } }
+    if (!c) return;
+    const spot = freeSpotNear(c, defId === 'feed_mill' ? 1 : 0, 9, rank);
+    if (spot) hover = spot;
   }
 
   function endBuild() {
@@ -1178,7 +1391,10 @@ export function createController({
     const valid = !code || SOFT.has(code);
     view.ghost.update({ x, z }, valid, code, blocker ?? undefined);
     sendGhost({ def: tool.build.def, x, z, rot: tool.build.rot });
-    emit('build', { ...tool.build, x, z, valid, code: code ?? null, blocker, ...(setPlan ? { set: setInfo(x, z) } : {}) });
+    // the price of THIS piece on the ✓ (S-06: "Place · 270"); 0 for a gift or a stored piece, null when unknown
+    const cost = tool.build.moveId ? null : placeCost(tool.build.def);
+    emit('build', { ...tool.build, x, z, valid, code: code ?? null, blocker, blockerDef: blocker ? store.state.farm.objects[blocker]?.def : null, cost,
+      ...(setPlan ? { set: setInfo(x, z) } : {}) });
   }
 
   /**
@@ -1210,19 +1426,38 @@ export function createController({
       invalid(code === ERR.BLOCKED ? blockerOf(x, z) : null, code, r ? { type: r.type, args: r.args } : {});
       return null;
     }
+    const cost0 = r.type === 'place' ? placeCost(r.args.def) : null;
     const res = perform(r, { x, z, def: defOf(tool.build.def), obj: { rot: tool.build.rot } }, performance.now());
-    if (res.ok) afterPlaced(r.type, r.args);
+    if (res.ok) afterPlaced(r.type, r.args, cost0);
     return res;
+  }
+
+  /**
+   * What placing one more `defId` costs now: 0 when a copy waits in the build tray (a gift, a stored piece), else its
+   * shop price in coins (acorns count too). null when it cannot be bought.
+   */
+  function placeCost(defId) {
+    const st = store.state;
+    if (!st || !defId) return null;
+    if ((st.farm.storage?.[defId] ?? 0) > 0) return 0;
+    try {
+      const p = buyPrice(st, defId);
+      return p.code ? null : (p.coins ?? 0) + (p.acorns ?? 0);
+    } catch { return null; }
   }
 
   /** After a placement or move (also one confirmed through the ui's BIG_SPEND card): plots, fences, paths and
    * decor stay in build mode for the next one; anything else returns to the Hand; a move keeps the hammer. A decor
    * set being placed moves on to its next piece, and to the Hand after the last. */
-  function afterPlaced(type, args) {
+  function afterPlaced(type, args, cost0 = null) {
     const b = tool.build;
     if (!b) return;
     if (type === 'move' && b.moveId === args.id) { endBuild(); startBuild('plot', { quiet: true }); return; }
     if (type !== 'place' || b.moveId || b.def !== args.def) return;
+    // a free piece (Grandma's Sunset Bench, a stored one) was the last of its kind in the tray: the next one would be
+    // bought, so build mode ends here and the Hand comes back; ✓ again used to buy a second bench for 270 coins with no
+    // word (QA r1 S-06)
+    if (cost0 === 0 && !setPlan && (placeCost(b.def) ?? 0) > 0) { endBuild(); backToHeld(); return; }
     if (setPlan) {
       const next = nextSetPiece(setPlan.id);
       if (next && next !== b.def) { startBuild(next, { rot: b.rot }); return; }
@@ -1230,12 +1465,12 @@ export function createController({
         const set = CONTENT.decorSets?.get(setPlan.id) ? i18n.N(setPlan.id, 'decorSets') : i18n.t('game.set.set');
         setPlan = null;
         endBuild();
-        setTool('hand');
+        backToHeld();
         toast(i18n.t('game.set.out', { set }), { kind: 'ok' });
         return;
       }
     }
-    if (!REPEAT_PLACE.has(defOf(b.def)?.kind)) { endBuild(); setTool('hand'); return; }
+    if (!REPEAT_PLACE.has(defOf(b.def)?.kind)) { endBuild(); backToHeld(); return; }
     // on a phone the ghost moves on to the next free spot beside the one just placed: ✓ again lays the next plot,
     // fence or path (with a mouse the ghost follows the cursor anyway)
     if (input === 'touch' && hover) {
@@ -1244,6 +1479,17 @@ export function createController({
       if (next) hover = next;
     }
     updateGhost();
+  }
+
+  /** Build mode ends after a placement: the tool held before it, the Hand still armed with its seed (QA r2 S-07). */
+  function backToHeld() {
+    const was = heldBefore;
+    heldBefore = null;
+    if (was && was.id !== 'hammer' && (!store.state || toolUnlocked(store.state, was.id))) {
+      if (was.id === 'hand') return setTool('hand', was.seeding && was.crop ? { crop: was.crop, plant: true } : {});
+      return setTool(was.id, was.crop ? { crop: was.crop } : {});
+    }
+    return setTool('hand');
   }
 
   /** The first piece of a decor set that is not on the farm and that this level can place, or null. */
@@ -1424,8 +1670,17 @@ export function createController({
   // Purchases carry a receipt (`rcpt`, refunded while pristine); moves leave `prev = { x, z, rot, until, by }`
   // (rules-economy decor.js). The newest of mine wins; the dry run decides whether it is still allowed.
   // With the Hammer over an object someone moved, that one goes back first (CL-05).
-  function undo() {
+  function undo(only = null) {
     if (!store.ready) return null;
+    // the Undo chip undoes exactly what it names, { id, verb } from canUndo(), and nothing once that is no longer
+    // undoable (QA r3 S3-17, br#2: a double click on "Undo: Picket Fence" refunded the fence and then the Scarecrow,
+    // the next-newest, which no chip had named); Ctrl+Z (no argument) keeps its stack
+    if (only && typeof only.id === 'string') {
+      if (only.verb !== 'refund' && only.verb !== 'moveBack') return null;
+      const tg = describe(store.state, only.id, now(), me());
+      const r = tg && resolve(store, only.verb, tg, {});
+      return r && r.type && r.code === undefined ? perform(r, tg, performance.now()) : null;
+    }
     // the Hammer over a moved object (whoever moved it): Ctrl+Z puts THAT one back. The object the Hammer hint shows
     // "Move back (Ctrl+Z)" for comes first (it lingers 1.5 s after the pointer leaves, and stays while the pointer
     // crosses other objects); then what the hint would name under the pointer now (pickUpTarget: nothing while a
@@ -1451,6 +1706,41 @@ export function createController({
     }
     toast(i18n.t('game.undo.none'), {});
     return null;
+  }
+
+  /**
+   * What Ctrl+Z would undo now (release 1.0 S3: the Undo chip while its window runs): { id, verb, until } of my newest
+   * pristine purchase or move whose window is still open and that the rules would take, else null. Pure on the store.
+   */
+  function canUndo() {
+    if (!store.ready) return null;
+    const t = now();
+    const win = SAFETY?.undoMs ?? 600_000;
+    const cands = [];
+    for (const [id, o] of Object.entries(store.state.farm.objects)) {
+      if (o.prev && o.prev.by === me() && o.prev.until > t) cands.push({ id, at: o.prev.until - (SAFETY?.moveBackMs ?? win), until: o.prev.until, verb: 'moveBack' });
+      if (o.rcpt && o.by === me() && Number.isFinite(o.placedAt) && t - o.placedAt < win) cands.push({ id, at: o.placedAt, until: o.placedAt + win, verb: 'refund' });
+    }
+    cands.sort((a, b) => b.at - a.at || (a.id < b.id ? -1 : 1));
+    for (const c of cands) {
+      const tg = describe(store.state, c.id, t, me());
+      const r = tg && resolve(store, c.verb, tg, {});
+      if (r && r.type && r.code === undefined) return { id: c.id, verb: c.verb, until: c.until, def: tg.def?.id ?? null };
+    }
+    return null;
+  }
+
+  /**
+   * Sit on bench `id` the way the Hand does (release 1.0 D2: the bench chip's Join, the tracker's Golden Hour card): the
+   * farmer walks over and sits on arrival. False when it is not a free seat for me.
+   */
+  function sitOn(id) {
+    if (!store.ready) return false;
+    const t = describe(store.state, id, now(), me());
+    if (!t || t.kind !== 'decor' || !t.seats || t.mySeat) return false;
+    if (tool.id !== 'hand') setTool('hand');
+    sitDown(t);
+    return true;
   }
 
   function storeHeld() {
@@ -1552,6 +1842,13 @@ export function createController({
     basket: 'harvest', axe: '#C9D3DA' };
   function refreshHighlight() {
     if (pairing.active) { pairing.refresh(); return; }       // the matchmaker's glow on the eligible homes (M2)
+    if (tool.id === 'hand' && tool.seeding && !shift && hover && hover.kind === 'object' && store.ready) {
+      // the armed Hand over an empty plot wears the seed's colour (what a click would plant)
+      const t = describe(store.state, hover.id, now(), me());
+      const hue = t && t.kind === 'plot' && t.empty ? cropOf(tool.crop)?.hue : null;
+      view.highlight(hue && /^#[0-9a-fA-F]{6}$/.test(hue) ? [[t.x, t.z]] : [], hue && /^#[0-9a-fA-F]{6}$/.test(hue) ? hue : null);
+      return;
+    }
     if (!hover || tool.id === 'hammer' || (tool.id === 'hand' && !shift)) { view.highlight([], null); return; }
     if (tool.id === 'hand') {                         // Shift + Hand: show the uproot only where a crop would come out
       const t = hover.kind === 'object' && store.ready ? describe(store.state, hover.id, now(), me()) : null;
@@ -1678,6 +1975,16 @@ export function createController({
     if (a && a !== document.body && typeof a.matches === 'function' && a.matches('input, textarea, [contenteditable="true"]')) a.blur();
   }, { passive: false });
 
+  // a press that closed a sheet (a Farm book tile, a ✕, the scrim): its twin on the farm does nothing (createQuiet)
+  const quiet = createQuiet();
+  const quietNow = () => quiet.blocks(performance.now());
+  if (typeof document !== 'undefined' && typeof document.addEventListener === 'function') {
+    for (const ev of ['pointerdown', 'pointerup', 'click']) {
+      document.addEventListener(ev, (e) => { if (e.target !== canvas) quiet.press(performance.now()); }, { capture: true, passive: true });
+    }
+  }
+  ui?.panels?.on?.('close', () => quiet.closed(performance.now()));
+
   canvas.addEventListener('pointerdown', (e) => {
     if (e.pointerType === 'touch') { touchDown(e); return; }
     setInput(e.pointerType === 'pen' ? 'pen' : 'mouse');
@@ -1690,9 +1997,10 @@ export function createController({
     const p = view.pick(ndc);
     setHover(p);
     down = { id: e.pointerId, button: e.button, x0: e.clientX, y0: e.clientY, x: e.clientX, y: e.clientY, mode: 'pending',
-      anchor: p && Number.isFinite(p.px) ? { x: p.px, z: p.pz } : null, info: null };
+      anchor: p && Number.isFinite(p.px) ? { x: p.px, z: p.pz } : null, info: null, p };
     if (e.button === 1) { down.mode = 'middle'; e.preventDefault(); return; }
     if (e.button === 2) { down.mode = 'right'; return; }
+    if (e.button === 0 && quietNow()) { down.mode = 'quiet'; return; }
     if (e.button !== 0 || !store.ready) return;
     if (interior.inside && tool.id === 'hammer') { interior.at(ndc, { tool: tool.id }); down.mode = 'mode'; return; }
     if (tool.id === 'hammer') { down.mode = 'build'; return; }
@@ -1722,7 +2030,7 @@ export function createController({
       down.x = e.clientX; down.y = e.clientY;
       return;
     }
-    if (down && ['pending', 'build', 'middle', 'right'].includes(down.mode) && Math.hypot(e.clientX - down.x0, e.clientY - down.y0) > CLICK_PX) {
+    if (down && ['pending', 'build', 'middle', 'right', 'quiet'].includes(down.mode) && Math.hypot(e.clientX - down.x0, e.clientY - down.y0) > CLICK_PX) {
       // the camera mode "Rotate" (wave 4, wish H): a right-drag turns and tilts; Shift + right-drag still pans
       if (down.mode === 'right' && options.rotateDrag && !e.shiftKey) {
         down.mode = 'orbit';
@@ -1732,10 +2040,19 @@ export function createController({
         down.x = e.clientX; down.y = e.clientY;
         return;
       }
-      down.mode = 'pan';
-      canvas.style.cursor = 'grabbing';
-      panTo = ndc;
-      return;
+      // a field tool dragged from a plot it cannot act on paints the field instead of panning (QA r1 S-01)
+      if (down.mode === 'pending' && down.button === 0 && (fieldStroke(down.p, e) || tendStroke(down.p, e, down.info))) {
+        down.mode = 'stroke';
+        refreshHighlight();
+      } else if (down.mode === 'pending' && down.button === 0 && seedFirst(down.info)) {
+        down.mode = 'mode';
+        return;
+      } else {
+        down.mode = 'pan';
+        canvas.style.cursor = 'grabbing';
+        panTo = ndc;
+        return;
+      }
     }
     if (interior.inside) { interior.hover(ndc); return; }          // the room's ghost follows the pointer (M2)
     const p = view.pick(ndc);
@@ -1816,7 +2133,7 @@ export function createController({
   canvas.addEventListener('auxclick', (e) => { if (e.button === 1) e.preventDefault(); });
   canvas.addEventListener('dblclick', () => {
     // two taps make a dblclick in some mobile browsers: the touch path has its own double tap (same target only)
-    if (performance.now() - lastTouchAt < 800) return;
+    if (performance.now() - lastTouchAt < 800 || quietNow()) return;
     if (!hover || tool.id === 'hammer') return;
     view.focus(hover.px ?? hover.x + 0.5, hover.pz ?? hover.z + 0.5);
   });
@@ -1968,9 +2285,10 @@ export function createController({
   }
   /**
    * The nearest tile (a hover for the ghost's centre) within rings r0..r1 of c where the ghost can go, preferring the
-   * calm middle of the screen (clear of the HUD round the edges); null when there is none.
+   * calm middle of the screen (clear of the HUD round the edges); null when there is none. `rank(h)` (optional, 0 best):
+   * a better rank wins over the middle of the screen and over nearness (S3-01: never in front of the Coop if it can).
    */
-  function freeSpotNear(c, r0, r1) {
+  function freeSpotNear(c, r0, r1, rank = null) {
     if (!store.ready || !tool.build) return null;
     const r = canvasRect();
     const inner = (h) => {
@@ -1980,7 +2298,7 @@ export function createController({
       const v = (sp.y - r.top) / r.height;
       return u > 0.15 && u < 0.72 && v > 0.22 && v < 0.7;          // clear of the HUD round the edges
     };
-    let first = null;
+    let best = null;
     for (let k = r0; k <= r1; k++) {
       for (let dz = -k; dz <= k; dz++) {
         for (let dx = -k; dx <= k; dx++) {
@@ -1989,12 +2307,13 @@ export function createController({
           const { x, z } = ghostTile(h);
           const { code } = buildCheck(x, z);
           if (code && !SOFT.has(code)) continue;
-          if (inner(h)) return h;
-          first ??= h;
+          const score = (rank ? rank(h) : 0) * 2 + (inner(h) ? 0 : 1);
+          if (score === 0) return h;
+          if (!best || score < best.score) best = { h, score };
         }
       }
     }
-    return first;
+    return best ? best.h : null;
   }
 
   function touchDown(e) {
@@ -2013,7 +2332,7 @@ export function createController({
     const ndc = ndcOf(e);
     lastNdc = ndc;
     const p = view.pick(ndc);
-    const g = { n: 1, id: e.pointerId, x0: e.clientX, y0: e.clientY, t0: Number.isFinite(e.timeStamp) ? e.timeStamp : performance.now(), p, mode: 'press', ghost: false, tip: false,
+    const g = { n: 1, id: e.pointerId, x0: e.clientX, y0: e.clientY, t0: Number.isFinite(e.timeStamp) ? e.timeStamp : performance.now(), p, mode: 'press', ghost: false, tip: false, quiet: quietNow(),
       slop: tapSlop(globalThis.devicePixelRatio), timers: [], anchor: null, viaPick: false, track: [], lift: TOUCH.ghostLiftPx };
     tg = g;
     if (tool.build) {
@@ -2081,8 +2400,10 @@ export function createController({
     else if (tool.id === 'hand' && g.p && g.p.near) g.mode = 'pan';
     else {
       const r = beginStroke(g.p, { shiftKey: false, timeStamp: e.timeStamp });
-      g.mode = r.started ? 'stroke' : 'pan';
-      if (r.started) refreshHighlight();
+      // a field tool dragged from a plot it cannot act on paints the field (QA r1 S-01): never a pan
+      const started = r.started || fieldStroke(g.p, { shiftKey: false, timeStamp: e.timeStamp }) || tendStroke(g.p, { timeStamp: e.timeStamp }, r);
+      g.mode = started ? 'stroke' : seedFirst(r) ? 'picked' : 'pan';
+      if (started) refreshHighlight();
     }
     if (g.mode === 'pan') {
       const ndc0 = ndcAt(g.x0, g.y0);
@@ -2181,7 +2502,8 @@ export function createController({
     else if (g.mode === 'pan' && !cancelled) startFling(g, e.timeStamp);
     else if ((g.mode === 'press' || (g.mode === 'long' && quick)) && !cancelled) {
       if (g.tip || g.mode === 'long') emit('hover', null);     // a tooltip sent early: a tap is not a long press
-      tap(g, e);
+      if (g.quiet) lastTap = null;
+      else tap(g, e);
     }
     // a long press keeps its tooltip up until the next touch; a carried ghost stays where it was put down
     if (!tool.build) {
@@ -2260,7 +2582,12 @@ export function createController({
     if (e.repeat && !['zoomIn', 'zoomOut', 'tiltUp', 'tiltDown'].includes(action)) return;
     switch (action) {
       case 'hand': setTool('hand'); break;
-      case 'build': if (tool.id === 'hammer' && tool.build?.moveId) endBuild(); setTool('hammer'); break;
+      // B opens the build tray like the Build button (release 1.0 S2, ux-first#13); without the ui it is the Hammer
+      case 'build':
+        if (typeof ui?.openBuild === 'function') { ui.openBuild(); break; }
+        if (tool.id === 'hammer' && tool.build?.moveId) endBuild();
+        setTool('hammer');
+        break;
       case 'rotate': {
         if (interior.held) { interior.rotate(); break; }
         // the Hammer over a placed thing with nothing in hand (wave 4, wish C): it turns where it stands
@@ -2284,7 +2611,7 @@ export function createController({
         if (!panelOpen && pairing.active) { pairing.cancel(); break; }
         if (!panelOpen && fishing.active) { fishing.stop('esc'); break; }
         if (!panelOpen && interior.inside) { if (!interior.cancel()) interior.leave('esc'); break; }
-        if (tool.build && (tool.build.moveId || tool.build.def !== 'plot')) { endBuild(); setTool('hand'); } else if (!panelOpen && tool.id !== 'hand') setTool('hand');
+        if (tool.build && (tool.build.moveId || tool.build.def !== 'plot')) { endBuild(); setTool('hand'); } else if (!panelOpen && (tool.id !== 'hand' || tool.seeding)) setTool('hand');
         break;
       }
       case 'camLeft': view.camera.rotate(-1); break;
@@ -2444,6 +2771,7 @@ export function createController({
     place: (defId, o = {}) => {
       if (!defOf(defId)) return false;
       if (store.state && levelFromXp(store.state.farm.xp) < (defOf(defId).unlock ?? 1)) { toast(ERR.LOCKED, { type: 'place', args: { def: defId } }); return false; }
+      if (tool.id !== 'hammer') heldBefore = { id: tool.id, crop: tool.crop, seeding: tool.seeding };
       tool.id = 'hammer';
       canvas.style.cursor = cursorFor('hammer');
       const ok = startBuild(defId, { rot: o.rot ?? 0 });
@@ -2453,7 +2781,7 @@ export function createController({
     build(defId, o) { return this.place(defId, o); },
     placeSet,
     move,
-    cancel() { endBuild(); endStroke(); if (tool.id === 'hammer') setTool('hand'); },
+    cancel() { endBuild(); endStroke(); if (tool.id === 'hammer') backToHeld(); },
     ride,
     dismount,
     get riding() { return riding; },
@@ -2468,6 +2796,8 @@ export function createController({
     rideCode,
     actOn,
     plantWith,
+    canUndo,
+    sitOn,
     walkTo,
     do: doAct,
     undo,

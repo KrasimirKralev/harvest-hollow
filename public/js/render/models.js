@@ -65,6 +65,7 @@
 //                                        names: 'standard', 'foliage' (DoubleSide), 'ghost' (transparent)
 //   createMaterial(opts) -> a NEW patched Lambert (opts: any MeshLambertMaterial params + { wrap, rim })
 //   dispose(key?)                        drop prepared data (all when key omitted)
+//   QA r3 R3-01 (additive; see below): loaded(), whenLoaded(), ensure(keys), onManifest(fn) -> off, epoch
 //   setOverlay({ [defId]: { key, from, to, kind, leaf? } })   (additive, Harness Hollow mods lane; harness contract
 //                                        §2.6) a farm's mod things: a key naming a mod def ('crop:x_moon_melon:3',
 //                                        'animal:x_moon_hen', or keyOf('x_moon_melon', 3)) answers the anchor's key with a
@@ -87,13 +88,14 @@ import * as THREE from 'three';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 import { recolorColors } from '../mod/recolor.js';
 import { loadManifest, getManifest, loadGLB } from './assets.js';
+import { gradeUniforms } from './renderer.js';
 
 export const LAMP_N = 4;
 export const GLASS_LIN = Object.freeze([0.347, 0.651, 0.807]);       // '#9FD3E8' linear: every building's window panes
 export const LAMP_GLASS_LIN = Object.freeze([1.0, 0.745, 0.254]);   // '#FFE08A' linear: lanterns, lamp posts, wall lamps
 
 export const LOOK = {
-  uWrap: { value: 0.42 },                          // half-Lambert-ish terminator: soft, painterly shadow side
+  uWrap: { value: 0.3 },                           // half-Lambert-ish terminator (G2, release 1.0: 0.42 -> 0.30, a firmer form)
   uRim: { value: 0.16 },                           // warm back-light rim (FV2's painted edge light)
   uRimColor: { value: new THREE.Color('#FFE2B0') },
   // wave 4: the night lights (see the header): view-space lamp positions (w = strength 0..1), range (m), colour, strength
@@ -138,7 +140,8 @@ export function addShaderPatch(material, name, fn, cacheKey = '') {
     material.onBeforeCompile = (shader, renderer) => {
       for (const p of list) p.fn(shader, renderer);
     };
-    material.customProgramCacheKey = () => list.map((p) => `${p.name}:${p.cacheKey}`).join('|');
+    // a cache key may be a function (a look-dev switch that changes the program, e.g. LOOK_DEV.contact)
+    material.customProgramCacheKey = () => list.map((p) => `${p.name}:${typeof p.cacheKey === 'function' ? p.cacheKey() : p.cacheKey}`).join('|');
   }
   const i = list.findIndex((p) => p.name === name);
   if (i >= 0) list[i] = { name, fn, cacheKey }; else list.push({ name, fn, cacheKey });
@@ -167,16 +170,27 @@ if ( uGlow > 0.001 ) {
 #endif
 `;
 
-/** Wrap (soft terminator) lighting + a warm rim on a MeshLambertMaterial. */
+/** G9 (graphics#11, release 1.0): models darken toward the ground: the lowest CONTACT.h metres of a model (model space,
+ *  its origin is the soil line) up to CONTACT.k darker, a linear ramp (one mad and a clamp per pixel: <= 0.1 ms on the
+ *  phone buffer), a cheap stand-in for ambient occlusion (GTAO cost +16 ms). */
+export const CONTACT = Object.freeze({ h: 0.3, k: 0.22 });
+/** Look-dev switches (tools/look-perf.mjs --ab measures an item's GPU cost on and off; the game never writes them). */
+export const LOOK_DEV = { contact: true };
+
+/** Wrap (soft terminator) lighting + a warm rim on a MeshLambertMaterial (+ the contact gradient, G9). */
 export function wrapLighting(material) {
   return addShaderPatch(material, 'hh-look', (shader) => {
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying float hhContactY;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nhhContactY = transformed.y;');
     shader.uniforms.uWrap = LOOK.uWrap;
     shader.uniforms.uRim = LOOK.uRim;
     shader.uniforms.uRimColor = LOOK.uRimColor;
     shader.uniforms.uGlow = LOOK.uGlow;
     for (const k of ['uLampPos', 'uLampR', 'uLampColor', 'uLampK']) shader.uniforms[k] = LOOK[k];
+    gradeUniforms(shader.uniforms);                  // G5: the tone-mapping chunk's grade (renderer.js)
     shader.fragmentShader = shader.fragmentShader
-      .replace('#include <common>', `#include <common>\n${WRAP_FRAG_PARS}`)
+      .replace('#include <common>', `#include <common>\n${WRAP_FRAG_PARS}\nvarying float hhContactY;`)
       .replace('#include <lights_lambert_pars_fragment>', `#include <lights_lambert_pars_fragment>
         #undef RE_Direct
         void RE_Direct_Wrap( const in IncidentLight directLight, const in vec3 geometryPosition, const in vec3 geometryNormal,
@@ -190,10 +204,12 @@ export function wrapLighting(material) {
           float rimK = 1.0 - saturate( dot( normal, normalize( vViewPosition ) ) );
           outgoingLight += uRimColor * diffuseColor.rgb * ( uRim * rimK * rimK * rimK );
         }
+        // G9: the contact gradient (before the lamps and the window glow: those are light, not shade)
+        ${LOOK_DEV.contact ? `outgoingLight *= clamp( ${(1 - CONTACT.k).toFixed(3)} + hhContactY * ${(CONTACT.k / CONTACT.h).toFixed(4)}, ${(1 - CONTACT.k).toFixed(3)}, 1.0 );` : ''}
         ${LAMPS_FRAG}
         ${GLOW_FRAG}
         #include <opaque_fragment>`);
-  }, 'v2');
+  }, () => (LOOK_DEV.contact ? 'v2' : 'v2-nc'));   // the key names the patch set (the G9 term rides in 'v2')
 }
 
 /** The player-colour mask of a one-mesh skinned model: diffuse mixes toward uTintColor where `_tint` is 1. */
@@ -435,8 +451,102 @@ function keyOf(defId, variant) {
   return m.keys[k] ? k : (variant === undefined ? (m.keys[base] ? base : (d && d.keys[0]) || null) : null);
 }
 
+// ---- R3-01 (QA r3 br#1): a blip while the farm loads left boxes for the session. A failed manifest is asked for again
+// after 1, 2, 4 ... 30 s or at once on a wake; init() still rejects on its first try; ensure(keys) waits for files too.
+export const RETRY = Object.freeze({ firstMs: 1000, maxMs: 30_000, otherTries: 3 });
+let retryTiming = { firstMs: RETRY.firstMs, maxMs: RETRY.maxMs };
+/** Test seam: shorter waits. */
+export function setRetryTiming(t = null) { retryTiming = { firstMs: t?.firstMs ?? RETRY.firstMs, maxMs: t?.maxMs ?? RETRY.maxMs }; }
+/** The wait before retry n (0-based). Pure. */
+export function retryDelay(n) {
+  return Math.min(retryTiming.maxMs, retryTiming.firstMs * 2 ** Math.max(0, Math.min(20, n)));
+}
+/** A failure the link explains (worth asking again); a file that does not parse is not. Pure. */
+export function networkFailure(err) {
+  return err instanceof TypeError || /HTTP \d+|failed to fetch|network|load failed/i.test(String(err?.message ?? err ?? ''));
+}
+const wakeFns = new Set();
+let wakeWired = false;
+function wakeAll() { for (const fn of [...wakeFns]) fn(); }
+function wireWake() {
+  if (wakeWired) return;
+  wakeWired = true;
+  try {
+    if (typeof globalThis.addEventListener === 'function') globalThis.addEventListener('online', wakeAll);
+    if (typeof document !== 'undefined' && typeof document.addEventListener === 'function') {
+      document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') wakeAll(); });
+    }
+  } catch { /* tests, tools: the timers alone */ }
+}
+/** fn() when the browser is back online or the page is shown again; returns off. */
+export function onWake(fn) { wireWake(); wakeFns.add(fn); return () => wakeFns.delete(fn); }
+/** retryDelay(n), or less when a wake comes first (unref: never holds Node open) -> true when a wake ended it.
+ *  QA r4 R4-02: a woken try does not count (a flapping link had pushed the next try 30 s out). */
+function backoff(n) {
+  return new Promise((resolve) => {
+    let t = null;
+    const off = onWake(() => done(true));
+    function done(woke) { clearTimeout(t); off(); resolve(woke); }
+    t = setTimeout(() => done(false), retryDelay(n));
+    if (t && typeof t === 'object') t.unref?.();
+  });
+}
+let manifestWait = null;          // { promise, resolve } while it is asked for again
+let manifestLate = false;
+let manifestEpoch = 0;
+const manifestFns = new Set();
+/** The manifest is in (whoever fetched it): a late one tells the views, then the waiters go on. */
+function manifestIn() {
+  if (!getManifest()) return;
+  if (manifestLate) {
+    manifestLate = false;
+    manifestEpoch++;
+    for (const fn of [...manifestFns]) { try { fn(); } catch (err) { console.error('late manifest re-sync', err); } }
+  }
+  if (manifestWait) { const w = manifestWait; manifestWait = null; w.resolve(); }
+}
+function whenLoaded() {
+  if (getManifest()) { manifestIn(); return Promise.resolve(); }
+  manifestLate = true;
+  if (!manifestWait) {
+    let resolve;
+    const promise = new Promise((r) => { resolve = r; });
+    manifestWait = { promise, resolve };
+    // after a failed try: wait first (a fetch in flight that succeeds says so through init())
+    (async () => {
+      for (let n = 0; manifestWait && !getManifest();) {
+        const woke = await backoff(n);
+        if (!manifestWait || getManifest()) break;
+        try { await loadManifest(); } catch { /* assets.js warned; the next wait is longer */ }
+        n = woke ? 0 : n + 1;
+      }
+      manifestIn();
+    })();
+  }
+  return manifestWait.promise;
+}
+
 export const models = {
-  async init() { await loadManifest(); },
+  async init() {
+    // while it is asked for again, wait for that (one fetch, not one per view)
+    if (manifestWait) { await manifestWait.promise; return; }
+    try { await loadManifest(); } catch (err) { whenLoaded(); throw err; }
+    manifestIn();
+  },
+  loaded() { return Boolean(getManifest()); },
+  whenLoaded,
+  /** ready(keys) however long the link takes; rejects only for a failure the link does not explain. */
+  async ensure(keys) {
+    await whenLoaded();
+    for (let n = 0, tries = 1; ; tries++) {
+      try { await models.ready(keys); return; } catch (err) {
+        if (!networkFailure(err) && tries >= RETRY.otherTries) throw err;
+        n = (await backoff(n)) ? 0 : n + 1;
+      }
+    }
+  },
+  onManifest(fn) { manifestFns.add(fn); return () => manifestFns.delete(fn); },
+  get epoch() { return manifestEpoch; },
 
   ready(keys) {
     const list = (Array.isArray(keys) ? keys : [keys]).map(norm);

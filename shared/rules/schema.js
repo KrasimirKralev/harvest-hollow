@@ -8,7 +8,7 @@
 //   'pid'                     a player slot id ('p1', 'p2')
 //   ['content', kind]         an OWN key of CONTENT[kind] (or of PLACEABLES for kind 'placeables')
 //   ['int', min, max]         integer in [min, max]
-//   ['text', max]             string, control chars stripped, trimmed, 1..max chars
+//   ['text', max]             string, control chars and bidi controls stripped, trimmed, 1..max chars
 //   ['enum', ...values]       one of the listed strings
 //   'confirm'                 array of at most 3 distinct soft codes (RESERVED, PINNED, BIG_SPEND)
 //   'bool'                    true or false
@@ -24,7 +24,8 @@
 // in BAD_ARGS. Read it with confirmed(args, code). A schema may still declare `confirm` itself (same rule).
 import { lookup } from '../content/index.js';
 import { WORLD_TILES, PLAYER_SLOTS } from '../content/config.js';
-import { SOFT } from '../net/protocol.js';
+import { SOFT, hasVisible } from '../net/protocol.js';
+import { capMarks } from '../net/text.js';
 
 const OBJ_ID_RE = /^[a-z0-9.]{1,40}$/;
 
@@ -71,9 +72,22 @@ export function check(spec, val) {
       case 'int': return isInt(val, a, b) ? { ok: true, v: val } : bad;
       case 'text': {
         if (typeof val !== 'string') return bad;
-        // eslint-disable-next-line no-control-regex
-        const s = val.replace(/[\u0000-\u001f\u007f]/g, ' ').trim();
-        return s.length >= 1 && s.length <= a ? { ok: true, v: s } : bad;
+        // control characters become spaces; the invisible bidi controls (LRM, RLM, ALM, the embeddings, overrides and
+        // isolates) go: one RLO in a farm name or a gift note reversed the text around it on the partner's screen (QA
+        // r1 I-02). Plain right-to-left letters stay. Input only: stored texts are never rewritten
+        // QA r2 I2-02 (infra's patch; br#7): a lone surrogate (drawn as "�") goes, a stack of combining marks keeps two
+        // per letter (25 of them smeared a name over the feed line above it), and a text with nothing visible left (two
+        // zero-width spaces blanked the farm name) is refused like a blank one
+        // QA r3 I3-C1 (infra's patch; br#3): the mark cap comes LAST, after every strip, and an invisible format
+        // character between two marks (ZWJ, ZWNJ, ZWSP, the word joiner: a grapheme extender or nothing at all) goes
+        // first: an LRM, a lone surrogate or a ZWJ between the pairs split the run before the cap and was dropped after
+        // it, so 40 marks stacked on one letter. An emoji's own joiner stays (an emoji, not a mark, follows it)
+        const s = capMarks(val.replace(/[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/g, '')
+          // eslint-disable-next-line no-control-regex
+          .replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/[‎‏؜‪-‮⁦-⁩]/g, '')).trim();
+        // a text the eye can see (shared/net/text.js hasVisible: a letter, digit, symbol or punctuation mark that is not
+        // one of the blank ones, the Hangul fillers and the braille blank; QA r2 I2-02)
+        return s.length >= 1 && s.length <= a && hasVisible(s) ? { ok: true, v: s } : bad;
       }
       case 'enum': return typeof val === 'string' && spec.slice(1).includes(val) ? { ok: true, v: val } : bad;
       case 'list': {

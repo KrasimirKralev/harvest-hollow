@@ -53,7 +53,7 @@ test('no page, manifest or catalog a player or visitor sees says the old name', 
   assert.match(index, /<meta name="apple-mobile-web-app-title" content="Harness Hollow">/);
   // the loading screen and the slot picker show the wordmark, named for screen readers
   assert.match(index, /<img class="boot-logo" src="\/assets\/art\/logo\.png" alt="Harness Hollow" width="1200" height="538">/);
-  assert.match(index, /<img class="slot-logo" src="\/assets\/art\/logo-wide\.png" alt="Harness Hollow" width="1400" height="336">/);
+  assert.match(index, /<img class="slot-logo" src="\/assets\/art\/logo-wide\.png" alt="Harness Hollow" width="1400" height="336"( loading="lazy")?>/);
   assert.match(read('public/landing.html'), /<title>Harness Hollow · a cozy farm for two<\/title>/);
   assert.match(read('public/landing.html'), /alt="Harness Hollow"/);
 });

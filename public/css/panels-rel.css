@@ -1,0 +1,60 @@
+/* Release 1.0 panels of the features lane (the gift sheet, ui/panels/gift.js), linked by the panel on its first open
+   (ensureStylesheet). Built on the shared components (rel-components.md): .pn-stack tiles, .chips > .chip notes,
+   input.field, .btn; only the sheet's own layout lives here. */
+.rel-gift-top { display: flex; flex-direction: column; gap: 10px; margin-bottom: 10px; }
+.rel-gift-note { margin: 0; font: 600 .9375rem/1.35 var(--font-ui); color: var(--ink-700); }
+.rel-gift-card { display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 4px 12px; padding: 10px 12px;
+  border-radius: var(--r-m); background: var(--pn-card, #FFF8E6); box-shadow: inset 0 0 0 2px rgba(217, 182, 119, .8); }
+.rel-gift-card.for-me { background: #FFF1D6; box-shadow: inset 0 0 0 3px var(--sun-700, #E3A31A); }
+.rel-gift-card p { margin: 0; font: 700 1rem/1.3 var(--font-ui); color: var(--ink-900); overflow-wrap: anywhere; }
+.rel-gift-what { display: block; margin-top: 2px; font: 600 .875rem/1.3 var(--font-ui); color: var(--ink-700); }
+.rel-gift-acts { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
+.rel-gift-grid { grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); }
+.rel-gift-grid .pn-stack-n { top: 40px; }
+.rel-gift-flower { position: absolute; top: 4px; left: 6px; font-size: .875rem; color: #C2477A; }
+.rel-gift-notes { justify-content: flex-start; margin-bottom: 8px; }
+.rel-gift-notes .chip[aria-pressed="true"] { background: #FFF6CF; box-shadow: inset 0 0 0 3px var(--sun-700, #E3A31A); }
+.rel-gift-field { max-width: none; font-size: 1rem; }
+/* the one Send stays in reach while the grid scrolls (a 360 px phone shows the grid and the notes first) */
+.rel-gift-foot { position: sticky; bottom: 0; z-index: 1; display: flex; justify-content: center; padding: 10px 0 6px;
+  background: linear-gradient(rgba(255, 248, 230, 0), var(--paper-50, #FFF8E6) 30%); }
+.rel-gift-foot .btn { min-height: 44px; }
+/* QA r2 F2-01: while the note field has the focus (a phone's keyboard is up) the foot scrolls with the form, right
+   under the field: sticky, it covered the field and a tap aimed at the field sent the surprise without its note */
+.hh-panel.field-on .rel-gift-foot { position: static; background: none; }
+/* a tile that takes the keyboard focus scrolls clear of the sticky foot (QA r2 F2-01, ap#1: Wood sat 17 % under it) */
+:is(.hh-panel, .hh-panel-scroll):has(.rel-gift-foot) { scroll-padding-bottom: 76px; }
+.rel-gift-form[hidden] { display: none; }
+/* QA r3 F3-03 (fe#3; r1 F-08's shape): a desktop side sheet with only its cards (a box waiting and wrapped today, a
+   farm of one) is as tall as they are, not a column of blank paper down to the dock; phones' sheets already fit */
+@media (min-width: 1181px) and (min-height: 501px) {
+  #panel-gift.size-side:has(.rel-gift-form[hidden]) { bottom: auto; max-height: calc(100% - 288px); }
+}
+/* a long one-word name ("Слънчоглед") never ends in an ellipsis: three tiles a row on a phone, the name wraps between
+   words and breaks inside one only when that one word cannot fit the tile at all */
+.rel-gift-grid .pn-stack-name { white-space: normal; text-overflow: clip; overflow-wrap: break-word; text-align: center; }
+@media (max-width: 420px) {
+  .rel-gift-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+  .rel-gift-notes .chip { min-height: 44px; }
+}
+/* QA r2 F2-12 (br#6): a landscape phone's side sheet fitted five (iPhone) or four (360) 85 px tiles, and "Слънчоглед"
+   broke as "Слънчогле / д": tiles of 100 px at least there */
+@media (orientation: landscape) and (max-height: 500px) {
+  .rel-gift-grid { grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); }
+}
+/* QA r2 F2-08 (fe#8): a 16-letter partner name ("Опаковай го за Константин-Борис" at 360 px) wraps inside the Wrap
+   button instead of running 6 px past it and past the screen's edge */
+.rel-gift-foot .pn-act { max-width: 100%; }
+.rel-gift-foot .pn-act .btn.rel-gift-send { max-width: 100%; white-space: normal; line-height: 1.15; text-align: center; }
+.rel-gift-foot .rel-gift-send .pn-btn-label { min-width: 0; overflow-wrap: break-word; }
+
+/* The balloon crates' rare power-ups (owner request 2026-10-19; ui/powerups.js, linked when the farm first has one):
+   their HUD chips' skins beside Golden Hour's (.buffs / .buff and the row's wrap are the shell's, from boot). Ink on light
+   fills and white on the night blue keep WCAG AA; the text stays at the shell's 15 / 14 px. */
+.buff[class*="pu-"] { color: var(--ink-900); box-shadow: inset 0 0 0 2px var(--pu-edge), var(--drop-soft); }
+.buff.pu-rainbow { --pu-edge: #A77BD0; background: linear-gradient(90deg, #FFD9D4, #FFF0B8 30%, #DDF5CC 55%, #D3EBFF 78%, #E9DCFF); }
+.buff.pu-ladybugs { --pu-edge: #C9302C; background: linear-gradient(180deg, #FFE8E4, #FFC2B8); }
+.buff.pu-swarm { --pu-edge: var(--sun-900); background: linear-gradient(180deg, #FFF6D2, #FFD45A); }
+.buff.pu-ticket { --pu-edge: var(--sun-900); background: linear-gradient(180deg, #FFF1C2, var(--sun-500));
+  box-shadow: inset 0 0 0 2px var(--pu-edge), 0 0 12px rgba(255, 200, 61, .6), var(--drop-soft); }
+.buff.pu-star { --pu-edge: #18224A; color: #fff; text-shadow: 0 1.5px 0 #18224A; background: linear-gradient(180deg, #4A5C9E, #26336A); }

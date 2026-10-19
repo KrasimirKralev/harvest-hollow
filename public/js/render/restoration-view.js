@@ -15,8 +15,8 @@
 //   createRestoration({ scenery, dyn, glows, fx }) -> restoration
 //     restoration.setState(state, now) / sync(ids, topics, state, now) / update(dt, now, { motion }) -> 0 | 1
 //     restoration.places() -> [{ place: 'restoration', args: { id }, box, live }]
-//     restoration.stages -> { greenhouse, mill_wheel, stone_bridge }
-//   SITES                                       where the three projects stand (metres, pure)
+//     restoration.stages -> { greenhouse, mill_wheel, stone_bridge, orchard_pond, farmhouse }
+//   SITES                                       where projects 1-4 stand (metres, pure); the Farmhouse's is the farmhouse
 import * as THREE from 'three';
 import { PLACES, BRIDGE_X, riverZ, riverHalf, heightAt, ORCHARD_POND, WATER_Y } from './ground.js';
 import { TILE_M, WORLD_TILES } from '../../../shared/content/config.js';
@@ -596,20 +596,27 @@ export function createRestoration({ scenery, dyn = null, glows = null, fx = null
     for (const p of list) if (p.id in stages) { next[p.id] = p.stage; nextLive[p.id] = p.live; }
     lives = { ...lives, ...nextLive };
     let changed = false;
+    const moments = [];
     for (const id of Object.keys(stages)) {
       const was = stages[id];
       const now2 = next[id] ?? 0;
       if (was === now2) continue;
       changed = true;
-      if (watched && was >= 0 && now2 > was && fx) {
-        const site = SITES[id];
-        const pos = new THREE.Vector3(site.x, heightAt(site.x, site.z), site.z);
-        fx.play(now2 === 4 ? { e: 'restored', project: id } : { e: 'bundleDone', project: id }, pos, {});
-      }
+      if (watched && was >= 0 && now2 > was) moments.push([id, now2]);
     }
+    // the stages and the build land before any moment plays: a moment that fails can never leave the view behind
+    // the state (every later sync would throw again and the scaffolding would never appear)
     stages = { ...stages, ...next };
     if (changed || houseMoved) build();
     watched = true;
+    if (!fx) return;
+    for (const [id, stage] of moments) {
+      // Grandma's Farmhouse has no site of its own: its moment plays at the farmhouse (none placed: no moment)
+      const site = id === 'farmhouse' ? house : SITES[id];
+      if (!site) continue;
+      const pos = new THREE.Vector3(site.x, heightAt(site.x, site.z), site.z);
+      fx.play(stage === 4 ? { e: 'restored', project: id } : { e: 'bundleDone', project: id }, pos, {});
+    }
   }
 
   return {

@@ -86,6 +86,9 @@ export const DUEL = {
     invite: '{name} challenges you to a {duel}! Until Sunday evening. Just for fun.',
     accept: 'Game on! May the best farmer win (and share the pie).',
     win: '{name} wins the {duel}! The crown is theirs for a week.',
+    // QA r3 S3-21 (coop#5): the winner's own screen (ui-shell's m2-moments.js): the winner never reads "Mia wins …
+    // the crown is theirs" about themselves
+    winYou: 'You win the {duel}! The crown is yours for a week.',
     tie: 'A dead heat! Two crowns this week.',
     over: 'The duel is over. Whoever won, the farm did well.',
   },

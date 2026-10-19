@@ -11,6 +11,7 @@
 // (`_track` the Seasonal Ribbon Track's season, `_duel` a Friendly Duel's end, `_grandma` Grandma's leaving; their
 // actions live in actions/track.js, duel.js, grandma.js), `_crate` (wave 4b: the balloon's loot crates, crates.js),
 // `_pen` (wave 5: a pairing's baby arrives in its home, pen.js; `_land`, the one-time land migration, runs FIRST),
+// `_gift` (release 1.0: a surprise nobody opened for two days goes to the recipient's shelf, actions/coop.js),
 // then the economy's (econDue: `_regrow`
 // debris, `_wishRelease`; rules-economy registers those actions through its own families). Each clears its own
 // condition when it
@@ -38,6 +39,7 @@ import { duelDue, duelNextAt } from './actions/duel.js';
 import { grandmaDue, grandmaNextAt } from './actions/grandma.js';
 import { crateDue, crateNextAt } from './actions/crates.js';
 import { pensDue, penNextAt } from './actions/pen.js';
+import { giftDue, giftNextAt } from './actions/coop.js';
 import { landDue } from './land.js';
 
 /** True when a joined player already wears this colour (case-insensitive). */
@@ -295,6 +297,8 @@ export function dueSystemActions(state, now) {
   if (crateDue(state, now)) due.push({ type: '_crate', args: {} });
   // wave 5: babies in the pen (actions/pen.js `_pen`): a pairing's baby is due and its home has room
   if (pensDue(state, now).length) due.push({ type: '_pen', args: {} });
+  // release 1.0 (D1): a surprise nobody opened for two days goes to its recipient's shelf (actions/coop.js `_gift`)
+  if (giftDue(state, now)) due.push({ type: '_gift', args: {} });
   // the economy's own (debris regrowth, Wishlist auto-release): shared/rules/actions/expansions.js
   for (const d of econDue(state, now)) due.push(d);
   return due;
@@ -336,7 +340,7 @@ export function nextSystemDueAt(state, now) {
   const g = goldenDueAt(state);
   if (g > now && g < t) t = g;
   for (const w of [fairNextAt(state, now), bargeNextAt(state, now), trackNextAt(state, now), duelNextAt(state),
-    grandmaNextAt(state), crateNextAt(state, now), penNextAt(state, now)]) if (w > now && w < t) t = w;
+    grandmaNextAt(state), crateNextAt(state, now), penNextAt(state, now), giftNextAt(state)]) if (w > now && w < t) t = w;
   const e = econNextDueAt(state, now);
   if (e > now && e < t) t = e;
   return t;

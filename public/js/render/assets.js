@@ -19,13 +19,18 @@
 //     aliases: { 'farmhouse': 'building:farmhouse', ... },
 //     keys: { 'crop:wheat:3': { file, node, kind, family, def, scale, yOffset, footprint, size, min, max,
 //                                tris, anim?, sway?, source }, ... } }
-// Errors: a failed file rejects its promise and is dropped from the cache, so a later call retries.
+// Errors: a failed file rejects its promise and is dropped from the cache, so a later call retries. A network failure
+// is a warning, not a program error (perf-a11y#6), once per file while it keeps failing (QA r3 R3-01). Option 2
+// (release 1.0): ASSET_ROOT is on the public host when the page has an asset base (net/asset-base.js); a file the host fails is fetched again from this server (the data
+// fallback), the manifest and the GLBs through fetchAsset, textures by a second load of the same path here.
+// Owned by the infra lane from release 1.0 (release-scope §6).
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { fromPack } from '../net/packs.js';
+import { assetUrl, fetchAsset, onHost, selfUrl, noteHostFailure } from '../net/asset-base.js';
 
-export const ASSET_ROOT = '/assets/';
+export const ASSET_ROOT = assetUrl('/assets/');
 const MODELS = `${ASSET_ROOT}models/`;
 
 let fetcher = (url, opts) => fetch(url, opts);
@@ -37,6 +42,14 @@ const texCache = new Map();       // url -> Promise<Texture>
 const progressFns = new Set();
 let loaded = 0;
 let total = 0;
+const warned = new Set();         // files warned about while they keep failing
+
+const linkFailure = (err) => err instanceof TypeError || /HTTP \d+/.test(String(err?.message));
+function firstFailure(key) {
+  if (warned.has(key)) return false;
+  warned.add(key);
+  return true;
+}
 
 function makeLoader() {
   const l = new GLTFLoader();
@@ -74,14 +87,15 @@ export function loadManifest(url = `${MODELS}manifest.json`) {
     const build = pageBuild();
     const src = build ? `${url}${url.includes('?') ? '&' : '?'}v=${build}` : url;
     manifestPromise = track(src, (async () => {
-      const res = await fetcher(src, build ? {} : { cache: 'no-cache' });
+      const res = await fetchAsset(src, build ? {} : { cache: 'no-cache' }, fetcher);
       if (!res.ok) throw new Error(`manifest ${url}: HTTP ${res.status}`);
       manifest = await res.json();
       return manifest;
     })());
-    manifestPromise.catch((err) => {
-      console.error('model manifest failed to load; every model falls back to a placeholder box', err);
+    manifestPromise.then(() => warned.delete('manifest'), (err) => {
       manifestPromise = null;
+      if (!linkFailure(err)) console.error('model manifest failed to load; every model falls back to a placeholder box', err);
+      else if (firstFailure('manifest')) console.warn('model manifest failed to load; placeholder boxes until it arrives', err?.message || err);
     });
   }
   return manifestPromise;
@@ -102,10 +116,11 @@ export function loadGLB(file) {
   let p = glbCache.get(url);
   if (!p) {
     p = track(url, (async () => {
-      // one request per model family (qa2 SV-03), else the single file
-      let buf = await fromPack(`${MODELS}${file}`, (u) => fetcher(u));
+      // one request per model family (qa2 SV-03), a first-view member alone and in its order (QA r2 I2-C1), else
+      // the single file
+      let buf = await fromPack(`${MODELS}${file}`, (u) => fetcher(u), url);
       if (!buf) {
-        const res = await fetcher(url);
+        const res = await fetchAsset(url, undefined, fetcher);
         if (!res.ok) throw new Error(`model ${file}: HTTP ${res.status}`);
         buf = await res.arrayBuffer();
       }
@@ -113,8 +128,10 @@ export function loadGLB(file) {
       return new Promise((resolve, reject) => loader.parse(buf, MODELS, resolve, reject));
     })());
     glbCache.set(url, p);
-    p.catch((err) => {
-      console.error(`model ${file} failed to load`, err);
+    p.then(() => warned.delete(file), (err) => {
+      // a network failure (a dropped link, a 404 mid-deploy) is not a program error; a file that does not parse is
+      if (!linkFailure(err)) console.error(`model ${file} failed to load`, err);
+      else if (firstFailure(file)) console.warn(`model ${file} failed to load`, err?.message || err);
       glbCache.delete(url);
     });
   }
@@ -126,15 +143,21 @@ export function loadTexture(url, { srgb = true } = {}) {
   const key = `${url}|${srgb ? 's' : 'l'}`;
   let p = texCache.get(key);
   if (!p) {
-    p = track(url, new Promise((resolve, reject) => {
-      new THREE.TextureLoader().load(url, (t) => {
+    const load = (u) => new Promise((resolve, reject) => {
+      new THREE.TextureLoader().load(u, (t) => {
         if (srgb) t.colorSpace = THREE.SRGBColorSpace;
         resolve(t);
       }, undefined, reject);
+    });
+    p = track(url, load(url).catch((err) => {
+      if (!onHost(url)) throw err;
+      noteHostFailure(`texture ${selfUrl(url)}`);
+      return load(selfUrl(url));                 // the data fallback: the same file from this server
     }));
     texCache.set(key, p);
-    p.catch((err) => {
-      console.error(`texture ${url} failed to load`, err);
+    p.then(() => warned.delete(key), (err) => {
+      // a texture that does not arrive is a network matter (perf-a11y#6: console.warn); the next call retries
+      if (firstFailure(key)) console.warn(`texture ${url} failed to load`, err?.message || err?.type || err);
       texCache.delete(key);
     });
   }
@@ -152,6 +175,7 @@ export function pending() { return total - loaded; }
 export function resetAssetCache() {
   glbCache.clear();
   texCache.clear();
+  warned.clear();
   manifestPromise = null;
   manifest = null;
   loaded = 0;

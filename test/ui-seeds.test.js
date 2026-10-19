@@ -10,7 +10,8 @@ test('the seed picker lists every seed this level plants, then at most two locke
   s.farm.xp = xpForLevel(5);
   const rows = pickerRows(s);
   const open = live('crops').filter((c) => c.unlock <= 5).map((c) => c.id);
-  assert.deepEqual(rows.filter((r) => r.open).map((r) => r.id), open);
+  // release 1.0 M12a: the newest unlocks first (the order rules: test/rel-shell.picker.test.js)
+  assert.deepEqual(rows.filter((r) => r.open).map((r) => r.id).sort(), [...open].sort());
   const locked = rows.filter((r) => !r.open);
   assert.ok(locked.length <= 2 && locked.length >= 1);
   assert.ok(rows.findIndex((r) => !r.open) === open.length, 'locked ones come last');

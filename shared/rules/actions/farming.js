@@ -10,7 +10,7 @@
 //   water   who watered ('sys' = a Sprinkler at planting); tend: the partner who added the partner tend
 import { cropOf, defOf, itemOf, live, liveAt, isLive, GROWTH, COOP, SAFETY, BOOSTS, MARKET } from '../../content/index.js';
 import { ERR, SOFT } from '../../net/protocol.js';
-import { V } from '../schema.js';
+import { V, confirmed } from '../schema.js';
 import { objectOf, idsAround } from '../grid.js';
 import { isReady, rainingAt, weatherAt, hourIndex, HOUR_MS } from '../time.js';
 import { sortedKeys } from '../order.js';
@@ -18,9 +18,10 @@ import { dayIndex } from '../calendar.js';
 import {
   spend, refund, intake, consume, available, stockOf, overflowOf, barnCap, mulBp, levelOf, starsOf,
   masteryEffects, startCutBp, cutMs, extraCutMs, inSeason, planBatch, targetsOf, oneTarget, MAX_BATCH, proofDeed,
-  collectionPerk, useReceipts, playerPerk,
+  collectionPerk, useReceipts, playerPerk, isBigSpend,
 } from '../economy.js';
 import { relicLuckBp } from '../relics.js';
+import { rainbowBp, ladybugBp } from '../powerups.js';
 import { formGiants, giantAnchorOf, syncGiant } from './giant.js';
 import { pollinated } from './animals.js';
 import { restoreDeed } from './restoration.js';
@@ -99,6 +100,64 @@ export function seedPrice(state, crop, pid = null) {
   return bp > 0 ? Math.max(1, crop.seed - mulBp(crop.seed, bp)) : crop.seed;
 }
 
+/**
+ * The time cut (bp) a crop planted now on `plot` starts with, and why: the farm-wide start cut (`c.baseCut`: mastery ★2,
+ * Golden Hour, recipes and animals), in season (`c.natural`, or forced by a Greenhouse / Cold Frame), watered (rain, a
+ * Sprinkler or a crate's Rainbow Watering Can, crops of 30 minutes or more), a Growth Totem nearby and the Rainbow
+ * Watering Can's own cut (`c.rainbow`, release 1.0). `used` collects the decor whose effect applies (the
+ * stroke's receipts). The one sum `plant` writes and `plantPreview` shows (QA r1 F-02: a clock from the base grow time
+ * was 1-4 h late).
+ */
+function plotCut(state, crop, plot, c, used = null) {
+  const forced = !c.natural && alwaysInSeason(state, plot, used);
+  const season = c.natural || forced;
+  // the Rainbow Watering Can (1.0) waters like the rain: no Sprinkler's receipt is used while it does
+  const sprinkled = crop.growMs >= GROWTH.water.minCropMs
+    && (c.raining || c.rainbow > 0 || sprinklerNear(state, plot, used));
+  const cut = c.baseCut + (season ? GROWTH.season.timeBp : 0) + (sprinkled ? GROWTH.water.cropBp : 0)
+    + growBpNear(state, plot, used)                    // a Growth Totem nearby (wave 4b): faster from the start
+    + c.rainbow;
+  return { cut, season, forced, sprinkled };
+}
+
+/** The farm-wide part of a planting's cut at `now` (plotCut's `c`). */
+const plantStart = (state, cropId, now) => ({
+  natural: inSeason(state, cropId, now),
+  baseCut: startCutBp(state, cropId, now),
+  raining: rainingAt(state.meta.farmSeed, now, state.meta.createdAt),   // watered (GDD §5.10)
+  rainbow: rainbowBp(state, now),                      // a crate's Rainbow Watering Can (1.0): watered and faster
+});
+
+/**
+ * What planting `cropId` now would do (release 1.0 D3, QA r1 F-02): `price` = the seed coins one plot costs this farmer
+ * (`seedPrice`, what `crop.paid` records), `readyAt` = when the LAST of the plots is ripe (`at` = a plot id or a list of
+ * plot ids; none = the farm-wide cut, without a plot's own Sprinkler, Cold Frame or Totem) and `soonest` the first one.
+ * The same cut `plant` writes (plotCut), so a promised clock is the clock the crop keeps. Pure.
+ * @returns {{ readyAt: number, soonest: number, price: number }}
+ */
+export function plantPreview(state, cropId, at, pid, now) {
+  const crop = cropOf(cropId);
+  const c = plantStart(state, cropId, now);
+  const ids = Array.isArray(at) ? at : typeof at === 'string' ? [at] : [];
+  let most = -Infinity;
+  let least = Infinity;
+  for (const id of ids) {
+    const plot = objectOf(state, id);
+    if (!isPlot(plot)) continue;
+    const { cut } = plotCut(state, crop, plot, c);
+    most = Math.max(most, cut);
+    least = Math.min(least, cut);
+  }
+  if (least === Infinity) {
+    // no plot named: the farm-wide cut (the calendar's season, rain)
+    most = c.baseCut + (c.natural ? GROWTH.season.timeBp : 0) + c.rainbow
+      + (crop.growMs >= GROWTH.water.minCropMs && (c.raining || c.rainbow > 0) ? GROWTH.water.cropBp : 0);
+    least = most;
+  }
+  // the smallest cut ripens last
+  return { readyAt: now + cutMs(crop.growMs, least), soonest: now + cutMs(crop.growMs, most), price: seedPrice(state, crop, pid) };
+}
+
 function planPlant(state, a, ctx) {
   const crop = cropOf(a.crop);
   if (crop.retired || levelOf(state) < crop.unlock) return { code: ERR.LOCKED, ok: [], how: {} };
@@ -135,21 +194,14 @@ export const plant = {
     const { ok, how } = planPlant(tx.state, a, ctx);
     const crop = cropOf(a.crop);
     const seed = seedPrice(tx.state, crop, ctx.pid);
-    const natural = inSeason(tx.state, a.crop, ctx.now);
-    const baseCut = startCutBp(tx.state, a.crop, ctx.now);
-    const waterable = crop.growMs >= GROWTH.water.minCropMs;
-    const raining = rainingAt(tx.state.meta.farmSeed, ctx.now, tx.state.meta.createdAt);   // watered (GDD §5.10)
+    const start = plantStart(tx.state, a.crop, ctx.now);
     let coins = 0;
     let packets = 0;
     const used = new Set();                              // Cold Frames and Sprinklers whose effect this stroke uses
     for (const id of ok) {
       const plot = tx.get(['farm', 'objects', id]);
-      // in season by the calendar, or by a Greenhouse / Cold Frame: -10 % time, fixed at planting
-      const forced = !natural && alwaysInSeason(tx.state, plot, used);
-      const season = natural || forced;
-      const sprinkled = waterable && (raining || sprinklerNear(tx.state, plot, used));
-      const cut = baseCut + (season ? GROWTH.season.timeBp : 0) + (sprinkled ? GROWTH.water.cropBp : 0)
-        + growBpNear(tx.state, plot, used);              // a Growth Totem nearby (wave 4b): faster from the start
+      // in season by the calendar, or by a Greenhouse / Cold Frame: -10 % time, fixed at planting; watered; a Totem
+      const { cut, season, forced, sprinkled } = plotCut(tx.state, crop, plot, start, used);
       const rec = { def: a.crop, plantedAt: ctx.now, readyAt: ctx.now + cutMs(crop.growMs, cut), by: ctx.pid,
         cycle: plot.cycle, cut };
       if (how[id] === 'packet') { rec.packet = true; packets++; } else { rec.paid = seed; coins += seed; }
@@ -166,6 +218,11 @@ export const plant = {
       tx.emit(ev);
     }
     useReceipts(tx, used);
+    // QA r2 F2-03: a planting stroke the farmer confirmed as a BIG_SPEND (the tracker's Plant for later card asks first)
+    // tells the partner like any big purchase (GDD §6.3; feedback.js bigSpendLine): an event only, no state
+    if (coins > 0 && confirmed(a, ERR.BIG_SPEND) && isBigSpend(tx.state, ctx.pid, ctx.now, coins)) {
+      tx.emit({ e: 'bigSpend', by: ctx.pid, coins, acorns: 0, what: a.crop, n: ok.length });
+    }
     if (coins > 0) spend(tx, ctx, coins, 'seed');
     if (packets > 0) tx.inc(['farm', 'seeds', a.crop], -packets, { dropZero: true });
     if (a.golden) tx.inc(['farm', 'golden'], -ok.length);
@@ -351,8 +408,9 @@ const rolled = (ctx, bp, ...keys) => bp > 0 && Math.floor(ctx.rng(...keys) * 10_
 /**
  * What harvesting plot `id` yields now (pure: the same in check, apply and on every client).
  * Units: yield + 1 with Compost + 1 for a blue ribbon (Golden Seed, or the Compost's chance: 10 % + 2 points per
- * mastery star, +5 at Gold, at most 24 %) + 1 on the ★3 chance (15 %) + 1 on a Scarecrow's chance (5 %). Rolls are
- * keyed by (farmSeed, plot id, plot cycle): client and server agree and a reload cannot re-roll (GDD §9 #46, R16).
+ * mastery star, +5 at Gold, at most 24 %) + 1 on the ★3 chance (15 %) + 1 on a Scarecrow's chance (5 %) + 1 on a
+ * crate's Lucky Ladybugs' chance while they stay (25 %, 1.0; `lady`). Rolls are keyed by (farmSeed, plot id, plot
+ * cycle): client and server agree and a reload cannot re-roll (GDD §9 #46, R16).
  */
 export function harvestOf(state, id, ctx, used = null) {
   const plot = objectOf(state, id);
@@ -382,6 +440,9 @@ export function harvestOf(state, id, ctx, used = null) {
   if (rolled(ctx, playerPerk(state, ctx.pid, 'grower', 'bonusUnitBp'), 'perk', id, plot.cycle)) bonus += 1;
   if (rolled(ctx, bonusBpNear(state, plot, 'crops', used), 'scarecrow', id, plot.cycle)) bonus += 1;
   if (pollinated(state, plot, used) && rolled(ctx, GROWTH.bees.pollinationBp, 'pollen', id, plot.cycle)) bonus += 1;
+  // a crate's Lucky Ladybugs (1.0): their own chance of one more, while they stay (the roll keyed like the others)
+  const lady = rolled(ctx, ladybugBp(state, ctx.now), 'ladybug', id, plot.cycle);
+  if (lady) bonus += 1;
   // a crop in season only thanks to a Greenhouse / Cold Frame cannot carry the +10 % sell price into the shared
   // Barn (units are pooled), so it is paid as its expected value: a yield x 10 % chance of one more unit
   if (c.forced && rolled(ctx, crop.yield * GROWTH.season.sellBp, 'forced', id, plot.cycle)) bonus += 1;
@@ -389,7 +450,7 @@ export function harvestOf(state, id, ctx, used = null) {
   const fresh = ctx.now <= c.readyAt + crop.freshMs;
   // XP in hundredths (RC-13): the stroke adds them to farm.xpFrac and pays whole XP; Fresh adds 10 % on every crop
   const xp100 = crop.xp100 + (fresh ? mulBp(crop.xp100, GROWTH.fresh.xpBonusBp) : 0);
-  return { crop: c.def, qty, bonus, ribbon, fresh, xp100, planter: c.by, star: stars };
+  return { crop: c.def, qty, bonus, ribbon, fresh, xp100, planter: c.by, star: stars, ...(lady ? { lady: true } : {}) };
 }
 
 function planHarvest(state, a, ctx) {
@@ -432,7 +493,7 @@ export const harvest = {
       tx.set(['farm', 'objects', id, 'cycle'], plot.cycle + 1);
       tx.del(['farm', 'objects', id, 'compost']);
       tx.emit({ e: 'harvested', id, crop: h.crop, qty: h.qty, by: ctx.pid, planter: h.planter, xp, xp100: h.xp100,
-        fresh: h.fresh, ribbon: h.ribbon, bonus: h.bonus, star: h.star });
+        fresh: h.fresh, ribbon: h.ribbon, bonus: h.bonus, star: h.star, ...(h.lady ? { lady: true } : {}) });
     }
     if (frac !== (tx.state.farm.xpFrac ?? 0)) tx.set(['farm', 'xpFrac'], frac);
   },

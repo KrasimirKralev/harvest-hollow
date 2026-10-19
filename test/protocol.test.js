@@ -102,9 +102,11 @@ test('server: the act bucket answers RATE when flooded', async () => {
     const { c } = await join(s.port, 'p1');
     const [, burst] = LIMITS.BUCKETS.act;
     const list = [];
-    for (let i = 1; i <= burst + 10; i++) list.push({ seq: i, type: 'sell', args: { item: 'wheat', qty: 1 } });
+    // three bursts: the bucket refills (120/s) while a loaded machine works through the flood, so burst + 10 needed all
+    // 370 acts handled within ~83 ms and under the full suite RATE never came (QA r2 run, load 25-40)
+    for (let i = 1; i <= burst * 3; i++) list.push({ seq: i, type: 'sell', args: { item: 'wheat', qty: 1 } });
     for (let i = 0; i < list.length; i += LIMITS.MAX_ACTS_PER_FRAME) c.send({ t: 'acts', list: list.slice(i, i + LIMITS.MAX_ACTS_PER_FRAME) });
-    const rate = await c.next((m) => m.t === MSG.REJ && m.code === ERR.RATE);
+    const rate = await c.next((m) => m.t === MSG.REJ && m.code === ERR.RATE, 15_000);
     assert.ok(rate.seq > burst - 5);
     c.close();
   } finally {

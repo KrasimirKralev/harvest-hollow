@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { installDom } from './ui-qa2-dom.js';
 import { makeFarm } from './helpers.js';
-import { LAYOUT_Q, layoutOf, menuBadge, menuNames } from '../public/js/ui/layout.js';
+import { LAYOUT_Q, layoutOf, menuBadge, menuNames, bookGroupOf } from '../public/js/ui/layout.js';
 import { sheetDismiss } from '../public/js/ui/index.js';
 import { PHONE_Q, phoneCoins } from '../public/js/ui/hud.js';
 import { ensureStylesheet } from '../public/js/ui/dom.js';
@@ -99,14 +99,16 @@ test('mobile.css: no text under 13 px (body text at 14 px and more)', () => {
   assert.deepEqual(small, []);
 });
 
-test('the desktop never draws the phone controls; the page is ready for notches and links mobile.css last', () => {
+test('the desktop never draws the phone controls; the page is ready for notches and links mobile.css after the base', () => {
   const shell = noComments(read('css/shell.css'));
   const base = topBlocks(shell).find((b) => b.prelude === '.m-menu-btn, .tracker-chip-wrap, .hh-sheet-grip');
   assert.ok(base && /display:\s*none/.test(base.body), 'shell.css hides the menu button, the tracker chip and the sheet grip');
   const html = read('index.html');
   assert.match(html, /<meta name="viewport" content="[^"]*viewport-fit=cover/);
   const sheets = [...html.matchAll(/<link rel="stylesheet" href="([^"]+)"/g)].map((m) => m[1]);
-  assert.equal(sheets.at(-1), '/css/mobile.css', 'mobile.css is the last stylesheet');
+  // release 1.0 (release-scope §7.2): only ui-panels' mobile-panels.css and life-feel's feel.css follow mobile.css
+  assert.deepEqual(sheets.slice(-3), ['/css/mobile.css', '/css/mobile-panels.css', '/css/feel.css'],
+    'mobile.css follows every base sheet, then mobile-panels.css, then feel.css');
   assert.match(read('css/style.css'), /--sab: env\(safe-area-inset-bottom, 0px\)/);
 });
 
@@ -128,21 +130,25 @@ test('phoneCoins: exact up to 99,999, then short', () => {
   assert.equal(phoneCoins(1_250_000), '1.3M');
 });
 
-test('the farm menu badge: red when something inside needs you, calm when there is only something to do', () => {
+test('the Farm book badge (1.0 S1): red when a place inside needs you, calm when there is only something to do', () => {
   const list = [
     { name: 'market', dock: { label: 'Market' }, badge: null },
     { name: 'barn', dock: { label: 'Barn' }, badge: '!', badgeTone: null },
     { name: 'orders', dock: { label: 'Orders' }, badge: 2, badgeTone: 'calm' },
-    { name: 'journal', dock: { label: 'Journal' }, badge: null },
+    { name: 'journal', dock: { label: 'Journal' }, badge: 1, badgeTone: 'calm' },
     { name: 'fair', dock: { label: 'Fair', mini: true }, badge: null },
     { name: 'settings', dock: null, badge: '!' },
   ];
-  assert.deepEqual(menuNames(list, false).map((p) => p.name), ['orders', 'journal', 'fair'], 'a tablet keeps Market and Barn in its bar');
-  assert.deepEqual(menuNames(list, true).map((p) => p.name), ['market', 'barn', 'orders', 'journal', 'fair']);
-  assert.deepEqual(menuBadge(list, true), { text: '!', tone: 'red' }, 'the Barn spills: red');
-  assert.deepEqual(menuBadge(list, false), { text: '1', tone: 'calm' }, 'on a tablet the Barn is in the bar');
-  assert.equal(menuBadge(list.map((p) => ({ ...p, badge: null })), true), null);
-  assert.deepEqual(menuBadge([{ name: 'pets', dock: { mini: true }, badge: 'New' }], false), { text: 'New', tone: 'new' });
+  assert.deepEqual(menuNames(list).map((p) => p.name), ['journal', 'fair'], 'the four verbs are never in the Farm book');
+  assert.deepEqual(menuBadge(list), { text: '1', tone: 'calm' }, 'the Barn spills, but the Barn has its own button');
+  assert.deepEqual(menuBadge([...list, { name: 'pets', dock: { mini: true }, badge: '!' }]), { text: '!', tone: 'red' });
+  assert.equal(menuBadge(list.map((p) => ({ ...p, badge: null }))), null);
+  assert.deepEqual(menuBadge([{ name: 'pets', dock: { mini: true }, badge: 'New' }]), { text: 'New', tone: 'new' });
+  assert.equal(bookGroupOf('journal'), 'week');
+  assert.equal(bookGroupOf('pets'), 'animals');
+  assert.equal(bookGroupOf('town'), 'village');
+  assert.equal(bookGroupOf('perks'), 'you');
+  assert.equal(bookGroupOf('somethingNew'), 'week', 'a place nobody listed goes to This week');
 });
 
 test('ensureStylesheet: a versioned link counts, so a panel sheet is never linked twice after mobile.css', () => {
@@ -169,11 +175,11 @@ test('ensureStylesheet: a versioned link counts, so a panel sheet is never linke
   assert.doesNotThrow(() => ensureStylesheet('/css/x.css'), 'no document: nothing to do');
 });
 
-test('the farm menu takes the HUD\'s dock, small dock and together buttons and gives them back exactly in place', async () => {
+test('the Farm book (1.0 S1, S3) borrows the HUD\'s places by group (and on a phone the together buttons) and gives them back in place', async () => {
   const document = installDom();
   document.documentElement = document.createElement('html');
   document.querySelector = (sel) => document.body.querySelector(sel);
-  // the tiny DOM has no nextSibling (the menu remembers each node's place by it)
+  // the tiny DOM has no nextSibling (the book remembers each node's place by it)
   const nodeProto = Object.getPrototypeOf(Object.getPrototypeOf(document.body));
   Object.defineProperty(nodeProto, 'nextSibling', { configurable: true, get() {
     const p = this.parentNode;
@@ -181,12 +187,17 @@ test('the farm menu takes the HUD\'s dock, small dock and together buttons and g
   } });
   const el = (tag, props = {}, ...kids) => {
     const e = document.createElement(tag);
-    for (const [k, v] of Object.entries(props)) { if (k === 'class') e.className = v; else e.setAttribute(k, v); }
+    for (const [k, v] of Object.entries(props)) {
+      if (k === 'class') e.className = v;
+      else if (k.startsWith('data-')) e.dataset[k.slice(5)] = v;          // the tiny DOM keeps data-* in dataset only
+      else e.setAttribute(k, v);
+    }
     e.append(...kids);
     return e;
   };
   const dock = el('nav', { id: 'dock', class: 'dock wood' }, el('button', { class: 'dock-btn', 'data-dock': 'build' }));
-  const minis = el('div', { class: 'dock-minis' }, el('button', { class: 'dock-mini', 'data-dock': 'orders' }));
+  const mini = (name) => el('button', { class: 'dock-mini', 'data-dock': name });
+  const minis = el('div', { class: 'dock-minis' }, mini('journal'), mini('pets'), mini('town'), mini('perks'));
   const feed = el('ol', { id: 'feed', class: 'feed' });
   const social = el('div', { id: 'social', class: 'social' }, el('button', { class: 'social-btn' }));
   const bl = el('section', { class: 'hud-bl' }, feed, social);
@@ -205,35 +216,44 @@ test('the farm menu takes the HUD\'s dock, small dock and together buttons and g
     list: () => [], on: () => () => {}, has: () => false, isOpen: () => false, open() {}, toggle() {}, close() {},
     register(name, spec) { specs[name] = spec; return () => {}; },
   };
-  const { state } = makeFarm();
+  const state = makeFarm();
   const { createLayout } = await import('../public/js/ui/layout.js');
-  const layout = createLayout({ store: { state, pid: 'p1' }, ui: { panels, toast() {} }, controller: {},
+  const layout = createLayout({ store: { state, pid: 'p1', now: () => Date.now() }, ui: { panels, toast() {} }, controller: {},
     settings: { get: () => ({ muted: false }), set() {} } });
   assert.equal(layout.mode, 'phone');
   assert.equal(document.documentElement.dataset.layout, 'phone');
-  assert.ok(tray.querySelector('#m-menu-btn'), 'the menu button sits in the bottom bar');
-  assert.ok(specs.menu, 'the menu registers as a panel (frame, focus trap, Esc and the sheet come with it)');
+  assert.ok(dock.querySelector('#m-menu-btn'), 'the Farm book button is the dock\'s (the phone bar\'s) last button');
+  assert.ok(specs.menu, 'the Farm book registers as the panel "menu" (frame, focus trap, Esc and the sheet come with it)');
 
   const order = () => hud.children.map((c) => c.id || c.className);
   const before = order();
   const body = document.createElement('div');
   let closed = 0;
   const inst = specs.menu.mount(body, { close: () => { closed++; } });
-  assert.ok(body.contains(dock) && body.contains(minis) && body.contains(social), 'a phone takes all three in');
-  assert.ok(!hud.contains(dock));
-  // a chat line opened from the menu goes home with the buttons
+  const group = (name) => body.querySelector(`[data-dock="${name}"]`)?.closest('section')?.dataset.book;
+  assert.equal(group('journal'), 'week');
+  assert.equal(group('pets'), 'animals');
+  assert.equal(group('town'), 'village');
+  assert.equal(group('perks'), 'you');
+  assert.ok(body.contains(social), 'a phone with a partner takes the together buttons in');
+  assert.ok(hud.contains(dock), 'the dock stays: it is the phone bar');
+  assert.ok(body.querySelector('[data-tile="settings"]'), 'a phone\'s Farm book has the Settings tile');
+  assert.ok(body.querySelector('[data-book="you"] .m-hearts'), 'M30: Hearts are a together stat on the You page');
+  // a chat line opened from the sheet goes home with the buttons
   social.before(el('div', { class: 'chat-box' }));
   inst.destroy();
   assert.deepEqual(order(), before, 'the HUD keeps its order');
+  assert.equal(minis.children.length, 4, 'every place went home');
   assert.equal(social.parentNode, bl);
   assert.deepEqual(bl.children.map((c) => c.className), ['feed', 'chat-box', 'social'], 'feed, the chat line, then the buttons');
   assert.equal(closed, 0);
 
-  // a wide tablet keeps Build / Market / Barn in its bar: only the small dock and the together buttons move
+  // a tablet: the places move, the together buttons stay on the HUD (Together is a button there) and no Settings tile
   W = 1024; H = 768;
   const body2 = document.createElement('div');
   const inst2 = specs.menu.mount(body2, { close() {} });
-  assert.ok(!body2.contains(dock) && body2.contains(minis) && body2.contains(social));
+  assert.ok(!body2.contains(social) && body2.querySelector('[data-dock="journal"]'));
+  assert.equal(body2.querySelector('[data-tile="settings"]'), null);
   inst2.destroy();
   assert.deepEqual(order(), before);
 });

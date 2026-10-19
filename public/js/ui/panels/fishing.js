@@ -159,7 +159,7 @@ export const fishingPanel = {
       const tr = v.treasures ? h('section.fi-treasures', h('h3', v.treasures.name), h('small', t('home.fish.treasures', { found: v.treasures.found, total: v.treasures.total })),
         h('ul', ...v.treasures.items.map((it) => h(`li${it.found ? '.got' : ''}`, { title: it.found ? it.name : t('home.fish.notFound') },
           stickerArt(v.treasures.id, it.id, 52), h('small', it.found ? it.name : '?')))),
-        h('button.pn-chipbtn', { type: 'button', on: { click: () => ctx.open('collections', { set: v.treasures.id }) } }, t('farm.unlock.collections.label'))) : null;
+        h('button.pn-chipbtn', { type: 'button', 'data-sfx': 'own', on: { click: () => ctx.open('collections', { set: v.treasures.id }) } }, t('farm.unlock.collections.label'))) : null;
       fill(body,
         h('div.fi-top', h('div.fi-scene', pondScene({ seats, label: seats.length ? t('home.fish.sceneBusy') : t('home.fish.sceneQuiet') })), rodCard(ctx, kit, v)),
         h('div.fi-mid', best, tr),

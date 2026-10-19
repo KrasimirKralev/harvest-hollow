@@ -30,23 +30,23 @@ farmer uses it.
 - **Sign-ins stay on your server**, per farmer, in the farm's `harness/users/` folder: the ChatGPT sign-in as a file
   only the server's user can read (mode 0600), never logged and never sent anywhere else. For Claude the server runs
   the Claude Code program, which keeps its own login in a private folder the game's code never opens. Signing out in
-  Settings › Helper removes it.
+  Settings › Harvey removes it.
 - **The helper's work** (its files, the checks, the request and its summary) is kept with the farm under `harness/`, so
   both farmers can see the history and undo a change: the record of a request for 30 days, its work files for 7 days,
   the applied changes as long as the farm.
 - **Speaking to the helper** uses the browser's own speech recognition, which may send the sound to the browser maker's
   service (Chrome to Google, Safari to Apple). The server never receives sound, only the typed-out words.
 - **Sharing your requests with the Harness Hollow team is off unless a farmer turns it on** (each farmer decides for
-  themselves; the helper asks once, and Settings › Helper changes it at any time; turning it off deletes what was still
+  themselves; the helper asks once, and Settings › Harvey changes it at any time; turning it off deletes what was still
   waiting to be sent). When it is on, after each helper job the server sends one event to `HH_TELEMETRY_URL` (by
   default the public host's `/api/telemetry`), at most 20 an hour, holding exactly: the request in the farmer's words,
   the helper's mod files, what they added, changed or removed, whether the checks passed (error codes only), whether the
   change was applied, discarded or undone, the provider and model, the game language and version, and a random install
-  id (`harness-host/install.json`). Never a sign-in, account, e-mail, farm id or key, farmer or farm names (unless typed
-  into the request), IP address or file path; anything in a request that looks like a key, a password, an e-mail, a
-  farm's address or a file path is blanked out before it leaves. An event that cannot be delivered waits in
+  code (`harness-host/install.json`). Never a sign-in, account, e-mail, farm id or key, farmer or farm names (unless
+  typed into the request), IP address or file path; anything in a request that looks like a key, a password, an e-mail,
+  a farm's address or a file path is blanked out before it leaves. An event that cannot be delivered waits in
   `harness-host/telemetry-outbox.jsonl` for up to 7 days, then is dropped. The public host keeps shared events for 12
-  months at most; to have yours deleted sooner, send the install id shown in Settings › Helper through the privacy
+  months at most; to have yours deleted sooner, send the install code shown in Settings › Harvey through the privacy
   request form on the public site.
 - **The operator's switch:** `HH_TELEMETRY=off` (or `HH_TELEMETRY_URL=off`) means nothing is ever shared, whatever a
   farmer chose.

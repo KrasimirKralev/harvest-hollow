@@ -12,6 +12,8 @@
 //    7. B feeds the hen with the Feed Scoop on the Coop; warp; A collects the egg with the Hand
 //    8. A fills Mabel's order; coins rise on both screens
 //    9. BIG_SPEND: A buys a Bakery: the "are you sure?" card, yes; B gets the heads-up toast
+//    9b. the workshop arrows (owner 2026-10-19): the lone Feed Mill's panel had no ‹ › (step 6); with the Bakery a real
+//       click on › turns the open panel to the Feed Mill (still open, camera still), ← turns it back
 //   10. A pings (G) and waves; B receives both
 //   10b. Golden Hour from the UI: A places a Sunset Bench; both click it with the Hand (real clicks), each farmer
 //       walks over and sits; after seatMs Golden Hour starts on both screens (CL-01: the second farmer used to "stand")
@@ -73,6 +75,43 @@ const steps = [];
 const skipped = [];
 const latencies = {};
 const errors = [];
+// QA r2 S2-17 (ap#7): the release budget is 0 console warnings (release-scope section 8), and a gate that never looked at
+// them could not keep it. Every warning fails the run except these reviewed ones, each with its reason
+const WARN_OK = [
+  // SwiftShader (headless, no GPU) reads the canvas back for the screenshots: a driver note, not the game's
+  /GPU stall due to ReadPixels/,
+];
+const warnings = [];
+/** A console warning the run did not expect: kept (the run fails on it at the end). */
+const warnOf = (tag, m) => { if (!WARN_OK.some((re) => re.test(m.text()))) warnings.push(`${tag} warning: ${m.text()}`); };
+// a deliberate restart's own outage (QA r2, render-look's patch): the socket says why it reconnects, and a music track
+// fetched while the server is down fails with no data (audio.js reports it as "network" and plays another); expected
+// only inside a restart window, so a track that 404s in normal play still fails the gate
+const RESTART_WARN = / warning: (?:socket: |audio: the music track \S+ did not play \(media error \d+, network\))/;
+const dropRestartWarnings = (from) => { const w = warnings.splice(from); warnings.push(...w.filter((x) => !RESTART_WARN.test(x))); };
+// Chrome's "<a Latin font> was preloaded ... but not used within a few seconds" on a starved CPU (life-feel's QA r3
+// Cross-lane 4; the rule e2e-multi.mjs already has): tolerated only when the page did draw with that face in the end;
+// a page that never uses the font it preloads still fails the run
+const FONT_LATE = /The resource \S+\/assets\/fonts\/(fredoka|baloo2)-latin\.woff2 was preloaded using link preload but not used/;
+const fontChecks = [];
+const lateFonts = [];
+function fontUsed(page, tag, text) {
+  const family = FONT_LATE.exec(text)[1] === 'fredoka' ? 'Fredoka' : 'Baloo 2';
+  return (async () => {
+    try {
+      const used = await page.evaluate(async (fam) => {
+        const loaded = () => [...document.fonts].some((f) => f.family.replace(/["']/g, '') === fam && /^U\+0+-0*FF\b/i.test(f.unicodeRange)
+          && f.status === 'loaded');
+        for (let i = 0; i < 40 && !loaded(); i++) await new Promise((r) => setTimeout(r, 500));
+        return loaded();
+      }, family);
+      if (!used) warnings.push(`${tag} warning: ${text}`);
+      else lateFonts.push(`${tag} ${family}`);
+    } catch (e) {
+      warnings.push(`${tag} warning: ${text} (not verified: ${String(e.message || e).slice(0, 60)})`);
+    }
+  })();
+}
 const files = [];
 let server = null;
 let serverLog = '';
@@ -142,7 +181,10 @@ const st = (page) => page.evaluate(() => JSON.parse(JSON.stringify(window.__hh.s
 // SwiftShader pages on a laptop with other agents' Chrome running (load > 10) took 4-6 s for what takes 50 ms alone
 // (integration-qa1 "What remains" #6); --slow N (or HH_E2E_SLOW) multiplies every one of them, and the two functional
 // latency gates below (presence, a stroke reaching the partner): on a loaded machine they are not measurements.
-const SLOW = Math.max(1, Number(args.slow || process.env.HH_E2E_SLOW || 1));
+// QA r1 S-32 (coop#8): without --slow a run at load 15 stopped on the presence gate (5988 ms > 5000): the factor follows
+// the machine's load when none is given (load per core over 1.5 doubles the waits, over 3 triples them)
+const LOAD_SLOW = (() => { const per = os.loadavg()[0] / Math.max(1, os.cpus().length); return per > 3 ? 3 : per > 1.5 ? 2 : 1; })();
+const SLOW = Math.max(1, Number(args.slow || process.env.HH_E2E_SLOW || LOAD_SLOW));
 const waitFor = (page, fn, arg, timeout = 10_000) => page.waitForFunction(fn, { timeout: timeout * SLOW, polling: 20 }, arg);
 const serverStatus = async () => (await fetch(`http://127.0.0.1:${port}/api/status`)).json();
 const inv = (s, item) => (s.farm.inventory[item] ?? 0) + (s.farm.overflow?.[item] ?? 0);
@@ -400,6 +442,7 @@ async function m1bFlows(A, B) {
   // ---- the mid-game farm: level 18, a Wednesday noon, the goods each flow needs (built with the real rules) ----------
   fs.mkdirSync(screens, { recursive: true });
   const before = await serverStatus();
+  const warnedBeforeM1b = warnings.length;
   await stopServer();
   const file = path.join(dataDir, 'farm.json');
   const save = JSON.parse(fs.readFileSync(file, 'utf8'));
@@ -462,6 +505,7 @@ async function m1bFlows(A, B) {
     JSON.stringify({ xpA: stNow.farm.xp, want: xpForLevel(18), v: stNow.meta.version, server: { v: st2.v, serverNow: st2.serverNow }, saved: save.version }));
   // the restart's refused reconnects are expected (as in step 11)
   for (let i = errors.length - 1; i >= 0; i--) if (/ERR_CONNECTION_REFUSED/.test(errors[i])) errors.splice(i, 1);
+  dropRestartWarnings(warnedBeforeM1b);
 
   // ---- a Fair entry by each player (the Fair panel's Enter buttons) ------------------------------------------------------
   if (liveFair && fairItems.length) {
@@ -575,14 +619,21 @@ async function m1bFlows(A, B) {
 }
 
 // ---- 14. M2 co-op flows (wave 3) -------------------------------------------------------------------------------------
-/** Click the first visible enabled button in `root` whose label matches `re` (the real UI path); false when none. */
+/**
+ * Click the first visible, enabled button whose label matches `re` inside the first SHOWN element matching `rootSel`
+ * (the real UI path); null when none, else the button's words. QA r1 S-31: '.hh-panel' found the first panel ever
+ * built (the hidden gift sheet or recap), so Invite, Accept and "bring it home" fell back to controller.do and the
+ * gate passed without the real buttons; an `aria-disabled` button (Invite before a duel is picked) is disabled.
+ */
 const clickButton = (page, rootSel, re) => page.evaluate(([sel, src]) => {
   const rx = new RegExp(src, 'i');
-  const root = sel ? document.querySelector(sel) : document;
-  if (!root) return false;
-  const b = [...root.querySelectorAll('button')].find((x) => x.offsetParent !== null && !x.disabled && rx.test(x.textContent.trim()));
+  const shown = (e) => Boolean(e) && !e.hidden && !e.closest('[hidden]') && e.getClientRects().length > 0;
+  const root = sel ? [...document.querySelectorAll(sel)].find(shown) : document;
+  if (!root) return null;
+  const b = [...root.querySelectorAll('button')].find((x) => shown(x) && !x.disabled && x.getAttribute('aria-disabled') !== 'true'
+    && rx.test(x.textContent.trim()));
   if (b) b.click();
-  return Boolean(b);
+  return b ? b.textContent.trim().slice(0, 40) || '(button)' : null;
 }, [rootSel, re.source]);
 
 /** A screen point over the room's floor (view.interior.pick answers a floor cell inside the room), or null. */
@@ -621,6 +672,7 @@ async function m2Flows(A, B) {
   fs.mkdirSync(screens, { recursive: true });
   // ---- the late-game farm: level 32, a Wednesday noon, built with the real rules --------------------------------------
   const before = await serverStatus();
+  const warnedBeforeM2 = warnings.length;
   await stopServer();
   const file = path.join(dataDir, 'farm.json');
   const save = JSON.parse(fs.readFileSync(file, 'utf8'));
@@ -684,6 +736,7 @@ async function m2Flows(A, B) {
   await Promise.all([A, B].map((p) => syncClock(p, target)));
   await waitFor(A, (x) => window.__hh.state.farm.xp >= x, xpForLevel(32), 20_000).catch(() => {});
   for (let i = errors.length - 1; i >= 0; i--) if (/ERR_CONNECTION_REFUSED/.test(errors[i])) errors.splice(i, 1);
+  dropRestartWarnings(warnedBeforeM2);
   for (const p of [A, B]) await p.evaluate(() => { window.__hh.ui.panels?.closeAll?.(); document.querySelector('.notice button:last-child')?.click(); });
 
   // ---- 14a. a Friendly Duel: A invites, B answers the invitation's own notice ---------------------------------------
@@ -691,9 +744,20 @@ async function m2Flows(A, B) {
     const kind = 'orders';
     let how = 'api';
     if (await A.evaluate(() => Boolean(window.__hh.ui.panels?.has?.('duel')))) {
+      // the real door: the duel panel, a duel picked (Invite waits for one: "Pick a duel first"), then Invite
       await A.evaluate(() => window.__hh.ui.panels.open('duel', {}));
-      await sleep(600);
-      if (await clickButton(A, '.hh-panel', /invite|challenge/)) how = 'ui';
+      await waitFor(A, () => Boolean(document.querySelector('#panel-duel:not([hidden]) .lg-kind')), null, 8000).catch(() => {});
+      const picked = await A.evaluate((k) => {
+        const open = (b) => b && b.getAttribute('aria-disabled') !== 'true';
+        const all = [...document.querySelectorAll('#panel-duel .lg-kind')];
+        const b = all.find((x) => x.dataset.kind === k && open(x)) ?? all.find(open);
+        b?.click();
+        return b?.dataset.kind ?? null;
+      }, kind);
+      await sleep(400);
+      const pressed = picked ? await clickButton(A, '#panel-duel', /invite|challenge/) : null;
+      if (pressed) how = `ui: ${picked}, "${pressed}"`;
+      check('M2: A picks a duel and presses Invite in the duel panel (the real buttons)', Boolean(pressed), JSON.stringify({ picked, pressed }));
     }
     if (how === 'api') {
       const r = await A.evaluate((k) => window.__hh.controller.do('duelInvite', { kind: k }), kind);
@@ -704,14 +768,27 @@ async function m2Flows(A, B) {
     const notice = await waitFor(B, () => [...document.querySelectorAll('.notice')].some((n) => /challenges you/i.test(n.textContent)), null, 12_000)
       .then(() => true, () => false);
     check('M2: B gets the duel invitation as a notice', notice, JSON.stringify(await toasts(B)));
-    await clickButton(B, '.notice', /duel|see/);
+    const seen = await clickButton(B, '.notice', /duel|see/);
     await sleep(500);
+    let answer = 'notice';
     if (!(await B.evaluate(() => window.__hh.state.farm.duel?.cur?.ok))) {
-      if (!(await clickButton(B, '.hh-panel', /accept|game on|yes/))) await B.evaluate(() => window.__hh.controller.do('duelAccept', {}));
+      await waitFor(B, () => Boolean(document.querySelector('#panel-duel:not([hidden])')), null, 4000).catch(() => {});
+      const accepted = await clickButton(B, '#panel-duel', /accept|game on|yes/);
+      answer = accepted ? `panel: "${accepted}"` : 'api';
+      if (!accepted) await B.evaluate(() => window.__hh.controller.do('duelAccept', {}));
     }
-    await Promise.all([A, B].map((p) => waitFor(p, () => window.__hh.state.farm.duel?.cur?.ok === true, null, 10_000)));
-    const [da, db] = [await st(A), await st(B)];
-    check('M2: the duel runs on both screens', JSON.stringify(da.farm.duel) === JSON.stringify(db.farm.duel), `${how}; ${JSON.stringify(da.farm.duel?.cur)}`);
+    check('M2: B answers through the notice or the duel panel\'s Accept (the real buttons)', answer !== 'api',
+      JSON.stringify({ notice: seen, answer }));
+    // compare the CONFIRMED duels: the accepting page shows `ok` at once from its own prediction, whose `start` is its
+    // clock estimate, until the server's ack replaces it (the flake of this step: test/integration.duel-race.test.js)
+    await Promise.all([A, B].map((p) => waitFor(p, () => window.__hh.state.farm.duel?.cur?.ok === true && window.__hh.pending === 0, null, 10_000)));
+    let [da, db] = [await st(A), await st(B)];
+    for (let i = 0; i < 20 && JSON.stringify(da.farm.duel) !== JSON.stringify(db.farm.duel); i++) {
+      await sleep(250);                          // a delta still on its way to one page
+      [da, db] = [await st(A), await st(B)];
+    }
+    check('M2: the duel runs on both screens', JSON.stringify(da.farm.duel) === JSON.stringify(db.farm.duel),
+      `${how}; A ${JSON.stringify(da.farm.duel?.cur)}; B ${JSON.stringify(db.farm.duel?.cur)}`);
     // A scores: an order filled (the Order Rush counts the filler's orders)
     const slots = da.farm.orders?.slots ?? {};
     const k = Object.keys(slots).find((x) => slots[x]?.order);
@@ -748,12 +825,18 @@ async function m2Flows(A, B) {
       check('M2: B is told the baby is ready', ready);
       await clickButton(B, '.notice', /bring it home/);
       await sleep(600);
+      let home = 'notice';
       if (await B.evaluate(() => Boolean(window.__hh.state.farm.breed?.cur))) {
         // the breeding panel opened: name it and bring it home there; else straight through the rules
-        await B.evaluate(() => { const i = document.querySelector('.hh-panel input[type="text"]'); if (i) { i.value = 'Clover'; i.dispatchEvent(new Event('input', { bubbles: true })); } });
-        if (!(await clickButton(B, '.hh-panel', /bring|home|collect|welcome/))) await B.evaluate(() => window.__hh.controller.do('breedCollect', { name: 'Clover' }));
+        await waitFor(B, () => Boolean(document.querySelector('#panel-breeding:not([hidden])')), null, 4000).catch(() => {});
+        await B.evaluate(() => { const i = document.querySelector('#panel-breeding input[type="text"]'); if (i) { i.value = 'Clover'; i.dispatchEvent(new Event('input', { bubbles: true })); } });
+        const pressed = await clickButton(B, '#panel-breeding', /bring|home|collect|welcome/);
+        home = pressed ? `panel: "${pressed}"` : 'api';
+        if (!pressed) await B.evaluate(() => window.__hh.controller.do('breedCollect', { name: 'Clover' }));
       }
-      await Promise.all([A, B].map((p) => waitFor(p, () => !window.__hh.state.farm.breed?.cur, null, 10_000)));
+      check('M2: B brings the baby home through the notice or the breeding panel (the real buttons)', home !== 'api', home);
+      // nothing pending: B's own collect is predicted with its clock estimate (placedAt) until the ack (see the duel step)
+      await Promise.all([A, B].map((p) => waitFor(p, () => !window.__hh.state.farm.breed?.cur && window.__hh.pending === 0, null, 10_000)));
       const [ba, bb] = [await st(A), await st(B)];
       const baby = Object.entries(ba.farm.objects).find(([, o]) => o.def === 'cow' && o.coat && o.placedAt >= cur.readyAt - 5000);
       check('M2: the newborn and its coat are on both screens', Boolean(baby) && JSON.stringify(bb.farm.objects[baby[0]]) === JSON.stringify(baby[1]),
@@ -846,7 +929,8 @@ async function m2Flows(A, B) {
       await shotM1b(A, 'e2e-m2-league-A.png', 'league', {});
     }
     if (live.duel) {
-      await waitFor(B, () => Boolean(window.__hh.state.farm.duel?.last), null, 15_000).catch(() => {});
+      await Promise.all([A, B].map((p) => waitFor(p, () => Boolean(window.__hh.state.farm.duel?.last) && window.__hh.pending === 0, null, 15_000)
+        .catch(() => {})));
       const [ea, eb] = [await st(A), await st(B)];
       check('M2: the duel ended with the same result on both screens', Boolean(ea.farm.duel?.last) && JSON.stringify(ea.farm.duel) === JSON.stringify(eb.farm.duel),
         JSON.stringify(ea.farm.duel?.last));
@@ -870,7 +954,11 @@ try {
     const page = await ctx.newPage();
     await page.setViewport({ width: 1280, height: 800 });
     page.on('pageerror', (e) => errors.push(`${tag} pageerror: ${e.message}`));
-    page.on('console', (m) => { if (m.type() === 'error') errors.push(`${tag} console: ${m.text()}`); });
+    page.on('console', (m) => {
+      if (m.type() === 'error') errors.push(`${tag} console: ${m.text()}`);
+      else if ((m.type() === 'warn' || m.type() === 'warning') && FONT_LATE.test(m.text())) fontChecks.push(fontUsed(page, tag, m.text()));
+      else if (m.type() === 'warn' || m.type() === 'warning') warnOf(tag, m);
+    });
     // every toast the page shows, from its first paint, and again after a reload (a build reload: another lane's files
     // changed while the server was down for a restart step; the restarted server then runs other files)
     await page.evaluateOnNewDocument(() => {
@@ -909,15 +997,55 @@ try {
   }, null, 15_000);
   latencies.presenceMs = Date.now() - t0;
   // A functional gate: under SwiftShader two WebGL pages share the CPU, so this number is not a measurement
-  // (tech §9.1); the 15 Hz relay + 120 ms interpolation make it ~150-250 ms on real GPUs.
-  check("B sees A's avatar move (presence)", latencies.presenceMs < 5000 * SLOW, `${latencies.presenceMs} ms`);
+  // (tech §9.1); the 15 Hz relay + 120 ms interpolation make it ~150-250 ms on real GPUs. Over the bar once: a second
+  // move is timed (a loaded machine's one slow frame is not a broken relay; QA r1 S-32); the numbers are advisory
+  if (latencies.presenceMs >= 5000 * SLOW) {
+    const t1 = Date.now();
+    await A.evaluate(() => { window.__hh.avatar.place(22.5, 31.5); });
+    await waitFor(B, () => { const p = window.__hh.view.partner.pose('p1'); return p && Math.abs(p.x - 22.5) < 0.1; }, null, 15_000).catch(() => {});
+    latencies.presenceRetryMs = Date.now() - t1;
+  }
+  check("B sees A's avatar move (presence)", Math.min(latencies.presenceMs, latencies.presenceRetryMs ?? Infinity) < 5000 * SLOW,
+    `${latencies.presenceMs} ms${latencies.presenceRetryMs !== undefined ? `, again ${latencies.presenceRetryMs} ms` : ''} (slow x${SLOW}, load ${os.loadavg()[0].toFixed(1)}: advisory)`);
+
+  // release 1.0 S4 + M21: with a partner claimed, Together is one button; its menu holds "Leave a surprise", which opens
+  // features' gift sheet (a real click on each)
+  {
+    const shownSel = (p, q) => p.evaluate((x) => { const e = document.querySelector(x); return Boolean(e && !e.closest('[hidden]') && e.getClientRects().length); }, q);
+    const together = await shownSel(A, '#together-btn');
+    check('S4: A has the Together button once B is claimed', together);
+    if (together) {
+      await A.click('#together-btn');
+      await sleep(400);
+      const gift = await shownSel(A, '#together-menu [data-gift="open"]');
+      check('S4: the Together menu opens with "Leave a surprise" in it', gift);
+      if (gift && await A.evaluate(() => window.__hh.ui.panels.has('gift'))) {
+        await A.click('#together-menu [data-gift="open"]');
+        const opened = await waitFor(A, () => window.__hh.ui.panels.isOpen('gift'), null, 8000 * SLOW).then(() => true, () => false);
+        check('M21: "Leave a surprise" opens the gift sheet', opened);
+        await A.evaluate(() => window.__hh.ui.panels.closeAll());
+        await sleep(300);
+      } else if (gift) skip('M21: the gift sheet', 'panel "gift" is not registered in this tree');
+    }
+    // QA r1 S-29 (br#1): a double click on a dock door opens it (the second click used to close it ~150 ms later)
+    const market = await shownSel(A, '#dock .dock-btn[data-dock="market"]');
+    if (market) {
+      await A.click('#dock .dock-btn[data-dock="market"]', { count: 2, delay: 40 });
+      await sleep(700);
+      check('S-29: a double click on Market leaves the Market open', await A.evaluate(() => window.__hh.ui.panels.isOpen('market')));
+      await A.evaluate(() => window.__hh.ui.panels.closeAll());
+      await sleep(300);
+    } else skip('S-29: double click on Market', 'no Market door on this screen');
+  }
 
   // --only m2: straight from the claims to the M2 co-op flows (step 14), then the error check (a quick run for the M2
   // systems; the full run does every step)
   if (ONLY_M2) {
     await m2Flows(A, B);
     check('no console or page errors', errors.length === 0, errors.join(' | '));
-    console.log(JSON.stringify({ ok: true, only: 'm2', steps: steps.length, done: steps.map((x) => x.name), skipped, latencies, errors, files }));
+    await Promise.all(fontChecks);
+    check('no console warnings (S2-17)', warnings.length === 0, warnings.slice(0, 4).join(' | '));
+    console.log(JSON.stringify({ ok: true, only: 'm2', steps: steps.length, done: steps.map((x) => x.name), skipped, latencies, errors, warnings, lateFonts, files }));
   } else {
 
   // 2. A drag-paints wheat with the Seed Bag across four plots (a real mouse stroke) ---------------------------
@@ -1048,6 +1176,15 @@ try {
         queue: h.state.farm.objects[id]?.queue, now: h.serverNow(), tool: h.controller.tool.id, pending: h.pending };
     }, millId));
     check('A collected the tray with one Hand click; B sees the feed', got, why);
+    // the workshop arrows (owner request 2026-10-19): the farm's only workshop has none
+    const lone = await A.evaluate((id) => {
+      const P = window.__hh.ui.panels;
+      P.open('building', { id });
+      const n = document.querySelectorAll('#panel-building .pn-wsnav').length;
+      P.closeAll();
+      return n;
+    }, millId);
+    check('the only workshop on the farm: its panel has no ‹ ›', lone === 0, String(lone));
   } else skip('feed mill', 'place / craft / collectTray not registered');
 
   // 7. B feeds the hen with the Feed Scoop; warp; A collects the egg with the Hand ---------------------------------
@@ -1112,6 +1249,42 @@ try {
     const heads = (await toasts(B)).filter((t) => /is buying/.test(t));
     check('exactly one heads-up for the purchase (CL-02)', heads.length === 1, JSON.stringify(heads));
   } else skip('BIG_SPEND', 'place not registered');
+
+  // 9b. the workshop arrows (owner request 2026-10-19): with the Feed Mill and the Bakery on the farm the workshop panel's
+  // title carries ‹ ›; a real click on › turns the open panel to the other workshop (it stays open, the camera stays),
+  // ← turns it back. With two workshops both arrows name the other one, so the arrows' target says which one shows.
+  const bakeryId = newest(await st(A), 'bakery');
+  if (millId && bakeryId) {
+    const showing = () => A.evaluate(() => (window.__hh.ui.panels.isOpen('building') && !document.getElementById('panel-building')?.classList.contains('is-closing')
+      ? [...document.querySelectorAll('#panel-building .pn-wsnav')].map((b) => b.dataset.to) : null));
+    await A.evaluate((id) => { window.__hh.ui.panels.closeAll(); window.__hh.ui.panels.open('building', { id }); }, bakeryId);
+    await sleep(700);                    // the entrance settles before the click
+    const cam0 = await A.evaluate(() => JSON.stringify(window.__hh.view.camera.get()));
+    const nx = await A.evaluate(() => {
+      const b = document.querySelector('#panel-building .pn-wsnav[data-dir="1"]');
+      if (!b) return null;
+      const r = b.getBoundingClientRect();
+      const x = r.left + r.width / 2;
+      const y = r.top + r.height / 2;
+      return { x, y, to: b.dataset.to, label: b.getAttribute('aria-label'), top: document.elementFromPoint(x, y)?.closest('.pn-wsnav') === b };
+    });
+    check('9b: two workshops: the Bakery\'s title has ‹ › (› names the Feed Mill)', Boolean(nx) && nx.to === millId && /Feed Mill/.test(nx.label ?? ''), JSON.stringify(nx));
+    if (nx) {
+      await A.mouse.click(nx.x, nx.y);
+      const onMill = await waitFor(A, (id) => window.__hh.ui.panels.isOpen('building')
+        && [...document.querySelectorAll('#panel-building .pn-wsnav')].every((b) => b.dataset.to === id), bakeryId, 6000).then(() => true, () => false);
+      check('9b: a click on › shows the Feed Mill in the same open panel', onMill && JSON.stringify(await showing()) === JSON.stringify([bakeryId, bakeryId]),
+        JSON.stringify({ covered: !nx.top, now: await showing() }));
+      check('9b: the camera stayed where it was', (await A.evaluate(() => JSON.stringify(window.__hh.view.camera.get()))) === cam0);
+      await A.keyboard.press('ArrowLeft');
+      const back = await waitFor(A, (id) => [...document.querySelectorAll('#panel-building .pn-wsnav')].every((b) => b.dataset.to === id), millId, 6000)
+        .then(() => true, () => false);
+      check('9b: ← turns back to the Bakery (and does not pan the farm)', back && (await A.evaluate(() => JSON.stringify(window.__hh.view.camera.get()))) === cam0,
+        JSON.stringify(await showing()));
+    }
+    await A.evaluate(() => window.__hh.ui.panels.closeAll());
+    await sleep(300);
+  } else skip('workshop arrows', 'no Feed Mill and Bakery on the farm');
 
   // 10. ping (G over the farm) and an emote reach the partner -------------------------------------------------------------
   await look(A, P(row[1]).x, P(row[1]).z);
@@ -1288,6 +1461,7 @@ try {
 
   // 11. server restart mid-session while B keeps playing ------------------------------------------------------------------
   const errorsBefore = errors.length;
+  const warningsBefore = warnings.length;
   await stopServer();
   await sleep(300);
   const offPlots = plots.slice(5, 7);
@@ -1298,6 +1472,8 @@ try {
   const expected = (e) => /WebSocket connection to .* failed: .*ERR_CONNECTION_REFUSED/.test(e) || /ERR_CONNECTION_REFUSED/.test(e);
   const during = errors.splice(errorsBefore);
   errors.push(...during.filter((e) => !expected(e)));
+  // the socket says why it reconnects while the server is down (net/socket.js, the silent-drop watchdog): expected here
+  dropRestartWarnings(warningsBefore);
   await sleep(300);
   const [ra2, rb2, srv2] = [await st(A), await st(B), await serverStatus()];
   check("restart: B's offline plantings landed on the server", offPlots.every((id) => ra2.farm.objects[id].crop?.def === 'wheat'));
@@ -1313,9 +1489,13 @@ try {
     JSON.stringify({ a: aPose, seenByB: await B.evaluate(() => window.__hh.view.partner.pose('p1')) }));
 
   // 12. a forced resync converges ----------------------------------------------------------------------------------------
+  const warnedBefore12 = warnings.length;
   await B.evaluate(() => window.__hh.store.requestResync('e2e'));
   await waitFor(B, () => window.__hh.store.ready, null, 15_000);
   check('resync: B is ready again and equals A', JSON.stringify(await st(B)) === JSON.stringify(await st(A)));
+  // the page says why it resyncs (main.js "sync: resync requested: e2e"): this step asked for it, so it is expected here
+  const warned12 = warnings.splice(warnedBefore12);
+  warnings.push(...warned12.filter((w) => !/ warning: sync: resync requested: e2e$/.test(w)));
 
   // 13. M1b co-op flows -----------------------------------------------------------------------------------------------
   await m1bFlows(A, B);
@@ -1362,7 +1542,10 @@ try {
     files.push(f);
   }
   check('no console or page errors', errors.length === 0, errors.join(' | '));
-  console.log(JSON.stringify({ ok: true, steps: steps.length, skipped, latencies, errors, files }));
+  await Promise.all(fontChecks);
+  check('no console warnings (S2-17)', warnings.length === 0, warnings.slice(0, 4).join(' | '));
+  // the step names: a reader sees which path each flow took (QA r1 S-31: the real buttons, not controller.do)
+  console.log(JSON.stringify({ ok: true, steps: steps.length, done: steps.map((x) => x.name), skipped, latencies, errors, warnings, lateFonts, files }));
   }
 } catch (e) {
   // what both screens showed when the step failed (e2e-FAIL-A/B.png next to the other screenshots)
@@ -1370,7 +1553,7 @@ try {
     const f = path.join(screens, `e2e-FAIL-${tag}.png`);
     try { fs.mkdirSync(screens, { recursive: true }); await p.screenshot({ path: f }); files.push(f); } catch { /* the page is gone */ }
   }
-  console.log(JSON.stringify({ ok: false, error: String(e && e.message ? e.message : e), steps, skipped, latencies, errors, files, serverLog: serverLog.slice(-1500) }));
+  console.log(JSON.stringify({ ok: false, error: String(e && e.message ? e.message : e), steps, skipped, latencies, errors, warnings, files, serverLog: serverLog.slice(-1500) }));
   process.exitCode = 1;
 } finally {
   if (browser) await browser.close().catch(() => {});

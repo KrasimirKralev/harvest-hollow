@@ -37,7 +37,7 @@ export const ECON_EVENTS = Object.freeze({
   restored: 'id, def, by  (taken back out of the trash; its coins were paid back)',
   stored: 'id, def, by  (decor went into the build tray)',
   pinned: 'id, pin, by  (pin = pid | null)',
-  bigSpend: 'by, coins, acorns, what  (a confirmed BIG_SPEND purchase: the partner\'s heads-up toast)',
+  bigSpend: 'by, coins, acorns, what, n?  (a confirmed BIG_SPEND purchase: the partner\'s heads-up toast; n: a planting stroke\'s plots)',
 
   // ---- crops (actions/farming.js) ---------------------------------------------------------------------------
   planted: 'id, crop, by, golden?, season?, packet?  (one per plot of a stroke; season: planted in season)',
@@ -45,8 +45,8 @@ export const ECON_EVENTS = Object.freeze({
     + '(tend: a partner tend after the OTHER player watered; savedMs = how much earlier it ripens)',
   composted: 'id, kind: "crop" | "tree", by',
   uprooted: 'id, crop, by, refund  (refund = seed coins back, 0 after the undo window)',
-  harvested: 'id, crop, qty, by, planter, xp, fresh, ribbon, bonus, star  '
-    + '(qty includes bonus units; xp has Fresh +10 %; star = mastery stars at harvest)',
+  harvested: 'id, crop, qty, by, planter, xp, fresh, ribbon, bonus, star, lady?  '
+    + '(qty includes bonus units; xp has Fresh +10 %; star = mastery stars at harvest; lady: a Ladybugs unit)',
   seedBasket: 'crop, n, by  (Grandma\'s seed basket: n free plantings)',
 
   // ---- trees and debris (actions/trees.js) --------------------------------------------------------------------
@@ -176,11 +176,13 @@ export const ECON_EVENTS = Object.freeze({
 
   // ---- wave 4b (the owners' wish list, 2026-10-05) --------------------------------------------------------------
   // the balloon dropped a crate on tile (x, z) (system `_crate`, actions/crates.js; by 'sys'): the parachute
-  crateDropped: 'id, def, x, z, k, until',
+  crateDropped: 'id, def, x, z, k, until, star?',
   // a crate was opened (openCrate) or went to the Barn by itself (auto: true, by 'sys'): the loot card. extra = the
   // extra's kind ('acorns' | 'goldenSeeds' | 'fertilizer' | 'collection' | 'decor') with acorns? goldenSeeds?
-  // item? qty? set? decor?; progress.js credits the XP and writes the feed line
-  crateOpened: 'id, def, x, z, k, by, coins, xp, auto?, extra?, acorns?, goldenSeeds?, item?, qty?, set?, decor?',
+  // item? qty? set? decor?; progress.js credits the XP and writes the feed line. 1.0: pu = a power-up (powerups.js),
+  // puUntil its end, puN a counted one's uses
+  crateOpened: 'id, def, x, z, k, by, coins, xp, auto?, extra?, acorns?, goldenSeeds?, item?, qty?, set?, decor?, '
+    + 'pu?, puUntil?, puN?',
   // an Acorn shop relic bought (actions/relics.js); def = the placed relic's def now waiting in the build tray
   relicBought: 'relic, acorns, by, def?',
   // a player picked the relic they save for (relic null = the tracker picks): their Goal Tracker card follows it

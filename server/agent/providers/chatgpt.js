@@ -67,6 +67,21 @@ export async function* sse(body) {
  * @param {{ cfg: object, log: object, hostDir: string, mode?: 'single'|'multi', redirectPort?: () => number,
  *   fetch?: typeof fetch, now?: () => number, retryMs?: number[] }} o
  */
+/**
+ * The default model by a preference list of known tool-capable models (harvey#13: the first one the API happens to list
+ * was called "Recommended"), the full model before its mini or nano sibling; falls back to the list's first. Pure.
+ */
+export const MODEL_PREFERENCE = Object.freeze([/^gpt-6(?:[.\d]*)(?:-(?!mini|nano)[a-z]+)?$/, /^gpt-5\.5(?:-(?!mini|nano)[a-z]+)?$/,
+  /^gpt-5(?:[.\d]*)(?:-(?!mini|nano)[a-z]+)?$/, /^gpt-6/, /^gpt-5/, /^gpt-4\.1/, /^o4/, /^o3/]);
+export function defaultModel(list) {
+  const ms = Array.isArray(list) ? list.filter((m) => m && typeof m.id === 'string') : [];
+  for (const re of MODEL_PREFERENCE) {
+    const hit = ms.find((m) => re.test(m.id));
+    if (hit) return hit;
+  }
+  return ms[0] ?? null;
+}
+
 export function createProvider({ cfg, log, hostDir, mode = 'single', redirectPort = () => 3300, fetch: fetchFn = globalThis.fetch,
   now = Date.now, retryMs = [1000, 3000] }) {
   const auth = createOpenAIAuth({ authBase: cfg.openaiAuthBase, fetch: fetchFn, now });
@@ -209,6 +224,13 @@ export function createProvider({ cfg, log, hostDir, mode = 'single', redirectPor
     return stateOf(user, await loadRecord(user));
   }
 
+  /** Release 1.0 (H4): a sign-in the player did not finish (another plan was chosen) is forgotten; a saved one stays. */
+  async function cancel(user) {
+    const st = pendingOf.get(userKey(user));
+    if (st) { pending.delete(st); pendingOf.delete(userKey(user)); }
+    return stateOf(user, await loadRecord(user));
+  }
+
   async function signOut(user) {
     const st = pendingOf.get(userKey(user));
     if (st) { pending.delete(st); pendingOf.delete(userKey(user)); }
@@ -256,6 +278,9 @@ export function createProvider({ cfg, log, hostDir, mode = 'single', redirectPor
   }
 
   const api = (p) => `${cfg.openaiApiBase}${p}`;
+
+  /** The model a job uses when the farmer picked none (harvey#13): see `defaultModel`. */
+  const pick = (list) => defaultModel(list);
 
   async function models(user) {
     const hit = modelCache.get(userKey(user));
@@ -401,7 +426,7 @@ export function createProvider({ cfg, log, hostDir, mode = 'single', redirectPor
     const state = { turns: 0, noInclude: false };
     let model = job.model;
     if (!model) {
-      try { model = (await models(user))[0]?.id || null; } catch (e) { return runEndFor(e.code || 'PROVIDER', 0, e.detail); }
+      try { model = pick(await models(user))?.id || null; } catch (e) { return runEndFor(e.code || 'PROVIDER', 0, e.detail); }
       if (!model) return runEndFor('PROVIDER', 0, 'no model');
       job.model = model;
     }
@@ -440,7 +465,8 @@ export function createProvider({ cfg, log, hostDir, mode = 'single', redirectPor
     id: 'chatgpt',
     available,
     models,
-    signIn: { start, continue: cont, status, signOut },
+    defaultModel: pick,
+    signIn: { start, continue: cont, status, signOut, cancel },
     /** GET /auth/callback hands its query here (agent routes). */
     callback: complete,
     owns: (state) => pending.has(String(state || '')),

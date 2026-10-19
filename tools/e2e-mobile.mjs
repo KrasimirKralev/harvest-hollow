@@ -17,14 +17,17 @@
 //       a tap on open ground walks the farmer there
 //    8. P opens the Market with a tap on the dock, swipes the card list (panels still scroll), buys a decor piece with a
 //       tap: build mode starts with the ghost in view, a tap moves it to a free spot, ✓ places it; D sees it
-//    9. P picks the piece up again with the Hammer (tap), carries the ghost with a finger, ✓ puts it down; D sees the move
-//   9b. the Barn by touch (owner 2026-10-04): a Hammer tap picks it up, a tap moves the ghost, ✓ puts it down; D sees it
+//    9. P takes the Hammer by touch (the tool slot, Build, Move: 1.0 has no Hammer on the bar), picks the piece up with
+//       a tap, carries the ghost with a finger, ✓ puts it down; D sees the move
+//   9b. the Barn by touch (owner 2026-10-04): the Hammer the same way, a tap picks it up, a tap moves the ghost, ✓ puts
+//       it down; D sees it
 //       and moves it back
 //   10. landscape: the phone turns; a tap still lands on the right tile
 //   11. CPU x4 (a mid-range phone): input -> first frame on P (SwiftShader: functional, not a measurement)
 // Prints one JSON line { ok, steps, skipped, latencies, errors, files } and exits non-zero on any failure.
 //
-//   node tools/e2e-mobile.mjs --port 3604 [--device "iPhone 13" | "Pixel 7" | "Galaxy S8"] [--screens dir] [--slow N]
+//   node tools/e2e-mobile.mjs --port 3604 [--device "iPhone 13" | "Pixel 7" | "Galaxy S8" | "Small 360"] [--screens dir] [--slow N]
+//     [--force-banner]   (verify-1 V1-S2 proof) raise a card over the farm just before step 3 looks for the row
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -50,6 +53,8 @@ const DEVICES = {
   ...KnownDevices,
   'Pixel 7': { userAgent: ANDROID_UA, viewport: { width: 412, height: 915, deviceScaleFactor: 2.625, isMobile: true, hasTouch: true, isLandscape: false } },
   'iPhone 15 Pro Max': { userAgent: IOS_UA, viewport: { width: 430, height: 932, deviceScaleFactor: 3, isMobile: true, hasTouch: true, isLandscape: false } },
+  // release 1.0 (critique#20): the smallest phone the bar is checked on, 360 x 640 at DPR 3 (Galaxy S8 is 360 x 740)
+  'Small 360': { userAgent: ANDROID_UA, viewport: { width: 360, height: 640, deviceScaleFactor: 3, isMobile: true, hasTouch: true, isLandscape: false } },
 };
 if (!DEVICES[DEVICE]) throw new Error(`unknown device "${DEVICE}"`);
 const screens = path.resolve(args.screens || path.join(ROOT, 'docs', 'qa', 'mobile', 'input', 'e2e'));
@@ -66,6 +71,15 @@ const steps = [];
 const skipped = [];
 const latencies = {};
 const errors = [];
+// QA r2 S2-17 (ap#7): the release budget is 0 console warnings (release-scope section 8), and a gate that never looked at
+// them could not keep it. Every warning fails the run except these reviewed ones, each with its reason
+const WARN_OK = [
+  // SwiftShader (headless, no GPU) reads the canvas back for the screenshots: a driver note, not the game's
+  /GPU stall due to ReadPixels/,
+];
+const warnings = [];
+/** A console warning the run did not expect: kept (the run fails on it at the end). */
+const warnOf = (tag, m) => { if (!WARN_OK.some((re) => re.test(m.text()))) warnings.push(`${tag} warning: ${m.text()}`); };
 const files = [];
 let server = null;
 let serverLog = '';
@@ -127,22 +141,65 @@ async function warp(A, B, ms) {
   const target = await A.evaluate((x) => window.__hh.dev.warp(x), ms);
   await syncClock(B, target - 100);
 }
+/** Rendered frames the camera must stay put over before look() reads "still" as "the pan bounds stopped it". */
+const LOOK_STILL_FRAMES = 6;
 /** Ease the camera to a tile and wait until it is there (or stops: the pan bounds clamp it). Two SwiftShader pages share
- * one CPU, so frames (and the camera's easing) can be slow: "no change in 150 ms" is not "settled". */
+ * one CPU, so frames (and the camera's easing) can be slow: "no change in 150 ms" is not "settled". verify-1 V1-S2
+ * (O-1): "still" was 8 polls of 150 ms, and a loaded page that drew no frame for 1.2 s ended the wait before the glide
+ * had begun; on a phone the camera never reached (x, z) either, since view.focus centres the tile in the part of the
+ * screen the HUD leaves free. Now: there = within 0.03 tiles of that inset-shifted aim; still = the same spot over
+ * LOOK_STILL_FRAMES frames the page really drew (view.onFrame), however long they take; the 80-poll cap stays.
+ * Returns { aim, cam, frames, why } for a failure's detail. */
 async function look(page, x, z) {
-  await page.evaluate(([a, b]) => window.__hh.view.focus(a, b), [x, z]);
+  const aim = await page.evaluate(([a, b]) => {
+    const v = window.__hh.view;
+    // one frame counter per page (a reload drops it with the page)
+    if (!window.__e2eFrames) { window.__e2eFrames = { n: 0 }; v.onFrame(() => { window.__e2eFrames.n += 1; }); }
+    const off = typeof v._insetShift === 'function' ? v._insetShift() : { x: 0, z: 0 };
+    v.focus(a, b);
+    return { x: a + off.x, z: b + off.z };
+  }, [x, z]);
+  const near = (c, p) => Math.abs(c.tx / 2 - p.x) < 0.03 && Math.abs(c.tz / 2 - p.z) < 0.03;
   let last = null;
-  let still = 0;
+  let movedAt = 0;
+  let out = { aim, cam: null, frames: 0, why: 'cap' };
   for (let i = 0; i < 80 * SLOW; i++) {
     await sleep(150);
-    const c = await page.evaluate(() => window.__hh.view.camera.get());
-    if (Math.abs(c.tx / 2 - x) < 0.03 && Math.abs(c.tz / 2 - z) < 0.03) break;
-    still = last && Math.abs(c.tx - last.tx) < 0.005 && Math.abs(c.tz - last.tz) < 0.005 ? still + 1 : 0;
-    if (still >= 8) break;
-    last = c;
+    const { c, n } = await page.evaluate(() => ({ c: window.__hh.view.camera.get(), n: window.__e2eFrames.n }));
+    out = { aim, cam: { tx: +(c.tx / 2).toFixed(2), tz: +(c.tz / 2).toFixed(2) }, frames: n, why: 'cap' };
+    if (near(c, aim) || near(c, { x, z })) { out.why = 'there'; break; }
+    if (!last || Math.abs(c.tx - last.tx) >= 0.005 || Math.abs(c.tz - last.tz) >= 0.005) { last = c; movedAt = n; }
+    else if (n - movedAt >= LOOK_STILL_FRAMES) { out.why = 'clamp'; break; }
   }
   await sleep(200);
+  return out;
 }
+/**
+ * Put away every card over the farm before a step needs the canvas under a finger (verify-1 V1-S2): open panels, and
+ * the cards in #banners and in the layer above the panels (the level tour "New since level 2" is a card, not a panel,
+ * so panels.closeAll() leaves it; it comes up 1.5 s after the join, later on a loaded machine). A card's close takes
+ * 280 ms and a waiting card comes up next: repeat until none is left. True when the farm is clear.
+ */
+async function clearCards(page, ms = 4000) {
+  await page.evaluate(() => window.__hh.ui.panels?.closeAll?.());
+  const t0 = Date.now();
+  while (Date.now() - t0 < ms * SLOW) {
+    const left = await page.evaluate(() => {
+      const cards = [...document.querySelectorAll('#banners > section, #over-panels .banners > section')];
+      for (const el of cards) if (!el.classList.contains('leaving')) el.querySelector('.x')?.click();
+      const more = [...document.querySelectorAll('#banners > :not(section)')]
+        .some((el) => !el.hidden && el.textContent.trim());
+      return cards.length + (more ? 1 : 0);
+    });
+    if (!left) return true;
+    await sleep(150);
+  }
+  return false;
+}
+/** Did a Hammer tap pick object `id` up? Waits up to 3 s (x --slow) for the controller to say so: a loaded SwiftShader
+ * page can take longer than 300 ms to handle a tap (verify-1 V1-S2). */
+const pickedUp = (page, id) => waitFor(page, (x) => window.__hh.controller.tool.build?.moveId === x, id, 3000)
+  .then(() => true, () => false);
 /**
  * CSS px of a point over the canvas whose pick IS tile (tx, tz) and that no HUD element covers (on a phone the HUD
  * takes a good part of the screen); null when none is on screen.
@@ -182,6 +239,27 @@ async function spotOf(page, sel) {
     await sleep(150);
   }
   return null;
+}
+/**
+ * The Hammer the way a finger gets it (release 1.0 S2, S3: the Hammer left the bar): on a phone the tool slot, Build in
+ * its pop-up, then the build tray's Move card; on a tablet the dock's Build, then Move. A step that is not on screen
+ * falls back to setTool('hammer') and is noted as skipped. Returns whether the Hammer is in hand.
+ */
+async function hammerByTouch(page, F, label) {
+  const phone = await page.evaluate(() => Boolean(document.querySelector('[data-slot="tool"]')));
+  const steps = phone ? ['[data-slot="tool"]', '#tools-flyout [data-act="build"]', '#build-tray .build-card[data-def="move"]']
+    : ['[data-dock="build"]', '#build-tray .build-card[data-def="move"]'];
+  for (const sel of steps) {
+    const at = await spotOf(page, sel);
+    if (!at) {
+      skip(`${label}: the Hammer by touch (${sel})`, 'not on screen in this layout; setTool used');
+      await page.evaluate(() => window.__hh.controller.setTool('hammer'));
+      return page.evaluate(() => window.__hh.controller.tool.id === 'hammer');
+    }
+    await F.tap(at);
+    await sleep(500);
+  }
+  return page.evaluate(() => window.__hh.controller.tool.id === 'hammer');
 }
 async function shot(page, name) {
   const f = path.join(screens, `${name}.png`);
@@ -290,7 +368,10 @@ try {
     const page = await ctx.newPage();
     await setup(page);
     page.on('pageerror', (e) => errors.push(`${tag} pageerror: ${e.message}`));
-    page.on('console', (m) => { if (m.type() === 'error') errors.push(`${tag} console: ${m.text()}`); });
+    page.on('console', (m) => {
+      if (m.type() === 'error') errors.push(`${tag} console: ${m.text()}`);
+      else if (m.type() === 'warn' || m.type() === 'warning') warnOf(tag, m);
+    });
     await page.goto(`http://${host}:${port}/?slot=${slot}&name=${name}&quality=low`, { waitUntil: 'domcontentloaded' });
     await waitFor(page, () => window.__hh && window.__hh.pid && window.__hh.state && window.__hh.controller, null, 60_000);
     // the guide's cards ("I know farming"): this run is about input, not the tutorial
@@ -350,19 +431,66 @@ try {
   const O = (id) => s0.farm.objects[id];
   const row = plots.filter((id) => O(id).z === O(plots[0]).z).slice(0, 4);
   check('the fixture has a row of four empty plots', row.length === 4, String(row.length));
-  await look(P, O(row[1]).x + 1, O(row[1]).z + 0.5);
+  const rowAim = [O(row[1]).x + 1, O(row[1]).z + 0.5];
+  const firstLook = await look(P, ...rowAim);
   // the Seed Bag from the tool tray with a tap (the layout may move the tray: fall back to the controller, noted)
-  const seedBtn = await spotOf(P, '[data-tool="seed_bag"]');
+  // 1.0 (S3): a phone's bar holds one tool slot; the Seed Bag is in its pop-up
+  let seedBtn = await spotOf(P, '#toolbar [data-tool="seed_bag"]');
+  if (!seedBtn) {
+    const slotBtn = await spotOf(P, '[data-slot="tool"]');
+    if (slotBtn) { await F.tap(slotBtn); await sleep(500); seedBtn = await spotOf(P, '#tools-flyout [data-tool="seed_bag"]'); }
+  }
   if (seedBtn) {
     await F.tap(seedBtn);
     await sleep(300);
+    check('the Seed Bag by touch (the bar, or the tool slot\'s pop-up)', await P.evaluate(() => window.__hh.controller.tool.id === 'seed_bag'));
   } else skip('tap the Seed Bag in the tool tray', 'the button is not on screen in this layout; setTool used');
   await P.evaluate(() => window.__hh.controller.setTool('seed_bag', { crop: 'wheat' }));
-  await P.evaluate(() => window.__hh.ui.panels?.closeAll?.());
+  // --force-banner (verify-1 V1-S2 proof): a card up over the farm right here, as the late level tour can be: as tall
+  // as the tour (8 things; a bare ribbon card sits above the row) and past the 600 ms a new card lets touches through
+  if (args['force-banner']) {
+    await P.evaluate(() => window.__hh.ui.banner({ ribbon: 'x', ttl: 60000, over: true,
+      things: Array.from({ length: 8 }, (_, i) => ({ glyph: 'star', name: `x${i}` })) }));
+    await sleep(800);
+  }
+  // the level tour or a quest card may still be up (O-1): put every card away, then find the row; once more on a miss
+  await clearCards(P);
   await sleep(200);
-  const pts = [];
-  for (const id of row) pts.push(await tileAt(P, O(id).x, O(id).z));
-  check('the row is on the phone screen, clear of the HUD', pts.every(Boolean), JSON.stringify(pts));
+  const rowPts = async () => {
+    const out = [];
+    for (const id of row) out.push(await tileAt(P, O(id).x, O(id).z));
+    return out;
+  };
+  let pts = await rowPts();
+  let rowLook = null;
+  if (!pts.every(Boolean)) {
+    await clearCards(P);
+    rowLook = await look(P, ...rowAim);
+    await sleep(500);
+    pts = await rowPts();
+  }
+  let rowWhy = JSON.stringify(pts);
+  if (!pts.every(Boolean)) {
+    // say which it was: the camera (aim vs where it is, and why look() stopped) or something over the row
+    const under = await P.evaluate((tiles) => tiles.map(([a, b]) => {
+      const p = window.__hh.view.toScreen(a + 0.5, b + 0.5, 0.1);
+      const on = p && p.x >= 0 && p.y >= 0 && p.x <= innerWidth && p.y <= innerHeight;
+      const el = on ? document.elementFromPoint(p.x, p.y) : null;
+      const names = el && typeof el.className === 'string' ? el.className.trim().split(/\s+/).filter(Boolean) : [];
+      const cls = names.map((n) => `.${n}`).join('');
+      return { tile: [a, b], at: p ? [Math.round(p.x), Math.round(p.y)] : null,
+        el: el ? `${el.tagName.toLowerCase()}${el.id ? `#${el.id}` : ''}${cls}` : 'off screen' };
+    }), row.map((id) => [O(id).x, O(id).z]));
+    const cards = await P.evaluate(() => document
+      .querySelectorAll('#banners > section, #over-panels .banners > section').length);
+    const cam = await P.evaluate(() => {
+      const c = window.__hh.view.camera.get();
+      return { tx: c.tx / 2, tz: c.tz / 2 };
+    });
+    rowWhy = JSON.stringify({ pts, look: [firstLook, rowLook], cam, under, cards });
+    await shot(P, 'p-fail-step8');
+  }
+  check('the row is on the phone screen, clear of the HUD', pts.every(Boolean), rowWhy);
   const coins0 = s0.farm.wallet.coins;
   await F.drag(pts, { n: 4 });
   const predicted = await P.evaluate((ids) => ids.filter((id) => window.__hh.state.farm.objects[id].crop?.def === 'wheat').length, row);
@@ -590,6 +718,107 @@ try {
     check('a tap on open ground walks the farmer there', ok7, `${JSON.stringify(w7)}${ok7 ? '' : ` ${await trace(P)}`}`);
   } else skip('tap to walk', 'no open owned ground clear of the HUD');
 
+  // 7b. QA r2 S2-05 (br#1): a double tap on each bar door and each Farm book tile opens it once and presses nothing in
+  // the sheet it opened (the second tap of a double tap on Market sold a whole stack: "Sell 39", no undo); a double tap on
+  // the gift's Wrap sends one surprise and opens nothing under the closed sheet -------------------------------------
+  {
+    await P.evaluate(() => window.__hh.ui.panels?.closeAll?.());
+    await sleep(500);
+    // every action the page sends from here on (the controller and the panels all act through the store)
+    await P.evaluate(() => {
+      const store = window.__hh.store;
+      window.__e2eActs = [];
+      if (!store.__e2eWrapped) {
+        const act = store.act.bind(store);
+        store.act = (type, ...rest) => { window.__e2eActs.push(type); return act(type, ...rest); };
+        store.__e2eWrapped = true;
+      }
+    });
+    // bookkeeping the page sends by itself (a panel's first-use tip marked seen, a guide step ticked) is no press
+    const acts = () => P.evaluate(() => window.__e2eActs.splice(0).filter((a) => a !== 'markSeen' && a !== 'tutDone'));
+    const top = () => P.evaluate(() => window.__hh.ui.panels.top?.() ?? null);
+    const coins0 = (await st(P)).farm.wallet.coins;
+    const ledger0 = (await st(P)).farm.ledger?.n ?? 0;
+    const doors = [];
+    for (const sel of ['[data-dock="market"]', '[data-dock="orders"]', '[data-dock="barn"]', '#m-menu-btn']) {
+      await P.evaluate(() => window.__hh.ui.panels?.closeAll?.());
+      await sleep(400);
+      const at = await spotOf(P, sel);
+      if (!at) { skip(`S2-05: double tap ${sel}`, 'not on screen in this layout'); continue; }
+      await F.doubleTap(at);
+      await sleep(900 * SLOW);
+      doors.push({ sel, acts: await acts(), top: await top() });
+    }
+    const pressed = doors.filter((d) => d.acts.length);
+    check('S2-05: a double tap on each bar door and each Farm book tile: the doors open their sheet and press nothing in it',
+      doors.length > 0 && !pressed.length && doors.every((d) => d.top), JSON.stringify(doors));
+    // the Farm book's tiles: each opens its sheet (or does its one thing) and the twin tap presses nothing there
+    const tiles = [];
+    const toggles = /full screen|sound|звук|цял екран/i;
+    for (let i = 0; i < 24; i++) {
+      await P.evaluate(() => window.__hh.ui.panels?.closeAll?.());
+      await sleep(300);
+      await P.evaluate(() => window.__hh.ui.farmBook.open());
+      await waitFor(P, () => window.__hh.ui.panels.top?.() === 'menu', null, 4000).catch(() => {});
+      await sleep(500);
+      const tile = await P.evaluate(([n, re]) => {
+        const all = [...document.querySelectorAll('#panel-menu .farm-book button')].filter((b) => b.getClientRects().length && !b.disabled
+          && !b.hasAttribute('aria-pressed') && b.getAttribute('role') !== 'menuitemcheckbox' && !new RegExp(re, 'i').test(b.textContent));
+        const b = all[n];
+        if (!b) return null;
+        document.querySelectorAll('[data-e2e-tile]').forEach((x) => x.removeAttribute('data-e2e-tile'));
+        b.dataset.e2eTile = '1';
+        return (b.textContent || b.getAttribute('aria-label') || '').trim().slice(0, 24);
+      }, [i, toggles.source]);
+      if (tile === null) break;
+      const at = await spotOf(P, '[data-e2e-tile]');
+      if (!at) { skip(`S2-05: double tap the tile "${tile}"`, 'not on screen'); continue; }
+      await acts();
+      await F.doubleTap(at);
+      await sleep(900 * SLOW);
+      tiles.push({ tile, acts: await acts(), top: await top() });
+    }
+    // a tile whose ONE job is an action (none today) would show it once: never twice
+    const twice = tiles.filter((x) => x.acts.length > 1 || x.acts.some((a) => /sell|petStay|keepsake|fill|deliver/.test(a)));
+    check('S2-05: a double tap on each Farm book tile presses nothing in the sheet it opened', tiles.length > 0 && !twice.length,
+      `${tiles.length} tiles; ${JSON.stringify(twice.length ? twice : tiles.map((x) => `${x.tile}:${x.top}`))}`);
+    // a red names what moved the coins: the ledger rows written since (who, how much, why), so a coin from another
+    // source (a system action, the partner) is told apart from a double tap that sold something
+    const after = await st(P);
+    const moved = [];
+    for (let i = ledger0; i < (after.farm.ledger?.n ?? 0); i++) {
+      const r = after.farm.ledger.rows?.[String(i % 500)];
+      if (r) moved.push(`${r.by}:${r.n}:${r.reason}`);
+    }
+    check('S2-05: no coins came from a double tap (nothing was sold)', after.farm.wallet.coins === coins0,
+      `${coins0} -> ${after.farm.wallet.coins}${moved.length ? ` (ledger: ${moved.join(', ')})` : ''}`);
+    // the gift's Wrap: one surprise, nothing opened under the sheet it closed
+    await P.evaluate(() => window.__hh.ui.panels?.closeAll?.());
+    await sleep(300);
+    const gift = await P.evaluate(async () => {
+      try { (await import('/js/ui/panels/gift.js')).openGiftSheet(window.__hh.ui); } catch { return false; }
+      return true;
+    });
+    const sheet = gift && await waitFor(P, () => Boolean(document.querySelector('.rel-gift-grid .pn-stack')), null, 5000).then(() => true, () => false);
+    if (sheet) {
+      await sleep(500);
+      const item = await spotOf(P, '.rel-gift-grid .pn-stack');
+      if (item) await F.tap(item);
+      await sleep(600);
+      const wrap = await spotOf(P, '[data-gift="send"]');
+      if (wrap) {
+        await acts();
+        await F.doubleTap(wrap);
+        await sleep(900 * SLOW);
+        const sent = await acts();
+        const after = await top();
+        check('S2-05: a double tap on Wrap sends one surprise and opens nothing under the closed sheet', sent.filter((a) => a === 'keepsake').length === 1 && after === null,
+          `acts ${JSON.stringify(sent)}, top ${after}`);
+        await shot(P, 'p-07b-gift-dbltap');
+      } else skip('S2-05: the gift\'s Wrap', 'the Wrap button is not on screen');
+    } else skip('S2-05: the gift\'s Wrap', 'no gift sheet or nothing to give on this farm');
+  }
+
   // 8. the Market by tap, a swipe in its list, buy decor, place it with the ghost by touch -------------------------------
   await P.evaluate(() => window.__hh.ui.panels?.closeAll?.());
   await sleep(300);
@@ -732,13 +961,14 @@ try {
   await P.evaluate(() => window.__hh.controller.cancel());
 
   // 9. move it by touch: Hammer tap picks it up, a finger carries the ghost, ✓ puts it down ------------------------------
-  await P.evaluate(() => window.__hh.controller.setTool('hammer'));
+  check('the Hammer by touch: the tool slot, Build, Move (1.0: no Hammer on the bar)', await hammerByTouch(P, F, 'step 9'));
   await look(P, spot.tx + 0.5, spot.tz + 0.5);
   const piece = await tileAt(P, spot.tx, spot.tz);
   if (piece) {
     await F.tap(piece);
-    await sleep(300);
-    check('a Hammer tap picks the piece up', await P.evaluate((id) => window.__hh.controller.tool.build?.moveId === id, placedId));
+    // verify-1 V1-S2: the outcome, not a fixed 300 ms (r1 and verify-1 at load 32-41: the tap had not been handled yet)
+    const picked = await pickedUp(P, placedId);
+    check('a Hammer tap picks the piece up', picked, picked ? '' : await trace(P));
     const to = await P.evaluate(async ([def, id, gx, gz]) => {
       const g = await import('/shared/rules/grid.js');
       const h = window.__hh;
@@ -779,7 +1009,8 @@ try {
   // 9b. the Barn moves by touch (owner request 2026-10-04): a Hammer tap on the Barn picks it up (no "Put it away" for a
   // landmark), a tap moves the ghost to a free spot, ✓ puts it down; D sees it there; D's Move back puts it home again
   {
-    await P.evaluate(() => { window.__hh.ui.panels?.closeAll?.(); window.__hh.controller.setTool('hammer'); });
+    await P.evaluate(() => window.__hh.ui.panels?.closeAll?.());
+    check('the Hammer by touch again (9b)', await hammerByTouch(P, F, 'step 9b'));
     const barn = await P.evaluate(() => Object.keys(window.__hh.state.farm.objects).find((k) => window.__hh.state.farm.objects[k].def === 'barn'));
     const b0 = (await st(P)).farm.objects[barn];
     await look(P, b0.x + 2, b0.z + 3);
@@ -800,8 +1031,8 @@ try {
     }, [barn, b0.x, b0.z]);
     if (onBarn) {
       await F.tap(onBarn);
-      await sleep(300);
-      check('a Hammer tap picks the Barn up', await P.evaluate((id) => window.__hh.controller.tool.build?.moveId === id, barn), await trace(P));
+      const pickedBarn = await pickedUp(P, barn);
+      check('a Hammer tap picks the Barn up', pickedBarn, await trace(P));
       check('no "Put it away" for the Barn (landmarks are moved, never stored)', await P.evaluate(() => {
         const b = document.querySelector('#touch-build .tb-away');
         return !b || b.hidden;
@@ -886,9 +1117,10 @@ try {
   await shot(P, 'p-11-final');
   await shot(D, 'd-11-final');
   check('no page errors', errors.length === 0, errors.slice(0, 3).join(' | '));
-  console.log(JSON.stringify({ ok: true, device: DEVICE, steps: steps.length, skipped, latencies, errors, files }));
+  check('no console warnings (S2-17)', warnings.length === 0, warnings.slice(0, 4).join(' | '));
+  console.log(JSON.stringify({ ok: true, device: DEVICE, steps: steps.length, skipped, latencies, errors, warnings, files }));
 } catch (err) {
-  console.log(JSON.stringify({ ok: false, error: err.message, device: DEVICE, steps, skipped, latencies, errors, files }));
+  console.log(JSON.stringify({ ok: false, error: err.message, device: DEVICE, steps, skipped, latencies, errors, warnings, files }));
   process.exitCode = 1;
 } finally {
   if (browser) await browser.close().catch(() => {});

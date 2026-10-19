@@ -74,7 +74,8 @@ export function upgradeInfo(state, id) {
   const next = tiers[tier] ?? null;
   const def = defOf(o.def);
   return {
-    id, def: o.def, defName: def ? cname(o.def) : o.def, target, tier, max: tiers.length,
+    // shortName: the upgrade strip's tab label ("Пейка", never "Пейка на …": copy#18)
+    id, def: o.def, defName: def ? cname(o.def) : o.def, shortName: def ? cname(o.def, { form: 'short' }) : o.def, target, tier, max: tiers.length,
     name: table.name ? ctext('upgrades', target, 'name', lang() !== 'en' && nameEntry(o.def) ? cname(o.def) : table.name) : def ? cname(o.def) : target,
     tiers, now, next, perObject: target === 'bench', level,
   };

@@ -37,8 +37,9 @@
 //   9d. Rowan loses his: Mia makes him a new key from her phone; his old laptop is signed out; a new laptop takes his
 //       farmer back (renamed); the farm plays on with two farmers (never stuck "full")
 // The front door and the ideas box (owner requests 2026-10-05), woven into the steps above:
-//    1. the landing page is one screen (v2): three actions (Play, Star us, Open GitHub), the orb's living farm (the video
-//       after the first paint), the links (way back, ideas, screenshots, privacy, self-host); the Star button's live
+//    1. the landing page is one screen (v2, release 1.0 O7): ONE big action (Play) with how the partner joins under it,
+//       the orb's living farm (the video after the first paint), the pill row (way back, Star us, GitHub, ideas,
+//       screenshots, privacy, self-host); the Star pill's live
 //       count from this server's /api/stars, which the SERVER asks of a stand-in for api.github.com (one request for
 //       every visitor, nothing of a visitor in it, nothing kept on the device), and no number when the server has none
 //       ({ stars: null }) or no such route (404); "Already have a farm?" and "Suggest an idea" open sheets; the ideas
@@ -62,7 +63,8 @@
 //   16. no full client address in the server log (an abusive socket behind a proxy shows only its /24); no page ever
 //       asked another host (every device, the whole run)
 // Prints one JSON line { ok, steps, errors, files } and exits non-zero on any failure. Screenshots: --screens
-// (default .scratch/mf-client/e2e), the privacy ones --privacy-shots (default .scratch/privacy-shots).
+// (default .scratch/mf-client/e2e), the privacy ones --privacy-shots (default .scratch/privacy-shots). --root <tree>: the
+// server runs from that copy of the tree (a gate run while others edit the working tree; see TREE below).
 import { spawn } from 'node:child_process';
 import http from 'node:http';
 import fs from 'node:fs';
@@ -77,6 +79,10 @@ const args = Object.fromEntries(process.argv.slice(2).reduce((acc, a, i, all) =>
   return acc;
 }, []));
 const port = Number(args.port || 3974);
+// --root <tree>: the server runs from a copy of the tree. A multi host computes its build hash at start and a modded
+// farm's worker computes its own when it starts, minutes later: on a working tree that other people are editing the
+// two differ, the page's content gate reloads a fresh device once, and its second boot can miss a step's wait
+const TREE = path.resolve(args.root || ROOT);
 // the ideas admin routes need a token (any long string: this is a throwaway test server)
 const ADMIN_TOKEN = `e2e-${Math.random().toString(36).slice(2)}-${Date.now().toString(36)}-admin-token`;
 // the stand-in GitHub's star count (the server asks it; the page shows it)
@@ -109,7 +115,7 @@ let serverLog = '';
 function startServer() {
   serverLog = '';
   server = spawn(process.execPath, ['server/index.js'], {
-    cwd: ROOT, env: { ...process.env, PORT: String(port), HH_DATA_DIR: dataDir, HH_DEV: '1', HH_MODE: 'multi', HH_TZ: 'Europe/Sofia',
+    cwd: TREE, env: { ...process.env, PORT: String(port), HH_DATA_DIR: dataDir, HH_DEV: '1', HH_MODE: 'multi', HH_TZ: 'Europe/Sofia',
       HH_FARM_IDLE_MS: '4000', NODE_ENV: 'development', HH_ADMIN_TOKEN: ADMIN_TOKEN,
       // the in-game helper (Harness Hollow): off on a multi host by default; on here, with the scripted mock provider
       HH_HELPER: 'on', HH_HARNESS_MOCK: '1', HH_MOCK_STEP_MS: '300', HH_STARS_URL: `http://127.0.0.1:${stubPort}/repos/KrasimirKralev/harvest-hollow` },
@@ -142,9 +148,58 @@ async function shot(page, name) {
 }
 /** Every page error and console error, except the browser's own line for a refused handshake (step 8 wants one). */
 const EXPECTED = /WebSocket connection to .* failed|Failed to load resource: the server responded with a status of (404|429)/;
+// QA r2 S2-17 (ui-shell's patch; ap#7): release-scope section 8 is 0 console warnings: a warning fails the run like an
+// error, except the socket's own reasons (kept apart below) and these reviewed ones, each with its reason
+const WARN_OK = [
+  // SwiftShader (headless, no GPU) reads the canvas back for the screenshots: a driver note, not the game's
+  /GPU stall due to ReadPixels/,
+];
+// Chrome's "<a Latin font> was preloaded ... but not used within a few seconds from the window's load event": on a
+// starved CPU (headless SwiftShader takes 7 cores) a page's first layout can come after that window (triage r2 dropped
+// fbp#8: 0 such warnings at load 0.13). It is tolerated only when the page did draw with that face in the end (its
+// @font-face is 'loaded'); a page that never uses the font it preloads still fails the run, like welcome.webp did (OBS-1)
+const FONT_LATE = /The resource \S+\/assets\/fonts\/(fredoka|baloo2)-latin\.woff2 was preloaded using link preload but not used/;
+const fontChecks = [];
+function fontUsed(page, tag, text) {
+  const family = FONT_LATE.exec(text)[1] === 'fredoka' ? 'Fredoka' : 'Baloo 2';
+  return (async () => {
+    try {
+      // the page's first screen may itself come late on that CPU (the farm gate waits for the modules): up to 20 s
+      const used = await page.evaluate(async (fam) => {
+        const loaded = () => [...document.fonts].some((f) => f.family.replace(/["']/g, '') === fam && /^U\+0+-0*FF\b/i.test(f.unicodeRange)
+          && f.status === 'loaded');
+        for (let i = 0; i < 40 && !loaded(); i++) await new Promise((r) => setTimeout(r, 500));
+        return loaded();
+      }, family);
+      if (!used) errors.push(`${tag} console warning: ${text}`);
+      else lateFonts.push(`${tag} ${family}`);
+    } catch (e) {
+      errors.push(`${tag} console warning: ${text} (not verified: ${String(e.message || e).slice(0, 60)})`);
+    }
+  })();
+}
+const lateFonts = [];
+// the same window for the picker's painting: tolerated only when a page did paint it (the slot picker or the farm gate
+// showed it as its background); a page that preloads it and never paints it fails, as in OBS-1
+const ART_LATE = /The resource \S+\/assets\/art\/welcome\.webp was preloaded using link preload but not used/;
+function artPainted(page, tag, text) {
+  return (async () => {
+    try {
+      const painted = await page.evaluate(async () => {
+        for (let i = 0; i < 40 && !window.__hhPainted?.welcome; i++) await new Promise((r) => setTimeout(r, 500));
+        return Boolean(window.__hhPainted?.welcome);
+      });
+      if (!painted) errors.push(`${tag} console warning: ${text}`);
+      else lateFonts.push(`${tag} welcome.webp`);
+    } catch (e) {
+      errors.push(`${tag} console warning: ${text} (not verified: ${String(e.message || e).slice(0, 60)})`);
+    }
+  })();
+}
 
 let browser;
 const pages = [];
+const netWarnings = [];
 /** Every URL a page requested (fragments never travel; the check is that no member secret rides in one). */
 const requested = [];
 /** Keys seen during the run (secrets, invites): none may reach the server log. */
@@ -169,8 +224,26 @@ async function device(tag, kind, { stars = null } = {}) {
   const page = await ctx.newPage();
   if (DEVICES[kind]) await page.emulate(DEVICES[kind]);
   else await page.setViewport({ width: 1280, height: 800 });
+  // a navigation without its own timeout waits as long as `--slow` allows the rest: at load 28 the landing's
+  // networkidle0 after the 429 step outran puppeteer's fixed 30 s (QA r1 gate run; the page itself idles in < 4 s)
+  page.setDefaultNavigationTimeout(30_000 * SLOW);
+  // which preloaded painting the page really painted (ART_LATE): the picker and the gate, sampled every 250 ms
+  await page.evaluateOnNewDocument(() => {
+    const look = () => {
+      for (const el of document.querySelectorAll('#slot-picker, #farm-gate')) {
+        if (el.hidden || !el.getClientRects().length) continue;
+        if (/\/assets\/art\/welcome\.webp/.test(getComputedStyle(el).backgroundImage)) (window.__hhPainted ??= {}).welcome = true;
+      }
+    };
+    setInterval(look, 250);
+  });
   page.on('pageerror', (e) => errors.push(`${tag} pageerror: ${e.message}`));
   page.on('console', (m) => {
+    // the socket's own reasons for giving up on a link (net/socket.js): kept for a failure's report
+    if ((m.type() === 'warn' || m.type() === 'warning') && /^socket:/.test(m.text())) netWarnings.push(`${tag} ${m.text()}`.slice(0, 160));
+    else if ((m.type() === 'warn' || m.type() === 'warning') && FONT_LATE.test(m.text())) fontChecks.push(fontUsed(page, tag, m.text()));
+    else if ((m.type() === 'warn' || m.type() === 'warning') && ART_LATE.test(m.text())) fontChecks.push(artPainted(page, tag, m.text()));
+    else if ((m.type() === 'warn' || m.type() === 'warning') && !WARN_OK.some((re) => re.test(m.text()))) errors.push(`${tag} console warning: ${m.text()}`);
     if (m.type() !== 'error' || EXPECTED.test(m.text())) return;
     errors.push(`${tag} console: ${m.text()}`);
   });
@@ -297,7 +370,9 @@ async function startFarm(page, name) {
 async function makeInvite(page) {
   await page.evaluate(() => window.__hh.ui.panels.closeAll?.());
   await sleep(300);
-  const phone = await page.evaluate(() => { const b = document.getElementById('m-menu-btn'); return Boolean(b && b.offsetParent); });
+  // the phone layout by its own rule (ui/layout.js LAYOUT_Q.phone): since 1.0 the Farm book button (#m-menu-btn) is on
+  // desktop too, and the invite tile lives in the phone's Farm book only (desktop: the gear's menu)
+  const phone = await page.evaluate(() => matchMedia('(max-width: 600px), (max-height: 500px)').matches);
   if (phone) {
     await pressUntil(page, '#m-menu-btn', () => window.__hh.ui.panels.isOpen('menu'));
     await sleep(700);                                  // the farm menu sheet slides up first
@@ -332,7 +407,8 @@ async function sendIdeaForm(page, root, { category, text, name }) {
   await page.$eval(`${root} .idea-cat input[value="${category}"]`, (e) => e.click());
   await page.type(`${root} .idea-text`, text);
   if (name) await page.type(`${root} input[name="name"]`, name);
-  await press(page, `${root} .idea-send`);
+  // a DOM click: under load headless Chrome read the iPhone's tap as a long press and nothing was sent (QA r4, life-feel)
+  await page.$eval(`${root} .idea-send`, (e) => e.click());
   await waitFor(page, (r) => { const d = document.querySelector(`${r} .idea-done`); return d && !d.hidden; }, root);
   return page.$eval(`${root} .idea-done`, (e) => e.innerText);
 }
@@ -367,13 +443,16 @@ try {
     && /7 days/.test(land.ttl) && /github\.com/.test(land.repo) && land.farms === true, JSON.stringify(land));
   check('landing: no sideways scroll on a desktop', await noSideScroll(K));
   const sections = await K.evaluate(() => ({ acts: [...document.querySelectorAll('#ld-dock .ld-act')].map((a) => a.id),
+    pills: [...document.querySelectorAll('.ld-more .ld-link')].map((a) => a.id), invite: document.getElementById('ld-invite')?.textContent,
     star: document.getElementById('ld-star-btn')?.href, host: document.getElementById('ld-host')?.href,
     privacy: document.getElementById('ld-privacy')?.getAttribute('href'),
     oneScreen: document.documentElement.scrollHeight <= innerHeight + 1, dockSeen: document.getElementById('ld-dock').getBoundingClientRect().bottom <= innerHeight,
     gone: !document.querySelector('.ld-feat, .ld-step, #ld-shots, .ld-peek, .ld-star-card'), sheets: [...document.querySelectorAll('dialog.ld-sheet')].filter((d) => d.open).length,
     orb: Boolean(document.querySelector('#ld-orb .ld-orb-still')), motes: document.querySelectorAll('.ld-motes i').length }));
-  check('landing: one screen: Play, Star us, Open GitHub; the self-host and privacy links; the orb and its fireflies; no long sections',
-    sections.acts.join() === 'ld-start,ld-star-btn,ld-repo' && /github\.com\/[^/]+\/harvest-hollow$/.test(sections.star) && /#quick-start$/.test(sections.host)
+  check('landing: one screen: Play the one big button, the invite line, Star us and GitHub beside "Already have a farm?"; the self-host and privacy links; the orb and its fireflies; no long sections',
+    sections.acts.join() === 'ld-start' && sections.pills.slice(0, 3).join() === 'ld-back-open,ld-star-btn,ld-repo'
+    && /Invite your partner with a link from inside the farm/.test(sections.invite || '')
+    && /github\.com\/[^/]+\/harvest-hollow$/.test(sections.star) && /#quick-start$/.test(sections.host)
     && sections.privacy === '/privacy' && sections.oneScreen && sections.dockSeen && sections.gone && sections.sheets === 0 && sections.orb && sections.motes >= 10,
     JSON.stringify(sections));
   await waitFor(K, () => Boolean(document.querySelector('#ld-orb-view video.is-on')), null, 30_000);
@@ -388,7 +467,7 @@ try {
   const SD = await device('Star desktop', 'desktop');
   await SD.goto(`${BASE}/`, { waitUntil: 'networkidle0' });
   await waitFor(SD, () => !document.getElementById('ld-star-n').hidden, null, 15_000);
-  const count = await SD.evaluate(() => ({ text: document.getElementById('ld-star-btn').innerText, said: document.querySelector('#ld-star-btn .sr-only')?.textContent }));
+  const count = await SD.evaluate(() => ({ text: document.getElementById('ld-star-btn').innerText, said: document.getElementById('ld-star-sr')?.textContent }));
   check('landing: the Star button shows the live count from this server (/api/stars), nothing kept on the device', /321/.test(count.text)
     && /321 stars/.test(count.said ?? '') && requested.includes(`${BASE}/api/stars`)
     && (await SD.evaluate(() => sessionStorage.getItem('hh.stars') === null && localStorage.getItem('hh.stars') === null)), JSON.stringify(count));
@@ -397,7 +476,7 @@ try {
   const phoneLanding = await device('Phone visitor', 'iPhone 13');
   await phoneLanding.goto(`${BASE}/`, { waitUntil: 'networkidle0' });
   check('landing: no sideways scroll on an iPhone 13', await noSideScroll(phoneLanding));
-  check('landing: Play, Star us, Open GitHub and the 7-day line in the first screen of an iPhone 13', await phoneLanding.evaluate(() => (
+  check('landing: Play, the 7-day line and the Star us and GitHub pills in the first screen of an iPhone 13', await phoneLanding.evaluate(() => (
     ['ld-start', 'ld-star-btn', 'ld-repo', 'ld-ttl'].every((id) => document.getElementById(id).getBoundingClientRect().bottom <= innerHeight))));
   await shot(phoneLanding, '01-landing-iphone13');
   await waitFor(phoneLanding, () => !document.getElementById('ld-star-n').hidden, null, 15_000);
@@ -609,12 +688,17 @@ try {
   await sleep(300);
   // the farm menu (a partner's arrival can repaint it mid-slide under a loaded CPU: open it again if it closed)
   await press(D, '#m-menu-btn');
-  await D.waitForSelector('.m-tile[data-ideas="open"]', { visible: true, timeout: 5000 * SLOW })
+  await D.waitForSelector('.m-tile[data-tile="settings"]', { visible: true, timeout: 5000 * SLOW })
     .catch(() => D.evaluate(() => window.__hh.ui.panels.open('menu')));
   await sleep(700);
-  await press(D, '.m-tile[data-ideas="open"]');
+  // a partner's arrival repaints the Farm book under a loaded CPU and a tap can land on the old tile: press until open
+  await pressUntil(D, '.m-tile[data-tile="settings"]', () => window.__hh.ui.panels.isOpen('settings'));
+  await D.waitForSelector('#panel-settings-tab-farm', { visible: true, timeout: 5000 * SLOW });
+  await pressUntil(D, '#panel-settings-tab-farm', () => Boolean(document.querySelector('#panel-settings [data-ideas="open"]')));
+  await D.waitForSelector('#panel-settings [data-ideas="open"]', { visible: true, timeout: 5000 * SLOW });
+  await press(D, '#panel-settings [data-ideas="open"]');
   await waitFor(D, () => document.querySelector('.ideas-card .idea-form') && window.__hh.ui.panels.top() === 'ideas');
-  check('Dana\'s phone farm menu has "Ideas", and it opens the in-game ideas card', true);
+  check('Dana\'s phone Farm book > Settings > Farm has "Suggest an idea", and it opens the in-game ideas card', true);
   check('the ideas card fits the phone (no sideways scroll)', await noSideScroll(D));
   await sleep(500);
   await shot(D, '07-farm2-ideas-card-iphone13');
@@ -673,7 +757,7 @@ try {
     const ap = await hx(K, 'POST', `/jobs/${cur.id}/apply`);
     check('Apply (the farm moves into its own worker)', ap.status === 200, JSON.stringify(ap.body).slice(0, 160));
     for (const [p, who] of [[K, 'Rowan'], [M, 'Mia']]) {
-      check(`${who}'s screen learns the Moon Melon with no reload`, await waitFor(p, async () => Boolean((await import('/shared/content/index.js')).cropOf('x_moon_melon')), null, 30_000)
+      check(`${who}'s screen learns the Moon Melon with no reload`, await waitFor(p, async () => Boolean((await import('/shared/content/index.js')).cropOf('x_moon_melon')), null, 30_000 * SLOW)
         .then(() => true, () => false) && await p.evaluate(() => performance.getEntriesByType('navigation').length === 1));
     }
     await waitFor(M, () => window.__hh.state && window.__hh.pending === 0, null, 20_000);
@@ -745,8 +829,9 @@ try {
 
   // 9b. an idea from inside the farm, the admin list, a status change -------------------------------------------------
   await K.evaluate(() => window.__hh.ui.panels.closeAll?.());
-  await press(K, '#hud-more');
-  await press(K, '#hud-ideas');
+  // the gear's menu, then its "Suggest an idea" (pressed until each answers: under load a tap can land mid-slide)
+  await pressUntil(K, '#hud-more', () => Boolean(document.getElementById('hud-ideas')?.offsetParent));
+  await pressUntil(K, '#hud-ideas', () => Boolean(document.querySelector('.ideas-card .idea-form')));
   const gameThanks = await sendIdeaForm(K, '.ideas-card', { category: 'feature', text: 'A rainy-day mode where the crops grow a little faster.' });
   check('the More menu\'s "Suggest an idea" sends an idea from inside farm 1', /Thank you/.test(gameThanks), gameThanks);
   await shot(K, '09b-ideas-sent-in-game-desktop');
@@ -857,8 +942,9 @@ try {
   await waitFor(K, () => window.__hh.ui.panels.isOpen('confirm'), null, 10_000);
   await sleep(400);
   const confirmText = await K.$eval('#panel-confirm', (el) => el.innerText);
-  check('a confirm first: "Make a new key for Mia?", "Their old phones will be signed out."', /Make a new key for Mia\?/.test(confirmText)
-    && /old phones will be signed out/.test(confirmText), confirmText.slice(0, 200));
+  // the title plaque is one line, so it names no one (cut on an iPhone 13); the body says whose key it is
+  check('a confirm first: "Make a new key?", "Their old phones will be signed out.", the farm as Mia', /Make a new key\?/.test(confirmText)
+    && /old phones will be signed out/.test(confirmText) && /opens the farm as Mia/.test(confirmText), confirmText.slice(0, 200));
   await keysShot(K, 'rekey-confirm-desktop');
   await clickText(K, '#panel-confirm button', 'Make a new key');
   await waitFor(K, () => window.__hh.ui.panels.isOpen('newkey') && document.querySelector('.newkey .link-field')?.value, null, 20_000);
@@ -1124,8 +1210,15 @@ try {
   await pshot(PB, 'privacy-en-iphone13');
   await pshot(PB, 'privacy-en-iphone13-full', true);
   await PB.setViewport({ width: 360, height: 740, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+  // QA r3 X3-14: this page sat behind four others (a background tab's timers are throttled) and `networkidle0` timed out
+  // at 90 s twice under load after every step had passed. The check needs the language's article laid out with its
+  // styles and fonts, not an idle network: the page to the front, the load event, the article, the fonts.
+  await PB.bringToFront();
   for (const lang of ['en', 'bg']) {
-    await PB.goto(`${BASE}/privacy?lang=${lang}`, { waitUntil: 'networkidle0' });
+    await PB.goto(`${BASE}/privacy?lang=${lang}`, { waitUntil: 'load', timeout: 60_000 * SLOW });
+    await PB.waitForFunction((l) => [...document.querySelectorAll('article.pv-doc')].some((a) => !a.hidden && a.dataset.lang === l),
+      { timeout: 30_000 * SLOW }, lang);
+    await PB.evaluate(() => document.fonts?.ready.then(() => true));
     check(`privacy page: no sideways scroll at 360 px (${lang})`, await noSideScroll(PB));
   }
   await PB.close();
@@ -1172,12 +1265,16 @@ try {
   const goneDel = await Promise.all([MN, KN].map((p) => p.evaluate((id) => ({ text: document.getElementById('farm-gate').innerText,
     privacy: document.querySelector('#farm-gate .gate-privacy a')?.getAttribute('href'),
     listed: JSON.parse(localStorage.getItem('hh.farms') || '[]').some((f) => f.id === id),
-    keys: Object.keys(localStorage).filter((k) => k.startsWith(`hh.f.${id}.`)).length }), f1.id)));
+    keys: Object.keys(localStorage).filter((k) => k.startsWith(`hh.f.${id}.`)).map((k) => k.slice(`hh.f.${id}.`.length)) }), f1.id)));
   check('deleted: both screens say "This farm was deleted" politely, link the privacy note, and forget the farm (list and keys)',
-    goneDel.every((g) => /This farm was deleted/.test(g.text) && /Thank you for farming here/.test(g.text) && g.privacy === '/privacy' && !g.listed && g.keys === 0),
+    goneDel.every((g) => /This farm was deleted/.test(g.text) && /Thank you for farming here/.test(g.text) && g.privacy === '/privacy' && !g.listed && g.keys.length === 0),
     JSON.stringify(goneDel.map(({ text, ...g }) => g)));
+  // the screens hear "deleted" first (denyAll), then the registry stops the farm (a modded farm's worker too) and removes
+  // its folder before the delete request answers: give that a few seconds on a loaded machine
+  let goneDir = false;
+  for (let i = 0; i < 30 * SLOW && !goneDir; i++) { goneDir = !fs.existsSync(path.join(dataDir, 'farms', f1.id)); if (!goneDir) await sleep(500); }
   check('deleted: the farm\'s folder (snapshot, journal, backups) is gone at once, and the farm answers 404',
-    !fs.existsSync(path.join(dataDir, 'farms', f1.id)) && (await fetch(`${BASE}/api/f/${f1.id}/status`)).status === 404);
+    goneDir && (await fetch(`${BASE}/api/f/${f1.id}/status`)).status === 404);
   await MN.bringToFront();
   await sleep(400);
   await pshot(MN, 'deleted-gate-iphone13');
@@ -1218,11 +1315,20 @@ try {
   check('no member secret in any URL a request carried (the #k= fragment never travels)', memberSecrets.length >= 3 && leaked.length === 0,
     `${memberSecrets.length} secrets, ${requested.length} requests, ${leaked.length} leaks${leaked.length ? `: ${leaked.map((u) => u.slice(0, 40)).join(' ')}` : ''}`);
   check('no request ever went to api.github.com (the star count comes from the farm server)', !requested.some((u) => /^https?:\/\/api\.github\.com\//.test(u)));
+  await Promise.all(fontChecks);
   check('no page errors', errors.length === 0, errors.slice(0, 5).join(' | '));
-  console.log(JSON.stringify({ ok: true, steps: steps.length, errors, files }));
+  console.log(JSON.stringify({ ok: true, steps: steps.length, errors, lateFonts, files }));
 } catch (err) {
-  for (const p of pages) { try { if (!p.isClosed()) await shot(p, `fail-${p.tag.replace(/\W+/g, '-')}`); } catch { /* closed */ } }
-  console.log(JSON.stringify({ ok: false, error: String(err && err.message || err), steps, errors, files, server: serverLog.slice(-1500) }));
+  const net = [];
+  for (const p of pages) {
+    try {
+      if (p.isClosed()) continue;
+      await shot(p, `fail-${p.tag.replace(/\W+/g, '-')}`);
+      net.push(`${p.tag}: ${await p.evaluate(() => `${window.__hh?.net?.status ?? 'no socket'}, welcomed ${Boolean(window.__hh?.net?.welcomed)}`)}`);
+    } catch { /* closed */ }
+  }
+  console.log(JSON.stringify({ ok: false, error: String(err && err.message || err), steps, errors, net, netWarnings: netWarnings.slice(-12), files,
+    server: serverLog.slice(-1500) }));
   process.exitCode = 1;
 } finally {
   if (browser) await browser.close().catch(() => {});

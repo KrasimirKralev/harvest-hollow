@@ -18,6 +18,7 @@
 //                                    never sent to a server, never in a server-side manifest). Android shares one
 //                                    storage between Chrome and its home-screen apps and makes an installed app only
 //                                    from an http(s) manifest: there the link is the keyless /f/<id>/manifest.webmanifest.
+import { assetUrl } from '../net/asset-base.js';
 import { h, ensureStylesheet } from './dom.js';
 import { langToggle } from './lang-toggle.js';
 import { createFarmScope, farmsOnDevice, personalLink, parseFarmLink, farmLinkPath, isAndroid, TTL_DAYS } from '../net/farm.js';
@@ -108,7 +109,7 @@ export function showFarmGate(kind, { farmId = null, doc = globalThis.document, l
   const el = h('section.modal-layer.farm-gate#farm-gate', { role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'farm-gate-title',
     'aria-describedby': 'farm-gate-lead', dataset: { gate: kind in GATE_TEXT ? kind : 'private' } },
   h('div.slot-card.wood.gate-card',
-    h('div.slot-title', h('img.slot-logo', { src: '/assets/art/logo-wide.png', alt: BRAND, width: '1400', height: '336' })),
+    h('div.slot-title', h('img.slot-logo', { src: assetUrl('/assets/art/logo-wide.png'), alt: BRAND, width: '1400', height: '336' })),
     h('div.slot-paper.paper', langToggle(() => showFarmGate(kind, { farmId, doc, loc, st })),
       h('h2.gate-title#farm-gate-title', { tabindex: '-1' }, text.title),
       h('p.gate-lead#farm-gate-lead', text.lead),

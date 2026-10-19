@@ -14,6 +14,7 @@
 import { createFarmScope, farmsOnDevice, forgetFarm, rememberFarm, startFarm, farmLinkPath, isStandalone } from './net/farm.js';
 import { t, ready, loaded, onLang, applyStatic, retell } from './i18n/front.js';
 import { langToggle } from './ui/lang-toggle.js';
+import { assetUrl } from './net/asset-base.js';
 
 const $ = (id) => document.getElementById(id);
 const st = (() => { try { return globalThis.localStorage ?? null; } catch { return null; } })();
@@ -50,7 +51,8 @@ function renderFarms() {
     a.className = 'ld-open';
     a.href = `/f/${encodeURIComponent(f.id)}`;
     const txt = Object.assign(document.createElement('span'), { className: 'ld-open-txt' });
-    txt.append(Object.assign(document.createElement('span'), { className: 'ld-name', textContent: name }),
+    // dir=auto isolates a right-to-left farm name from the line around it (QA r1 I-02)
+    txt.append(Object.assign(document.createElement('span'), { className: 'ld-name', dir: 'auto', textContent: name }),
       Object.assign(document.createElement('span'), { className: 'ld-when', textContent: t('front.farms.last', { when: ago(f.lastOpen) }) }));
     a.append(txt);
     const x = document.createElement('button');
@@ -145,7 +147,7 @@ function stylesheet(href) {
   return sheets.get(href);
 }
 /** The game's tokens, buttons and the way-back block's styles: what the sheets' insides are drawn with. */
-const sheetStyles = () => Promise.all([stylesheet('/css/style.css'), stylesheet('/css/farm.css')]);
+const sheetStyles = () => Promise.all([stylesheet(assetUrl('/css/style.css')), stylesheet(assetUrl('/css/farm.css'))]);
 
 // ---- the sheets ----------------------------------------------------------------------------------------------------
 function wireSheet(dialog) {
@@ -192,7 +194,7 @@ function paintIdeas() {
 }
 /** "Suggest an idea": the ideas form, built once. */
 function buildIdeas() {
-  ideasReady ??= Promise.all([import('./front/ideas.js'), sheetStyles(), stylesheet('/css/ideas.css')]).then(([{ ideaForm }]) => {
+  ideasReady ??= Promise.all([import('./front/ideas.js'), sheetStyles(), stylesheet(assetUrl('/css/ideas.css'))]).then(([{ ideaForm }]) => {
     ideaFormOf = ideaForm;
     paintIdeas();
   }).catch((err) => { ideasReady = null; throw err; });
@@ -205,15 +207,15 @@ let gallery = null;
 async function openShots(from) {
   if (!gallery) {
     const { createGallery } = await import('./front/gallery.js');
-    gallery = createGallery(SHOTS.map(([f, key]) => ({ full: `/assets/landing/shot-${f}.webp`, mid: `/assets/landing/shot-${f}_960.webp`,
+    gallery = createGallery(SHOTS.map(([f, key]) => ({ full: assetUrl(`/assets/landing/shot-${f}.webp`), mid: assetUrl(`/assets/landing/shot-${f}_960.webp`),
       get caption() { return t(key); }, w: 1600, h: 1000 })));
   }
   if (gallery) gallery.open(0, from);
-  else location.assign(`/assets/landing/shot-${SHOTS[0][0]}.webp`);   // no <dialog>: the picture itself
+  else location.assign(assetUrl(`/assets/landing/shot-${SHOTS[0][0]}.webp`));   // no <dialog>: the picture itself
 }
 
 // ---- after the first paint: the living farm and the star count -----------------------------------------------------
-const VIDEO = [['/assets/landing/farm-orbit.webm', 'video/webm; codecs="vp9"'], ['/assets/landing/farm-orbit.mp4', 'video/mp4; codecs="avc1.4D401F"']];
+const VIDEO = [[assetUrl('/assets/landing/farm-orbit.webm'), 'video/webm; codecs="vp9"'], [assetUrl('/assets/landing/farm-orbit.mp4'), 'video/mp4; codecs="avc1.4D401F"']];
 
 /** The orbiting farm over the orb's still: muted, looping, only while the orb is on screen; never under reduced motion
  *  or Save-Data (the still stays). */

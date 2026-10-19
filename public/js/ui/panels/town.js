@@ -9,10 +9,10 @@
 import { CONTENT, TOWN_PROJECT_RULES, itemOf, defOf } from '../../../../shared/content/index.js';
 import * as TW from '../../../../shared/rules/actions/town.js';
 import { systemLive } from '../../../../shared/rules/coop.js';
-import { h, icon, svgIcon, fmt, fmtShort, playerMark, createKit, fill, hintable } from './kit.js';
+import { h, icon, svgIcon, fmt, fmtShort, playerMark, createKit, fill, hintable, phoneTitle } from './kit.js';
 import { levelOf, available } from './core.js';
 import { s as sv } from './art.js';
-import { actionOf, banner, speech, lockedBody, leftText, need, toTop, fairView, fmtPts, tParts } from './fair.js';
+import { actionOf, banner, speech, lockedBody, leftText, need, toTop, fairView, fmtPts, tParts, num } from './fair.js';
 import { bargeView } from './barge.js';
 import { townsfolkView } from './townsfolk.js';
 import { t, ctext, name as cname } from '../../i18n/index.js';
@@ -132,8 +132,11 @@ export function weeklyLines(state, pid, now) {
   const f = fairView(state, pid, now);
   if (f.open && f.has && f.isOpen) {
     const pts = { p: fmtPts(f.p10), w: fmtPts(f.W10), left: leftText(f.closesAt, now) };
+    // past the week's reference score W, "549 of 190 points" reads like a bug: the line drops "of W" (astra#10)
+    const past = num(f.p10) >= num(f.W10) && num(f.W10) > 0;
     out.push({ panel: 'fair', icon: 'ribbon_rosette',
-      text: f.medal ? t('weekly.line.fairMedal', { ...pts, medal: f.medal.name }) : t('weekly.line.fair', pts) });
+      text: f.medal ? t(past ? 'weekly.line.fairMedalPast' : 'weekly.line.fairMedal', { ...pts, medal: f.medal.name })
+        : t(past ? 'weekly.line.fairPast' : 'weekly.line.fair', pts) });
   } else if (f.open && f.last && now - f.last.at < 2 * 86_400_000) {
     out.push({ panel: 'fair', icon: 'ribbon_rosette', text: f.last.name ? t('weekly.line.fairWon', { medal: f.last.name, p: fmtPts(f.last.p10), n: f.last.p10 / 10 })
       : t('weekly.line.fairNone', { p: fmtPts(f.last.p10), n: f.last.p10 / 10 }) });
@@ -288,8 +291,9 @@ export function villageStrip(projects, { more = 0 } = {}) {
   });
   if (more) {
     const x = w - tail / 2 - 10;
-    svg.append(sv('g', { class: 'wk-lm s-later' }, sv('path', L({ d: `M${x - 18} 85 v-22 h36 v22`, fill: 'none', 'stroke-dasharray': '4 4' })),
-      sv('text', { x, y: 126, 'text-anchor': 'middle', class: 'wk-lm-name s-later' }, t('weekly.town.more', { n: more }))));
+    // the words outside the faded lot (inside its .5 group "+18 more" was 2.5:1, QA r2 a11y pass), like the lots' names
+    svg.append(sv('g', { class: 'wk-lm s-later' }, sv('path', L({ d: `M${x - 18} 85 v-22 h36 v22`, fill: 'none', 'stroke-dasharray': '4 4' }))),
+      sv('text', { x, y: 126, 'text-anchor': 'middle', class: 'wk-lm-name s-later' }, t('weekly.town.more', { n: more })));
   }
   return svg;
 }
@@ -311,7 +315,7 @@ function ollieLine(v) {
 }
 
 export const townPanel = {
-  get title() { return t('weekly.town.title'); },
+  get title() { return phoneTitle('weekly.town.title', 'weekly.town.titleShort'); },
   icon: 'ferry_landing_souvenir',
   size: 'full',
   topics: ['town', 'inventory', 'overflow', 'wallet', 'xp', 'players', 'made'],
@@ -343,17 +347,18 @@ export const townPanel = {
       }
       const c = v.cur;
       const board = ctx.ui.panels.has('townsfolk')
-        ? h('button.btn.btn--paper.btn--small.wk-board-link', { type: 'button', on: { click: () => ctx.ui.panels.open('townsfolk') } },
+        ? h('button.btn.btn--paper.btn--small.wk-board-link', { type: 'button', 'data-sfx': 'own', on: { click: () => ctx.ui.panels.open('townsfolk') } },
           svgIcon('letter', 20), t('weekly.town.board'))
         : null;
       fill(body,
         banner('e', t('weekly.town.banner'), v.pavilionTiers ? t('weekly.town.bannerPavilion', { n: v.pavilionTiers })
           : t('weekly.town.bannerSub', { n: v.built.length, of: v.projects.length }),
           { chip: board }),
-        (() => { const sw = stripWindow(v.projects); return h('div.wk-village-wrap', villageStrip(sw.list, { more: sw.after + v.more })); })(),
+        (() => { const sw = stripWindow(v.projects); // a phone scrolls the village sideways: the keyboard can too (a named, focusable region; axe scrollable-region-focusable)
+          return h('div.wk-village-wrap', { role: 'region', tabindex: '0', 'aria-label': t('weekly.town.villageAria') }, villageStrip(sw.list, { more: sw.after + v.more })); })(),
         h('div.wk-town-cols',
           h('section.wk-col', speech('ollie', ollieLine(v), null, 64), c ? projectCard(st, v, c, now) : waitingCard(v)),
-          h('aside.wk-col.wk-side', c ? rewardCard(c) : null, builtCard(v))));
+          h('section.wk-col.wk-side', c ? rewardCard(c) : null, builtCard(v))));
       kit.refresh();
       kit.tick();
     }
@@ -406,7 +411,7 @@ export const townPanel = {
       const when = c.readyAt > now ? t('weekly.town.readyIn', { left: leftText(c.readyAt, now) })
         : c.stage === 'built' ? t('weekly.town.lightsUp') : t('weekly.town.tomorrow');
       return h('section.wk-project', { dataset: { project: c.id ?? '' } },
-        h('header.wk-project-head', c.souvenir ? icon(c.souvenir, { size: 56 }) : null,
+        h('div.wk-project-head', c.souvenir ? icon(c.souvenir, { size: 56 }) : null,
           h('div', h('small', t('weekly.town.projectN', { n: c.n, of: v.projects.length + v.more })), h('h3', c.name), c.text ? h('p', c.text) : null)),
         stagesEl(c),
         gathering ? null : h('div.wk-building', svgIcon('hammer', 30),

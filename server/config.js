@@ -76,6 +76,58 @@ export function loadConfig(env = process.env) {
     version: packageVersion(),
     harness: harnessConfig(env),          // the in-game helper (Harness Hollow): every HH_HARNESS* / HH_MOD* knob
     telemetry: telemetryConfig(env),      // the helper's opt-in sharing (server/telemetry)
+    assets: assetConfig(env),             // option 2: the game files from the public host (server/asset-origin.js)
+  };
+}
+
+const LOOPBACK_NAME = /^(localhost|127(?:\.\d{1,3}){3}|\[::1\])$/i;
+
+/**
+ * An origin from the environment (scheme, host, optional port; nothing else), or null when unset. https only, except
+ * a loopback or a *.test / *.localhost name with HH_DEV=1 (the e2e lab: tools/e2e-assets.mjs).
+ */
+function originOf(key, raw, { dev }) {
+  if (raw === undefined || raw === '') return null;
+  let u = null;
+  try { u = new URL(raw); } catch { u = null; }
+  if (!u || !/^https?:$/.test(u.protocol)) throw new ConfigError(`${key}=${raw} must be an https origin (https://host[:port])`);
+  if (u.username || u.password || u.search || u.hash || (u.pathname !== '/' && u.pathname !== '')
+    || /[?#]/.test(raw) || /^https?:\/\/[^/]+\/./.test(raw)) {
+    throw new ConfigError(`${key}=${raw} must be an origin only: no path, query, fragment or user name`);
+  }
+  if (u.protocol === 'http:' && !(dev && (LOOPBACK_NAME.test(u.hostname) || /\.(test|localhost)$/i.test(u.hostname)))) {
+    throw new ConfigError(`${key}=${raw}: http is refused (https, or a loopback or *.test name with HH_DEV=1)`);
+  }
+  return u.origin;
+}
+
+/**
+ * Option 2 (release 1.0, docs/qa/release/option2.md D2): where the static game files come from.
+ *   HH_ASSET_ORIGIN      the public host's origin as the BROWSER reaches it (unset = every file from this server)
+ *   HH_ASSET_CHECK_MS    how often this server asks the public host for its build (default 60000, min 5000)
+ *   HH_ASSET_TIMEOUT_MS  that question's timeout (default 4000)
+ *   HH_ASSET_PROBE       tests only: where this server asks, when the browser's host name does not resolve here
+ *                        (refused with NODE_ENV=production)
+ *   HH_ASSET_HOST        on (default) | off: serve /b/<build>/... to other origins; off is the kill switch (every
+ *                        Farmbox's probe then says mismatch and serves itself)
+ */
+export function assetConfig(env = process.env) {
+  const dev = env.HH_DEV === '1';
+  const origin = originOf('HH_ASSET_ORIGIN', env.HH_ASSET_ORIGIN, { dev });
+  let probe = null;
+  if (env.HH_ASSET_PROBE !== undefined && env.HH_ASSET_PROBE !== '') {
+    if (env.NODE_ENV === 'production') throw new ConfigError('HH_ASSET_PROBE is for tests only and refused with NODE_ENV=production');
+    if (!origin) throw new ConfigError('HH_ASSET_PROBE needs HH_ASSET_ORIGIN');
+    probe = originOf('HH_ASSET_PROBE', env.HH_ASSET_PROBE, { dev: true });
+  }
+  const host = env.HH_ASSET_HOST === undefined || env.HH_ASSET_HOST === '' ? 'on' : env.HH_ASSET_HOST;
+  if (host !== 'on' && host !== 'off') throw new ConfigError(`HH_ASSET_HOST=${host} must be on or off`);
+  return {
+    origin,
+    probe: probe || origin,
+    checkMs: posInt(env, 'HH_ASSET_CHECK_MS', 60_000, { min: 5000 }),
+    timeoutMs: posInt(env, 'HH_ASSET_TIMEOUT_MS', 4000, { min: 200 }),
+    host: host === 'on',
   };
 }
 

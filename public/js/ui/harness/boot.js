@@ -5,20 +5,23 @@
 // request per visit and nothing else.
 //
 //   bootHarness(S, onReady(helper)) -> stop()
+import { assetUrl, assetPath } from '../../net/asset-base.js';
 import { farm, session as farmSession } from '../../net/farm.js';
+import { lazyImport, importFailed } from '../../net/lazy.js';
 import { onHarness, harnessAuth } from '../../harness/bus.js';
 import { harnessBase } from '../../harness/api.js';
 import { farmerKey } from './link.js';
 
 /** The stylesheet with the page's own version stamp (server/static.js versions every stylesheet link). */
 function loadCss(doc) {
-  const href = '/css/harness.css';
-  if (doc.querySelector(`link[href^="${href}"]`)) return Promise.resolve();
+  // option 2 (option2#6, infra's patch): compared through assetPath, linked through assetUrl (the host or this server)
+  const href = '/css/harness.css'; // asset-ok: compared through assetPath, linked through assetUrl
+  if ([...doc.querySelectorAll('link')].some((l) => assetPath(l.getAttribute('href') || '').split('?')[0] === href)) return Promise.resolve();
   const stamp = /\?v=[\w.-]+/.exec(doc.querySelector('link[rel="stylesheet"][href*="?v="]')?.getAttribute('href') ?? '')?.[0] ?? '';
   return new Promise((resolve) => {
     const link = doc.createElement('link');
     link.rel = 'stylesheet';
-    link.href = `${href}${stamp}`;
+    link.href = assetUrl(`${href}${stamp}`);
     // a stylesheet that fails still lets the helper work (unstyled is better than missing)
     link.onload = () => resolve();
     link.onerror = () => resolve();
@@ -42,13 +45,14 @@ export function bootHarness(S, onReady, { doc = globalThis.document, fetcher = (
     if (!on) { state = 'idle'; return; }            // asked again after the next welcome (a restart may turn it on)
     state = 'loading';
     try {
-      const [m, i18n] = await Promise.all([import('./index.js'), import('../../i18n/harness.js'), loadCss(doc)]);
+      const [m, i18n] = await Promise.all([lazyImport('harvey', () => import('./index.js')),
+        lazyImport('harvey-words', () => import('../../i18n/harness.js')), loadCss(doc)]);
       await i18n.loaded();
       if (state === 'stopped') return;
       state = 'ready';
       onReady(m.createHarnessUi(S));
     } catch (err) {
-      console.error('the helper did not start', err);
+      if (!importFailed(err)) console.error('the helper did not start', err);
       state = 'idle';
     }
   }

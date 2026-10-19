@@ -26,7 +26,7 @@ body.hud-hidden #hud, body.hud-hidden #panels, body.hud-hidden #pointers { displ
 .level-body { padding: 7px 16px 8px 34px; border-radius: 10px var(--r-l) var(--r-l) 10px; display: flex; flex-direction: column; gap: 4px;
   background: linear-gradient(180deg, var(--wood-100), var(--wood-300) 60%, var(--wood-500));
   box-shadow: inset 0 2px 0 rgba(255, 255, 255, .45), inset 0 -3px 0 rgba(90, 50, 21, .35), 0 0 0 3px var(--wood-900), var(--drop); }
-.farm-name { font: 700 1.0625rem/1.05 var(--font-display); letter-spacing: .01em; max-width: 210px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.farm-name { font: 700 1.0625rem/1.05 var(--font-display); padding-bottom: 4px; margin-bottom: -4px; letter-spacing: .01em; max-width: 210px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .farm-name.outlined { --o: var(--wood-900); text-shadow: -1.5px -1.5px 0 var(--o), 1.5px -1.5px 0 var(--o), -1.5px 1.5px 0 var(--o), 1.5px 1.5px 0 var(--o), 0 2.5px 0 var(--o); }
 /* the farm XP bar (owner: "make it better"): a warm track that belongs to the wood plaque, and a fill that ends in a
    rounded, glossy cap instead of a hard cut (it slides in on the compositor, no relayout) */
@@ -48,6 +48,8 @@ body.hud-hidden #hud, body.hud-hidden #panels, body.hud-hidden #pointers { displ
 .players li { display: flex; align-items: center; }
 .players .farmer { display: flex; align-items: center; gap: 0; padding: 0; border: 0; background: none; cursor: pointer; text-align: left; border-radius: var(--r-pill); }
 .players .face { position: relative; z-index: 1; width: 52px; height: 52px; border-radius: 50%; display: grid; place-items: center;
+  /* the track is the face itself: one very wide initial ('﷽') widened it and stretched the portrait (QA r4 L4-09, life-feel) */
+  grid-template-columns: minmax(0, 100%); grid-template-rows: minmax(0, 100%);
   background: radial-gradient(circle at 35% 30%, color-mix(in srgb, var(--pc) 55%, #fff), var(--pc) 60%, var(--pcd));
   box-shadow: 0 0 0 3px var(--paper-50), 0 0 0 6px var(--pcd), 0 4px 0 6px rgba(62, 38, 18, .25);
   font: 800 1.5rem/1 var(--font-display); color: #fff; --o: var(--pcd);
@@ -77,7 +79,7 @@ body.hud-hidden #hud, body.hud-hidden #panels, body.hud-hidden #pointers { displ
 .players .who .nm { min-width: 0; max-width: 128px; overflow: hidden; text-overflow: ellipsis; }
 .players li.me .who .nm { max-width: 96px; }
 .players .who .you { flex: none; font-weight: 600; color: var(--ink-500); }
-.players .title { display: block; max-width: 132px; overflow: hidden; text-overflow: ellipsis; font-weight: 600; font-size: .8125rem; line-height: 16px; height: 16px; color: var(--ink-500); }
+.players .title { display: block; max-width: 172px; overflow: hidden; text-overflow: ellipsis; font-weight: 600; font-size: .8125rem; line-height: 16px; height: 16px; color: var(--ink-500); }
 /* cut sideways only: the trimmed line boxes below end at the baseline, and a vertical clip took the tails of g, p, y */
 .players .who .nm, .players .title { overflow: clip visible; }
 /* under the 1366 px design floor the names give way first; when even that does not fit (hud.js fit) the partner is a face */
@@ -95,7 +97,7 @@ body.hud-hidden #hud, body.hud-hidden #panels, body.hud-hidden #pointers { displ
   .players .tag { gap: 6px; padding-bottom: 2px; }
 }
 /* the portrait: over the initial, faded in once decoded; on the small phone dots it shows the head a little closer */
-.face > .ltr { grid-area: 1 / 1; }
+.face > .ltr { grid-area: 1 / 1; max-width: 100%; overflow: hidden; }
 .face > .pfw { grid-area: 1 / 1; place-self: stretch; overflow: hidden; border-radius: inherit; opacity: 0; container-type: inline-size;
   transition: opacity var(--t-micro) var(--ease-out); pointer-events: none; }
 .face > .pfw > .pf { display: block; width: 100%; height: 100%; object-fit: cover; -webkit-user-drag: none; user-select: none; }
@@ -107,7 +109,7 @@ body.hud-hidden #hud, body.hud-hidden #panels, body.hud-hidden #pointers { displ
 .pmark.has-portrait { background-color: #fff; background-position: 50% 30%; background-size: cover; background-repeat: no-repeat; color: transparent; }
 body.cb-safe .pill-barn.overflow::after { content: '!'; position: absolute; right: -6px; top: -8px; width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center;
   font: 800 .875rem/1 var(--font-display); color: #fff; background: var(--stop-700); box-shadow: 0 0 0 2px #fff; }
-body.cb-safe .seed[aria-selected="true"]::after, body.cb-safe .tool[aria-pressed="true"]::after,
+body.cb-safe .seed[aria-pressed="true"]::after, body.cb-safe .tool[aria-pressed="true"]::after,
 body.cb-safe .ss-seed[aria-pressed="true"]::after, body.cb-safe .sp-seed.last::after { content: '✓'; position: absolute; right: 4px; top: 2px;
   font: 800 .875rem/1 var(--font-ui); color: var(--go-900); }
 body.no-key-hints .tool .key, body.no-key-hints .social-btn .key { display: none; }
@@ -117,6 +119,10 @@ body.cb-safe .players li.offline .face::after { content: 'z'; display: grid; pla
 body.cb-safe .players li.online:not(.me) .face::after { content: '✓'; display: grid; place-items: center; font: 800 .8125rem/1 var(--font-ui); color: #fff; }
 
 .buffs { position: absolute; left: 344px; top: 72px; display: flex; gap: 8px; }
+/* 1.0 (crate power-ups): a row as wide as its chips that wraps before the screen's edge (phones: as mobile.css) */
+.buffs { flex-wrap: wrap; width: max-content; max-width: calc(100vw - 360px); }
+@media (max-width: 600px) { .buffs { max-width: calc(100vw - 12px - var(--sal, 0px) - var(--edge-lane, 0px)); } }
+@media (max-height: 500px) and (min-width: 601px) { .buffs { max-width: calc(100vw - var(--side-l, 0px) - 296px); } }
 .buff { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px 0 6px; white-space: nowrap; border-radius: var(--r-pill); font: 700 .9375rem/1 var(--font-ui);
   font-variant-numeric: tabular-nums; animation: tray-in var(--t-beat) var(--ease-back); }
 .buff.golden { color: var(--ink-900); background: linear-gradient(180deg, #FFF1C2, var(--sun-500)); box-shadow: inset 0 0 0 2px var(--sun-900), 0 0 14px rgba(255, 200, 61, .7), var(--drop-soft); }
@@ -126,7 +132,8 @@ body.cb-safe .players li.online:not(.me) .face::after { content: '✓'; display:
   0%, 100% { box-shadow: inset 0 0 0 2px var(--sun-900), 0 0 10px rgba(255, 200, 61, .55), var(--drop-soft); }
   50% { box-shadow: inset 0 0 0 2px var(--sun-900), 0 0 22px rgba(255, 200, 61, .95), var(--drop-soft); }
 }
-@media (prefers-reduced-motion: reduce) { .buff.golden { animation: none; } }
+@media (prefers-reduced-motion: reduce) { body:not(.motion-set) .buff.golden { animation: none; } }
+body.motion-reduced .buff.golden { animation: none; }
 .buff.spark { color: #fff; background: linear-gradient(180deg, var(--sky-500), var(--sky-700)); box-shadow: inset 0 0 0 2px var(--sky-900), var(--drop-soft); text-shadow: 0 1.5px 0 var(--sky-900); }
 .buff .glyph { width: 22px; height: 22px; }
 
@@ -150,7 +157,7 @@ body.cb-safe .players li.online:not(.me) .face::after { content: '✓'; display:
 @keyframes bump-down { 40% { transform: scale(.93); } }
 
 /* ---- right edge: view buttons --------------------------------------------------------------------------- */
-.hud-right { position: absolute; right: var(--safe); top: 50%; transform: translateY(-50%); display: flex; flex-direction: column; gap: 8px; }
+.hud-right { position: absolute; right: var(--safe); top: calc(var(--safe) + 122px); display: flex; flex-direction: column; gap: 8px; }
 .edge-btn { width: 44px; height: 44px; display: grid; place-items: center; border: 0; border-radius: 13px; padding: 0;
   background: linear-gradient(180deg, var(--wood-100), var(--wood-300) 60%, var(--wood-500));
   box-shadow: inset 0 2px 0 rgba(255, 255, 255, .45), inset 0 -2px 0 rgba(90, 50, 21, .35), 0 0 0 2.5px var(--wood-900), 0 4px 0 2.5px rgba(62, 38, 18, .35);
@@ -215,7 +222,7 @@ body.cb-safe .players li.online:not(.me) .face::after { content: '✓'; display:
 .tool .ico { display: grid; place-items: center; height: 44px; }
 .tool .ic, .tool .glyph { width: 44px; height: 44px; filter: drop-shadow(0 2px 0 rgba(62, 38, 18, .25)); transition: transform var(--t-beat) var(--ease-back); }
 .tool .name { font: 600 .875rem/1 var(--font-ui); color: var(--ink-700); margin-top: 1px; white-space: nowrap; }
-.tool .name.long { letter-spacing: -.02em; }
+.tool .name.long { font-size: .8125rem; letter-spacing: -.02em; }
 .tool .key { position: absolute; left: -5px; top: -6px; width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center;
   font: 700 .875rem/1 var(--font-ui); color: #fff; background: var(--wood-900); box-shadow: 0 0 0 2px var(--paper-50); }
 .tool:hover { transform: translateY(-3px); }
@@ -240,7 +247,7 @@ body.cb-safe .players li.online:not(.me) .face::after { content: '✓'; display:
 .seed { position: relative; flex: none; width: 92px; padding: 6px 4px 7px; border: 0; border-radius: 14px; display: flex; flex-direction: column; align-items: center; gap: 2px;
   background: var(--paper-50); box-shadow: inset 0 0 0 2px var(--paper-edge), 0 3px 0 var(--paper-edge); transition: transform var(--t-micro) var(--ease-out); }
 .seed:hover { transform: translateY(-2px); }
-.seed[aria-selected="true"] { background: #FFF6CC; box-shadow: inset 0 0 0 3px var(--sun-700), 0 3px 0 var(--sun-900); }
+.seed[aria-pressed="true"] { background: #FFF6CC; box-shadow: inset 0 0 0 3px var(--sun-700), 0 3px 0 var(--sun-900); }
 .seed .ic { width: 46px; height: 46px; }
 .seed .nm { font: 700 .9375rem/1.05 var(--font-ui); white-space: nowrap; }
 .seed .row { display: flex; align-items: center; gap: 3px; font: 600 .8125rem/1.1 var(--font-ui); color: var(--ink-700); white-space: nowrap; }
@@ -304,7 +311,7 @@ body.cb-safe .players li.online:not(.me) .face::after { content: '✓'; display:
 #hud .feed li { pointer-events: auto; }
 #hud .feed li.stale { pointer-events: none; }
 #hud .hud-bl:hover .feed li.stale { pointer-events: auto; }
-.feed { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 5px; }
+.feed { position: relative; list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 5px; }
 .feed li { display: flex; align-items: center; gap: 7px; max-width: 100%; padding: 4px 6px 4px 10px; border-radius: 12px;
   background: rgba(255, 251, 238, .92); box-shadow: inset 4px 0 0 var(--fc, var(--wood-500)), 0 0 0 1.5px var(--paper-edge), var(--drop-soft);
   font: 600 .9375rem/1.2 var(--font-ui); color: var(--ink-900);
@@ -314,6 +321,17 @@ body.cb-safe .players li.online:not(.me) .face::after { content: '✓'; display:
 .feed li .actor { font-weight: 700; color: var(--fct, var(--ink-900)); }
 .feed li.stale { opacity: 0; transform: translateX(-8px); pointer-events: none; }
 .hud-bl:hover .feed li.stale, .hud-bl:focus-within .feed li.stale { opacity: .92; transform: none; }
+/* once the corner is hovered (from Together) it holds the hover across its own gaps, so the pointer reaches a faded line's
+   "Show me" (QA r3 S3-C2, coop#2: the 10 px gap between the buttons and the feed let the lines fade again); it gives the
+   farm its clicks back the moment the pointer leaves the corner. Hover only, never focus: a focused button inside
+   (Together after Escape, the Undo chip after a tap) must not turn the corner into a wall that swallows the next farm
+   click; and not for a finger (a phone's hover sticks after a tap) */
+@media not all and (pointer: coarse) {
+  /* only the lines' column and a 12 px bridge over the gap above the buttons: the whole corner took the farm's clicks
+     and wheel (QA r4 S4-13, coop#2: 29,000 px² of farm dead after a hover on Together) */
+  #hud > .hud-bl:hover .feed { pointer-events: auto; }
+  #hud > .hud-bl:hover .feed::after { content: ''; position: absolute; left: 0; right: 0; top: 100%; height: 12px; }
+}
 .feed .thanks { border: 0; padding: 2px 8px; border-radius: var(--r-pill); font: 700 .875rem/1.2 var(--font-ui); color: #B5304C;
   background: #FFE3E8; box-shadow: inset 0 0 0 1.5px #F5A3B5; white-space: nowrap; }
 .feed .thanks:hover { background: #FFD0DA; }
@@ -329,6 +347,9 @@ body.cb-safe .players li.online:not(.me) .face::after { content: '✓'; display:
 .social-btn .key { position: absolute; right: -5px; bottom: -4px; min-width: 20px; height: 20px; padding: 0 4px; border-radius: 10px; display: grid; place-items: center;
   font: 700 .875rem/1 var(--font-ui); color: #fff; background: var(--wood-900); box-shadow: 0 0 0 2px var(--paper-50); }
 .social-btn .badge { position: absolute; top: -7px; right: -7px; }
+/* a surprise waits for me: a dot on Together and on the gift's door (QA r3 S3-C2: nothing led to the box after 8 s) */
+.social-btn.has-gift::before { content: ''; position: absolute; z-index: 1; right: -3px; top: -3px; width: 14px; height: 14px; border-radius: 50%;
+  background: var(--stop-500, #E2483D); box-shadow: 0 0 0 2px var(--paper-50); pointer-events: none; }
 
 .chat-box { display: flex; gap: 8px; align-items: center; width: min(360px, 80vw); padding: 8px; border-radius: var(--r-m);
   box-shadow: inset 0 0 0 2px var(--paper-edge), 0 0 0 2.5px var(--wood-700), var(--drop); animation: tray-in var(--t-beat) var(--ease-back); }
@@ -402,13 +423,24 @@ body.cb-safe .players li.online:not(.me) .face::after { content: '✓'; display:
 .tracker-mode[aria-pressed="true"] > span::before { content: '▴'; }
 .tracker-mode:hover { background: var(--wood-900); }
 /* all the letters in one chip; hover, focus or a tap opens their painted cards over the farm */
-.goal-slot.story-group { height: 28px; }
+.goal-slot.chip.story-group { height: auto; min-height: 28px; padding: 0; }
+/* release 1.0 M12a (ui-shell P-13, integrator): the letters' chip never ellipsises its title ("Ръце на по…" in BG at
+   1366): it sits in the flow and takes a second line; its cards still open over it (.story-pop is absolute) */
+.goal-slot.story-group > .goal.story-sum { position: relative; width: 100%; }
+.goal-slot.story-group > .goal.story-sum .gt { white-space: normal; overflow: visible; text-overflow: clip; overflow-wrap: anywhere; }
 .story-sum .more-n { flex: none; margin-left: auto; padding: 2px 7px; border-radius: var(--r-pill); font: 800 .8125rem/1.2 var(--font-ui); color: #fff; background: var(--stop-700); }
 .story-sum.bang::after { content: '!'; position: absolute; right: -6px; top: -6px; width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center;
   font: 800 .875rem/1 var(--font-display); color: var(--ink-900); background: var(--sun-500); box-shadow: 0 0 0 2px var(--sun-900); animation: bob 500ms var(--ease-inout) infinite alternate; }
 .story-pop { display: none; position: absolute; left: 0; top: 0; width: 100%; z-index: 5; flex-direction: column; gap: 8px; }
 .story-group:hover > .story-pop, .story-group:focus-within > .story-pop, .story-group.open > .story-pop { display: flex; }
-.story-group:hover > .story-sum, .story-group:focus-within > .story-sum, .story-group.open > .story-sum { visibility: hidden; }
+/* release 1.0 M13a (perf-a11y#7): a focused summary must stay focusable (visibility: hidden blurred it, focus fell to
+   <body>): it fades under the pop for the keyboard; hover and tap still hide it */
+.story-group:hover > .story-sum, .story-group.open > .story-sum { visibility: hidden; }
+/* QA r1 S-11 (ap#1): for the keyboard the summary stays in sight with its focus ring (an opacity-0 summary over cards
+   still sliding in from opacity 0 read as a blank card) and the letters open under it, whole at once: no goal-in
+   slide inside the pop or under a focus */
+.story-group:focus-within:not(:hover):not(.open) > .story-pop { top: calc(100% + 8px); }
+.story-pop .goal, .story-group:focus-within .goal { animation: none; }
 .story-pop > .goal-slot > .goal { box-shadow: inset 0 0 0 2px var(--paper-edge), 0 0 0 2.5px var(--wood-700), 0 8px 18px rgba(62, 38, 18, .35); }
 .goal .mini { display: none; }
 
@@ -443,12 +475,14 @@ body.cb-safe .players li.online:not(.me) .face::after { content: '✓'; display:
 /* QA2 UI-03: in the compact tracker everything under NOW folds into ONE row (tags and icons, one count of letters).
    Hover, keyboard focus or a tap opens the chips right under it, over the farm; each chip opens into its card as
    before. The row stays in view while open (its own focus never hides). */
-.goal-rest { position: relative; height: 32px; }
-.goal-rest-sum { position: relative; display: flex; align-items: center; gap: 8px; width: 100%; height: 32px; padding: 0 10px 0 6px; border: 0;
+.goal-rest { position: relative; min-height: 32px; }
+.goal-rest-sum { position: relative; display: flex; align-items: center; gap: 8px; width: 100%; min-height: 32px; padding: 3px 10px 3px 6px; border: 0;
   border-radius: var(--r-m); text-align: left; cursor: pointer;
   background: radial-gradient(120% 90% at 30% 30%, var(--paper-50), var(--paper-100) 60%, var(--paper-200));
   box-shadow: inset 0 0 0 2px var(--paper-edge), 0 0 0 2px var(--wood-700), 0 3px 0 2px rgba(62, 38, 18, .3); }
-.goal-rest-sum .segs { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; overflow: hidden; }
+/* the row wraps inside itself when a language's tags do not fit one line (ui-panels' P7 clip: the letters tag was cut
+   at 1366 x 768; the 1366 BG shots then showed a wrapped second line spilling out of a 32 px row: it grows instead) */
+.goal-rest-sum .segs { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; flex: 1; min-width: 0; overflow: visible; }
 .goal-rest-sum .seg { display: inline-flex; align-items: center; gap: 4px; flex: none; }
 .goal-rest-sum .tag { padding: 3px 6px; border-radius: 7px; font: 800 .8125rem/1 var(--font-display); letter-spacing: .04em; color: #fff; }
 .goal-rest-sum .seg[data-slot="now"] .tag { background: var(--go-900); }
@@ -462,8 +496,9 @@ body.cb-safe .players li.online:not(.me) .face::after { content: '✓'; display:
 .goal-rest-sum .chev { flex: none; font: 800 .875rem/1 var(--font-ui); color: var(--ink-700); transition: transform var(--t-micro) var(--ease-out); }
 .goal-rest-sum.bang::after { content: '!'; position: absolute; right: -6px; top: -6px; width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center;
   font: 800 .875rem/1 var(--font-display); color: var(--ink-900); background: var(--sun-500); box-shadow: 0 0 0 2px var(--sun-900); animation: bob 500ms var(--ease-inout) infinite alternate; }
-@media (prefers-reduced-motion: reduce) { .goal-rest-sum.bang::after { animation: none; } }
-.goal-rest-pop { display: none; position: absolute; left: 0; top: 32px; width: 100%; z-index: 5; flex-direction: column; gap: 6px; padding-top: 6px; }
+@media (prefers-reduced-motion: reduce) { body:not(.motion-set) .goal-rest-sum.bang::after { animation: none; } }
+body.motion-reduced .goal-rest-sum.bang::after { animation: none; }
+.goal-rest-pop { display: none; position: absolute; left: 0; top: 100%; width: 100%; z-index: 5; flex-direction: column; gap: 6px; padding-top: 6px; }
 .goal-rest:hover > .goal-rest-pop, .goal-rest:focus-within > .goal-rest-pop, .goal-rest.open > .goal-rest-pop { display: flex; }
 .goal-rest:hover .chev, .goal-rest:focus-within .chev, .goal-rest.open .chev { transform: rotate(180deg); }
 .goal-rest-pop > .goal-slot.chip > .goal, .goal-rest-pop > .story-group > .story-sum { box-shadow: inset 0 0 0 2px var(--paper-edge), 0 0 0 2.5px var(--wood-700), 0 6px 14px rgba(62, 38, 18, .35); }
@@ -529,8 +564,7 @@ body.cb-safe .conn.ok::before { content: '✓'; font: 800 1rem/1 var(--font-disp
   animation: toast-in var(--t-beat) var(--ease-back); }
 
 .banners { position: absolute; top: 76px; right: 96px; display: flex; flex-direction: column; align-items: flex-end; gap: 10px; z-index: 5; }
-.unlock-banner { position: relative; width: 340px; padding: 34px 14px 12px; border-radius: var(--r-l);
-  animation: banner-slide 400ms var(--ease-back) both; }
+.unlock-banner { position: relative; width: 340px; padding: 34px 14px 12px; border-radius: var(--r-l); }   /* entrance: feel.css (M19) */
 .unlock-banner .ribbon { position: absolute; left: 50%; top: -14px; transform: translateX(-50%); padding: 5px 22px 7px; white-space: nowrap;
   font: 800 1.25rem/1 var(--font-display); color: #fff; --o: var(--stop-900); border-radius: 10px;
   background: linear-gradient(180deg, var(--stop-300), var(--stop-500) 50%, var(--stop-700));
@@ -544,9 +578,6 @@ body.cb-safe .conn.ok::before { content: '✓'; font: 800 1rem/1 var(--font-disp
 .unlock-banner .acts { display: flex; justify-content: center; gap: 10px; margin-top: 10px; }
 .unlock-banner .x { position: absolute; right: -10px; top: -10px; }
 .card-chip { display: none; }            /* a phone's compact system card only (css/mobile.css) */
-.unlock-banner.leaving { animation: banner-out 260ms var(--ease-in) both; }
-@keyframes banner-slide { from { opacity: 0; transform: translateX(60px) rotate(3deg); } }
-@keyframes banner-out { to { opacity: 0; transform: translateX(60px); } }
 .banner-more { align-self: flex-end; padding: 3px 12px 4px; border-radius: var(--r-pill); pointer-events: none;
   font: 700 .875rem/1.2 var(--font-ui); color: #fff; background: rgba(90, 50, 21, .86); box-shadow: var(--drop-soft); }
 .unlock-banner .ribbon { display: inline-flex; align-items: center; gap: 8px; }
@@ -568,17 +599,16 @@ body.cb-safe .conn.ok::before { content: '✓'; font: 800 1rem/1 var(--font-disp
 body.motion-reduced .unlock-banner[data-kind="loot"] .thing .ic { animation: none; }
 .bloom-banner { width: 340px; display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-radius: var(--r-m);
   background: linear-gradient(180deg, #F2FFE6, #D7F5C0); box-shadow: inset 0 0 0 2px var(--go-500), 0 0 0 3px var(--go-900), var(--drop);
-  font: 600 .9375rem/1.3 var(--font-ui); animation: banner-slide 400ms var(--ease-back) both; }
+  font: 600 .9375rem/1.3 var(--font-ui); }
 .bloom-banner b { display: block; font: 800 1.125rem/1.1 var(--font-display); color: var(--go-900); }
 .bloom-banner .petal { flex: none; width: 46px; height: 46px; animation: spin 6s linear infinite; }
 
 .rosette { position: relative; display: flex; align-items: center; gap: 12px; width: 340px; padding: 10px 18px 10px 12px; border-radius: var(--r-l);
   background: linear-gradient(180deg, var(--paper-50), var(--paper-100)); box-shadow: inset 0 0 0 2px var(--paper-edge), 0 0 0 3px var(--ribbon-blue), var(--drop);
-  transform-origin: 100% 0; animation: rosette-in 300ms var(--ease-out) both, swing 2s var(--ease-out) 300ms; }
+  transform-origin: 100% 0; }
 .rosette .medal { width: 64px; height: 76px; flex: none; }
 .rosette b { display: block; font: 800 1.25rem/1.1 var(--font-display); color: var(--ink-900); }
 .rosette span { font: 600 .9375rem/1.25 var(--font-ui); color: var(--ink-700); }
-@keyframes rosette-in { from { transform: translateX(110%); } }
 @keyframes swing { 0% { rotate: 0deg; } 15% { rotate: 6deg; } 35% { rotate: -4deg; } 55% { rotate: 2.5deg; } 75% { rotate: -1deg; } 100% { rotate: 0deg; } }
 
 /* ---- level-up celebration (confirmed-only; pointer-events: none so it never blocks a drag) --------------- */
@@ -612,10 +642,23 @@ body.motion-reduced .unlock-banner[data-kind="loot"] .thing .ic { animation: non
 .pointer { position: absolute; left: 0; top: 0; width: 0; height: 0; will-change: transform; }
 .pointer .arrow { position: absolute; left: -24px; top: -76px; width: 48px; height: 64px; animation: point-bob 500ms var(--ease-inout) infinite alternate;
   filter: drop-shadow(0 4px 0 rgba(62, 38, 18, .35)); }
-.pointer.edge .arrow { animation: none; }
+/* off screen (QA r1 S-15): no target ring at the screen edge (on a phone it sat on empty grass and read as the
+   target); the arrow nudges toward the target instead, a cue of its own */
+.pointer.edge .arrow { animation: edge-nudge 600ms var(--ease-inout) infinite alternate; }
+.pointer.edge .halo { display: none; }
+/* a tap on the edge arrow, or just past its point, brings its target into view (tutorial.js; QA r4 S4-04, fbp#2: a
+   tap where it pointed did nothing) */
+.pointer.edge::after { content: ''; position: absolute; left: -28px; top: -80px; width: 56px; height: 96px; pointer-events: auto; cursor: pointer; }
+.pointer.edge.under-card::after, .pointer.edge.no-tap::after { pointer-events: none; }
+@keyframes edge-nudge { to { transform: translateY(10px); } }
 .pointer .halo { position: absolute; left: -34px; top: -14px; width: 68px; height: 28px; border-radius: 50%; border: 4px solid rgba(255, 229, 138, .95);
   box-shadow: 0 0 12px rgba(255, 200, 61, .8); animation: ping-ring 1.2s var(--ease-out) infinite; }
 .pointer.ui .halo { display: none; }
+/* the arrow steps aside while a quest card covers its plot (tutorial.js place(): the card's words stay readable) */
+.pointer.under-card { opacity: 0; transition: opacity 160ms; }
+/* the level-up celebration is no time for a hover card over its star and number (QA r1 S-22): it waits for the next
+   pointer move (hud.js) */
+body.celebrating #tip { visibility: hidden; }
 @keyframes point-bob { to { transform: translateY(-12px); } }
 .coach-slot { display: flex; flex-direction: column; align-items: center; gap: 8px; }
 .coach-slot:empty { display: none; }
@@ -660,12 +703,29 @@ body.tray-open .coach .prog { margin-top: 3px; }
 body.tray-open .coach .acts .btn { font-size: .875rem; padding: 6px 10px 8px; }
 body.tray-open .coach-slot .hint { display: none; }
 body.tray-open #hud .feed { display: none; }
+/* a dock door is the coach's target (desktop): her card docks left of the toolbar like an open tray, so the arrow from the
+   open farm never lands on her words or her "⋯" (tutorial.js body.coach-aside; QA r2 S-08, jde#10) */
+body.coach-aside:not(.tray-open) .coach-slot { position: absolute; right: calc(100% + 14px); bottom: 62px; width: min(380px, calc(50vw - 140px));
+  align-items: stretch; }
+body.coach-aside:not(.tray-open) .coach { width: 100%; padding: 5px; }
+body.coach-aside #hud .feed { display: none; }
 .hint { max-width: min(460px, 80vw); padding: 9px 16px; border-radius: var(--r-m);
   font: 600 1rem/1.3 var(--font-ui); background: var(--paper-50); box-shadow: inset 0 0 0 2px var(--paper-edge), 0 0 0 2.5px var(--sky-700), var(--drop);
   animation: toast-in var(--t-beat) var(--ease-back); pointer-events: none; }
 .hint b { color: var(--sky-900); }
-.ui-spot { position: relative; z-index: 2; animation: spot 1s var(--ease-inout) infinite alternate; }
-@keyframes spot { from { box-shadow: 0 0 0 0 rgba(255, 200, 61, .9); } to { box-shadow: 0 0 0 10px rgba(255, 200, 61, 0); } }
+/* a panel's first-use tip: a strip inside its own sheet, between the tabs and the body, with its own ✕ (QA r3 S3-12:
+   in the coach column it lay under every modal sheet and was used up unseen) */
+.hh-panel .panel-tip { flex: none; display: flex; align-items: center; gap: 10px; max-width: none; margin: 0 0 8px; padding: 5px 5px 5px 14px;
+  pointer-events: auto; }
+.hh-panel .panel-tip[hidden] { display: none; }   /* on another tab than its own (QA r4 S4-15) */
+.panel-tip .panel-tip-t { flex: 1; min-width: 0; }
+.panel-tip-x { flex: none; width: 36px; height: 36px; border: 0; border-radius: 50%; display: grid; place-items: center; background: transparent;
+  font: 800 1rem/1 var(--font-ui); color: var(--ink-700); cursor: pointer; }
+.panel-tip-x:hover, .panel-tip-x:focus-visible { background: #FFF6CC; }
+/* the step's HUD target pulses a ring OUTSIDE its own look (an outline): animating box-shadow replaced the tile's inset
+   border and its bottom edge, and the tile read as greyed out (QA r2 S-10, fbp#6) */
+.ui-spot { position: relative; z-index: 2; outline: 3px solid rgba(255, 200, 61, .9); outline-offset: 0; animation: spot 1s var(--ease-inout) infinite alternate; }
+@keyframes spot { from { outline-color: rgba(255, 200, 61, .9); outline-offset: 0; } to { outline-color: rgba(255, 200, 61, 0); outline-offset: 9px; } }
 
 /* ---- world tooltip (hover after 250 ms) ------------------------------------------------------------------ */
 .wtip { min-width: 170px; }
@@ -711,11 +771,19 @@ body.tray-open #hud .feed { display: none; }
   max-width: calc(100% - 90px); padding: 8px 30px 11px; border-radius: var(--r-m); white-space: nowrap;
   font: 800 1.875rem/1 var(--font-display); color: #fff; --o: var(--wood-900);
   text-shadow: -2px -2px 0 var(--o), 0 -2px 0 var(--o), 2px -2px 0 var(--o), -2px 0 0 var(--o), 2px 0 0 var(--o), -2px 2px 0 var(--o), 0 2px 0 var(--o), 2px 2px 0 var(--o), 0 4px 0 var(--o); }
-.hh-panel-title-text { overflow: hidden; text-overflow: ellipsis; padding-bottom: 3px; }
+.hh-panel-title-text { overflow: hidden; text-overflow: ellipsis; padding-bottom: 7px; margin: 0 0 -4px; font: inherit; letter-spacing: inherit; }
 .hh-panel-title .ic { width: 40px; height: 40px; margin: -10px 0 -8px -10px; filter: drop-shadow(0 2px 0 rgba(62, 38, 18, .4)); }
 .hh-panel.size-side .hh-panel-title { font-size: 1.625rem; }
 .hh-panel-close { position: absolute; right: -14px; top: -14px; z-index: 3; }
 .hh-tabs { display: flex; gap: 4px; padding: 0 10px; margin-bottom: -2px; overflow-x: auto; scrollbar-width: none; flex: none; position: relative; z-index: 1; }
+/* tabs past an edge of the strip: a "‹" / "›" on a fade there, pinned while the strip scrolls (ui/dom.js tabCue; QA r4
+   S4-07, fbp#6: the Market's last three tabs and the Journal's sat off a 360 screen with no cue) */
+.hh-tabs::before, .hh-tabs::after { content: ''; position: sticky; z-index: 2; flex: none; width: 34px; display: grid; place-items: center;
+  visibility: hidden; font: 800 1.375rem/1 var(--font-ui); color: var(--wood-900); }
+/* pinned over the strip's side padding too (--tab-pad: its padding; a sliver of the next tab showed past the cue) */
+.hh-tabs::before { content: '‹' / ''; left: calc(-1 * var(--tab-pad, 10px)); margin-right: -38px; background: linear-gradient(90deg, var(--wood-300) 55%, transparent); }
+.hh-tabs::after { content: '›' / ''; right: calc(-1 * var(--tab-pad, 10px)); margin-left: -38px; background: linear-gradient(270deg, var(--wood-300) 55%, transparent); }
+.hh-tabs.more-l::before, .hh-tabs.more-r::after { visibility: visible; }
 .hh-tab { flex: none; display: flex; align-items: center; gap: 5px; padding: 7px 13px 8px; border: 0; border-radius: 12px 12px 0 0;
   font: 700 .9375rem/1 var(--font-ui); color: var(--ink-700); background: linear-gradient(180deg, var(--wood-50), var(--paper-300));
   box-shadow: inset 0 2px 0 rgba(255, 255, 255, .5), inset 0 0 0 2px var(--wood-300); transition: transform var(--t-micro); }
@@ -736,6 +804,28 @@ body.tray-open #hud .feed { display: none; }
   border-radius: 0 0 var(--r-m) var(--r-m); background: linear-gradient(to bottom, rgba(248, 230, 184, 0), rgba(239, 212, 154, .95));
   opacity: 0; transition: opacity var(--t-beat); }
 .hh-panel.more-below .scroll-fade { opacity: 1; }
+/* a text field has the focus (the keyboard is up on a phone): room under the last button so it can scroll clear of
+   the fade above (QA r1 S-13; ui/index.js keepInView) */
+.hh-panel.field-on .hh-panel-scroll { padding-bottom: 48px; }
+/* a very short screen with the keyboard up (a phone on its side: 181 px left): the box takes two lines while it has the
+   focus, so it and its button both fit under the sheet's title (QA r1 S-13) */
+@media (max-height: 300px) {
+  .hh-panel.field-on textarea:focus { height: 2.6em; min-height: 0; }
+  .hh-panel.field-on:has(textarea:focus, input:focus) > .scroll-fade { display: none; }
+  /* the tab strip steps aside while the box has the focus (Harvey's sheet: title, tabs, box and Ask are 201 px) */
+  .hh-panel.field-on:has(textarea:focus, input:focus) > .hh-tabs { display: none; }
+  /* the Market's quantity: the slip stands still at the top of the sheet (sticky), so no scroll can bring Sell up; while
+     the field (or Sell, the next press) has the focus the field and Sell share one row under the goods' name, and the
+     slider, the quick chips and the sum fold (QA r3 S3-16, oib#4: "Продай 10" stayed under the keyboard, 120 px below
+     the field, in a 96 px sheet) */
+  #panel-market .pn-slip:has(.pn-num:focus, .pn-sell-btn:focus) { flex-flow: row wrap; align-items: center; }
+  #panel-market .pn-slip:has(.pn-num:focus, .pn-sell-btn:focus) > .pn-slip-head { flex: 1 1 100%; }
+  #panel-market .pn-slip:has(.pn-num:focus, .pn-sell-btn:focus) > :is(.pn-quick, .pn-slip-sum, .pn-slip-wanted, .pn-slip-note) { display: none; }
+  #panel-market .pn-slip:has(.pn-num:focus, .pn-sell-btn:focus) .pn-range { display: none; }
+  #panel-market .pn-slip:has(.pn-num:focus, .pn-sell-btn:focus) > .pn-slip-qty { flex: 0 0 60px; grid-template-columns: 60px; }
+  #panel-market .pn-slip:has(.pn-num:focus, .pn-sell-btn:focus) > .pn-act { flex: 1 1 0; min-width: 0; }
+  #panel-market .pn-slip:has(.pn-num:focus, .pn-sell-btn:focus) .pn-sell-btn { padding: 8px 10px; font-size: 1rem; }
+}
 .hh-panel-body.paper { background: none; box-shadow: none; border-radius: 0; }
 .hh-panel-body.paper::before { display: none; }
 
@@ -783,6 +873,15 @@ body.tray-open #hud .feed { display: none; }
 
 .settings { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 22px; }
 .settings h3 { grid-column: 1 / -1; margin: 6px 0 -4px; font: 800 1.25rem/1 var(--font-display); color: var(--wood-700); }
+/* the key list folded on a phone without a keyboard (QA r1 S-35): its heading opens it */
+.settings .set-fold { grid-column: 1 / -1; }
+.settings .set-fold > summary { min-height: 44px; display: flex; align-items: center; gap: 8px; cursor: pointer;
+  font: 800 1.25rem/1 var(--font-display); color: var(--wood-700); }
+/* flex drops the disclosure triangle: a ▸ / ▾ of its own says the heading opens (QA r2 S-19, oib#9) */
+.settings .set-fold > summary::-webkit-details-marker { display: none; }
+.settings .set-fold > summary::after { content: '▸'; font: 800 1.125rem/1 var(--font-ui); color: var(--wood-700); }
+.settings .set-fold[open] > summary::after { content: '▾'; }
+.settings .set-fold > .keys { margin-top: 6px; }
 .set-row { display: flex; flex-direction: column; gap: 6px; }
 .set-row > label, .set-row > .lbl { font: 700 .9375rem/1.2 var(--font-ui); color: var(--ink-900); }
 .set-row .help { font: 500 .875rem/1.3 var(--font-ui); color: var(--ink-500); }
@@ -807,6 +906,7 @@ body.tray-open #hud .feed { display: none; }
 .keys li { display: flex; align-items: center; gap: 8px; font: 600 .9375rem/1.2 var(--font-ui); }
 kbd { display: inline-grid; place-items: center; min-width: 30px; height: 28px; padding: 0 7px; border-radius: 7px; font: 700 .875rem/1 var(--font-ui); color: var(--ink-900);
   background: linear-gradient(180deg, #fff, var(--paper-200)); box-shadow: inset 0 0 0 1.5px var(--paper-edge), 0 2px 0 var(--paper-edge); }
+.keys li kbd { flex: none; }   /* a key cap never shrinks below its words ("Ctrl+Z", P7 gate) */
 
 /* ---- slot picker (first screen) --------------------------------------------------------------------------- */
 /* The first screen: a painted title scene (sun, clouds, rolling hills) so the farm feels alive before it loads. */
@@ -839,6 +939,7 @@ kbd { display: inline-grid; place-items: center; min-width: 30px; height: 28px; 
 .slot { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; padding: 12px; border-radius: var(--r-m); text-align: left;
   background: var(--paper-50); box-shadow: inset 0 0 0 2px var(--paper-edge), 0 3px 0 var(--paper-edge); }
 .slot .face { flex: none; width: 46px; height: 46px; border-radius: 50%; display: grid; place-items: center; font: 800 1.375rem/1 var(--font-display); color: #fff;
+  grid-template-columns: minmax(0, 100%); grid-template-rows: minmax(0, 100%);
   background: radial-gradient(circle at 35% 30%, color-mix(in srgb, var(--pc) 55%, #fff), var(--pc) 60%, var(--pcd)); box-shadow: 0 0 0 3px #fff, 0 0 0 5px var(--pcd); }
 .slot .face { --o: var(--pcd); text-shadow: -1.5px -1.5px 0 var(--o), 1.5px -1.5px 0 var(--o), -1.5px 1.5px 0 var(--o), 1.5px 1.5px 0 var(--o), 0 2px 0 var(--o); }
 .slot[data-slot="p2"] .face { border-radius: 12px; }
@@ -884,11 +985,20 @@ kbd { display: inline-grid; place-items: center; min-width: 30px; height: 28px; 
 
 /* art lane (public/assets/art): the painted valley behind the boot screen and the slot picker, the carved logo.
    The drawn sky above stays the fallback while the paintings load. */
-#boot.modal-layer { background: url('/assets/art/welcome-couple_960.webp') center / cover no-repeat, #F6C98F; }
-#slot-picker.modal-layer { background: url('/assets/art/welcome_960.webp') center / cover no-repeat, #F6C98F; }
+/* release 1.0 S8: under each painting its 32 x 18 copy (index.html --lqip-*), blurred by the browser's scaling: the
+   painting shows from the first paint instead of a flat peach until 7-30 s */
+#boot.modal-layer { background: url('../assets/art/welcome-couple_960.webp') center / cover no-repeat, var(--lqip-boot, none) center / cover no-repeat, #F6C98F; }
+#slot-picker.modal-layer { background: url('../assets/art/welcome_960.webp') center / cover no-repeat, var(--lqip-slot, none) center / cover no-repeat, #F6C98F; }
 @media (min-width: 960px), (min-resolution: 1.5dppx) {
-  #boot.modal-layer { background-image: url('/assets/art/welcome-couple.webp'); }
-  #slot-picker.modal-layer { background-image: url('/assets/art/welcome.webp'); }
+  #boot.modal-layer { background-image: url('../assets/art/welcome-couple.webp'), var(--lqip-boot, none); }
+  #slot-picker.modal-layer { background-image: url('../assets/art/welcome.webp'), var(--lqip-slot, none); }
+}
+/* a portrait phone sees a quarter of the 16:9 painting: centred, that was the farmhouse and the waving man alone. At
+   70 % the couple share the frame (both faces sit at 0.52-0.78 of the painting on an iPhone 13 and at 360 x 640; QA r2
+   S-16, va#4, ap#8); the chimney smoke follows the same anchor (--bx, the welcome smoke below) */
+@media (orientation: portrait) {
+  #boot.modal-layer { background-position: 70% 50%, 70% 50%; }
+  #boot > .smoke .plume { --bx: 70; }
 }
 #boot .boot-card { align-self: start; margin-top: 4vh; }
 .boot-logo { display: block; width: min(560px, 70vw); height: auto; filter: drop-shadow(0 6px 10px rgba(62, 38, 18, .35)); }
@@ -922,7 +1032,10 @@ kbd { display: inline-grid; place-items: center; min-width: 30px; height: 28px; 
 .sp-art .ic { width: 38px; height: 38px; filter: drop-shadow(0 2px 0 rgba(62, 38, 18, .22)); }
 .sp-seed:hover .sp-art .ic { transform: rotate(-6deg) scale(1.06); transition: transform var(--t-beat) var(--ease-back); }
 .sp-nm { font: 700 .875rem/1.1 var(--font-ui); white-space: nowrap; }
-.sp-meta { display: flex; align-items: center; gap: 3px; font: 600 .8125rem/1.1 var(--font-ui); color: var(--ink-700); white-space: nowrap; }
+/* the price, then the clock it is ready at (D3); the two wrap onto two lines rather than spill (M12a, ux-phone#2) */
+.sp-meta { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 0 5px; font: 600 .8125rem/1.15 var(--font-ui); color: var(--ink-700); }
+.sp-price { display: inline-flex; align-items: center; gap: 2px; white-space: nowrap; }
+.sp-ready { color: var(--ink-500); text-align: center; }
 .sp-meta b { font-weight: 800; color: var(--ink-900); }
 .sp-meta .ic { width: 15px; height: 15px; }
 .sp-dot { color: var(--ink-500); }
@@ -987,6 +1100,7 @@ body.hud-hidden .crop-cursor { display: none; }
 /* ---- welcome smoke: the painting's farmhouse chimney (and one village chimney) smoke -------------------------------
    The boot and slot-picker paintings are cover-scaled (`center / cover`), so one painting pixel is
    --u = max(100cqw / 1920, 100cqh / 1080) and a painting point (x, y) sits at 50cqw + (x - 960) --u, 50cqh + (y - 540) --u
+   (a painting anchored at --bx % across, the portrait boot: --bx cqw + (x - 19.2 --bx) --u)
    at every window size and aspect (container units of the full-layer .smoke box, so the UI scale's zoom is included).
    The painted plume was painted out of the farmhouse sky (welcome*.webp): these puffs ARE the plume. Each drifts along
    the old plume's path in percentages of its own size (static keyframes, transform and opacity only: the compositor
@@ -996,7 +1110,7 @@ body.hud-hidden .crop-cursor { display: none; }
 .modal-layer:not(.painted) > .smoke { opacity: 0; }
 .modal-layer > .smoke { transition: opacity 700ms var(--ease-out); }
 .smoke .plume { --u: max(100cqw / 1920, 100cqh / 1080); position: absolute; width: 0; height: 0;
-  left: calc(50cqw + (var(--x) - 960) * var(--u)); top: calc(50cqh + (var(--y) - 540) * var(--u));
+  left: calc(var(--bx, 50) * 1cqw + (var(--x) - var(--bx, 50) * 19.2) * var(--u)); top: calc(50cqh + (var(--y) - 540) * var(--u));
   transform-origin: 0 0; animation: smoke-wind 9s var(--ease-inout) infinite alternate; }
 /* painting px: the top of the farmhouse chimney's cap (868, 283); the village chimney left of the church (1616, 364) */
 .plume--farm { --x: 868; --y: 281; --s: 44; }
@@ -1065,9 +1179,10 @@ body.hud-hidden .crop-cursor { display: none; }
 @keyframes smoke-wind { from { transform: skewX(-2deg); } to { transform: skewX(-11deg); } }
 /* reduced motion (the system setting or the game's own): the plume stands still, each puff at its own phase */
 @media (prefers-reduced-motion: reduce) {
-  .modal-layer > .smoke .plume, .modal-layer > .smoke i { animation-play-state: paused !important; animation-iteration-count: infinite !important; }
-  .modal-layer > .smoke i { animation-duration: 7.8s !important; }
-  .modal-layer > .smoke .plume { animation-duration: 9s !important; }
+  body:not(.motion-set) .modal-layer > .smoke .plume, body:not(.motion-set) .modal-layer > .smoke i {
+    animation-play-state: paused !important; animation-iteration-count: infinite !important; }
+  body:not(.motion-set) .modal-layer > .smoke i { animation-duration: 7.8s !important; }
+  body:not(.motion-set) .modal-layer > .smoke .plume { animation-duration: 9s !important; }
 }
 body.motion-reduced .modal-layer > .smoke .plume, body.motion-reduced .modal-layer > .smoke i {
   animation-play-state: paused !important; animation-iteration-count: infinite !important; }
@@ -1094,7 +1209,7 @@ body.motion-reduced .modal-layer > .smoke .plume { animation-duration: 9s !impor
   color: var(--ink-900); font: 600 .875rem/1.25 var(--font-ui); transform-origin: var(--tail, 50%) 100%;
   background:
     radial-gradient(120% 90% at 50% 30%, transparent 55%, rgba(239, 212, 154, .5) 88%, var(--paper-300) 100%),
-    url('/assets/art/parchment.webp') 0 0 / 512px 512px repeat, var(--paper-100);
+    url('../assets/art/parchment.webp') 0 0 / 512px 512px repeat, var(--paper-100);
   box-shadow: inset 0 0 0 2px var(--paper-edge), 0 0 0 4px var(--wood-300), 0 0 0 6.5px var(--wood-900), 0 10px 22px rgba(62, 38, 18, .38); }
 .ih.below { transform-origin: var(--tail, 50%) 0; }
 .ih.left { transform-origin: 100% var(--tail, 50%); }
@@ -1206,3 +1321,255 @@ html[lang="bg"] .seed { width: auto; min-width: 92px; }
   background: var(--paper-50); color: var(--ink-900); box-shadow: inset 0 0 0 1.5px var(--paper-edge);
   font: 800 .8125rem/1.3 var(--font-ui); font-variant-numeric: tabular-nums; text-align: center; pointer-events: none; }
 .ss-seed .ss-n.zero { opacity: .6; }
+
+
+/* ==== release 1.0: the simpler shell (ui-shell S1-S9a; ux-first "A simpler shell") =================================== */
+/* the XP numbers never wrap (M12a, copy#3): a second line was cut in half in Bulgarian */
+#hud-xp-text, #hud-xp-text > span { white-space: nowrap; }
+
+/* top right: Coins and the Barn only (S1). Hearts live on the Farm book's You page (M30); Acorns show while a price
+   needs them (the Market is open: hud.js body.acorn-price); Beauty moved into the level card's hover and the You page */
+#hud-hearts-pill { display: none; }
+#hud-acorns-pill { display: none; }
+body.acorn-price #hud-acorns-pill { display: inline-flex; }
+#hud > #hud-beauty { display: none; }
+/* the pills' "+" read as "buy currency": a small chevron says "opens" (S1, ux-first#19) */
+.pill > .more { width: 18px; height: 24px; margin-right: 2px; border-radius: 0; color: var(--ink-500); background: none; box-shadow: none; }
+.pill > .more svg { display: block; width: 12px; height: 12px; }
+
+/* Settings is the top of the right edge, in a slot of its own (M3, ux-first#3): nothing covers it, its menu opens
+   downward to the left */
+.hud-gear { position: absolute; right: var(--safe); top: calc(var(--safe) + 66px); }
+/* the open gear menu stands over the right column, which rises to z 6 while Harvey's pill shows (harness.css): the pill
+   covered "Settings" and a click there opened Harvey (QA r2 S-03, jde#4; M3 Settings always reachable) */
+.hud-gear:has(.edge-menu:not([hidden])) { z-index: 7; }
+.hud-gear .edge-menu { top: 0; bottom: auto; transform-origin: 100% 0; }
+
+/* the dock: four big buttons and the Farm book (S1); the small buttons live in the Farm book */
+#hud > .dock-minis { display: none; }
+.dock .m-menu-btn { position: relative; width: 84px; height: 78px; border: 0; padding: 4px 2px 0; display: flex; flex-direction: column;
+  align-items: center; justify-content: flex-start; gap: 0; border-radius: 16px; color: var(--wood-900);
+  background: radial-gradient(110% 90% at 50% 30%, #FFF6DD, var(--paper-100) 55%, var(--paper-300));
+  box-shadow: inset 0 0 0 2px var(--paper-edge), inset 0 -4px 0 rgba(160, 110, 40, .25), 0 4px 0 var(--wood-900), 0 7px 10px rgba(0, 0, 0, .25);
+  transition: transform var(--t-micro) var(--ease-out); }
+.dock .m-menu-btn:hover { transform: translateY(-3px); }
+.dock .m-menu-btn:active { transform: translateY(3px); }
+.dock .m-menu-btn[aria-expanded="true"] { background: radial-gradient(110% 90% at 50% 30%, var(--sun-300), var(--sun-500) 70%, var(--sun-700)); }
+.dock .m-menu-ico { display: grid; place-items: center; height: 46px; }
+.dock .m-menu-ico .glyph { width: 44px; height: 44px; color: var(--wood-700); filter: drop-shadow(0 2px 0 rgba(62, 38, 18, .3)); }
+.dock .m-menu-btn .lbl { font: 800 .9375rem/1 var(--font-display); color: #fff; margin-top: 1px; white-space: nowrap;
+  --o: var(--wood-900); text-shadow: -1.5px -1.5px 0 var(--o), 1.5px -1.5px 0 var(--o), -1.5px 1.5px 0 var(--o), 1.5px 1.5px 0 var(--o), 0 2.5px 0 var(--o); }
+.dock .m-menu-btn .badge { position: absolute; top: -9px; right: -9px; }
+
+/* the toolbar of 3: [Hand] [Seeds ▸] [Tools ▸] (S2); a slot's chevron says it opens */
+.tool .chev { position: absolute; right: 4px; top: 3px; bottom: auto; width: auto; height: auto; font: 800 .8125rem/1 var(--font-ui); color: var(--ink-500); }
+.tool[aria-expanded="true"] .chev { transform: rotate(180deg); }
+.tool[data-tool="seed_bag"]::after { content: '▴'; position: absolute; right: 4px; top: 3px; font: 800 .8125rem/1 var(--font-ui); color: var(--ink-500); }
+.tool[data-tool="seed_bag"][aria-expanded="true"]::after { transform: rotate(180deg); }
+.tool-flyout .tool[data-tool="seed_bag"]::after { content: none; }
+.tool-slot.has-new::before { content: ''; position: absolute; right: -4px; top: -4px; width: 12px; height: 12px; border-radius: 50%;
+  background: var(--sun-500); box-shadow: 0 0 0 2px var(--paper-50); }
+/* the Hand armed with a seed (M2): the seed rides on the hand's picture */
+.tool .ico { position: relative; }
+.tool .crop-on { position: absolute; right: -8px; bottom: -4px; width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center;
+  background: var(--paper-50); box-shadow: 0 0 0 2px var(--sun-700); }
+.tool .crop-on .ic { width: 22px; height: 22px; filter: none; }
+/* the flyout over the toolbar: the group's tools in a strip, a caret pointing at the slot it came from */
+.tool-flyout { position: relative; display: flex; gap: 6px; padding: 10px 10px 9px; border-radius: var(--r-l);
+  background: linear-gradient(180deg, var(--paper-50), var(--paper-100)); box-shadow: inset 0 0 0 2px var(--paper-edge), 0 0 0 3px var(--wood-700), var(--drop);
+  animation: tray-in var(--t-beat) var(--ease-back); transform-origin: var(--caret-x, 50%) 100%; }
+.tool-flyout[hidden] { display: none; }
+.tool-flyout .tool[aria-pressed="true"] { transform: translateY(-3px); }
+.tool-flyout .fly-caret { position: absolute; left: var(--caret-x, 50%); bottom: -9px; width: 16px; height: 16px; margin-left: -8px; transform: rotate(45deg);
+  background: var(--paper-100); box-shadow: 3px 3px 0 0 var(--wood-700); pointer-events: none; }
+.tool-flyout .tool .key { display: grid; }
+/* the build tray: Shop, Move and Upgrade first, arrows always there on a strip wider than the screen */
+.build-tray .tray-arrow.always { display: none; }
+.build-tray.scrolls .tray-arrow.always { display: grid; }
+.build-tray .tray-arrow[aria-disabled] { opacity: .3; cursor: default; }
+.build-tray .tray-sep { flex: none; width: 3px; margin: 8px 2px; border-radius: 3px; background: rgba(138, 100, 64, .35); }
+
+/* one guide voice (M1a, S5): the coach card is one line and a bar; the tracker waits while Grandma speaks */
+body.coach-on #tracker, body.coach-on .tracker-chip-wrap { display: none; }
+.coach.coach--line { width: auto; max-width: min(620px, 92vw); padding: 5px; }
+.coach--line .coach-paper { align-items: center; gap: 10px; padding: 6px 10px 6px 7px; }
+.coach--line .grandma-art, .coach--line .gran { width: 40px !important; height: 40px !important; }
+.coach--line .line { margin: 0; font: 600 1rem/1.25 var(--font-ui); }
+.coach--line .prog { margin-top: 4px; gap: 6px; font-size: .8125rem; }
+.coach--line .prog .bar { height: 7px; max-width: 240px; }
+.coach .prog .eta { white-space: nowrap; font-weight: 800; color: var(--wood-700); }
+.coach--line .acts { flex-direction: row; align-items: center; gap: 6px; margin-left: auto; }
+/* the naming chip and "⋯" step under Grandma's words when both do not fit beside them (the 360 BG first five minutes:
+   "Продай 10 снопа…" was squeezed to five letters a line and clipped) */
+.coach--line .coach-paper { flex-wrap: wrap; row-gap: 6px; }
+.coach--line .say { flex: 1 1 180px; min-width: 0; }
+.coach--line .coach-name { min-height: 34px; white-space: nowrap; }
+.coach--line .coach-more { width: 32px; height: 32px; font-size: 1.25rem; }
+body.tray-open .coach--line .line { -webkit-line-clamp: 3; }
+
+/* Together (S4): one button bottom left, its menu above it; only with a partner claimed */
+.social { position: relative; }
+.social[hidden] { display: none; }
+.together-menu { position: absolute; left: 0; bottom: calc(100% + 10px); z-index: 4; display: flex; gap: 10px; padding: 10px;
+  border-radius: var(--r-m); box-shadow: inset 0 0 0 2px var(--paper-edge), 0 0 0 3px var(--wood-700), var(--drop); animation: tray-in var(--t-beat) var(--ease-back);
+  transform-origin: 20px 100%; }
+.together-menu[hidden] { display: none; }
+.together-btn .glyph { color: #D6456A; }
+.gift-btn .gift-ico { font-size: 1.5rem; line-height: 1; }
+/* the chips of the moment: the partner waiting on the bench (D2), Undo during its ten minutes (S3) */
+.hud-chips { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
+.bench-chip, .undo-chip { display: inline-flex; align-items: center; gap: 10px; padding: 6px 6px 6px 14px; border-radius: var(--r-pill);
+  font: 700 .9375rem/1.2 var(--font-ui); color: var(--ink-900); background: linear-gradient(180deg, #FFF1C2, var(--sun-300));
+  box-shadow: inset 0 0 0 2px var(--sun-900), var(--drop-soft); animation: tray-in var(--t-beat) var(--ease-back); }
+.bench-chip[hidden], .undo-chip[hidden] { display: none; }
+.bench-chip { position: absolute; left: calc(var(--safe) + 278px); top: calc(var(--safe) + 96px); }
+/* a Golden Hour / Spark pill (the buffs row, 32 px from top 88) would sit under the chip's top 8 px: the chip goes below it
+   (QA r2 integration, the desktop twin of life-feel's L2-04 phone note) */
+#hud:has(.buffs > *) .bench-chip { top: calc(var(--safe) + 112px); }
+.undo-chip { padding: 4px; background: linear-gradient(180deg, var(--paper-50), var(--paper-200)); box-shadow: inset 0 0 0 2px var(--paper-edge), var(--drop-soft); }
+.undo-chip .chip { display: inline-flex; align-items: center; gap: 6px; }
+.undo-chip .glyph { width: 20px; height: 20px; }
+
+/* the Farm book (ui/layout.js; S1, S3): one sheet with one name on every device. Groups: This week / Animals / Village /
+   You (+ Together and Settings on phones); one tile language for every entry (astra#8): a round paper button with its
+   label plaque under it, the badge inside the circle */
+.farm-book { display: flex; flex-direction: column; gap: 14px; }
+.farm-book .m-sec[hidden] { display: none; }
+.farm-book .m-sec h3 { margin: 0 0 10px; font: 800 1.0625rem/1 var(--font-display); color: var(--wood-700); }
+.farm-book .m-places, .farm-book .m-tiles, .farm-book #social, .farm-book .together-menu {
+  position: static; display: grid; grid-template-columns: repeat(auto-fill, minmax(76px, 1fr)); justify-items: center; gap: 22px 6px;
+  padding: 2px 0 12px; margin: 0; background: none; box-shadow: none; border-radius: 0; transform: none; animation: none; }
+.farm-book #social .together-btn { display: none; }
+.farm-book #social .together-menu[hidden] { display: grid; }
+/* #social is a block here, but it keeps the grid's justify-items: center, which Chrome now applies to block children
+   too: the menu shrank to one 62 px column (the owners' iPhone 13: ping, emotes, chat, notes, surprise one under
+   another, the last ones below the fold). It takes the full width */
+.farm-book #social { display: block; justify-items: stretch; }
+.farm-book #social .together-menu { width: 100%; }
+.farm-book .m-places:empty { display: none; }
+.farm-book .dock-mini, .farm-book .social-btn, .farm-book .m-tile .m-ico { position: relative; width: 60px; height: 60px; border-radius: 50%; }
+.farm-book .dock-mini .ic, .farm-book .dock-mini .glyph { width: 40px; height: 40px; }
+.farm-book .dock-mini .lbl, .farm-book .social-btn > .lbl, .farm-book .m-tile .lbl { position: absolute; bottom: -12px; left: 50%; transform: translateX(-50%);
+  padding: 2px 9px; border-radius: var(--r-pill); font: 700 .875rem/1.1 var(--font-ui); color: #fff; background: var(--wood-900); white-space: nowrap; }
+/* a together button's caption shows only in the Farm book (QA r1 S-33: a real element the book fits to its column) */
+.social-btn > .lbl { display: none; }
+.farm-book .social-btn > .lbl { display: block; z-index: 1; }
+/* a caption too long for its row takes two centred lines at the book's one size (ui/layout.js fitCaptions; QA r2 S-21):
+   its first line stays where the one line was and the second hangs below, with room under its row for it */
+/* (as specific as the later desktop and phone rules that set the one-line caption's `bottom`: both set, the box stayed one
+   line tall and the second line spilled under the pill) */
+.farm-book .dock-mini .lbl.two, .farm-book .social-btn > .lbl.two, .farm-book .m-tile .lbl.two { white-space: normal; width: max-content;
+  text-align: center; line-height: 1.02; bottom: auto; top: calc(100% - 5px); border-radius: 12px; }
+.farm-book .m-places:has(.lbl.two), .farm-book .m-tiles:has(.lbl.two), .farm-book #social .together-menu:has(.lbl.two) { row-gap: 32px; padding-bottom: 22px; }
+.farm-book .social-btn .glyph { width: 34px; height: 34px; }
+.farm-book .social-btn .key { display: none; }
+.farm-book .dock-mini .badge, .farm-book .social-btn .badge { top: 0; right: 0; }
+.farm-book .m-tile { position: relative; display: grid; place-items: center; width: 76px; height: 60px; padding: 0; border: 0; background: none; cursor: pointer; }
+.farm-book .m-tile .m-ico { display: grid; place-items: center;
+  background: radial-gradient(110% 90% at 50% 30%, var(--paper-50), var(--paper-100) 55%, var(--paper-300));
+  box-shadow: inset 0 0 0 2px var(--paper-edge), 0 0 0 3px var(--wood-900), 0 5px 0 3px rgba(62, 38, 18, .35); }
+.farm-book .m-tile:active .m-ico, .farm-book .social-btn:active, .farm-book .dock-mini:active { transform: translateY(2px); }
+.farm-book .m-stats { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+.farm-book .m-stat { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 4px 16px 4px 8px; border: 0; border-radius: var(--r-pill);
+  font: 600 .9375rem/1.2 var(--font-ui); color: var(--ink-700); background: linear-gradient(180deg, var(--paper-50), var(--paper-200)); cursor: pointer;
+  box-shadow: inset 0 0 0 2px var(--paper-edge), 0 3px 0 rgba(62, 38, 18, .25); }
+.farm-book .m-stat b { font: 800 1.125rem/1 var(--font-ui); color: var(--ink-900); font-variant-numeric: tabular-nums; }
+.farm-book .m-stat .ic, .farm-book .m-stat .glyph { width: 28px; height: 28px; }
+.farm-book .m-stat.m-hearts b { color: #B5304C; }
+.farm-book .m-stat.m-beauty .glyph { color: #D6456A; }
+
+/* the ghost's reason beside what is carried (S7) */
+.hammer-hint .carry-why { color: var(--stop-900); font-weight: 800; }
+.hammer-hint .carry-why[hidden] { display: none; }
+.wtip .s.verb { margin-top: 5px; font-weight: 700; color: var(--sky-900); }
+
+/* the boot curtain (S8; feel#3, #4): a real progress line; it stays over the HUD (z 85) until the first view is drawn
+   (render-look's view.ready), then fades in 500 ms while the HUD comes in, tracker from the left, pills from the top,
+   the dock from the bottom, 60 ms apart */
+#boot { z-index: 85; }
+.boot-pct { font-variant-numeric: tabular-nums; }
+/* the farm does not answer: no percentage beside that line (QA r1 S-38) */
+.boot-line.no-pct .boot-pct, .boot-line.no-pct .boot-prog { display: none; }
+.boot-prog { position: absolute; left: 22px; right: 22px; bottom: 4px; height: 4px; border-radius: 2px; background: rgba(62, 38, 18, .15); overflow: hidden; }
+.boot-prog > i { display: block; width: 0; height: 100%; border-radius: 2px; background: var(--go-500); transition: width 300ms var(--ease-out); }
+.boot-line { position: relative; }
+#boot.lifting { opacity: 0; transition: opacity 500ms var(--ease-out); pointer-events: none; }
+/* the painting back after the slot card's Play is whole at once: the layer's fade-in from 0 showed a flat mauve frame,
+   and on a phone the lift ran inside it and dropped in one frame onto tan boxes (QA r4 S4-01, jde#1, va#1) */
+#boot.no-fade { animation: none; }
+body.hud-wait #hud > * { opacity: 0; }
+body.hud-in .hud-tl, body.hud-in .hud-tr, body.hud-in .hud-gear { animation: hud-in-top 420ms var(--ease-back) both; }
+body.hud-in #tracker, body.hud-in .tracker-chip-wrap, body.hud-in .hud-bl { animation: hud-in-left 420ms var(--ease-back) 60ms both; }
+body.hud-in .hud-right { animation: hud-in-right 420ms var(--ease-back) 120ms both; }
+body.hud-in #dock, body.hud-in .tray-wrap { animation: hud-in-bottom 420ms var(--ease-back) 180ms both; }
+@keyframes hud-in-top { from { opacity: 0; transform: translateY(-24px); } }
+@keyframes hud-in-left { from { opacity: 0; translate: -32px 0; } }
+@keyframes hud-in-right { from { opacity: 0; translate: 32px 0; } }
+@keyframes hud-in-bottom { from { opacity: 0; translate: 0 32px; } }
+body.motion-reduced.hud-in #hud > * { animation: none; }
+body.motion-reduced #boot.lifting { transition-duration: 1ms; }
+
+/* S9a (ux-phone#14): a phone's crop card asks before it spends Acorns, and "Pull it up" is a quiet text button */
+.tip .tip-finish-fold { display: none; }
+.tip .tip-finish.folds:not(.open) > :not(.tip-finish-fold) { display: none; }
+.tip .tip-finish.folds:not(.open) > .tip-finish-fold { display: inline-flex; width: 100%; min-height: 44px; justify-content: center; gap: 6px; }
+.tip .tip-pull { display: block; width: 100%; min-height: 44px; margin-top: 6px; border: 0; background: none; padding: 6px;
+  font: 700 .9375rem/1.2 var(--font-ui); color: var(--stop-900); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+.tip .tip-pull:focus-visible { outline: 3px solid var(--sky-900); outline-offset: 2px; border-radius: 8px; }
+
+/* the Farm book in one screen (S3: <= 14 entries on an iPhone 13): small groups share a row, five tiles a row */
+.farm-book { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 12px; grid-auto-flow: row dense; }
+/* dense: a one-tile section (Settings) fills the half row a lone place left (the L32 iPhone 13 book: Village alone on
+   its row, Settings 30 px under the home bar) */
+.farm-book .m-sec { grid-column: 1 / -1; min-width: 0; }
+.farm-book .m-sec[data-n="1"], .farm-book .m-sec[data-n="2"] { grid-column: span 1; }
+.farm-book .m-sec[data-book="settings"] { grid-column: span 1; }
+/* You carries its stats row as well as its places: the whole width, so Hearts, Acorns and Beauty sit side by side */
+.farm-book .m-sec[data-book="you"] { grid-column: 1 / -1; }
+.farm-book .m-sec h3 { margin-bottom: 8px; font-size: 1rem; }
+.farm-book .m-places, .farm-book .m-tiles, .farm-book #social .together-menu { grid-template-columns: repeat(auto-fill, minmax(62px, 1fr)); gap: 18px 4px; padding-bottom: 10px; }
+.farm-book .dock-mini, .farm-book .social-btn, .farm-book .m-tile .m-ico { width: 54px; height: 54px; }
+.farm-book .m-tile { width: 62px; height: 54px; }
+.farm-book .dock-mini .ic, .farm-book .dock-mini .glyph { width: 36px; height: 36px; }
+.farm-book .dock-mini .lbl, .farm-book .social-btn > .lbl, .farm-book .m-tile .lbl { font-size: .8125rem; padding: 1px 7px; bottom: -11px; }
+.farm-book .m-stats { margin-bottom: 10px; gap: 6px; }
+.farm-book .m-stat { padding: 2px 12px 2px 6px; }
+
+/* ---- sideways rows for a mouse (ui/hscroll.js; owner 2026-10-19 "scroll the seeds and the menus sideways") ---------
+   The wheel, a drag and a ‹ › pair while the mouse is over a row; an edge with more fades (.hs-l / .hs-r). A focused
+   item scrolls clear of the fade and the arrow. Rows with their own arrows or cue (the trays, the tabs, the hub) keep
+   them. */
+:is(.seed-strip, .up-strip, .lg-track, .pn-quick, .pn-slots, .sp-grid, .wk-village-wrap) { scroll-padding-inline: 34px; }
+.hs-drag { user-select: none; -webkit-user-select: none; scroll-snap-type: none !important; scroll-behavior: auto !important; }
+.hs-drag, .hs-drag * { cursor: grabbing !important; }
+/* the quick-seed strip: its wood ring is outside its box, so the fade is drawn inside it (a mask would cut the ring
+   off): pinned to each end over the padding, the strip's own paper and inner ring, faded towards the seeds */
+.seed-strip { --hs-pl: 6px; --hs-pr: 6px; --hs-gap: 4px; }
+.spread-strip { --hs-pr: 12px; --hs-gap: 6px; }
+.seed-strip::before, .seed-strip::after { content: ''; position: sticky; z-index: 2; flex: none; align-self: stretch; width: 30px;
+  margin-block: -4px; pointer-events: none; opacity: 0; transition: opacity var(--t-micro);
+  background: linear-gradient(180deg, var(--paper-50), var(--paper-200)); box-shadow: inset 0 0 0 2px var(--paper-edge); }
+.seed-strip::before { left: calc(-1 * var(--hs-pl)); margin-right: calc(-30px - var(--hs-gap)); border-radius: var(--r-pill) 0 0 var(--r-pill);
+  -webkit-mask-image: linear-gradient(90deg, #000 40%, transparent); mask-image: linear-gradient(90deg, #000 40%, transparent); }
+.seed-strip::after { right: calc(-1 * var(--hs-pr)); margin-left: calc(-30px - var(--hs-gap)); border-radius: 0 var(--r-pill) var(--r-pill) 0;
+  -webkit-mask-image: linear-gradient(270deg, #000 40%, transparent); mask-image: linear-gradient(270deg, #000 40%, transparent); }
+.seed-strip.hs-l::before, .seed-strip.hs-r::after { opacity: 1; }
+/* the sheets' rows and the seed picker sit on their paper: the row itself fades out at an edge with more (its focus
+   ring would be masked too, so a focused row shows it whole) */
+:is(.up-strip, .lg-track, .pn-quick, .pn-slots, .sp-grid, .wk-village-wrap):is(.hs-l, .hs-r):not(:focus-visible) {
+  -webkit-mask-image: linear-gradient(90deg, var(--hs-ml, #000), #000 36px, #000 calc(100% - 36px), var(--hs-mr, #000));
+  mask-image: linear-gradient(90deg, var(--hs-ml, #000), #000 36px, #000 calc(100% - 36px), var(--hs-mr, #000)); }
+.hs-l { --hs-ml: transparent; }
+.hs-r { --hs-mr: transparent; }
+/* the pair: laid over the hovered row (its box, in its parent), the buttons at its ends; the row under it keeps every
+   press but the arrows' (important: the HUD's `#hud > * > *` turns its children's presses back on) */
+.hs-pair { position: absolute; z-index: 4; margin: 0; pointer-events: none !important; }
+.hs-arrow { position: absolute; top: 50%; width: 32px; height: 32px; margin-top: -16px; padding: 0 0 3px; border: 0; border-radius: 50%;
+  display: grid; place-items: center; pointer-events: auto; cursor: pointer; font: 800 1.5rem/1 var(--font-display); color: var(--wood-900);
+  background: radial-gradient(circle at 50% 35%, #fff, var(--paper-100) 70%);
+  box-shadow: inset 0 0 0 2px var(--paper-edge), 0 2px 0 var(--wood-700), 0 3px 8px rgba(62, 38, 18, .3);
+  transition: transform var(--t-micro) var(--ease-out); }
+.hs-arrow.hs-left { left: 3px; }
+.hs-arrow.hs-right { right: 3px; }
+.hs-arrow:hover { color: var(--sun-ink); transform: scale(1.1); }
+.hs-arrow:active { transform: scale(.94); }

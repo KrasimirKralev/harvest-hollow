@@ -196,7 +196,7 @@ test('the Responses loop: function tools run in the job folder, outputs go back,
   for (const r of reqs) {
     assert.equal(r.body.store, false);
     assert.equal(r.body.stream, true);
-    assert.match(r.body.instructions, /^You are the Harness Hollow helper/);
+    assert.match(r.body.instructions, /^You are Harvey, the helper of the cozy co-op farm game/);
     assert.deepEqual(r.body.tools.map((x) => x.name), ['read_file', 'list_files', 'write_file', 'edit_file', 'validate', 'preview']);
     assert.ok(r.body.tools.every((x) => x.type === 'function' && x.strict === true && x.parameters.additionalProperties === false));
     assert.ok(!r.body.input.some((i) => i.role === 'system'));

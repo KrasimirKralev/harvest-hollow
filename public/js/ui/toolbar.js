@@ -16,11 +16,22 @@ import { useIntent, relicIcon } from './panels/w4b-rules.js';
 import { probe, reason } from './panels/core.js';
 import { hasIcon } from '../render/icons.js';
 import { ONCE_VERBS } from '../game/targets.js';
-import { h, icon, svgIcon, fmt, fmtDuration, kv, touchPlayer, touchText } from './dom.js';
+import { h, icon, svgIcon, fmt, fmtDuration, kv, touchPlayer, touchText, fitLabel } from './dom.js';
 import { t as tr, tn, lang, onLang, N, name as cname, nameEntry, ctext } from '../i18n/index.js';
+import { LAYOUT_Q } from './layout.js';
+import { lazyImport } from '../net/lazy.js';
+
+/** A tool button's label longer than this many letters is set a size smaller (the 1366 BG shots: "Пшеница" spilled). */
+const LONG_NAME = 6;
 
 /** Wave 4 (wishes A, C, E): the Hammer hint's Sell, Rotate and Upgrade flows live in a module loaded on first use. */
-const flows = () => import('./panels/w4-flows.js');
+const flows = () => lazyImport('w4-flows', () => import('./panels/w4-flows.js'));
+
+/** A red placement ghost's words (S7): its blocker, else the spot's reason (QA r4 S4-06, S4-12: land not ours). Pure. */
+export function placeWhy(e) {
+  if (!e || e.valid !== false || e.pickUp) return '';
+  return e.blockerDef && defOf(e.blockerDef) ? tr('dock.why.blocked', { thing: N(e.blockerDef) }) : e.code ? reason(e.code) : '';
+}
 
 /** Controller tool id -> content tool id (M0 ids and the GDD names both map). */
 export const TOOL_CONTENT = Object.freeze({
@@ -102,6 +113,27 @@ export function seedRows(state) {
   return rows;
 }
 
+/**
+ * The free buildings this level can place that the farm has none of yet, not waiting in storage (QA r2 S-01, fbp#1,
+ * jde#3): Grandma's Windmill comes at level 3 as a free shop building, and the coach's "Make Flour together" pointed
+ * at nothing while it hid in Market > Buildings. The build tray offers them as "Free · Place" cards like the Coop.
+ * Pure.
+ */
+export function freeToPlace(state) {
+  if (!state?.farm) return [];
+  const level = levelFromXp(state.farm.xp);
+  const objs = Object.values(state.farm.objects ?? {});
+  const out = [];
+  for (const fam of [CONTENT.homes, CONTENT.buildings]) {
+    for (const d of fam?.values?.() ?? []) {
+      if (!d.shop || d.retired || d.cost !== 0 || (d.acorns ?? 0) > 0 || (d.unlock ?? 1) > level) continue;
+      if ((state.farm.storage?.[d.id] ?? 0) > 0 || objs.some((o) => o.def === d.id)) continue;
+      out.push(d.id);
+    }
+  }
+  return out.sort();
+}
+
 /** "1m", "45m", "2h", "1h 30m" (Bulgarian "1 мин", "2 ч 30 мин"): the seed tray's short grow time. Pure. */
 export function shortTime(ms) {
   const m = Math.max(1, Math.round(ms / 60_000));
@@ -116,8 +148,16 @@ export function createToolbar(S) {
   // qa2 CL-05: offsetWidth on every render forced a layout per predicted change of a drag stroke; the bar is measured
   // once, then whenever it changes size
   let sized = false;
-  if (typeof ResizeObserver === 'function') new ResizeObserver(() => sizeTrays()).observe(bar);
+  if (typeof ResizeObserver === 'function') new ResizeObserver(() => { sizeTrays(); refit(); }).observe(bar);
   else window.addEventListener('resize', () => sizeTrays());
+  /** The bar changed size, or the fonts arrived: the phone's shrunk names are measured again (QA r1 S-07). */
+  function refit() {
+    for (const n of document.querySelectorAll('#toolbar .tool .name, #tools-flyout .tool .name')) {
+      delete n.dataset.fit;
+      if (isPhone()) fitLabel(n); else n.style.fontSize = '';
+    }
+  }
+  document.fonts?.ready?.then?.(() => refit());
   const tray = document.getElementById('seed-tray');
   const chip = document.getElementById('stroke-chip');
   const btray = document.getElementById('build-tray');
@@ -125,80 +165,183 @@ export function createToolbar(S) {
   let seedsOpen = false;
   let lastLevel = 0;
 
-  // ---- a bar wider than the screen (a phone's holds five of nine tools): a chevron says there is more and goes there;
-  // at the far end it points back. The tool in hand always scrolls into view (mobile QA M-13, astra P1-3) ----------
-  const more = h('button.tool-more', { type: 'button', hidden: true, on: { click: () => {
-    const v = vertical();
-    const back = more.dataset.dir === 'back';
-    const step = v ? bar.clientHeight * 0.7 : bar.clientWidth * 0.6;
-    bar.scrollBy(v ? { top: back ? -bar.scrollHeight : step, behavior: 'smooth' } : { left: back ? -bar.scrollWidth : step, behavior: 'smooth' });
-  } } }, h('span', { 'aria-hidden': 'true' }, '›'));
-  document.getElementById('tray-wrap')?.append(more);
-  const vertical = () => bar.scrollHeight > bar.clientHeight + 2 && bar.scrollWidth <= bar.clientWidth + 2;
-  function paintMore() {
-    const v = vertical();
-    const max = v ? bar.scrollHeight - bar.clientHeight : bar.scrollWidth - bar.clientWidth;
-    if (max <= 2 || bar.offsetParent === null) { more.hidden = true; return; }
-    const pos = v ? bar.scrollTop : bar.scrollLeft;
-    const back = pos >= max - 4;
-    more.hidden = false;
-    more.dataset.dir = back ? 'back' : 'on';
-    more.dataset.axis = v ? 'y' : 'x';
-    more.setAttribute('aria-label', back ? tr('toolbar.moreBack') : tr('toolbar.more'));
+  // ---- the toolbar of 3 (release 1.0 S2, ux-first#5, #13): [Hand] [Seeds ▸] [Tools ▸]; the Sickle, Water, Feed, Basket,
+  // Compost and Axe live in the Tools flyout (keys 3-8 unchanged), the Hammer left the bar (key 9 and the build tray's
+  // Move card pick it up). A phone (S3) keeps ONE slot: the tool in hand; a tap pops up every tool and Build.
+  // Flyouts open and close by keyboard: Enter / Space on the slot, arrows inside, Escape back to the slot (P9).
+  const phoneMq = globalThis.matchMedia?.(LAYOUT_Q.phone) ?? null;
+  const isPhone = () => Boolean(phoneMq?.matches);
+  const GROUP = new Set(['sickle', 'watering_can', 'feed_scoop', 'basket', 'compost_scoop', 'axe']);
+  let toolsFly = false;            // the Tools flyout (desktop)
+  let popOpen = false;             // the phone's tool pop-up
+  let seedFly = false;             // the crop strip above the Seeds slot (seeds.js shows it while this is true)
+  let lastGroupTool = 'sickle';
+  // a group of toggle buttons (aria-pressed), not a menu: a menuitem may not be pressed (axe, P9 audit)
+  const fly = h('div.tool-flyout#tools-flyout', { role: 'group', hidden: true });
+  bar.before(fly);
+  const flyCaret = h('i.fly-caret', { 'aria-hidden': 'true' });
+  /** The tool flyout's caret points at the slot it opened from. */
+  function caretAt(slot) {
+    if (!slot || !slot.isConnected) return;
+    const s0 = slot.getBoundingClientRect();
+    const f = fly.getBoundingClientRect();
+    const scale = (S.settings?.scale?.() ?? 100) / 100;
+    if (f.width) fly.style.setProperty('--caret-x', `${Math.round((s0.left + s0.width / 2 - f.left) / scale)}px`);
   }
-  bar.addEventListener('scroll', paintMore, { passive: true });
-  if (typeof ResizeObserver === 'function') new ResizeObserver(paintMore).observe(bar);
-  /** Scroll the bar so tool button `b` is clear of the menu button and the chevron. */
-  function revealTool(b) {
-    if (!b || !b.isConnected) return;
-    const br = b.getBoundingClientRect();
-    const r = bar.getBoundingClientRect();
-    if (!br.width || !r.width) return;
-    const pad = 40;
-    if (vertical()) {
-      const lo = r.top + 4;
-      const hi = r.bottom - pad;
-      if (br.top < lo) bar.scrollBy({ top: br.top - lo, behavior: 'smooth' });
-      else if (br.bottom > hi) bar.scrollBy({ top: br.bottom - hi, behavior: 'smooth' });
+  function closeFlyouts({ focus = false } = {}) {
+    const was = toolsFly || popOpen;
+    toolsFly = false;
+    popOpen = false;
+    fly.hidden = true;
+    fly.replaceChildren();
+    for (const b of bar.querySelectorAll('[data-slot]')) b.setAttribute('aria-expanded', 'false');
+    if (was && focus) bar.querySelector('[data-slot="tools"], [data-slot="tool"]')?.focus({ preventScroll: true });
+    syncSoon();
+  }
+  function setSeedFly(open) {
+    if (seedFly === Boolean(open)) return;
+    seedFly = Boolean(open);
+    bar.querySelector('[data-tool="seed_bag"]')?.setAttribute('aria-expanded', String(seedFly));
+    S.seeds?.renderStrip?.();
+    // the strip sits before the bar in the page: it takes the focus, so Tab and the arrows work inside it (P9 audit)
+    if (seedFly) {
+      const strip = document.querySelector('#tray-wrap > .seed-strip:not(.spread-strip)');
+      (strip?.querySelector('[aria-pressed="true"]') ?? strip?.querySelector('button'))?.focus({ preventScroll: true });
+    }
+    syncSoon();
+  }
+  // Escape closes an open flyout, pop-up or crop strip wherever the focus is (P9 audit: from the slot it did nothing);
+  // it stops there, so the same key does not also put the tool in hand away (the controller's Escape)
+  document.addEventListener('keydown', (e) => {
+    // (the full seed tray, opened by the picker's "⋯" or ui.openSeeds, closes the same way: the integrator's P9 run;
+    // the build tray too, wherever the focus is: a double click on Build left the focus on Build, QA r2 S-11, br#5)
+    if (e.key !== 'Escape' || e.defaultPrevented || !(toolsFly || popOpen || seedFly || seedsOpen || buildOpen)) return;
+    if (typeof ui?.panels?.top === 'function' && ui.panels.top()) return;
+    e.preventDefault();
+    e.stopPropagation();
+    if (buildOpen) {
+      openBuild(false);
+      const door = document.querySelector('[data-dock="build"]');
+      if (door?.getClientRects?.().length) door.focus({ preventScroll: true });
       return;
     }
-    if (bar.scrollWidth <= bar.clientWidth + 2) return;
-    const menu = document.getElementById('m-menu-btn');
-    const mr = menu && menu.offsetParent !== null ? menu.getBoundingClientRect() : null;
-    const hi = (mr && mr.top < r.bottom && mr.left < r.right ? mr.left : r.right) - pad;
-    const lo = r.left + pad;
-    if (br.left < lo) bar.scrollBy({ left: br.left - lo, behavior: 'smooth' });
-    else if (br.right > hi) bar.scrollBy({ left: br.right - hi, behavior: 'smooth' });
-  }
-  let revealed = null;
+    const strip = seedFly || seedsOpen;
+    if (seedsOpen) { seedsOpen = false; tray.hidden = true; }
+    closeFlyouts({ focus: !strip });
+    setSeedFly(false);
+    if (strip) bar.querySelector('[data-tool="seed_bag"]')?.focus({ preventScroll: true });
+  }, true);
+  // a panel coming up puts away whatever was open over the toolbar (QA r2 S-11, oib#3: the phone's tool pop-up stayed
+  // open under the Market sheet and covered 240 px of the farm after its ✕; the build tray stayed under every panel)
+  ui?.panels?.on?.('open', () => {
+    if (toolsFly || popOpen) closeFlyouts();
+    if (seedFly) setSeedFly(false);
+    if (seedsOpen) { seedsOpen = false; tray.hidden = true; }
+    if (buildOpen) openBuild(false);
+  });
+  // a press anywhere else on the HUD puts the flyouts away as well (QA r3 S3-19, oib#5: the phone's tool pop-up stayed
+  // open behind the Goal Tracker's opened list, which is no panel, and a HUD tap is no farm tap); a press on the bar
+  // itself is the slots' own business (a slot toggles its flyout on its click)
+  document.addEventListener('pointerdown', (e) => {
+    if (!(toolsFly || popOpen || seedFly)) return;
+    const el = e.target;
+    if (!el?.closest?.('#hud') || el.closest('#toolbar, #tools-flyout, .seed-strip, .hs-pair')) return;
+    if (toolsFly || popOpen) closeFlyouts();
+    if (seedFly) setSeedFly(false);
+  }, true);
+  // the Goal Tracker's list opened by the keyboard (Enter on the NOW chip: no press) says so with a window event
+  // (features' ui/tracker.js `tracker-open`, S3-19): the flyouts go then too
+  globalThis.addEventListener?.('tracker-open', () => {
+    if (toolsFly || popOpen) closeFlyouts();
+    if (seedFly) setSeedFly(false);
+  });
+  fly.addEventListener('keydown', (e) => {
+    const items = [...fly.querySelectorAll('button')];
+    const i = items.indexOf(document.activeElement);
+    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeFlyouts({ focus: true }); return; }
+    if (e.key === 'ArrowRight' || e.key === 'ArrowDown') { e.preventDefault(); items[(i + 1) % items.length]?.focus(); }
+    else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') { e.preventDefault(); items[(i - 1 + items.length) % items.length]?.focus(); }
+  });
+  const syncSoon = () => (typeof requestAnimationFrame === 'function' ? requestAnimationFrame(() => syncTrayState()) : null);
+
+  // (HEAD's sideways scroller of nine tools on phones is gone with the one-slot bar; the chevron stays, never shown)
+  const more = h('button.tool-more', { type: 'button', hidden: true, tabindex: '-1', 'aria-hidden': 'true' });
+  document.getElementById('tray-wrap')?.append(more);
+  function paintMore() { more.hidden = true; }
 
   const seenKey = () => `hh.seen.${store.pid}`;
   const seen = () => kv.get(seenKey(), null);
   function markSeen(kind, id) {
-    const s = seen() || { tools: {}, crops: {} };
-    s[kind] = s[kind] || {};
-    if (s[kind][id]) return;
-    s[kind][id] = 1;
-    kv.set(seenKey(), s);
+    const s0 = seen() || { tools: {}, crops: {} };
+    s0[kind] = s0[kind] || {};
+    if (s0[kind][id]) return;
+    s0[kind][id] = 1;
+    kv.set(seenKey(), s0);
   }
   /** On the very first render everything visible counts as seen: "New!" is for what arrives later. */
   function seedSeen(state) {
     if (seen()) return;
     const level = levelFromXp(state.farm.xp);
-    const s = { tools: {}, crops: {} };
-    for (const t of controller.TOOLS) s.tools[t.id] = 1;
-    for (const c of live('crops')) if (c.unlock <= level) s.crops[c.id] = 1;
-    kv.set(seenKey(), s);
+    const s0 = { tools: {}, crops: {} };
+    for (const t of controller.TOOLS) s0.tools[t.id] = 1;
+    for (const c of live('crops')) if (c.unlock <= level) s0.crops[c.id] = 1;
+    kv.set(seenKey(), s0);
   }
 
   /** One tool button (built once per tool; render() only patches its state, so keyboard focus survives). */
   function toolButton(tool) {
-    const b = h('button.tool', { type: 'button', dataset: { tool: tool.id }, on: { click: () => onTool(tool.id) } },
+    return h('button.tool', { type: 'button', dataset: { tool: tool.id }, on: { click: () => onTool(tool.id) } },
       h('span.ico'), h('span.name'), tool.key ? h('span.key', { 'aria-hidden': 'true' }, String(tool.key)) : null);
-    return b;
   }
   const buttons = new Map();         // tool id -> button
+  const chev = (dir = 'up') => h('span.chev', { 'aria-hidden': 'true' }, dir === 'up' ? '▴' : '▸');
+  // the Tools slot (desktop) and the phone's current-tool slot: a button of their own, never a tool's button
+  const toolsSlot = h('button.tool.tool-slot', { type: 'button', dataset: { slot: 'tools' }, 'aria-expanded': 'false',
+    'aria-controls': 'tools-flyout', on: { click: () => toggleTools() } }, h('span.ico'), h('span.name'), chev());
+  const curSlot = h('button.tool.tool-slot.tool-cur', { type: 'button', dataset: { slot: 'tool' }, 'aria-expanded': 'false',
+    'aria-controls': 'tools-flyout', on: { click: () => togglePop() } }, h('span.ico'), h('span.name'), chev());
+  // Build in the phone's pop-up (the phone bar has no Build button: S3)
+  const buildItem = h('button.tool.tool-build', { type: 'button', dataset: { act: 'build' },
+    on: { click: () => { closeFlyouts(); openBuild(true); } } }, h('span.ico', icon('hammer', { size: 44 })), h('span.name'));
   let shownIds = '';
+
+  /** Paint a tool's look into a button: its icon, its short word, pressed, the New badge. */
+  function paintTool(b, tool, state, t, sn) {
+    const def = toolDefFor(tool.id, state);
+    const name = def ? cname(def.id, { family: 'tools' }) : tool.label;
+    const touch = touchPlayer(controller);
+    const label = `${name}${tool.key && !touch ? ` (${tool.key})` : ''}`;
+    b.setAttribute('aria-pressed', String(t.id === tool.id || (isSeedTool(t.id) && isSeedTool(tool.id))));
+    b.setAttribute('aria-label', label);
+    const desc = def && def.text ? ctext('tools', def.id, 'desc', def.text) : '';
+    b.dataset.tip = `${label}${desc ? `: ${desc}` : ''}`;
+    // a finger has no number keys and no Shift: its tip leaves the key out and says the touch words of the text
+    b.dataset.tipTouch = `${name}${desc ? `: ${touchText(desc, true)}` : ''}`;
+    const ico = b.querySelector('.ico');
+    // the Compost Scoop spreading Fertilizer says so (wave 4, wish 2): its picture and name are the Fertilizer's
+    const fertOn = TOOL_CONTENT[tool.id] === 'compost_scoop' && t.id === tool.id && t.spread === 'fertilizer';
+    // the Hand armed with a seed (release 1.0 M2): the seed rides on its picture
+    const armed = tool.id === 'hand' && t.id === 'hand' && t.seeding && t.crop;
+    const iconId = fertOn ? 'fertilizer' : def ? def.id : null;
+    const key = `${iconId}|${armed ? t.crop : ''}`;
+    if (ico.dataset.id !== key) {
+      ico.dataset.id = key;
+      ico.replaceChildren(iconId ? icon(iconId, { size: 44 }) : svgIcon(tool.id === 'hand' ? 'hand' : 'star', 44),
+        armed ? h('span.crop-on', icon(t.crop, { size: 26 })) : '');
+    }
+    const nameEl = b.querySelector('.name');
+    nameEl.textContent = isSeedTool(tool.id) ? (isSeedTool(t.id) ? cropName(t.crop) || tr('toolbar.short.seeds') : tr('toolbar.short.seeds'))
+      : armed ? cropName(t.crop) || shortLabel(def, name) : fertOn ? tr('toolbar.fertilizer') : shortLabel(def, name);
+    // a long name ("Fertilizer", "Strawberry", "Пшеница" in bold on the Hand) is set a size smaller so it fits the button
+    nameEl.classList.toggle('long', nameEl.textContent.length > LONG_NAME);
+    // on a phone the slot is narrower: a name still too long shrinks to what it holds (QA r1 S-07; measured once per text)
+    if (isPhone()) fitLabel(nameEl);
+    b.classList.toggle('armed', Boolean(armed));
+    const isNew = !sn.tools?.[tool.id];
+    const badge = b.querySelector('.badge');
+    if (isNew && !badge) b.append(h('span.badge.badge--new', tr('toolbar.new')));
+    else if (!isNew && badge) badge.remove();
+  }
 
   function render() {
     const state = store.state;
@@ -213,51 +356,110 @@ export function createToolbar(S) {
       const def = toolDefFor(tool.id, state);
       return !(def && def.unlock > level);
     });
-    const ids = visible.map((x) => x.id).join(',');
+    for (const tool of visible) if (!buttons.has(tool.id)) buttons.set(tool.id, toolButton(tool));
+    if (GROUP.has(t.id)) lastGroupTool = t.id;
+    const phone = isPhone();
+    const group = visible.filter((x) => GROUP.has(x.id));
+    const ids = `${phone ? 'p' : 'd'}|${visible.map((x) => x.id).join(',')}`;
     if (ids !== shownIds) {
       shownIds = ids;
-      bar.replaceChildren(...visible.map((tool) => {
-        if (!buttons.has(tool.id)) buttons.set(tool.id, toolButton(tool));
-        return buttons.get(tool.id);
-      }));
-      requestAnimationFrame?.(paintMore);
+      closeFlyouts();
+      if (phone) bar.replaceChildren(curSlot);
+      else bar.replaceChildren(...['hand', 'seed_bag'].map((id) => buttons.get(id)).filter(Boolean), ...(group.length ? [toolsSlot] : []));
     }
-    for (const tool of visible) {
-      const b = buttons.get(tool.id);
-      const def = toolDefFor(tool.id, state);
-      const name = def ? cname(def.id, { family: 'tools' }) : tool.label;
-      const label = `${name}${tool.key ? ` (${tool.key})` : ''}`;
-      b.setAttribute('aria-pressed', String(t.id === tool.id || (isSeedTool(t.id) && isSeedTool(tool.id))));
-      b.setAttribute('aria-label', label);
-      const desc = def && def.text ? ctext('tools', def.id, 'desc', def.text) : '';
-      b.dataset.tip = `${label}${desc ? `: ${desc}` : ''}`;
-      // a finger has no number keys and no Shift: its tip leaves the key out and says the touch words of the text
-      b.dataset.tipTouch = `${name}${desc ? `: ${touchText(desc, true)}` : ''}`;
-      const ico = b.querySelector('.ico');
-      // the Compost Scoop spreading Fertilizer says so (wave 4, wish 2): its picture and name are the Fertilizer's
-      const fertOn = TOOL_CONTENT[tool.id] === 'compost_scoop' && t.id === tool.id && t.spread === 'fertilizer';
-      const iconId = fertOn ? 'fertilizer' : def ? def.id : null;
-      if (ico.dataset.id !== String(iconId)) {
-        ico.dataset.id = String(iconId);
-        ico.replaceChildren(iconId ? icon(iconId, { size: 44 }) : svgIcon(tool.id === 'hand' ? 'hand' : 'star', 44));
+    for (const tool of visible) paintTool(buttons.get(tool.id), tool, state, t, sn);
+    for (const b of buttons.values()) if (b.dataset.tool === 'seed_bag') b.setAttribute('aria-expanded', String(seedFly));
+    if (!phone) {
+      // the Tools slot shows the tool in hand from its group, else the last one used (a Sickle on a new farm)
+      const inHand = GROUP.has(t.id);
+      const showId = group.some((x) => x.id === lastGroupTool) ? lastGroupTool : group[0]?.id;
+      const tool = group.find((x) => x.id === showId);
+      if (tool) {
+        const def = toolDefFor(tool.id, state);
+        const ico = toolsSlot.querySelector('.ico');
+        if (ico.dataset.id !== def?.id) { ico.dataset.id = def?.id ?? ''; ico.replaceChildren(icon(def?.id ?? tool.id, { size: 44 })); }
+        const slotName = toolsSlot.querySelector('.name');
+        slotName.textContent = inHand ? shortLabel(def, tool.label) : tr('dock.tools.slot');
+        slotName.classList.toggle('long', slotName.textContent.length > LONG_NAME);
+        toolsSlot.setAttribute('aria-pressed', String(inHand));
+        toolsSlot.setAttribute('aria-label', inHand ? tr('dock.tools.labelIn', { tool: cname(def.id, { family: 'tools' }) }) : tr('dock.tools.label'));
+        toolsSlot.dataset.tip = tr('dock.tools.tip');
+        toolsSlot.classList.toggle('has-new', group.some((x) => !sn.tools?.[x.id]));
       }
-      const nameEl = b.querySelector('.name');
-      nameEl.textContent = isSeedTool(tool.id) ? (cropName(t.crop) || tr('toolbar.short.seeds')) : fertOn ? tr('toolbar.fertilizer') : shortLabel(def, name);
-      // a long name ("Fertilizer", "Strawberry") is set a size smaller so it fits a phone's tool button
-      nameEl.classList.toggle('long', nameEl.textContent.length > 8);
-      const isNew = !sn.tools?.[tool.id];
-      const badge = b.querySelector('.badge');
-      if (isNew && !badge) b.append(h('span.badge.badge--new', tr('toolbar.new')));
-      else if (!isNew && badge) badge.remove();
+    } else {
+      // the phone's one slot: the tool in hand (the Hammer counts as Build)
+      const cur = visible.find((x) => x.id === t.id || (isSeedTool(t.id) && isSeedTool(x.id))) || visible[0];
+      if (cur) {
+        const ico = curSlot.querySelector('.ico');
+        const proxy = buttons.get(cur.id);
+        paintTool(proxy, cur, state, t, sn);
+        ico.replaceChildren(...[...proxy.querySelector('.ico').childNodes].map((n) => n.cloneNode(true)));
+        curSlot.querySelector('.name').textContent = proxy.querySelector('.name').textContent;
+        curSlot.querySelector('.name').classList.toggle('long', proxy.querySelector('.name').classList.contains('long'));
+        fitLabel(curSlot.querySelector('.name'));
+        curSlot.setAttribute('aria-label', tr('dock.tools.curLabel', { tool: proxy.getAttribute('aria-label') }));
+        curSlot.setAttribute('aria-pressed', 'true');
+      }
     }
+    if (toolsFly || popOpen) renderFly();
     if (seedsOpen) renderSeeds(); else tray.hidden = true;
     renderSpread();
     renderGolden();
     if (level !== lastLevel) lastLevel = level;
-    const held = isSeedTool(t.id) ? visible.find((x) => isSeedTool(x.id))?.id : t.id;
-    // layout reads only when the tool in hand or the set of tools changed: render runs during a drag stroke (CL-05)
-    if (held !== revealed) { revealed = held; revealTool(buttons.get(held)); paintMore(); }
     if (!sized) { sized = true; sizeTrays(); }
+  }
+
+  /** The flyout's buttons: the group's tools (desktop), or every tool and Build (phone). */
+  function renderFly() {
+    const state = store.state;
+    const t = controller.tool;
+    const sn = seen() || { tools: {}, crops: {} };
+    const level = levelFromXp(state.farm.xp);
+    const visible = controller.TOOLS.filter((tool) => { const def = toolDefFor(tool.id, state); return !(def && def.unlock > level); });
+    const list = popOpen ? visible.filter((x) => x.id !== 'hammer') : visible.filter((x) => GROUP.has(x.id));
+    for (const tool of list) {
+      const b = buttons.get(tool.id);
+      paintTool(b, tool, state, t, sn);
+      b.removeAttribute('role');   // a toggle button (aria-pressed) in a group, not a menu item (P9 audit)
+    }
+    buildItem.querySelector('.name').textContent = tr('hud.dock.build');
+    buildItem.setAttribute('aria-label', tr('hud.dock.build'));
+    fly.classList.toggle('tool-pop', popOpen);
+    fly.setAttribute('aria-label', popOpen ? tr('dock.tools.popLabel') : tr('dock.tools.label'));
+    fly.replaceChildren(...list.map((x) => buttons.get(x.id)), ...(popOpen ? [buildItem] : []), flyCaret);
+    fly.hidden = false;
+  }
+  function toggleTools(open = !toolsFly) {
+    if (!open) { closeFlyouts(); return; }
+    setSeedFly(false);
+    toolsFly = true;
+    popOpen = false;
+    toolsSlot.setAttribute('aria-expanded', 'true');
+    renderFly();
+    caretAt(toolsSlot);
+    fly.querySelector('[aria-pressed="true"]')?.focus({ preventScroll: true }) ?? fly.querySelector('button')?.focus({ preventScroll: true });
+    syncSoon();
+  }
+  function togglePop(open = !popOpen) {
+    if (!open) { closeFlyouts(); return; }
+    setSeedFly(false);
+    if (buildOpen) openBuild(false);
+    popOpen = true;
+    toolsFly = false;
+    curSlot.setAttribute('aria-expanded', 'true');
+    renderFly();
+    caretAt(curSlot);
+    // the pop-up sits before the bar in the page: Tab from the slot would never reach it (P9 audit), so it takes the focus
+    fly.querySelector('[aria-pressed="true"]')?.focus({ preventScroll: true }) ?? fly.querySelector('button')?.focus({ preventScroll: true });
+    syncSoon();
+  }
+  phoneMq?.addEventListener?.('change', () => { shownIds = ''; closeFlyouts(); render(); });
+  /** The element a pointer should show for a tool now (the tool's own button, or the slot that holds it). */
+  function slotOf(id) {
+    const b = buttons.get(id) || [...buttons.values()].find((x) => TOOL_CONTENT[x.dataset.tool] === TOOL_CONTENT[id]);
+    if (b && b.isConnected && b.getClientRects().length) return b;
+    if (isPhone()) return curSlot;
+    return GROUP.has(TOOL_CONTENT[id] ?? id) ? toolsSlot : b ?? null;
   }
 
   /**
@@ -276,20 +478,28 @@ export function createToolbar(S) {
 
   function onTool(id) {
     markSeen('tools', id);
+    // a pick in the Tools flyout (or the phone's pop-up) gives the focus back to its slot: it fell to <body> and the next
+    // Tab started over at the Hand (QA r2 S-14, ap#1)
+    closeFlyouts({ focus: true });
     if (isSeedTool(id)) {
-      // the Seed Bag button toggles its tray; picking a seed selects the tool
-      if (isSeedTool(controller.tool.id)) { seedsOpen = !seedsOpen; render(); return; }
-      seedsOpen = true;
+      // the Seeds slot opens its crop strip; with the Seed Bag in hand a second press puts the strip away
+      if (isSeedTool(controller.tool.id)) { setSeedFly(!seedFly); render(); return; }
+      controller.setTool(id);
+      setSeedFly(true);
     } else {
+      setSeedFly(false);
       seedsOpen = false;
+      // the armed Hand pressed again puts its seed away: the next empty plot asks which seed
+      controller.setTool(id);
     }
-    controller.setTool(id);
     S.tutorial?.firstUse(TOOL_CONTENT[id] || id);
   }
 
   function renderSeeds() {
     const state = store.state;
-    const rows = seedRows(state);
+    const now = store.now?.() ?? Date.now();
+    // the price this farmer pays (mastery, perks), the one `plant` charges, not the base table's (QA r1 F-02)
+    const rows = seedRows(state).map((r) => (r.open ? { ...r, seed: FARMING.plantPreview(state, r.id, null, store.pid, now).price } : r));
     const t = controller.tool;
     const sn = seen() || { crops: {} };
     tray.replaceChildren(arrow(-1));
@@ -299,19 +509,20 @@ export function createToolbar(S) {
       const stars = h('span.stars', { 'aria-hidden': 'true' });
       for (let i = 0; i < 3; i++) stars.append(h(i < r.stars ? 'span' : 'span.off', '★'));
       const card = h('button.seed', {
-        type: 'button', role: 'option', dataset: { crop: r.id }, 'aria-selected': String(sel), 'aria-disabled': r.open ? null : 'true',
+        type: 'button', dataset: { crop: r.id }, 'aria-pressed': String(sel), 'aria-disabled': r.open ? null : 'true',
         'aria-label': r.open
-          ? tr('toolbar.seed.label', { name: N(r.id, 'crops'), seed: r.seed, d: fmtDuration(r.growMs), sell: r.sell, stars: r.stars, stock: r.stock })
+          ? tr('toolbar.seed.label', { name: N(r.id, 'crops'), seed: r.seed, d: fmtDuration(r.growMs, { trim: true }), sell: r.sell, stars: r.stars, stock: r.stock })
           : tr('toolbar.seed.lockedLabel', { name: N(r.id, 'crops'), level: r.unlock }),
         'data-tip': r.open
-          ? tr(r.stock ? 'toolbar.seed.tipStock' : 'toolbar.seed.tip', { name: N(r.id, 'crops'), seed: r.seed, d: fmtDuration(r.growMs), yield: r.yield,
+          ? tr(r.stock ? 'toolbar.seed.tipStock' : 'toolbar.seed.tip', { name: N(r.id, 'crops'), seed: r.seed, d: fmtDuration(r.growMs, { trim: true }), yield: r.yield,
             sell: r.sell, xp: r.xp, stock: r.stock })
           : tr('toolbar.seed.locked', { name: N(r.id, 'crops'), level: r.unlock }),
         on: { click: () => pickSeed(r) },
       },
       icon(r.id, { size: 46 }),
-      // how many the barn holds already (owner 2026-10-11: "show when planting how much we have in the barn")
-      r.open ? h(`span.stock${r.stock ? '' : '.zero'}`, { 'aria-hidden': 'true', title: tr('toolbar.seed.inBarn', { n: r.stock }) },
+      // how many the barn holds already (owner 2026-10-11: "show when planting how much we have in the barn"); none: no
+      // badge (a bare "0" read as "0 seeds", release 1.0 M28)
+      r.open && r.stock ? h('span.stock', { 'aria-hidden': 'true', title: tr('toolbar.seed.inBarn', { n: r.stock }) },
         icon('barn', { size: 16 }), fmt(r.stock)) : null,
       h('span.nm', cname(r.id, { family: 'crops' })),
       // "Plant 2 · 1m" and "Harvest 2 × 2": what a plot costs and what it gives, labelled (QA wave 1 UI-25)
@@ -384,6 +595,22 @@ export function createToolbar(S) {
   store.subscribe('relics', renderGolden);
 
   // ---- the seed tray's overflow cue (QA wave 1 UI-38): a fading arrow at each end that has more cards ----------
+  /** A scroll arrow for any tray (the build tray's are always there: release 1.0 S2). */
+  function arrowOn(el, dir) {
+    return h(`button.tray-arrow.always.${dir < 0 ? 'left' : 'right'}`, { type: 'button', tabindex: '-1',
+      'aria-label': dir < 0 ? tr('dock.build.left') : tr('dock.build.right'),
+      on: { click: () => el.scrollBy({ left: dir * Math.max(120, el.clientWidth * 0.6), behavior: 'smooth' }) } },
+    h('span', { 'aria-hidden': 'true' }, dir < 0 ? '‹' : '›'));
+  }
+  function cueOn(el) {
+    const max = el.scrollWidth - el.clientWidth;
+    el.classList.toggle('scrolls', max > 4);
+    const l = el.querySelector('.tray-arrow.left');
+    const r = el.querySelector('.tray-arrow.right');
+    if (l) l.toggleAttribute('aria-disabled', el.scrollLeft <= 4);
+    if (r) r.toggleAttribute('aria-disabled', el.scrollLeft >= max - 4);
+  }
+  btray.addEventListener('scroll', () => cueOn(btray), { passive: true });
   function arrow(dir) {
     return h(`button.tray-arrow.${dir < 0 ? 'left' : 'right'}`, { type: 'button', tabindex: '-1', hidden: true,
       'aria-label': dir < 0 ? tr('toolbar.seedsLeft') : tr('toolbar.seedsRight'),
@@ -406,19 +633,23 @@ export function createToolbar(S) {
   /** The tray state on <body> (layout: the coach docks beside the toolbar, the feed steps aside; UI-07, UI-09). */
   const wrap = document.getElementById('tray-wrap');
   function syncTrayState() {
-    const open = !tray.hidden || !btray.hidden;
+    // any tray or flyout over the toolbar: the coach docks left of it (M1a, ux-first#12)
+    const strip = document.querySelector('#tray-wrap > .seed-strip:not(.spread-strip)');
+    const open = !tray.hidden || !btray.hidden || !fly.hidden || Boolean(strip && !strip.hidden);
     document.body.classList.toggle('tray-open', open);
     if (!open || !wrap) return;
     const scale = (S.settings?.scale?.() ?? 100) / 100;
     const w = wrap.getBoundingClientRect();
-    const b = bar.getBoundingClientRect();
-    // logical px (the HUD is zoomed by --ui-scale): the toolbar's inset in the column, the room left of it
-    wrap.style.setProperty('--tool-inset', `${Math.max(0, (w.width - b.width) / 2 / scale)}px`);
-    wrap.style.setProperty('--coach-w', `${Math.max(200, Math.min(380, (b.left - 16 - 14) / scale))}px`);
+    // the coach docks left of everything open over the toolbar: a build or seed tray (360 px) is wider than the toolbar
+    // of 3 and sat on the card's right half at 1366 x 768 (QA r1 S-09); logical px (the HUD is zoomed by --ui-scale)
+    const shown = [bar, tray, btray, fly, strip].filter((e) => e && !e.hidden && e.getClientRects().length);
+    const left = Math.min(...shown.map((e) => e.getBoundingClientRect().left));
+    wrap.style.setProperty('--tool-inset', `${Math.max(0, (left - w.left) / scale)}px`);
+    wrap.style.setProperty('--coach-w', `${Math.max(200, Math.min(380, (left - 16 - 14) / scale))}px`);
   }
   if (typeof MutationObserver === 'function') {
     const mo = new MutationObserver(() => requestAnimationFrame(syncTrayState));
-    for (const el of [tray, btray]) mo.observe(el, { attributes: true, attributeFilter: ['hidden'] });
+    for (const el of [tray, btray, fly]) mo.observe(el, { attributes: true, attributeFilter: ['hidden'] });
   }
   window.addEventListener('resize', () => requestAnimationFrame(() => { syncTrayState(); cue(); }));
 
@@ -426,14 +657,16 @@ export function createToolbar(S) {
     if (!r.open) { ui.toast(tr('toolbar.seed.lockedToast', { name: N(r.id, 'crops'), level: r.unlock }), { kind: 'info', icon: r.id }); return; }
     markSeen('crops', r.id);
     if (controller.tool.id === 'hand') {
-      // the Smart Hand asked for a seed (an empty plot, no seed chosen): keep the Hand, remember the seed
-      controller.setTool('hand', { crop: r.id });
+      // the Smart Hand asked for a seed (an empty plot, no seed chosen): keep the Hand, armed with the seed (M2)
+      controller.setTool('hand', { crop: r.id, plant: true });
       seedsOpen = false;
       render();
       return;
     }
     const seedTool = controller.TOOLS.find((x) => isSeedTool(x.id));
     controller.setTool(seedTool ? seedTool.id : 'seed', { crop: r.id });
+    seedsOpen = false;
+    setSeedFly(false);
     S.tutorial?.firstUse('seed_bag');
   }
 
@@ -443,9 +676,31 @@ export function createToolbar(S) {
     const st = store.state;
     if (!st) return;
     const stored = Object.keys(st.farm.storage || {}).sort().filter((d) => (st.farm.storage[d] || 0) > 0 && defOf(d));
-    const cards = stored.map((d) => {
-      const def = defOf(d);
-      const n = st.farm.storage[d];
+    const tools = [];
+    // Shop, Move and Upgrade first (release 1.0 S2, ux-first#13: the Shop card was the 23rd of 23 on the owners' farm),
+    // then what waits in storage, then selling stored decor back
+    if (ui.panels.has('market')) {
+      tools.push(h('button.seed.build-card', {
+        type: 'button', role: 'menuitem', dataset: { def: 'shop' }, 'aria-label': tr('toolbar.build.shopLabel'),
+        on: { click: () => { buildOpen = false; btray.hidden = true; ui.panels.open('market', { tab: 'buildings' }); } },
+      }, icon('market_stand', { size: 46 }), h('span.nm', tr('toolbar.build.shop')), h('span.row', tr('toolbar.build.shopSub'))));
+    }
+    tools.push(h('button.seed.build-card', {
+      type: 'button', role: 'menuitem', dataset: { def: 'move' }, 'aria-label': tr('toolbar.build.moveLabel'),
+      'data-tip': tr('toolbar.build.moveTip'),
+      on: { click: () => { buildOpen = false; btray.hidden = true; controller.setTool('hammer'); } },
+    }, icon('hammer', { size: 46 }), h('span.nm', tr('toolbar.build.move')), h('span.row', tr('toolbar.build.moveSub'))));
+    // the farmhouse, Market Stand, Well and benches upgrade from here too (wave 4, wish E)
+    if (ui.panels.has('upgrades')) {
+      tools.push(h('button.seed.build-card', {
+        type: 'button', role: 'menuitem', dataset: { def: 'upgrades' }, 'aria-label': tr('toolbar.build.upLabel'),
+        'data-tip': tr('toolbar.build.upTip'),
+        on: { click: () => { buildOpen = false; btray.hidden = true; S.hud?.renderDock(); ui.panels.open('upgrades'); } },
+      }, icon('farmhouse', { size: 46 }), h('span.nm', tr('toolbar.build.up')), h('span.row', tr('toolbar.build.upSub'))));
+    }
+    // what waits in storage, then a free building this level brought that the farm has none of (the Windmill, S-01)
+    const cards = [...stored, ...freeToPlace(st)].map((d) => {
+      const n = st.farm.storage?.[d] ?? 0;
       return h('button.seed.build-card', {
         type: 'button', role: 'menuitem', dataset: { def: d },
         'aria-label': tr(n > 1 ? 'toolbar.build.placeN' : 'toolbar.build.place', { thing: N(d), n }), 'data-tip': tr('toolbar.build.tip', { thing: N(d) }),
@@ -460,27 +715,10 @@ export function createToolbar(S) {
         on: { click: () => { buildOpen = false; btray.hidden = true; S.hud?.renderDock(); ui.panels.open('decorSell'); } },
       }, icon('coins', { size: 46 }), h('span.nm', tr('toolbar.build.sell')), h('span.row', tr('toolbar.build.sellSub'))));
     }
-    cards.push(h('button.seed.build-card', {
-      type: 'button', role: 'menuitem', dataset: { def: 'move' }, 'aria-label': tr('toolbar.build.moveLabel'),
-      'data-tip': tr('toolbar.build.moveTip'),
-      on: { click: () => { buildOpen = false; btray.hidden = true; controller.setTool('hammer'); } },
-    }, icon('hammer', { size: 46 }), h('span.nm', tr('toolbar.build.move')), h('span.row', tr('toolbar.build.moveSub'))));
-    // the farmhouse, Market Stand, Well and benches upgrade from here too (wave 4, wish E)
-    if (ui.panels.has('upgrades')) {
-      cards.push(h('button.seed.build-card', {
-        type: 'button', role: 'menuitem', dataset: { def: 'upgrades' }, 'aria-label': tr('toolbar.build.upLabel'),
-        'data-tip': tr('toolbar.build.upTip'),
-        on: { click: () => { buildOpen = false; btray.hidden = true; S.hud?.renderDock(); ui.panels.open('upgrades'); } },
-      }, icon('farmhouse', { size: 46 }), h('span.nm', tr('toolbar.build.up')), h('span.row', tr('toolbar.build.upSub'))));
-    }
-    if (ui.panels.has('market')) {
-      cards.push(h('button.seed.build-card', {
-        type: 'button', role: 'menuitem', dataset: { def: 'shop' }, 'aria-label': tr('toolbar.build.shopLabel'),
-        on: { click: () => { buildOpen = false; btray.hidden = true; ui.panels.open('market', { tab: 'buildings' }); } },
-      }, icon('market_stand', { size: 46 }), h('span.nm', tr('toolbar.build.shop')), h('span.row', tr('toolbar.build.shopSub'))));
-    }
-    btray.replaceChildren(...cards);
+    // the scroll arrows always show on a strip wider than the screen (they grey out at an end)
+    btray.replaceChildren(arrowOn(btray, -1), ...tools, ...(cards.length ? [h('span.tray-sep', { 'aria-hidden': 'true' })] : []), ...cards, arrowOn(btray, 1));
     btray.hidden = false;
+    requestAnimationFrame?.(() => cueOn(btray));
   }
   function placeStored(defId) {
     buildOpen = false;
@@ -491,7 +729,14 @@ export function createToolbar(S) {
   }
   function openBuild(open = !buildOpen) {
     buildOpen = Boolean(open);
-    if (buildOpen) { seedsOpen = false; tray.hidden = true; renderBuild(); btray.querySelector('button')?.focus({ preventScroll: true }); }
+    if (buildOpen) {
+      seedsOpen = false;
+      tray.hidden = true;
+      closeFlyouts();
+      setSeedFly(false);
+      renderBuild();
+      btray.querySelector('.build-card')?.focus({ preventScroll: true });
+    }
     else btray.hidden = true;
     S.hud?.renderDock();
   }
@@ -612,8 +857,15 @@ export function createToolbar(S) {
     if (!e || e.pickUp || !e.def || (!e.moveId && e.def === 'plot') || touchPlayer(controller)) return null;
     return { def: e.def, moveId: e.moveId ?? null, rot: e.rot ?? 0 };
   }
-  function showCarry(c) {
+  // the ghost's reason, beside what is carried (release 1.0 S7, ux-first#15): "In the way: the Well"
+  const carryWhy = h('span.carry-why', { role: 'status' });
+  function paintWhy(e) {
+    carryWhy.textContent = placeWhy(e);
+    carryWhy.hidden = !carryWhy.textContent;
+  }
+  function showCarry(c, e = null) {
     const key = `${c.def}|${c.moveId}`;
+    paintWhy(e);
     if (key === carryKey && !hint.hidden) return;
     carryKey = key;
     clearTimeout(hintT);
@@ -622,7 +874,7 @@ export function createToolbar(S) {
     shown();
     const thing = defOf(c.def) ? N(c.def) : tr('toolbar.carry.it');
     const btn = (label, fn, title) => h('button.hint-btn', { type: 'button', title, on: { click: (ev) => { ev.stopPropagation(); fn(); } } }, label);
-    hint.replaceChildren(icon(c.def, { size: 26 }), h('span', tr(c.moveId ? 'toolbar.carry.moving' : 'toolbar.carry.placing', { thing })),
+    hint.replaceChildren(icon(c.def, { size: 26 }), h('span', tr(c.moveId ? 'toolbar.carry.moving' : 'toolbar.carry.placing', { thing })), carryWhy,
       btn(tr('toolbar.hint.rotateKey'), () => controller.rotate(), tr('toolbar.carry.rotateTip')),
       btn(tr('toolbar.carry.cancel'), () => controller.cancel?.(), c.moveId ? tr('game.build.leave') : tr('toolbar.carry.putBack')));
     hint.classList.add('carry');
@@ -647,7 +899,7 @@ export function createToolbar(S) {
 
   controller.on('build', (e) => {
     const carry = carryOf(e);
-    if (carry) { showCarry(carry); return; }
+    if (carry) { showCarry(carry, e); return; }
     if (carryKey) hideCarry();
     if (e && e.pickUp) {
       clearTimeout(hintT);
@@ -671,8 +923,13 @@ export function createToolbar(S) {
   });
   store.on('change', (ch) => { if (hintId && !hint.hidden && (ch.ids.has(hintId) || ch.topics.has('*'))) renderHint(); });
 
+  let heldTool = controller.tool.id;
   controller.on('tool', (t) => {
-    if (!isSeedTool(t.id)) seedsOpen = false;
+    if (!isSeedTool(t.id)) { seedsOpen = false; setSeedFly(false); }
+    // the Seed Bag taken up (2, the pop-up): its crop strip opens over the slot
+    else if (!isSeedTool(heldTool)) setSeedFly(true);
+    heldTool = t.id;
+    if (toolsFly || popOpen) closeFlyouts();
     if (t.id !== 'hammer') { hint.hidden = true; hintId = null; dropSwitch(); shown(); }
     render();
   });
@@ -691,6 +948,8 @@ export function createToolbar(S) {
   // a click on the farm closes the seed tray (the chosen seed stays)
   document.getElementById('world').addEventListener('pointerdown', () => {
     if (seedsOpen) { seedsOpen = false; tray.hidden = true; }
+    if (toolsFly || popOpen) closeFlyouts();
+    if (seedFly) setSeedFly(false);
     if (buildOpen) { buildOpen = false; btray.hidden = true; S.hud?.renderDock(); }
   });
 
@@ -699,6 +958,11 @@ export function createToolbar(S) {
     openSeeds(open = true) { seedsOpen = Boolean(open); if (seedsOpen) { buildOpen = false; btray.hidden = true; } render(); },
     openBuild,
     get buildOpen() { return buildOpen; },
+    /** The crop strip over the Seeds slot is open (seeds.js shows it then). */
+    get seedFly() { return seedFly; },
+    setSeedFly,
+    closeFlyouts,
+    slotOf,
     toolDef: (id) => toolDefFor(id, store.state),
   };
 }

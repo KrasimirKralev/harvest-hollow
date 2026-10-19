@@ -9,7 +9,7 @@ import { TOWNSFOLK, itemOf, npcOf, defOf } from '../../../../shared/content/inde
 import * as FK from '../../../../shared/rules/actions/folk.js';
 import { systemLive, weekOf, dayOf, weekStartDay, localAt } from '../../../../shared/rules/coop.js';
 import { sortedKeys } from '../../../../shared/rules/order.js';
-import { h, svgIcon, createKit, fill, chip, price } from './kit.js';
+import { h, svgIcon, createKit, fill, chip, price, phoneTitle } from './kit.js';
 import { has, levelOf, available } from './core.js';
 import { portrait } from './art.js';
 import { focusOn, actionOf, banner, clockChip, flagButton, lockedBody, need, toTop } from './fair.js';
@@ -79,7 +79,7 @@ export function townsfolkBadge(state, pid, now) {
 }
 
 export const townsfolkPanel = {
-  get title() { return t('weekly.folk.title'); },
+  get title() { return phoneTitle('weekly.folk.title', 'weekly.folk.titleShort'); },
   icon: 'order_board',
   size: 'full',
   topics: ['folk', 'inventory', 'overflow', 'xp', 'players', 'meta'],
@@ -110,7 +110,7 @@ export const townsfolkPanel = {
         return;
       }
       const village = ctx.ui.panels.has('town')
-        ? h('button.btn.btn--paper.btn--small.wk-board-link', { type: 'button', on: { click: () => ctx.ui.panels.open('town') } },
+        ? h('button.btn.btn--paper.btn--small.wk-board-link', { type: 'button', 'data-sfx': 'own', on: { click: () => ctx.ui.panels.open('town') } },
           svgIcon('hammer', 20), t('weekly.folk.projects'))
         : null;
       const clock = clockChip(kit, { label: t('weekly.folk.clock'), at: v.leavesAt, doneText: t('weekly.clock.anyMoment'), glyph: 'letter' });
@@ -119,7 +119,8 @@ export const townsfolkPanel = {
       fill(body,
         banner('b', t('weekly.folk.banner'), v.posts.length ? t('weekly.folk.bannerSub', { n: v.done, of: v.posts.length }) : t('weekly.folk.bannerNone'),
           { chip: h('div.wk-banner-chips', clock, village) }),
-        h('div.wk-board', { role: 'list', 'aria-label': t('weekly.folk.requests') }, ...(v.posts.length ? v.posts.map((p, k) => postCard(st, p, k)) : [empty])),
+        // no request today: one note, not a list with no item (QA r1 P-19 sibling)
+        h('div.wk-board', { role: v.posts.length ? 'list' : null, 'aria-label': t('weekly.folk.requests') }, ...(v.posts.length ? v.posts.map((p, k) => postCard(st, p, k)) : [empty])),
         friendsEl(st, v));
       kit.refresh();
       if (Number.isInteger(ctx.args.i) && !ctx.wkRang) focusOn(ctx.wkRang = body.querySelector(`[data-post="${ctx.args.i}"]`));
@@ -133,10 +134,10 @@ export const townsfolkPanel = {
       const line = (Array.isArray(lines) ? lines[p.n % Math.max(1, lines.length)] : null) ?? '';
       const ft = flagType();
       const missing = () => ({ missing: p.items.filter((x) => x.have < x.qty).flatMap((x) => need(x.item, x.qty - x.have).missing) });
-      return h(`article.pn-order.wk-post${p.ready ? '.ready' : ''}${p.done ? '.done' : ''}`, {
+      return h(`div.pn-order.wk-post${p.ready ? '.ready' : ''}${p.done ? '.done' : ''}`, {
         role: 'listitem', dataset: { post: String(p.i) }, style: { '--tilt': `${[-1.1, 0.9, -0.5][k % 3]}deg` } },
       h('span.pn-pin', { 'aria-hidden': 'true' }),
-      h('header.wk-post-head', npc ? portrait(npc, 56) : null,
+      h('div.wk-post-head', npc ? portrait(npc, 56) : null,
         h('div', h('b', npcName(p.npc)), h('small', npc ? npcRole(p.npc) : ''), line ? h('q', line) : null)),
       h('div.pn-order-items', ...p.items.map((x) => chip(x.item, p.done ? { n: x.qty, size: 44 } : { have: x.have, need: x.qty, size: 44 }))),
       h('div.pn-order-pay', price({ coins: p.coins }), h('span.pn-xp', t('weekly.xp', { n: p.xp })),

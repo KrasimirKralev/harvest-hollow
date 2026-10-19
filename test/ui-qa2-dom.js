@@ -14,6 +14,8 @@ class FakeNode {
   _drop() { for (const c of this.childNodes) c.parentNode = null; this.childNodes = []; }
   _wrap(c) { return c instanceof FakeNode ? c : new FakeText(String(c)); }
   _add(c, at = this.childNodes.length) {
+    // a fragment moves its children in (like the DOM), and is left empty
+    if (c instanceof FakeFragment) { const kids = [...c.childNodes]; kids.forEach((k, i) => this._add(k, at + i)); return c; }
     const n = this._wrap(c);
     if (n.parentNode) n.remove();
     n.parentNode = this;
@@ -34,8 +36,13 @@ class FakeNode {
 
 class FakeText extends FakeNode {
   constructor(t) { super(); this.data = t; }
+  get nodeType() { return 3; }
   get textContent() { return this.data; }
   set textContent(v) { this.data = String(v); }
+}
+
+class FakeFragment extends FakeNode {
+  get nodeType() { return 11; }
 }
 
 class ClassList {
@@ -62,6 +69,7 @@ class FakeElement extends FakeNode {
     this.hidden = false;
     this.id = '';
   }
+  get nodeType() { return 1; }
   get className() { return [...this.classList].join(' '); }
   set className(v) { this.classList.set = new Set(String(v).split(/\s+/).filter(Boolean)); }
   setAttribute(k, v) { this.attrs.set(k, String(v)); if (k === 'id') this.id = String(v); if (k === 'class') this.className = v; }
@@ -78,6 +86,7 @@ class FakeElement extends FakeNode {
   click() { this.dispatch('click'); }
   focus() {}
   blur() {}
+  scrollIntoView() {}
   getBoundingClientRect() { return { left: 0, top: 0, right: 0, bottom: 0, width: 0, height: 0 }; }
   getClientRects() { return []; }
   set innerHTML(v) { this._drop(); this._html = String(v); }
@@ -125,12 +134,17 @@ export function installDom() {
     createElement: (t) => new FakeElement(t),
     createElementNS: (_ns, t) => new FakeElement(t),
     createTextNode: (t) => new FakeText(t),
+    createDocumentFragment: () => new FakeFragment(),
     activeElement: null,
     addEventListener() {},
     removeEventListener() {},
   };
   document.body = new FakeElement('body');
   document.getElementById = (id) => (document.body.id === id ? document.body : document.body.querySelector(`#${id}`));
+  // the document's own selectors search the body (a real document would include <html> and <head>: nothing the
+  // panels build lives there)
+  document.querySelectorAll = (sel) => document.body.querySelectorAll(sel);
+  document.querySelector = (sel) => document.body.querySelector(sel);
   Object.assign(globalThis, { document, Node: FakeNode, CSS: { escape: (s) => String(s) } });
   return document;
 }

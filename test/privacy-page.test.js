@@ -87,14 +87,14 @@ test('privacy page: English and Bulgarian, each complete: every topic, the same 
     assert.match(html, /#k=/, 'never send your key');
   }
   const e = words(en);
-  for (const must of ['Rowena Kralev', 'Bulgaria', 'controller', 'hash', 'browser\'s family', 'Safari on iOS', 'only to reply',
+  for (const must of ['Krasimir Kralev', 'Bulgaria', 'controller', 'hash', 'browser\'s family', 'Safari on iOS', 'only to reply',
     'no tracking cookies, no analytics and no ads', '7 days', '12 months', 'United States', 'travels to the US', 'legitimate interest',
     'consent', 'Access', 'Deletion', 'Objection', 'Commission for Personal Data Protection', 'Settings › Farm', 'Delete this farm now',
     'Keep my farm', 'every backup', 'cannot be undone', 'We are not lawyers', 'Memory Book', 'IP address', '203.0.113.0',
     // the in-game helper (harness-contract §6): the provider under the player's own account, the sign-ins, speech, sharing
     'The in-game helper', 'OpenAI (ChatGPT)', 'Anthropic (Claude)', 'Under your own account', 'never see your password',
-    'Claude Code', 'private folder our code never opens', 'Settings › Helper', 'speech recognition', 'off unless you say yes',
-    'Until you say yes, nothing', 'install id', 'Never your sign-in', 'blanked out', '12 months at most', 'Never your farm\'s save']) {
+    'Claude Code', 'private folder our code never opens', 'Settings › Harvey', 'speech recognition', 'off unless you say yes',
+    'Until you say yes, nothing', 'install code', 'Never your sign-in', 'blanked out', '12 months at most', 'Never your farm\'s save']) {
     assert.ok(e.includes(must), `EN says "${must}"`);
   }
   const b = words(bg);
@@ -103,10 +103,12 @@ test('privacy page: English and Bulgarian, each complete: every topic, the same 
     'Възражение', 'Комисията за защита на личните данни', 'Настройки › Ферма', 'необратимо', 'Не сме юристи', 'Книгата на спомените',
     'IP адрес', '203.0.113.0',
     'Помощникът в играта', 'OpenAI (ChatGPT)', 'Anthropic (Claude)', 'През твоя собствен профил', 'Claude Code',
-    'нашият код никога не отваря', 'Настройки › Помощник', 'разпознаването на говор', 'изключено, докато не кажеш „да“',
+    'нашият код никога не отваря', 'Настройки › Харви', 'разпознаването на говор', 'изключено, докато не кажеш „да“',
     'кода на инсталацията', 'Никога входът ти', 'се заличава', 'най-много 12 месеца', 'Никога записа на фермата']) {
     assert.ok(b.includes(must), `BG says "${must}"`);
   }
+  // the tab is "Harvey" / "Харви" (harness.set.tab): "Settings › Helper" does not exist in the game (QA r1 H-13)
+  assert.ok(!/Settings › Helper|Настройки › Помощник/.test(e + b), 'no menu path the game does not have');
   // the informal "ти" of the game's Bulgarian (docs/agent-briefs/i18n-glossary-bg.md), never the capitalised "Вие"
   assert.ok(!/(^|[^\p{L}])(Вие|Ваш\p{L}*|Ви)(?!\p{L})/u.test(b), 'no capitalised Вие');
   assert.ok(/(^|[^\p{L}])ти(?!\p{L})/u.test(b), 'the page says ти');
@@ -217,4 +219,30 @@ test('privacy page: served at /privacy in multi mode (versioned assets, no third
   try {
     assert.equal((await fetch(`http://127.0.0.1:${single.port}/privacy`)).status, 404, 'a self-hosted server links PRIVACY.md instead');
   } finally { await single.close(); }
+});
+
+// Option 2 (release 1.0, critique#14): the files above stay as they are on disk, but the page the Farmbox SERVES may take
+// its game files from the public host. The promise still holds for the served page: every script, stylesheet, font,
+// image, module and preload comes from this site or exactly from HH_ASSET_ORIGIN (the same game, the same people),
+// never from a third party; the host variant also keeps the Referer off the host.
+test('third parties: the SERVED page (option 2\'s host variant) loads only from this site or exactly HH_ASSET_ORIGIN', async () => {
+  const { StaticFiles } = await import('../server/static.js');
+  const ORIGIN = 'https://hh-assets.example.app';
+  const sf = new StaticFiles({ root: ROOT, log: { info() {}, warn() {}, error() {}, log() {} } });
+  const html = String(sf.indexHtml('index.html', `${ORIGIN}/b/${sf.build}`).body);
+  const ours = (u) => local(u) || u === ORIGIN || u.startsWith(`${ORIGIN}/`);
+  let n = 0;
+  for (const [tag, name] of html.matchAll(/<(script|link|img|source|iframe|video|audio|embed|object)\b[^>]*>/gi)) {
+    for (const [, attr, url] of tag.matchAll(/\b(src|href|srcset|data-src|data-srcset|poster)=["']([^"']*)["']/gi)) {
+      for (const u of attr.toLowerCase().includes('srcset') ? url.split(',').map((x) => x.trim().split(/\s+/)[0]) : [url]) {
+        n++;
+        assert.ok(ours(u), `served <${name} ${attr}="${u}">: neither this site nor HH_ASSET_ORIGIN`);
+      }
+    }
+  }
+  const map = JSON.parse(/<script type="importmap">([\s\S]*?)<\/script>/.exec(html)[1]);
+  for (const u of [...Object.values(map.imports), ...Object.keys(map.integrity || {})]) { n++; assert.ok(ours(u), `import map: ${u}`); }
+  assert.ok(n > 300, `checked ${n} URLs`);
+  assert.match(html, /<meta name="referrer" content="same-origin">/, 'the host never learns where the farm lives');
+  assert.match(html, /<meta name="hh-assets" content="https:\/\/hh-assets\.example\.app\/b\/[0-9a-f]{16}\/public">/);
 });

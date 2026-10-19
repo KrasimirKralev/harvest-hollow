@@ -11,6 +11,7 @@ import * as questsA from '../../../../shared/rules/actions/quests.js';
 import * as ribbonsA from '../../../../shared/rules/actions/ribbons.js';
 import * as dailyR from '../../../../shared/rules/daily.js';
 import * as feedR from '../../../../shared/rules/feed.js';
+import * as memoryA from '../../../../shared/rules/actions/memory.js';
 import { m1bFeedText, foldGiants, feedLine, feedText as feedRowText } from '../feed.js';
 import * as coopR from '../../../../shared/rules/coop.js';
 import * as ordersA from '../../../../shared/rules/actions/orders.js';
@@ -335,8 +336,12 @@ const an = (en) => (/^[aeiou]/i.test(String(en)) ? 'an' : 'a');
 /** A wish's thing as a ref ({w}), or null. */
 const wishRef = (def) => (def ? nm(def, nameOf(def)) : null);
 
-/** One feed row as a sentence (actor name added by the panel): the Journal's own, longer words. */
-export function feedText(row) {
+/**
+ * One feed row as a sentence (actor name added by the panel): the Journal's own, longer words. `state` and `me` (the
+ * reading farmer) name the other people a line is about: "Ana left a surprise for you" (QA r1 P-01: without them every
+ * name in a line read "The farm").
+ */
+export function feedText(row, state = null, me = null) {
   const L = (key, params) => feedLine(key, params).text;
   const what = (n, id) => ({ _what: counted(n, id), q: qRef(id, n) });
   switch (row.k) {
@@ -374,7 +379,9 @@ export function feedText(row) {
     case 'hf': return L('feed.j.hf');
     case 'gift': return L('feed.j.gift', { day: row.day });
     case 'chest': return L(['meter', 'almanac', 'challenge', 'together'].includes(row.what) ? `feed.j.chest.${row.what}` : 'feed.j.chest');
-    case 'name': return L(row.what === 'farm' ? 'feed.j.name.farm' : 'feed.j.name.animal', { text: row.text });
+    // QA r4 F4-03: a rename names both names (features' rules put `was` on the row; an old row has none)
+    case 'name': return L(row.what === 'farm' ? 'feed.j.name.farm' : row.was !== undefined ? 'feed.j.name.renamed' : 'feed.j.name.animal',
+      { text: row.text, was: row.was ?? '' });
     case 'wish': {
       const w = wishRef(row.def);
       const p = w ? { w } : {};
@@ -387,8 +394,51 @@ export function feedText(row) {
       return L(w ? 'feed.j.wish.made' : 'feed.j.wish.made.any', p);
     }
     case 'keep': return row.q > 0 ? L('feed.j.keep', what(row.q, row.item)) : L('feed.j.unkeep', { item: nm(row.item, nameOf(row.item), 'items') });
+    // release 1.0 D1: a surprise names the giver and the one it is for, as the reader sees them ("your surprise")
+    case 'surprise': return feedRowText(row, state, me).text;
     // the rows only the feed words (balloon crates, treasures, upgrades...): the feed's own sentence, never the bare kind
-    default: return m1bFeedText(row)?.text ?? feedRowText(row).text;
+    default: return m1bFeedText(row)?.text ?? feedRowText(row, state, me).text;
+  }
+}
+
+// ---- the Memory Book (GDD §5.9; QA r1 P-06) ------------------------------------------------------------------------
+
+/** The Memory Book's pages, newest first (the rules' own ring reader). */
+export function memoryView(state, limit = 200) {
+  return typeof memoryA.memoryRows === 'function' ? memoryA.memoryRows(state, limit) : [];
+}
+
+const SEASONS = ['spring', 'summer', 'autumn', 'winter'];
+/**
+ * One page as a sentence, as farmer `me` reads it ("You named Rada", "A surprise from Ana: Roses"); a gift's note is
+ * the page's `text`, shown by the panel under the line. Pure.
+ */
+export function memoryLine(row, state = null, me = null) {
+  const players = state?.players ?? {};
+  const named = (pid) => (pid === me ? t('common.you') : Object.hasOwn(players, pid) ? players[pid].name : null);
+  const ref = row.ref ?? null;
+  switch (row.k) {
+    case 'farm': return t('goals.j.mem.farm', { text: row.text ?? '' });
+    case 'animal': { const who = named(row.by); return who ? t('goals.j.mem.animal', { who, text: row.text ?? '' }) : t('goals.j.mem.animalAny', { text: row.text ?? '' }); }
+    case 'level': return t('goals.j.mem.level', { n: Number(ref) || 0 });
+    case 'prized': return t('goals.j.mem.prized');
+    case 'together': return t('goals.j.mem.together');
+    case 'project': { const p = ref && CONTENT.restoration.get(ref); return p ? t('goals.j.mem.project', { p: nm(p.id, p.name, 'restoration') }) : t('goals.j.mem.projectAny'); }
+    case 'town': { const tp = ref && CONTENT.townProjects.get(ref); return tp ? t('goals.j.mem.town', { tp: nm(tp.id, tp.name, 'townProjects') }) : t('goals.j.mem.townAny'); }
+    case 'season': return t(`goals.j.mem.season.${SEASONS.includes(ref) ? ref : 'any'}`);
+    case 'platinum': return t('goals.j.mem.platinum');
+    case 'grandma': return t('goals.j.mem.grandma');
+    case 'duel': return t('goals.j.mem.duel');
+    case 'photo': return t('goals.j.mem.photo');
+    case 'golden': return t('goals.j.mem.golden');
+    case 'duet': return t('goals.j.mem.duet');
+    case 'quest': { const q = ref && questOf(ref); return q ? t('goals.j.mem.quest', { title: ctext('quests', q.id, 'title', q.title) }) : t('goals.j.mem.questAny'); }
+    case 'gift': {
+      const item = ref ? nm(ref, nameOf(ref), 'items') : '';
+      if (row.by === me) return t('goals.j.mem.giftYou', { item });
+      return t('goals.j.mem.gift', { who: named(row.by) ?? t('common.partner'), item });
+    }
+    default: return t('goals.j.mem.page');
   }
 }
 

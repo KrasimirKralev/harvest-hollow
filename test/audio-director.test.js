@@ -132,6 +132,9 @@ test('a borrowed track plays on: the title tune and the Fair\'s one dance are ne
   assert.equal(audio.info().music.track, borrowed.track, 'the borrowed track is kept');
   // two ceremonies in a row: the second wants the Fair again, its only track just played
   audio.setScene({ title: false });
+  // (QA r4 L4-03: composed tracks wait for the farm's models, 1 s with none loading after its first scene)
+  await advance(0.6);
+  await advance(0.6);
   audio.festive();
   await advance(3);
   await advance(0.3);

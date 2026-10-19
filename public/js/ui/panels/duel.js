@@ -219,7 +219,7 @@ export const duelResultPanel = {
         first ? rewardChips({ decor: first }) : null),
       h('div.wk-cere-acts',
         h('button.btn.btn--sun', { type: 'button', on: { click: () => ctx.close() } }, l.tie ? t('league.duel.card.wellPlayed') : iWon ? t('weekly.cere.hooray') : t('league.duel.card.congrats')),
-        rematch ? h('button.btn.btn--paper.btn--small', { type: 'button', on: { click: () => { ctx.close(); ctx.ui.panels.open('duel', { kind: l.kind.id }); } } }, t('league.duel.card.rematch')) : null)));
+        rematch ? h('button.btn.btn--paper.btn--small', { type: 'button', 'data-sfx': 'own', on: { click: () => { ctx.close(); ctx.ui.panels.open('duel', { kind: l.kind.id }); } } }, t('league.duel.card.rematch')) : null)));
     return {};
   },
 };
@@ -243,7 +243,7 @@ export function duelChipView(state, pid, now) {
  */
 export function startDuel(ui, store) {
   const hud = typeof document !== 'undefined' ? document.getElementById('hud') : null;
-  const chip = hud ? h('button.lg-duel-chip', { type: 'button', hidden: true, on: { click: () => ui.panels.open('duel') } }) : null;
+  const chip = hud ? h('button.lg-duel-chip', { type: 'button', 'data-sfx': 'own', hidden: true, on: { click: () => ui.panels.open('duel') } }) : null;
   if (chip) hud.append(chip);
   // under the farmers' cards on a wide screen (clear of the coins pill and the goal tracker); on a phone the CSS
   // centres it under the top row. Measured, never per frame: on draw, resize and a layout change.

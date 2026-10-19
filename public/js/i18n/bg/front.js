@@ -1,16 +1,16 @@
 // Bulgarian catalog, area 'front': the same keys and {params} as en/front.js.
 export default {
-  // the one screen: the tagline and the three actions
-  'front.hero.tag': 'Уютна 3D ферма за двама, на живо в браузъра ти.',
+  // the one screen: the tagline, Play and how the partner joins (release 1.0 O7). A display line stays in one face
+  // (copy#19): no Latin brand word and no digit beside the Cyrillic (Nunito) on the lines people see first
+  'front.hero.tag': 'Уютна ферма за двама, на живо в браузъра ти.',
   'front.act.title': 'Играй или помогни на Harness Hollow да расте',
   'front.act.play': 'Играй',
   'front.act.playSub': 'Създай нова ферма',
+  'front.act.invite': 'Покани половинката си с линк от самата ферма.',
   'front.act.star': 'Дай звезда',
   'front.act.starSub': 'в GitHub',
   'front.act.github': 'Отвори GitHub',
-  'front.act.githubSub': 'Виж как е направена',
-  'front.act.why': 'Безплатна и с отворен код: една ⭐ помага и на други двойки да я открият.',
-  'front.act.ttl': 'Ферми без посещение 7 дни се изтриват.',
+  'front.act.ttl': 'Изоставена за седмица ферма се изтрива.',
 
   // starting a farm (js/landing.js)
   'front.start.busy': 'Засаждаме фермата ти…',
@@ -42,6 +42,7 @@ export default {
   // where to go if you need (the link row) and its sheets
   'front.more.nav': 'Още връзки',
   'front.more.back': 'Вече имаш ферма?',
+  'front.more.github': 'GitHub',
   'front.more.ideas': 'Предложи идея',
   'front.more.shots': 'Снимки',
   'front.more.privacy': 'Поверителност',
@@ -65,7 +66,7 @@ export default {
 
   // the ideas box (landing and in game)
   'front.ideas.title': 'Имаш идея за фермата?',
-  'front.ideas.sub': 'Растение, което ти липсва, животно, сграда, нещо, което те дразни: кажи ни. Четем всяка идея, а най-добрите израстват в играта.',
+  'front.ideas.sub': 'Растение, което ти липсва, животно, сграда, нещо, което те дразни: кажи ни. Четем всяка идея, а най‑добрите израстват в играта.',
   'front.ideas.cat': 'За какво е?',
   'front.ideas.cat.content': 'Растение, животно или сграда',
   'front.ideas.cat.feature': 'Нова възможност',

@@ -323,6 +323,8 @@ export const collectTray = {
         const ev = { e: 'crafted', id, building: o.def, recipe: q.r, item: t.item, qty: t.qty, by: ctx.pid, xp: t.xp,
           double: t.double, first, maker: q.by };
         if (q.duet) ev.duet = true;
+        // release 1.0 (M22): a duet recipe slow-cooked alone (`slow`, no pair) counts for the Together chain
+        else if (q.slow) ev.solo = true;
         tx.emit(ev);
         // the duet credit is paid here, once per cooked item (RC-02); progress.js handles the celebration
         if (Array.isArray(q.pair)) {

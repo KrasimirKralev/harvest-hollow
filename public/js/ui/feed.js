@@ -1,20 +1,80 @@
 // Mini activity feed (GDD §6.4): bottom-left, the last 5 lines, fading after FEED.fadeMs (hover brings them back),
 // every line in the actor's colour with a ♥ Thanks button for the partner's lines. Lines come from the replicated
 // ring farm.feed (rules-goals, shared/rules/feed.js) plus local captions (partner joined, emotes, pings: GDD §7.5
-// "important sounds have captions"). ui-shell lane.
+// "important sounds have captions"). life-feel lane.
 //
-//   feedText(row, state, me) -> { actor, text, icon }   one ring row as a sentence (pure; tests)
+//   feedText(row, state, me, { notes? }) -> { actor, text, icon }   one ring row as a sentence (pure; tests); notes:
+//     false leaves out a surprise's quoted note (QA r1 L-01: the recap quotes it once, under "Gifts on your shelf")
+//   giftNote(state, row) -> the giver's note of a surprise row, or null (QA r1 L-01; pure)
 //   foldGiants(list, rowOf?, withRow?) -> list          a Giant's nine plots leave the harvest line (pure; tests)
 //   createFeed(S) -> { push({ text, by?, icon?, glyph? }), render() }
+// QA r2: L2-06 one collect's named animals make one line, and local lines never push the farm's rows out; L2-07 the
+// recipient's "left you a surprise" line says where and pans to the box until it is opened; F2-02 a one-tap note in the
+// reader's language (ui/goal-text.js noteText).
 import { landRef } from './panels/w5-rules.js';
 import { babyNoun } from './panels/nursery.js';
 import { CONTENT, FEED, FAIR, itemOf, defOf, pluralOf } from '../../../shared/content/index.js';
 import * as CONTENT_ALL from '../../../shared/content/index.js';
 import { ACTIONS } from '../../../shared/rules/index.js';
-import { feedRows } from '../../../shared/rules/feed.js';
+import { feedRows, renamedMine } from '../../../shared/rules/feed.js';
 import { h, icon, svgIcon, playerVars, playerMark } from './dom.js';
 import { t, tn, tNodes, fmtNum, fmtDec, ordinal, ctext, N, Q, nameEntry } from '../i18n/index.js';
-import { prep } from './goal-text.js';
+import { prep, noteText } from './goal-text.js';
+import { waitingBoxOf } from '../../../shared/rules/actions/coop.js';
+import { dayIndex } from '../../../shared/rules/calendar.js';
+import { LAYOUT_Q } from './layout.js';
+
+/** D4 (features#F4, release 1.0): the name of a named animal (farm.names), or null. Pure. */
+export const animalName = (state, id) => (typeof id === 'string' ? state?.farm?.names?.[id]?.name ?? null : null);
+
+/**
+ * D4: "Rada Petrova gave 2 Milk" once a farm day per named animal (a `collected` event from it, mine or the partner's).
+ * `seen` maps an animal id to the day it last said so; returns the line { text, by, icon } or null. Pure but for `seen`.
+ */
+export function namedGave(ev, state, seen, day) {
+  if (!ev || ev.e !== 'collected' || !(ev.qty > 0)) return null;
+  const name = animalName(state, ev.id);
+  if (!name || seen.get(ev.id) === day) return null;
+  seen.set(ev.id, day);
+  const item = ev.item || ev.product;
+  const q = item && itemOf(item) ? Q(item, ev.qty, 'items') : String(ev.qty);
+  return { text: t('cheer.named.gave', { name, q }), by: ev.by ?? null, icon: item || null, name, item: item || null, qty: ev.qty };
+}
+
+/**
+ * QA r2 L2-06 (coop#4): the named animals of one collect as ONE line: "Rada Petrova gave 1 Milk", "Rada Petrova and
+ * Ruja gave 2 Milk", "Rada Petrova, Ruja and 4 more gave 6 Milk". `lines` are namedGave lines of one farmer and item.
+ * Pure.
+ */
+export function foldNamed(lines) {
+  if (!lines.length) return null;
+  if (lines.length === 1) return lines[0];
+  const [a, b] = lines;
+  const n = lines.reduce((sum, l) => sum + (l.qty > 0 ? l.qty : 0), 0);
+  const item = a.item;
+  const q = item && itemOf(item) ? Q(item, n, 'items') : String(n);
+  const names = lines.length === 2 ? t('cheer.named.two', { a: a.name, b: b.name }) : tn('cheer.named.more', lines.length - 2, { names: `${a.name}, ${b.name}` });
+  return { text: t('cheer.named.gaveMany', { names, q }), by: a.by, icon: item };
+}
+
+/**
+ * QA r1 L-01 (D1): the giver's note of a surprise feed row ('opened' / 'shelved'), or null. The rules keep the note on
+ * the recipient's shelf row (written in the same action as the feed row: the same `at`, giver and item); a row that
+ * carries `note` itself wins. Pure.
+ */
+export function giftNote(state, row) {
+  if (!row) return null;
+  if (typeof row.note === 'string' && row.note.trim()) return noteText(row.note.trim());
+  const players = state?.players;
+  const to = row.to;
+  const from = row.from ?? row.by;
+  const shelf = players && typeof to === 'string' && Object.hasOwn(players, to) ? players[to].shelf : null;
+  if (!shelf || !shelf.rows) return null;
+  for (const r of Object.values(shelf.rows)) {
+    if (r && r.at === row.at && r.by === from && r.item === row.item && typeof r.note === 'string' && r.note.trim()) return noteText(r.note.trim());
+  }
+  return null;
+}
 
 /** A content name for a sentence: the Bulgarian ref when the names table has one, else the English the code holds. */
 const nm = (id, en, family) => (nameEntry(id, family) ? N(id, family) : en);
@@ -56,7 +116,7 @@ export const farmLine = (row) => row?.k === 'level' || Boolean(m1bFeedText(row ?
 /** Is `row` a line `pid` can thank: the other farmer's own line, not thanked yet (the Journal's Случки and the HUD). Pure. */
 export function thankable(row, state, pid) {
   return Boolean(row) && row.by !== pid && row.by !== 'sys' && Object.hasOwn(state?.players ?? {}, row.by) && row.ty === undefined
-    && !farmLine(row);
+    && !farmLine(row) && !renamedMine(row, pid);
 }
 
 /**
@@ -163,7 +223,7 @@ export function foldGiants(list, rowOf = (x) => x, withRow = (_x, row) => row) {
  * name ("You" / "Ти" for me), `text` the sentence without it; `key` / `params` say the whole sentence (tNodes puts the
  * actor in its place). Who is "you" is decided by pid, never by the words.
  */
-export function feedText(row, state, me) {
+export function feedText(row, state, me, { notes = true } = {}) {
   const players = (state && state.players) || {};
   const isMe = (pid) => pid === me;
   const who = (pid) => (isMe(pid) ? t('common.you') : (Object.hasOwn(players, pid) ? players[pid].name : t('feed.farm')));
@@ -178,7 +238,11 @@ export function feedText(row, state, me) {
     case 'water': return out('feed.water', { n: q }, { icon: 'watering_can' });
     case 'craft': return out('feed.craft', { q: qOf(row.item, q) }, { icon: row.item });
     case 'sell': return out('feed.sell', { q: qOf(row.item, q), n: row.c ?? 0 }, { icon: 'coins' });
-    case 'order': return out(row.g ? 'feed.order.golden' : 'feed.order', { n: row.c ?? 0 }, { icon: 'order_board' });
+    case 'order': {
+      // tk (1.0): a crate's Golden Ticket paid coins on top
+      const key = row.tk ? 'feat.pu.order' : 'feed.order';
+      return out(row.g ? `${key}.golden` : key, { n: row.c ?? 0, ...(row.tk ? { tk: row.tk } : {}) }, { icon: 'order_board' });
+    }
     case 'level': return { ...line('feed.level', { level: row.level }, { icon: 'xp' }), actor: t('feed.farm') };
     case 'buy': {
       const b = defRef(row.def);
@@ -209,6 +273,30 @@ export function feedText(row, state, me) {
       return out(qd ? 'feed.quest' : 'feed.quest.any', qd ? { title: ctext('quests', row.id, 'title', qd.title) } : {}, { icon: null });
     }
     case 'keepsake': return out(isMe(row.to) ? 'feed.keepsake.you' : 'feed.keepsake', isMe(row.to) ? {} : { to: who(row.to) }, { icon: row.item });
+    // release 1.0 D1 (features#F1): a surprise left on the porch (what is inside stays a secret), opened, or shelved by
+    // the farm after 48 h (rules-features' row { k: 'surprise', what: 'left' | 'opened' | 'shelved', to, from?, item? })
+    case 'surprise': {
+      const item = row.item ? (itemOf(row.item) ? N(row.item, 'items') : String(row.item).replace(/_/g, ' ')) : '';
+      // QA r1 L-01: the recipient's own line quotes the giver's note (it reached no screen before); L-07: the giver's
+      // own shelved surprise is "Your surprise …", never "You's surprise …" / "Изненадата от Ти …"
+      const note = notes && isMe(row.to) && !isMe(row.from) ? giftNote(state, row) : null;
+      if (row.what === 'opened') {
+        if (isMe(row.from)) return out('cheer.feed.openedYours', { from: who(row.from), item }, { icon: row.item || 'gift_box' });
+        return out(note ? 'cheer.feed.openedNote' : 'cheer.feed.opened', { from: who(row.from), item, ...(note ? { note } : {}) },
+          { icon: row.item || 'gift_box' });
+      }
+      if (row.what === 'shelved') {
+        const key = isMe(row.from) ? 'cheer.feed.shelvedMine' : isMe(row.to) ? (note ? 'cheer.feed.shelvedYouNote' : 'cheer.feed.shelvedYou')
+          : 'cheer.feed.shelved';
+        return { actor: null, ...line(key, { from: who(row.from), to: who(row.to), item, ...(note ? { note } : {}) }, { icon: row.item || 'gift_box' }) };
+      }
+      // L2-07: the recipient's line says where the box waits (and the feed gives it Show me while it waits)
+      if (isMe(row.to)) {
+        const box = waitingBox(state, row);
+        return out(box ? 'cheer.feed.leftYouPorch' : 'cheer.feed.leftYou', {}, { icon: 'gift_box', ...(box ? { box } : {}) });
+      }
+      return out('cheer.feed.left', { to: who(row.to) }, { icon: 'gift_box' });
+    }
     case 'note': return out('feed.note', {}, { icon: null });
     case 'golden': return { ...line('feed.golden', {}, { icon: 'sunset_bench' }), actor: t('feed.golden.actor') };
     case 'hf': {
@@ -217,7 +305,8 @@ export function feedText(row, state, me) {
     }
     case 'gift': return out('feed.gift', {}, { icon: null });
     case 'chest': return out(row.what === 'meter' ? 'feed.chest.meter' : row.what === 'almanac' ? 'feed.chest.almanac' : 'feed.chest', {}, { icon: null });
-    case 'name': return out(row.what === 'farm' ? 'feed.name.farm' : 'feed.name.animal', { text: row.text }, { icon: null });
+    case 'name': return out(row.what === 'farm' ? 'feed.name.farm' : row.was !== undefined ? 'feed.name.renamed' : 'feed.name.animal',
+      { text: row.text, was: row.was ?? '' }, { icon: null });
     case 'wish': {
       const w = defRef(row.def);
       const p = w ? { w } : {};
@@ -253,6 +342,7 @@ export function feedText(row, state, me) {
         const en = nameOfDef(row.def) ?? t('feed.decorPiece');
         bits.push(t('feed.crate.decor', { _a: an(en), d: defRef(row.def) ?? en }));
       }
+      if (row.pu) bits.push(t(`feat.pu.a.${row.pu}`));
       const loot = bits.length > 1 ? t('feed.crate.and', { list: bits.slice(0, -1).join(', '), last: bits.at(-1) }) : bits[0];
       if (row.auto || row.by === 'sys') return { actor: null, ...line('feed.crate.auto', { loot }, { icon: 'coins' }) };
       return out('feed.crate', { loot }, { icon: row.item ?? 'coins' });
@@ -297,6 +387,13 @@ export function feedText(row, state, me) {
   }
 }
 
+/** L2-07: the box a 'left' row's giver still has waiting on the porch for its recipient, or null. Pure. */
+function waitingBox(state, row) {
+  const id = state?.farm?.gifts ? waitingBoxOf(state, row.by) : null;
+  const g = id ? state.farm.gifts[id] : null;
+  return g && g.to === row.to && g.at === row.at && state.farm.objects?.[id] ? id : null;
+}
+
 /** The line's words: the whole catalog sentence with the actor's span in its place (a local caption: actor + text). */
 function sentence(actor, text, key, params) {
   if (key) {
@@ -312,6 +409,7 @@ export function createFeed(S) {
   const list = document.getElementById('feed');
   const local = [];           // { at, by, text, icon, glyph }
   const MAX = FEED.visibleLines || 5;
+  const LOCAL_MAX = 2;
   const fadeMs = FEED.fadeMs || 8000;
   const thanked = new Set();  // ring indexes this tab already thanked (until the delta lands)
 
@@ -325,15 +423,22 @@ export function createFeed(S) {
     return li;
   }
   /** Fill (or refill in place) one line: a coalesced ring row grows ("harvested 12" -> "24") without a new <li>. */
-  function patchLine(li, { at, by, actor, text, line: lineKey, params, iconId, glyph, thank }) {
+  const sigOf = (l) => `${l.actor}|${l.text}|${l.iconId || l.glyph || ''}|${l.thank ? 1 : 0}|${l.show ? 1 : 0}`;
+  function patchLine(li, l) {
+    const { at, by, actor, text, line: lineKey, params, iconId, glyph, thank, show } = l;
     const p = by && store.state && Object.hasOwn(store.state.players, by) ? store.state.players[by] : null;
     const vars = p ? playerVars(p.color) : {};
     li.dataset.at = String(at);
-    li.dataset.sig = `${actor}|${text}|${iconId || glyph || ''}|${thank ? 1 : 0}`;
+    li.dataset.sig = sigOf(l);
+    if (l.quiet) li.dataset.quiet = '1'; else delete li.dataset.quiet;
     if (p) { li.style.setProperty('--fc', vars['--pc']); li.style.setProperty('--fcd', vars['--pcd']); li.style.setProperty('--fct', vars['--pct']); li.dataset.slot = by; }
     li.replaceChildren(...[
       iconId ? icon(iconId, { size: 24 }) : glyph ? svgIcon(glyph, 24) : null,
-      h('span.txt', p && actor ? playerMark(by, p) : null, p && actor ? ' ' : null, sentence(actor, text, lineKey, params)),
+      // L2-11 (fbp#10): the mark is the row's own flex item, centred with the words (inside their line box it sat 5 px low)
+      p && actor ? playerMark(by, p) : null,
+      h('span.txt', sentence(actor, text, lineKey, params)),
+      // L2-07: a surprise still waiting on the porch: the way to it, not a thanks for a gift still closed
+      show ? h('button.thanks.feed-show', { type: 'button', on: { click: () => show() } }, t('moments.showMe')) : null,
       thank ? h('button.thanks', {
         // a farm-level line (a Fair medal) has no actor: thank the partner whose row it is, by name
         type: 'button', 'aria-label': t('feed.thank.aria', { name: p?.name ?? actor }), 'data-tip': t('feed.thank.tip', { name: p?.name ?? actor }),
@@ -342,19 +447,33 @@ export function createFeed(S) {
     ].filter(Boolean));
   }
 
+  // QA r3 S3-C2: a line with "Show me" to a waiting surprise does not fade until the box is opened (after 8 s nothing
+  // led to it)
+  // QA r4 L4-07: a Golden Hour line is history at once (its banner says it)
+  const isStale = (li, now) => (li.dataset.quiet === '1' || now - Number(li.dataset.at) > fadeMs) && !li.querySelector('.feed-show');
+  // L4-08: made in render() a line's callback held its `keep`, and so every line before it
+  const showAt = (x, z) => () => S.view?.focus?.(x + 0.5, z + 0.5);
+  const thankRow = (i) => () => { thanked.add(i); S.controller.do('thank', { i }); };
+
   function render() {
     if (!store.state) return;
+    fitBeside();
     const now = store.now();
     // two rows more than shown: a Giant's harvest line folded away still leaves MAX lines
     const rows = foldGiants(feedRows(store.state, MAX + 2), ([, r]) => r, ([i], r) => [i, r]).slice(0, MAX).map(([i, r]) => {
       const ft = feedText(r, store.state, store.pid);
+      const box = ft.box ? store.state.farm.objects[ft.box] : null;
       return {
         key: `r${i}`, at: r.at, by: r.by, actor: ft.actor, text: ft.text, line: ft.key, params: ft.params, iconId: ft.icon,
         glyph: ft.glyph,
-        thank: canThank(i, r) ? () => { thanked.add(i); S.controller.do('thank', { i }); } : null,
+        show: box ? showAt(box.x, box.z) : null,
+        thank: !box && canThank(i, r) ? thankRow(i) : null,
+        quiet: r.k === 'golden',
       };
     });
-    const loc = local.map((l, j) => ({ key: `l${j}-${l.at}`, at: l.at, by: l.by, actor: l.actor, text: l.text, iconId: l.icon, glyph: l.glyph }));
+    // L2-06: local lines (captions, named animals) take at most LOCAL_MAX of the places the farm's rows need
+    const loc = local.slice(-Math.max(LOCAL_MAX, MAX - rows.length))
+      .map((l) => ({ key: `l${l.n}-${l.at}`, at: l.at, by: l.by, actor: l.actor, text: l.text, iconId: l.icon, glyph: l.glyph }));
     const all = [...rows, ...loc].sort((a, b) => a.at - b.at).slice(-MAX);
     const keep = new Map([...list.children].map((li) => [li.dataset.key, li]));
     const next = all.map((l) => {
@@ -362,29 +481,86 @@ export function createFeed(S) {
       if (!old) return lineEl(l);
       // a coalesced ring row keeps its key but grows ("harvested 12" -> "harvested 24"): patch the same <li>, never a
       // new one per update (a partner's long stroke used to churn thousands of nodes; QA wave 1 UI-31)
-      if (old.dataset.at !== String(l.at) || old.dataset.sig !== `${l.actor}|${l.text}|${l.iconId || l.glyph || ''}|${l.thank ? 1 : 0}`) patchLine(old, l);
+      if (old.dataset.at !== String(l.at) || old.dataset.sig !== sigOf(l)) patchLine(old, l);
       return old;
     });
     // minimal DOM moves: a line that stays is never re-inserted (that would replay its slide-in)
     const keepSet = new Set(next);
     for (const li of [...list.children]) if (!keepSet.has(li)) li.remove();
     next.forEach((li, k) => { if (list.children[k] !== li) list.insertBefore(li, list.children[k] || null); });
-    for (const li of next) li.classList.toggle('stale', now - Number(li.dataset.at) > fadeMs);
+    for (const li of next) li.classList.toggle('stale', isStale(li, now));
+    keep.clear();
   }
 
+  let localN = 0;
   function push({ text, by = null, actor = null, icon: iconId = null, glyph = null, at = null }) {
-    local.push({ at: Number.isFinite(at) ? at : store.now(), by, actor, text, icon: iconId, glyph });
+    local.push({ n: localN++, at: Number.isFinite(at) ? at : store.now(), by, actor, text, icon: iconId, glyph });
     local.sort((a, b) => a.at - b.at);
     while (local.length > MAX) local.shift();
     render();
   }
 
+  // D4: a named animal says its name in the feed once a farm day (remembered per browser: a reload says it once too)
+  const GAVE_KEY = 'hh.named.gave';
+  const seen = new Map();
+  try { for (const [id, d] of Object.entries(JSON.parse(localStorage.getItem(GAVE_KEY) || '{}'))) seen.set(id, d); } catch { /* no storage */ }
+  // L2-06: one collect (one tap on a barn) sends its animals' events together: their names wait a moment and fold into
+  // one line per farmer and good
+  const gave = [];
+  let gaveT = 0;
+  const flushGave = () => {
+    gaveT = 0;
+    const groups = new Map();
+    for (const l of gave.splice(0)) {
+      const k = `${l.by}|${l.item}`;
+      if (!groups.has(k)) groups.set(k, []);
+      groups.get(k).push(l);
+    }
+    for (const g of groups.values()) { const l = foldNamed(g); if (l) push(l); }
+  };
+  store.on?.('fx', ({ ev }) => {
+    if (!ev || ev.e !== 'collected' || !store.state) return;
+    let day = 0;
+    try { day = dayIndex(store.now(), store.state.meta?.tz); } catch { day = Math.floor(store.now() / 86_400_000); }
+    const l = namedGave(ev, store.state, seen, day);
+    if (!l) return;
+    gave.push(l);
+    if (!gaveT) gaveT = setTimeout(flushGave, 60);
+    try { localStorage.setItem(GAVE_KEY, JSON.stringify(Object.fromEntries([...seen].filter(([, d]) => d >= day - 1)))); } catch { /* no storage */ }
+  });
+
   store.subscribe('feed', render);
-  setInterval(() => {
+  // a waiting surprise opened (or shelved): its line trades Show me for the thanks (L2-07)
+  store.subscribe('gifts', render);
+
+  // ---- QA r3 L3-03: a phone on its side with a sheet docked right: the lines wrap in the free farm left of it (they
+  // ran under the sheet: the corner's 44vw knows nothing of it). Again after the slide-in, on resize, with the fade tick.
+  function fitBeside() {
+    if (!list || typeof list.getBoundingClientRect !== 'function') return;
+    const name = S.ui?.panels?.top?.() ?? null;
+    const frame = name ? document.getElementById(`panel-${name}`) : null;
+    let cap = '';
+    if (frame && typeof frame.getBoundingClientRect === 'function' && globalThis.matchMedia?.(LAYOUT_Q.land)?.matches) {
+      const f = frame.getBoundingClientRect();
+      const l = list.getBoundingClientRect();
+      const z = Number.parseFloat(globalThis.getComputedStyle?.(document.documentElement)?.getPropertyValue?.('--ui-scale')) || 1;
+      if (f.width > 0 && f.right >= innerWidth - 4 && f.left > l.left) cap = `${Math.max(120, Math.floor((f.left - 12 - l.left) / z))}px`;
+    }
+    if (list.style.maxWidth !== cap) list.style.maxWidth = cap;
+  }
+  let fitT = 0;
+  const refit = () => { fitBeside(); clearTimeout(fitT); fitT = setTimeout(fitBeside, 350); };
+  S.ui?.panels?.on?.('open', refit);
+  S.ui?.panels?.on?.('close', refit);
+  globalThis.addEventListener?.('resize', refit);
+
+  const fadeT = setInterval(() => {
     if (!store.state) return;
     const now = store.now();
-    for (const li of list.children) li.classList.toggle('stale', now - Number(li.dataset.at) > fadeMs);
+    for (const li of list.children) li.classList.toggle('stale', isStale(li, now));
+    if (list.style.maxWidth || S.ui?.panels?.top?.()) fitBeside();
   }, 1000);
+  fadeT?.unref?.();
 
   return { push, render };
 }

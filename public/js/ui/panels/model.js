@@ -176,9 +176,16 @@ export function unitPriceOf(state, item, now) {
 }
 
 /** What selling `qty` pays right now: { coins, demand } (demand = units at the +50 % bonus). */
-export function saleQuote(state, item, qty, now) {
-  if (typeof economy.saleOf === 'function') return economy.saleOf(state, item, qty, now);
-  return { coins: unitPriceOf(state, item, now) * qty, demand: 0 };
+export function saleQuote(state, item, qty, now, pid = null) {
+  if (typeof economy.saleOf !== 'function') return { coins: unitPriceOf(state, item, now) * qty, demand: 0, unit: unitPriceOf(state, item, now), bonusUnit: 0 };
+  const r = economy.saleOf(state, item, qty, now, pid);
+  // the receipt's two prices, the same arithmetic as saleOf: the stand's price for this seller (an artisan's perk on a
+  // craft), and the Demand price, floor(unit x 1.5), so "39 x 1,003 = 39,117" adds up on screen (astra#4, M18)
+  let unit = typeof economy.unitPrice === 'function' ? economy.unitPrice(state, item, now) : unitPriceOf(state, item, now);
+  const craftBp = pid && itemOf(item)?.kind === 'craft' && typeof economy.playerPerk === 'function' ? economy.playerPerk(state, pid, 'artisan', 'craftSellBp') : 0;
+  if (craftBp > 0) unit = economy.mulBp(unit, 10_000 + craftBp);
+  const bonusUnit = economy.mulBp(unit, 10_000 + MARKET.demand.bonusBp);
+  return { ...r, unit, bonusUnit };
 }
 
 /** Sellable stacks for the Market's Sell tab: Demand items first, then by stack value. */
@@ -539,6 +546,9 @@ export function landCards(state, env = {}) {
   const exps = landUnits().filter((e) => e.k > 0 && isLive(e));
   const owned = (e) => unitOwned(state, e);
   const nextK = Math.min(...exps.filter((e) => !owned(e)).map((e) => e.k));
+  // a locked parcel names the one to buy first (QA r2 P2-05: "Buy the land before it first" on six cards)
+  const nextUnit = exps.find((e) => e.k === nextK);
+  const beforeText = nextUnit ? t('market.land.before', { parcel: N(nextUnit.id, landFamily()) }) : '';
   return exps.map((e) => {
     const mine = owned(e);
     const needs = [];
@@ -552,7 +562,7 @@ export function landCards(state, env = {}) {
     }
     let gate;
     if (mine) gate = { code: 'ALREADY_DONE', hint: { done: t('market.land.ours') } };
-    else if (e.k !== nextK) gate = { code: 'LOCKED', hint: { text: t('market.land.before') } };
+    else if (e.k !== nextK) gate = { code: 'LOCKED', hint: { text: beforeText } };
     else if (level < e.unlock) gate = { code: 'LOCKED', hint: { unlock: e.unlock } };
     else {
       const miss = needs.filter((x) => x.have < x.n).map((x) => ({ item: x.item, n: x.n - x.have }));

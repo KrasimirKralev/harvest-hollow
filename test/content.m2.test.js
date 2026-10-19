@@ -254,8 +254,9 @@ test('breeding coats, the Nursery, perks and rested XP are GDD §3.4 / §4.7', (
 
 test('the Seasonal Ribbon Track, Legacy levels and the last four collection sets (GDD §5.9, §5.5)', () => {
   const T = SEASONAL_TRACK;
+  // release 1.0 (D5, features#F5): the track opens at L16 (GDD §5.9 said L24)
   assert.deepEqual([T.unlock, T.tiers, T.tierHours, T.acornTiers, T.acorns, T.leftoverCoinsHoursBp],
-    [24, 30, 1, [10, 20, 30], 5, 500]);
+    [16, 30, 1, [10, 20, 30], 5, 500]);
   assert.equal(T.rewards.length, 30);
   assert.equal(T.rewards.filter((r) => r.coat === 'season').length, 1, 'one season-exclusive coat');
   assert.ok(T.rewards.some((r) => r.goldenSeeds) && T.rewards.some((r) => r.decor), 'decor and Golden Seeds');

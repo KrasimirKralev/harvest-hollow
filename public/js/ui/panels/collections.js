@@ -18,7 +18,7 @@
 import { COLLECTION_RULES, decorOf, collectionOf } from '../../../../shared/content/index.js';
 import * as albumA from '../../../../shared/rules/actions/album.js';
 import { startPlacement } from './placement.js';
-import { h, fmt, createKit, bar, icon, svgIcon, playerMark, phoneTitle } from './kit.js';
+import { h, fmt, createKit, bar, icon, svgIcon, playerMark, phoneTitle, scrollBehavior } from './kit.js';
 import { s } from './art.js';
 import { ensureStylesheet } from '../dom.js';
 import { ribbonWallPanel } from './ribbon-wall.js';
@@ -343,8 +343,8 @@ function tradeRow(ctx, kit, set, open, toggle) {
 function page(ctx, kit, set, ui) {
   const st = ctx.store.state;
   const inTray = (own(st.farm.storage, set.display) ?? 0) > 0;
-  const head = h('header.pc-page-head',
-    h('div.pc-page-title', h('h4', set.name), h('small', t('collect.album.foundByHow', { how: set.how }))),
+  const head = h('div.pc-page-head',
+    h('div.pc-page-title', h('h3', set.name), h('small', t('collect.album.foundByHow', { how: set.how }))),
     h(`span.pc-count${set.done ? '.done' : ''}`, { 'aria-label': t('collect.album.nOf', { n: set.found, total: set.total }) },
       `${set.found}/${set.total}`));
   const stickers = h('div.pc-stickers', ...set.items.map((it) => sticker(ctx, set, it)));
@@ -378,7 +378,7 @@ function mountAlbum(body, ctx, kit) {
     const st = ctx.store.state;
     const v = albumView(st, ctx.store.pid);
     ui.open = v.open;
-    const head = h('header.pc-album-head',
+    const head = h('div.pc-album-head',
       h('div.pc-album-title', h('b', t('collect.album.nOf', { n: v.found, total: v.total })),
         h('small', t('collect.album.setsDone', { done: v.setsDone, sets: v.sets.length, a: COLLECTION_RULES.acorns }))),
       bar(v.found / Math.max(1, v.total), null, 'pn-go pc-album-bar'));
@@ -394,7 +394,7 @@ function mountAlbum(body, ctx, kit) {
       if (el) {
         el.classList.add('pn-focus-ring');
         setTimeout(() => el.classList.remove('pn-focus-ring'), 2000);
-        requestAnimationFrame(() => el.scrollIntoView({ block: 'center', behavior: 'smooth' }));
+        requestAnimationFrame(() => el.scrollIntoView({ block: 'center', behavior: scrollBehavior() }));
       }
     }
   }

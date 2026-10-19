@@ -10,6 +10,7 @@ import { h, svgIcon, ensureStylesheet } from './dom.js';
 import { farm } from '../net/farm.js';
 import { t } from '../i18n/index.js';
 import { IDEAS_URL } from '../front/links.js';
+import { lazyImport } from '../net/lazy.js';
 
 export function createIdeasUi(S) {
   const { ui } = S;
@@ -25,7 +26,7 @@ export function createIdeasUi(S) {
         body.append(wrap);
         // the form's code comes with the first open: nobody pays for it at boot. A language switch mounts the card again:
         // the new form starts from what the last one held
-        import('../front/ideas.js').then(({ ideaForm }) => {
+        lazyImport('ideas', () => import('../front/ideas.js')).then(({ ideaForm }) => {
           if (!wrap.isConnected) return;
           const f = ideaForm({ prefix: 'game-idea', farm: farm.id, draft: form?.draft() ?? null });
           form = f;
@@ -45,7 +46,8 @@ export function createIdeasUi(S) {
   }
 
   /** The More menu's item (hud.js), closing that menu first. */
-  const menuItem = (closeMenu) => h('button.edge-item', { type: 'button', role: 'menuitem', id: 'hud-ideas', dataset: { mk: 'front.game.suggest' },
+  // no Tab stop: the menu's arrows move to it (ui/hud.js, QA r3 S3-11)
+  const menuItem = (closeMenu) => h('button.edge-item', { type: 'button', role: 'menuitem', tabindex: '-1', id: 'hud-ideas', dataset: { mk: 'front.game.suggest' },
     on: { click: () => { closeMenu?.(); open(); } } }, svgIcon('sprout', 26), h('span.lbl', t('front.game.suggest')));
 
   /** The phone farm menu's tile (layout.js): a short label, the whole words for a screen reader. */

@@ -10,13 +10,18 @@ import { START } from '../shared/content/config.js';
 import { validateState } from '../shared/rules/state.js';
 import { feedRows } from '../shared/rules/feed.js';
 import { farmAt, put, give, runDue, runTwin, mulberry32, GOALS_PLAYER_ACTIONS, T0, MIN } from './helpers/rules-goals.js';
+import { REL_FUZZED, relArgs } from './helpers/features.js';
+
+// release 1.0: the features lane's player actions are fuzzed with the goals actions
+const TYPES = [...GOALS_PLAYER_ACTIONS, ...REL_FUZZED];
 
 const ALL = new Set([...FX_EVENTS, ...CELEBRATIONS]);
 
 function randomGoalsAction(rnd, s, bench, hen) {
   const pick = (list) => list[Math.floor(rnd() * list.length)];
   const slot = () => Math.floor(rnd() * 6);
-  const type = pick(GOALS_PLAYER_ACTIONS);
+  const type = pick(TYPES);
+  if (REL_FUZZED.includes(type)) return [type, relArgs(type, rnd, s)];
   switch (type) {
     case 'orderRush':
       return [type, { slot: slot() }];
@@ -39,7 +44,8 @@ function randomGoalsAction(rnd, s, bench, hen) {
     case 'sit': return [type, { id: bench }];
     case 'stand': return [type, {}];
     case 'highFive': return [type, {}];
-    case 'keepsake': return [type, rnd() < 0.5 ? { item: 'wheat' } : { item: 'egg', confirm: ['RESERVED'] }];
+    case 'keepsake': return [type, rnd() < 0.5 ? { item: 'wheat', ...(rnd() < 0.5 ? { note: 'for you' } : {}) }
+      : { item: 'egg', confirm: ['RESERVED'] }];
     case 'thank': {
       const rows = feedRows(s).map(([i]) => i);
       return [type, { i: rows.length ? pick(rows) : 0 }];

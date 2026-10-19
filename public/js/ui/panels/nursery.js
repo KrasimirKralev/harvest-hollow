@@ -209,7 +209,7 @@ function careCard(ctx, kit, b, picks) {
   }
   const grow = b.baby ? kit.timer(h('span.nu-grow'), { end: b.grownAt, prefix: t('home.nursery.growsIn'), doneText: t('home.nursery.grown') }) : h('span.nu-grow', t('home.nursery.grown'));
   return h(`article.nu-card${b.pick ? '.pick' : ''}`, { dataset: { baby: b.id } },
-    h('header.nu-head',
+    h('div.nu-head',
       h('div.nu-face', icon(b.species, { size: 64, alt: '' }), b.baby ? h('span.nu-baby-tag', t('farm.ani.babyTag')) : null),
       h('div.nu-who', h('h4', animalName(b)), h('small', t('home.nursery.who', { species: b.speciesName, noun: b.noun }), ' · ', grow),
         nameEditor(ctx, b)),
@@ -249,8 +249,8 @@ export const nurseryPanel = {
           : h('div.br-empty', careGlyph('bottle', 56),
             h('p', t('home.nursery.none')),
             h('div.br-empty-acts',
-              h('button.btn.btn--sky.pn-sm', { type: 'button', on: { click: () => ctx.open('market', { tab: 'animals' }) } }, t('home.nursery.buyBaby')),
-              v.breedingOpen ? h('button.btn.btn--paper.pn-sm', { type: 'button', on: { click: () => ctx.open('breeding') } }, t('home.nursery.breeding')) : null)),
+              h('button.btn.btn--sky.pn-sm', { type: 'button', 'data-sfx': 'own', on: { click: () => ctx.open('market', { tab: 'animals' }) } }, t('home.nursery.buyBaby')),
+              v.breedingOpen ? h('button.btn.btn--paper.pn-sm', { type: 'button', 'data-sfx': 'own', on: { click: () => ctx.open('breeding') } }, t('home.nursery.breeding')) : null)),
         v.alumni.length ? h('section.nu-alumni', h('h3.pn-h', h('span', t('home.nursery.alumni'))),
           h('ul', ...v.alumni.map((a) => h('li.nu-alum', icon(a.species, { size: 36, alt: '' }),
             h('div', h('b', animalName(a)), h('small', [careWords.personalities[a.personality]?.[0], careWords.specialties[a.specialty]?.[0]].filter(Boolean).join(' · '))),

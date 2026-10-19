@@ -3,8 +3,8 @@
 //   node tools/shot.mjs --port 3310 --clients 2 --size 1366x768 --script tools/play-evening.mjs \
 //        --out docs/screens/wave1/evening.png
 //
-// Rowan (A) takes the Fields track, Mia (B) the Barnyard track, as GDD §7.4 scripts it: name the farm, drag-plant and
-// drag-harvest Wheat, sell at the Market, fill Mabel's first order, clear weeds, place the free Coop and Feed Mill
+// Farmer A takes the Fields track, Mia (B) the Barnyard track, as GDD §7.4 scripts it (release 1.0: Grandma's first
+// line is planting; the naming chip comes after the first harvest): drag-plant and drag-harvest Wheat, name the farm, sell at the Market, fill Mabel's first order, clear weeds, place the free Coop and Feed Mill
 // from the build tray, buy hens, make Chicken Feed, feed the hens, collect eggs, finish the first story cards, buy and
 // place a building, then keep farming with dev time warps until the farm reaches level 5. Real mouse input where
 // the input path matters (strokes, the build ghost, panel buttons); `window.__hh` only to read state and to find
@@ -106,7 +106,7 @@ export default async ({ pages, sleep, shot: rawShot, port }) => {
     await sleep(120);
     await p.mouse.click(c.x, c.y);
   };
-  const toasts = (p) => p.evaluate(() => [...document.querySelectorAll('#toasts > *')].map((t) => t.textContent.trim()));
+  const toasts = (p) => p.evaluate(() => [...document.querySelectorAll('#toasts > *, #over-panels .toast')].map((t) => t.textContent.trim()));
   const freeSpot = (p, def, cx, cz) => p.evaluate(async ([d, x0, z0]) => {
     const g = await import('/shared/rules/grid.js');
     const s = window.__hh.state;
@@ -137,6 +137,28 @@ export default async ({ pages, sleep, shot: rawShot, port }) => {
     return { ok: Boolean(r && r.ok), code: r && r.code };
   }, [type, args]);
   /** Dismiss celebration overlays / banners so they never cover the next click. */
+  // release 1.0 (S1, S2): a tool of the Tools ▸ group sits in its flyout, a small place in the Farm book
+  const shown = (p, sel) => p.evaluate((q) => [...document.querySelectorAll(q)].some((e) => !e.closest('[hidden]') && e.getClientRects().length > 0), sel);
+  const pickTool = async (p, id) => {
+    if (!(await shown(p, `#toolbar [data-tool="${id}"]`))) {
+      await p.click('[data-slot="tools"]').catch(() => {});
+      await sleep(400);
+    }
+    const sel = (await shown(p, `#tools-flyout [data-tool="${id}"]`)) ? `#tools-flyout [data-tool="${id}"]` : `#toolbar [data-tool="${id}"]`;
+    const ok = await p.click(sel).then(() => true, () => false);
+    if (!ok || (await p.evaluate(() => window.__hh.controller.tool.id)) !== id) {
+      fallback(`pick the ${id}`, 'not reachable from the toolbar or its flyout');
+      await p.evaluate((t) => window.__hh.controller.setTool(t), id);
+    }
+  };
+  const openPlace = async (p, name) => {
+    if (!(await shown(p, `[data-dock="${name}"]`))) {
+      await p.click('#m-menu-btn').catch(() => {});
+      await waitFor(p, () => window.__hh.ui.panels.isOpen('menu'), null, 4000).catch(() => {});
+      await sleep(500);
+    }
+    await p.click(`[data-dock="${name}"]`).catch(() => fallback(`open ${name}`, 'no door'));
+  };
   const dismiss = async (p) => {
     for (let i = 0; i < 4; i++) {
       const t = await click(p, /^(Wonderful!?|Hooray!?|Yay!?|Continue|Nice!?|Lovely!?|Got it!?|Close)$/i, '#celebrate');
@@ -153,32 +175,11 @@ export default async ({ pages, sleep, shot: rawShot, port }) => {
     s0.players.p1 && s0.players.p2 && objs(s0, (o) => o.def === 'plot').length === 16 && s0.farm.wallet.coins === 300);
   await shot('arrive');
 
-  // ---- 2. Grandma's welcome, then the farm is named together ------------------------------------------------------
-  const go = await click(A, /^Let's go!?$/);
-  step("A pressed Grandma's \"Let's go!\"", go);
-  await sleep(1500);
-  const naming = await A.evaluate(() => window.__hh.ui.panels.isOpen('naming'));
-  if (!naming) await A.evaluate(() => window.__hh.ui.nameFarm());
-  await sleep(500);
-  await shot('naming', A);
-  const typed = await A.evaluate(() => {
-    const i = document.querySelector('input[aria-label="Farm name"]');
-    if (!i) return false;
-    i.value = 'Sunny Hollow';
-    i.dispatchEvent(new Event('input', { bubbles: true }));
-    return true;
-  });
-  const carved = typed && await click(A, /^Carve it!?$/);
-  if (!carved) {
-    fallback('name the farm', 'no naming card');
-    await act(A, 'nameFarm', { name: 'Sunny Hollow' });
-  }
-  await waitFor(B, () => window.__hh.state.farm.name === 'Sunny Hollow', null, 5000).catch(() => {});
-  await sleep(1200);
-  step('the farm is named on both screens', (await st(B)).farm.name === 'Sunny Hollow');
-  await shot('named');
-  await dismiss(B);
-  await click(B, /^Love it$/);
+  // ---- 2. Grandma's first line is planting (1.0 M1a: no welcome card, no naming gate; naming is a chip after the first
+  //         harvest, step 4b) ------------------------------------------------------------------------------------------
+  const first = await A.evaluate(() => document.querySelector('#coach-slot .coach')?.dataset.msg ?? null);
+  step("Grandma's first line is planting (no welcome card)", first === 'TUTORIAL:step.plant_wheat', String(first));
+  step('no naming card over the farm', !(await A.evaluate(() => window.__hh.ui.panels.isOpen('naming'))));
 
   // ---- 3. A drag-plants Wheat with the Seed Bag (toolbar -> seed tray -> stroke); B plants the other half --------
   const plots = objs(s0, (o) => o.def === 'plot').map((id) => ({ id, ...s0.farm.objects[id] }))
@@ -188,12 +189,13 @@ export default async ({ pages, sleep, shot: rawShot, port }) => {
   const midZ = (plots[0].z + plots.at(-1).z) / 2 + 0.5;
   await look(A, midX, midZ);
   await look(B, midX, midZ);
+  // 1.0 (S2): Seeds ▸ opens the crop strip above its slot
   await A.click('[data-tool="seed_bag"]').catch(() => {});
   await sleep(400);
-  const seedTray = await A.evaluate(() => !document.getElementById('seed-tray').hidden);
-  await shot('seed-tray', A);
-  if (seedTray) await A.click('#seed-tray [data-crop="wheat"]');
-  else { fallback('seed tray', 'the Seed Bag did not open the tray'); await A.evaluate(() => window.__hh.controller.setTool('seed_bag', { crop: 'wheat' })); }
+  const strip = await shown(A, '#tray-wrap > .seed-strip [data-crop="wheat"]');
+  await shot('seed-strip', A);
+  if (strip) await A.click('#tray-wrap > .seed-strip [data-crop="wheat"]');
+  else { fallback('seed strip', 'Seeds did not open the crop strip'); await A.evaluate(() => window.__hh.controller.setTool('seed_bag', { crop: 'wheat' })); }
   await sleep(200);
   for (const r of rows.slice(0, 2)) {
     await stroke(A, (r[0].x < r.at(-1).x ? r : [...r].reverse()).map((p) => [p.x, p.z]));
@@ -215,7 +217,7 @@ export default async ({ pages, sleep, shot: rawShot, port }) => {
   const readyAt = Math.max(...plots.map((p) => s.farm.objects[p.id].crop?.readyAt ?? 0));
   await warpTo(readyAt);
   await shot('ripe', A);
-  await A.click('[data-tool="sickle"]').catch(() => A.evaluate(() => window.__hh.controller.setTool('sickle')));
+  await pickTool(A, 'sickle');
   for (const r of rows.slice(0, 2)) { await stroke(A, r.map((p) => [p.x, p.z])); await sleep(200); }
   await B.evaluate(() => window.__hh.controller.setTool('hand'));
   for (const r of rows.slice(2)) { await stroke(B, r.map((p) => [p.x, p.z])); await sleep(200); }
@@ -225,6 +227,33 @@ export default async ({ pages, sleep, shot: rawShot, port }) => {
   step('every plot harvested; Wheat in the Barn', plots.every((p) => !s.farm.objects[p.id].crop), `wheat ${inv(s, 'wheat')}`);
   await shot('harvested');
   await dismiss(A); await dismiss(B);
+
+  // ---- 4b. the naming chip (1.0 M1a: after the first harvest), the farm is named together ----------------------------
+  await waitFor(A, () => Boolean(document.querySelector('.coach-name')), null, 6000).catch(() => {});
+  const chip = await A.click('.coach-name').then(() => true, () => false);
+  step('the naming chip came after the first harvest', chip);
+  await sleep(700);
+  if (!(await A.evaluate(() => window.__hh.ui.panels.isOpen('naming')))) await A.evaluate(() => window.__hh.ui.nameFarm?.());
+  await sleep(500);
+  await shot('naming', A);
+  const typed = await A.evaluate(() => {
+    const i = document.querySelector('input[aria-label="Farm name"]');
+    if (!i) return false;
+    i.value = 'Sunny Hollow';
+    i.dispatchEvent(new Event('input', { bubbles: true }));
+    return true;
+  });
+  const carved = typed && await click(A, /^Carve it!?$/);
+  if (!carved) {
+    fallback('name the farm', 'no naming card');
+    await act(A, 'nameFarm', { name: 'Sunny Hollow' });
+  }
+  await waitFor(B, () => window.__hh.state.farm.name === 'Sunny Hollow', null, 5000).catch(() => {});
+  await sleep(1200);
+  step('the farm is named on both screens', (await st(B)).farm.name === 'Sunny Hollow');
+  await shot('named');
+  await dismiss(B);
+  await click(B, /^Love it$/);
 
   // ---- 5. A sells 10 Wheat at the Market (dock -> stack -> quantity -> Sell) --------------------------------------
   const sellUi = async (p, item, qty) => {
@@ -409,7 +438,7 @@ export default async ({ pages, sleep, shot: rawShot, port }) => {
   await closePanels(B);
 
   // ---- 10. B feeds the hens with the Feed Scoop (drag over the pen); warp; A collects eggs with the Hand --------------
-  await B.click('[data-tool="feed_scoop"]').catch(() => B.evaluate(() => window.__hh.controller.setTool('feed_scoop')));
+  await pickTool(B, 'feed_scoop');
   await look(B, cc.x, cc.z, 700);
   await stroke(B, [[cc.x - 1, cc.z - 0.6], [cc.x - 0.5, cc.z - 0.5], [cc.x, cc.z - 0.5]], 0.4);
   await idle(B);
@@ -444,7 +473,7 @@ export default async ({ pages, sleep, shot: rawShot, port }) => {
   await dismiss(A); await dismiss(B);
 
   // ---- 11. the Journal: story letters --------------------------------------------------------------------------------
-  await A.click('[data-dock="journal"]').catch(() => {});
+  await openPlace(A, 'journal');
   await waitFor(A, () => window.__hh.ui.panels.isOpen('journal'), null, 4000).catch(() => {});
   await sleep(700);
   await shot('journal', A);
@@ -584,7 +613,7 @@ export default async ({ pages, sleep, shot: rawShot, port }) => {
   await sleep(900);
   await shot('barn', A);
   await closePanels(A);
-  await B.click('[data-dock="journal"]').catch(() => {});
+  await openPlace(B, 'journal');
   await sleep(700);
   await click(B, /^Ribbons$/, '#panels');
   await sleep(700);

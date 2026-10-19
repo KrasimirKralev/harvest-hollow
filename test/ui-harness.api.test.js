@@ -49,6 +49,7 @@ test('every route: method, path and body as the contract says; the key rides onl
   await api.signInContinue('chatgpt', { redirectUrl: 'http://127.0.0.1:3300/auth/callback?code=c&state=s' });
   await api.signInStatus('chatgpt');
   await api.signOut('claude');
+  await api.signInCancel('claude');
   const B = '/api/f/abcdefghij23/harness';
   const got = f.calls.map((c) => [c.opts.method, c.url.replace(B, ''), c.body]);
   assert.deepEqual(got, [
@@ -72,6 +73,7 @@ test('every route: method, path and body as the contract says; the key rides onl
     ['POST', '/providers/chatgpt/signin/continue', { redirectUrl: 'http://127.0.0.1:3300/auth/callback?code=c&state=s' }],
     ['GET', '/providers/chatgpt/signin', undefined],
     ['POST', '/providers/claude/signout', {}],
+    ['POST', '/providers/claude/signin/cancel', {}],
   ]);
   for (const c of f.calls) {
     assert.equal(c.opts.headers.authorization, `Bearer ${'k'.repeat(64)}`);
@@ -79,7 +81,7 @@ test('every route: method, path and body as the contract says; the key rides onl
     assert.equal(c.opts.cache, 'no-store');
     if (c.opts.method === 'POST') assert.equal(c.opts.headers['content-type'], 'application/json');
   }
-  assert.equal(Object.keys(ROUTES).length, 17);
+  assert.equal(Object.keys(ROUTES).length, 18);
 });
 
 test('answers: the body error code, HTTP_<status>, NET, AUTH without a key (and then no request at all)', async () => {

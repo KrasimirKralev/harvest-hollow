@@ -26,6 +26,7 @@ import { hash32 } from './rng.js';
 import { goldenHourBp } from './coop.js';
 import { upgradeBonus } from './upgrades.js';
 import { relicBarnCap } from './relics.js';
+import { swarmBp } from './powerups.js';
 import { landRow } from './land.js';
 import { V } from './schema.js';
 import { ERR } from '../net/protocol.js';
@@ -290,7 +291,8 @@ export const inSeason = (state, cropId, now) => cropOf(cropId)?.season === seaso
 
 /**
  * Basis points of time a process loses when it STARTS now (mastery ★2, in season, Golden Hour, the Mill Wheel and
- * collection perks for recipes, Pig Woods for truffle pigs, the Orchard Pond's irrigation for trees); not capped
+ * collection perks for recipes, Pig Woods for truffle pigs, the Orchard Pond's irrigation for trees, a crate's Busy-Bee
+ * Swarm for animals and trees); not capped
  * (cutMs applies the 50 % floor).
  */
 export function startCutBp(state, id, now, { season = false } = {}) {
@@ -299,6 +301,7 @@ export function startCutBp(state, id, now, { season = false } = {}) {
   if (season && inSeason(state, id, now)) bp += GROWTH.season.timeBp;
   bp += goldenHourBp(state, now);                     // rules-goals' window; fixed at start (GDD §6.2 #9)
   bp += recipeCutBp(state, id) + animalCutBp(state, id) + treeCutBp(state, id);
+  if (m) bp += swarmBp(state, m.family, now);         // 1.0: a crate's Busy-Bee Swarm (animals, fruit), fixed at start
   return bp;
 }
 

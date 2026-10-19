@@ -64,6 +64,8 @@ import * as grid from '../../../shared/rules/grid.js';
 
 /** How far out on Willow Pond the float lands from the dock's end (metres; land-features' cast rings sit 2.2-3.4 m). */
 const POND_CAST_M = 2.6;
+/** QA r3 R3-01: the wait before the n-th new try of a failed model: 1, 2, 4 … 30 s. Pure. */
+export const retryMs = (n) => Math.min(30_000, 1000 * 2 ** Math.max(0, n - 1));
 
 /**
  * A cast at Willow Pond by a farmer at `here` (metres): the nearer dock seat's facing (toward the water) and where the
@@ -454,6 +456,8 @@ export function createAvatarsView(layers, overlay, toScreen) {
       const dot = document.createElement('span');
       dot.style.cssText = 'display:inline-block;width:9px;height:9px;border-radius:50%;border:1.5px solid rgba(255,255,255,.9);box-shadow:0 0 0 1px rgba(60,30,10,.35)';
       const label = document.createElement('span');
+      // QA r4 L4-09: a name of wide glyphs ends in an ellipsis (a plate was wider than the screen)
+      label.style.cssText = 'min-width:0;max-width:10em;overflow:hidden;text-overflow:ellipsis';
       plate.append(dot, label);
       plate.dot = dot;
       plate.label = label;
@@ -480,14 +484,27 @@ export function createAvatarsView(layers, overlay, toScreen) {
 
   // -------------------------------------------------------------------------------------------------
   // the rigged farmer
+  // QA r3 R3-01: a rig that failed to load (manifest or file) is asked for again (retryMs, or at once on `online`);
+  // a 4 s blip left a capsule for the session. An unknown key is no failure.
   async function loadRig(a) {
     const key = `avatar:${a.body}`;
     const body = a.body;
+    clearTimeout(a.rigT);
+    a.rigT = 0;
     try {
       await models.init();
       if (!models.has(key)) return;
       await models.ready([key, 'tool:sickle']);
+    } catch (err) {
+      if (a.body !== body || a.rigOf === body) return;
+      a.rigFails = (a.rigFails || 0) + 1;
+      if (a.rigFails === 1) console.warn(`avatar ${a.pid}: rig failed to load; trying again`, err);
+      a.rigT = setTimeout(() => { a.rigT = 0; if (a.body === body && a.rigOf !== body) loadRig(a); }, retryMs(a.rigFails));
+      return;
+    }
+    try {
       if (a.body !== body) return;
+      a.rigFails = 0;
       const info = models.info(key);
       const c = models.clone(key, { tint: info && info.tint ? { [info.tint]: a.color } : undefined });
       if (!c) return;
@@ -532,6 +549,7 @@ export function createAvatarsView(layers, overlay, toScreen) {
       }
       c.object.position.y = -drop;
       a.root.add(c.object);
+      a.rigOf = body;
       dressLook(a);
       a.placeholder.visible = false;
       playBase(a, 'Idle', 1, 0);
@@ -619,7 +637,8 @@ export function createAvatarsView(layers, overlay, toScreen) {
       a.rig.hand.add(holder);
       a.rig.toolObj = holder;
     };
-    if (models.isReady(want)) attach(); else models.ready([want]).then(attach).catch(() => {});
+    // R3-01: a failed tool is asked for again with the next action
+    if (models.isReady(want)) attach(); else models.ready([want]).then(attach).catch(() => { if (a.toolKey === want) a.toolKey = null; });
   }
 
   function placeRoot(a, p) {
@@ -1023,13 +1042,36 @@ export function createAvatarsView(layers, overlay, toScreen) {
       holder.add(c.object);
       playPet(p, 'Idle', 1, 0);
     };
-    models.init().then(() => (models.has(key) ? models.ready([key]) : null)).then(attach)
-      .catch((err) => console.error(`pet of ${pid}: model failed to load`, err));
+    // R3-01: the same for the pet (an error in attach is a program error)
+    p.fails = 0;
+    p.loadT = 0;
+    p.load = () => {
+      p.loadT = 0;
+      models.init().then(() => (models.has(key) ? models.ready([key]) : null)).then(attach, (err) => {
+        if (pets.get(pid) !== p) return;
+        p.fails++;
+        if (p.fails === 1) console.warn(`pet of ${pid}: model failed to load; trying again`, err);
+        p.loadT = setTimeout(p.load, retryMs(p.fails));
+      }).catch((err) => console.error(`pet of ${pid}: model failed to load`, err));
+    };
+    p.load();
   }
+
+  // R3-01: back online or shown again: every waiting rig, pet and tool asks now
+  function retryNow() {
+    for (const a of av.values()) {
+      if (a.rigT) loadRig(a);
+      else if (a.rig && a.tool && !a.toolKey) setTool(a, a.tool);
+    }
+    for (const p of pets.values()) if (p.loadT) { clearTimeout(p.loadT); p.load(); }
+  }
+  globalThis.addEventListener?.('online', retryNow);
+  globalThis.document?.addEventListener?.('visibilitychange', () => { if (globalThis.document.visibilityState !== 'hidden') retryNow(); });
 
   function dropPet(pid) {
     const p = pets.get(pid);
     if (!p) return;
+    clearTimeout(p.loadT);
     if (p.mixer) p.mixer.stopAllAction();
     p.root.removeFromParent();
     if (p.zzz) p.zzz.remove();
@@ -1071,7 +1113,9 @@ export function createAvatarsView(layers, overlay, toScreen) {
         + '.hh-zzz-emoji{font:22px/1 "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif;-webkit-text-stroke:0;'
         + 'background:#FFF8EC;border:2px solid #7A4B2C;border-radius:14px;padding:3px 5px;box-shadow:0 2px 0 rgba(60,30,10,.3)}'
         + '.hh-zzz-emoji>span{animation-name:hh-zzz-bob}@keyframes hh-zzz-bob{0%,100%{translate:0 0}50%{translate:0 -3px}}'
-        + '@media (prefers-reduced-motion: reduce){.hh-zzz>span{animation:none}}';
+        // (QA r2 S2-15: the OS setting holds only until the player picks a motion level)
+        + '@media (prefers-reduced-motion: reduce){body:not(.motion-set) .hh-zzz>span{animation:none}}'
+        + 'body.motion-reduced .hh-zzz>span{animation:none}';
       document.head.appendChild(st);
     }
     const el = document.createElement('div');

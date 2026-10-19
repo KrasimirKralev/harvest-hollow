@@ -309,7 +309,8 @@ export function createTown({ scenery, glows = null, fx = null }) {
     view = townView(s, now);
     pav = pavilionView(s, now);
     liveNow = view.live;
-    const k = `${view.built.map((b) => b.id).join(',')}|${view.building?.id || ''}|${pav.tiers}|${pav.building ?? ''}`;
+    // (R3-01: a late manifest, epoch, rebuilds)
+    const k = `${view.built.map((b) => b.id).join(',')}|${view.building?.id || ''}|${pav.tiers}|${pav.building ?? ''}|${models.epoch}`;
     if (k === key) return;
     key = k;
     build(firstLook);

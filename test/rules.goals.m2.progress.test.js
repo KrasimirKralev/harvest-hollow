@@ -199,16 +199,16 @@ test('Legacy levels: L41+ pay the rotating pool once each, in order, and keep a 
 
 // ---- the Seasonal Ribbon Track ---------------------------------------------------------------------------------
 
-test('the track opens at L24 for the season: points = farm XP, a tier = nice(E / 8)', () => {
-  const s = farmAt(23);
+test('the track opens at L16 for the season (release 1.0, D5; was L24): points = farm XP, a tier = nice(E / 8)', () => {
+  const s = farmAt(15);
   runDue(s, T0);
-  assert.equal(s.farm.track.s, null);
-  s.farm.xp = xpForLevel(24);
+  assert.equal(s.farm.track.s, null, 'closed at L15');
+  s.farm.xp = xpForLevel(16);
   assert.ok(dueSystemActions(s, T0).some((d) => d.type === '_track'));
   runDue(s, T0);
-  assert.equal(s.farm.track.s, seasonKey(s, T0));
-  assert.equal(s.farm.track.need, niceInt(Math.floor(levelRow(24).E / 8)));
-  assert.equal(trackNeed(s, 24), s.farm.track.need);
+  assert.equal(s.farm.track.s, seasonKey(s, T0), 'open at L16');
+  assert.equal(s.farm.track.need, niceInt(Math.floor(levelRow(16).E / 8)));
+  assert.equal(trackNeed(s, 16), s.farm.track.need);
   const need = s.farm.track.need;
   const r = credit(s, [order(need * 2 + 5)], { pid: 'p1', now: T0 + MIN });
   assert.deepEqual(r.events.filter((e) => e.e === 'trackTier').map((e) => e.tier), [1, 2]);

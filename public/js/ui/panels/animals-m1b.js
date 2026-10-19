@@ -116,7 +116,7 @@ const fact = (glyphOrIcon, title, text, cls = '') => h(`li.pc-fact${cls ? `.${cl
 
 function albumLink(ctx, set, n, of) {
   if (!ctx.ui.panels.has('collections')) return null;
-  return h('button.pn-chipbtn.pc-albumlink', { type: 'button', on: { click: () => ctx.open('collections', { set }) } },
+  return h('button.pn-chipbtn.pc-albumlink', { type: 'button', 'data-sfx': 'own', on: { click: () => ctx.open('collections', { set }) } },
     t('farm.m1b.album', { name: collectionOf(set) ? cname(set, { family: 'collections' }) : t('farm.m1b.albumWord'), n, of }));
 }
 
@@ -182,7 +182,7 @@ export function m1bSection(v, ctx) {
       {
         const mill = millId(st);
         if (mill && ctx.ui.panels.has('building')) extra.push(h('button.pn-chipbtn',
-          { type: 'button', on: { click: () => ctx.open('building', { id: mill, focus: 'pig_slop' }) } },
+          { type: 'button', 'data-sfx': 'own', on: { click: () => ctx.open('building', { id: mill, focus: 'pig_slop' }) } },
             t('farm.m1b.makeSlop', { item: N('pig_slop') })));
       }
       break;

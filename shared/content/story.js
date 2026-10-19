@@ -102,7 +102,7 @@ export const QUEST_STORY = {
   },
   a4: {
     letter: { greeting: 'Hello you two,', art: 'order', signoff: 'Grandma Hazel', body: [
-      'Mabel has put up her Order Board. Orders pay half again what the market does, and they never, ever expire.',
+      'Mabel has put up her Order Board. Orders pay more than the market, in coins and XP, and they never, ever expire.',
       'Fill one together. She notices who her good customers are.',
     ] },
     done: 'Mabel says you are "very promising". From her, that is a medal.',
@@ -611,7 +611,7 @@ export const QUEST_STORY = {
       '"When one of us put up a flag for help, the other came running. Orders, crates, the odd stubborn bundle."',
       '"Three times is a habit. A good habit is a kind of love letter."',
     ] },
-    done: 'Helping hands, three times over.',
+    done: 'Three times you helped each other. A good habit.',
     rewards: { hearts: 2 },
   },
   h4: {

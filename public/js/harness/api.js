@@ -11,7 +11,7 @@
 //     history() undo(to?) consent() setConsent(bool)
 //     providers() models(provider) signIn(provider, { method? }) signInContinue(provider, { code? , redirectUrl? })
 //     (method: one of Claude Code's own login methods, 'claudeai' | 'console' | 'sso'; absent = the binary's default)
-//     signInStatus(provider) signOut(provider)
+//     signInStatus(provider) signOut(provider) signInCancel(provider) (release 1.0 H4: end a sign-in nobody finished)
 //   unwrapSignIn(data) -> SignInState | null     the provider routes answer { signin } (or a bare SignInState)
 //
 // The provider routes are not spelled out in the contract (4.3 "see 5.3"): ROUTES below is the one place that names
@@ -37,6 +37,7 @@ export const ROUTES = Object.freeze({
   signInContinue: ['POST', '/providers/:provider/signin/continue'],
   signInStatus: ['GET', '/providers/:provider/signin'],
   signOut: ['POST', '/providers/:provider/signout'],
+  signInCancel: ['POST', '/providers/:provider/signin/cancel'],
 });
 
 /** The harness base of a farm scope (net/farm.js `farm`). Pure. */
@@ -100,5 +101,6 @@ export function createHarnessApi({ base = '/api/harness', auth = () => null, fet
       typeof redirectUrl === 'string' ? { redirectUrl } : { code: String(code ?? '') }),
     signInStatus: (provider) => call('signInStatus', { provider }),
     signOut: (provider) => call('signOut', { provider }),
+    signInCancel: (provider) => call('signInCancel', { provider }),
   };
 }

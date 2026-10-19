@@ -84,7 +84,7 @@ function wishBtn(ctx, p) {
   const it = I.wish(p.id);
   const wished = Object.values(st.farm.wishlist ?? {}).some((w) => w.def === p.id);
   if (!wished && !passes(probe(ctx.store, it.type, it.args))) return null;
-  return h('button.pn-wishbtn', { type: 'button', 'aria-pressed': String(wished), 'aria-label': t('market.wish.aria', { item: p.name }),
+  return h('button.pn-wishbtn', { type: 'button', 'data-sfx': 'own', 'aria-pressed': String(wished), 'aria-label': t('market.wish.aria', { item: p.name }),
     title: wished ? t('market.wish.on') : t('market.wish.save'), dataset: { wish: p.id },
     on: { click: (e) => {
       e.stopPropagation();
@@ -127,7 +127,7 @@ function pieceCard(ctx, kit, p, v) {
   }
   // the content text says what a piece does; a seat that it does not mention gets its own words
   const extra = [p.text, /seat/i.test(p.textEn || p.text || '') ? null : SEAT(p.effect)].filter(Boolean);
-  return h(`article.hg-card${locked ? '.locked' : ''}${p.owned ? '.owned' : ''}`, { role: 'listitem', dataset: { def: p.id } },
+  return h(`div.hg-card${locked ? '.locked' : ''}${p.owned ? '.owned' : ''}`, { role: 'listitem', dataset: { def: p.id } },
     art, h('h4.hg-name', p.name), facts,
     extra.length ? h('p.hg-text', extra.join('. ')) : null,
     previewLine(p, v), foot);
@@ -154,7 +154,7 @@ export const grandDecorPanel = {
           h('p', t('home.grand.intro'))),
         v.beauty ? h('div.hg-meter', { title: t('home.grand.meterTip') }, svgIcon('flower', 30),
           h('div', h('b', fmt(v.beauty.score)), h('small', `${'★'.repeat(v.beauty.stars)}${'☆'.repeat(5 - v.beauty.stars)}`)),
-          ctx.ui.panels.has('beauty') ? h('button.pn-chipbtn', { type: 'button', on: { click: () => ctx.open('beauty', {}, { stack: true }) } }, t('home.grand.beautyBtn')) : null) : null);
+          ctx.ui.panels.has('beauty') ? h('button.pn-chipbtn', { type: 'button', 'data-sfx': 'own', on: { click: () => ctx.open('beauty', {}, { stack: true }) } }, t('home.grand.beautyBtn')) : null) : null);
       fill(body, head,
         v.live ? null : h('p.hg-soon', svgIcon('lock', 20), t('home.grand.arrives')),
         h('div.hg-grid', { role: 'list', 'aria-label': t('home.grand.title') }, ...v.pieces.map((p) => pieceCard(ctx, kit, p, v))));
@@ -185,7 +185,7 @@ export function grandStrip(ctx) {
   return h('div.hg-strip', { dataset: { grand: 'strip' } },
     h('div.hg-strip-icons', ...show.map((p) => icon(p.id, { size: 44, alt: '' }))),
     h('div.hg-strip-text', h('b', t('home.grand.title')), h('small', t('home.grand.strip', { open: v.open, owned: v.owned }))),
-    h('button.btn.btn--sky.pn-sm', { type: 'button', dataset: { open: 'grandDecor' }, on: { click: () => ctx.open('grandDecor') } },
+    h('button.btn.btn--sky.pn-sm', { type: 'button', 'data-sfx': 'own', dataset: { open: 'grandDecor' }, on: { click: () => ctx.open('grandDecor') } },
       t('home.grand.showroom')));
 }
 

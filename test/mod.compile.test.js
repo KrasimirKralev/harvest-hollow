@@ -56,7 +56,7 @@ test('every family, tuning and look: all compile, the content check stays empty,
   const wheat = o.patch.crops.find((c) => c.id === 'wheat');
   assert.equal(wheat.growMs, 54_000);
   assert.equal(wheat.sell, CONTENT.crops.get('wheat').sell, 'tuning never re-prices');
-  assert.equal(o.look.sky, 'pastel');
+  assert.equal(o.look.sky, 'golden');
   assert.equal(o.defs.decor[0].effect.cosmetic, 'glow');
   assert.deepEqual(validateContent(applyMod(base.tables, o)), []);
 });
@@ -85,7 +85,12 @@ test('semantic problems: anchors, references, unlocks, economy, cycles, names, c
   assert.ok(bad((f) => { f['content/decor/x_moon_lantern.json'].cost = 5000; }).includes('OUT_OF_RANGE@content/decor/x_moon_lantern.json:cost'));
   assert.ok(bad((f) => { f['content/crops/x_moon_melon.json'].text.en.name = 'Wheat'; }).includes('NAME_TAKEN@content/crops/x_moon_melon.json:text.en.name'));
   assert.ok(bad((f) => { f['content/crops/x_moon_melon.json'].hue = '#7CC243'; }).includes('LOW_CONTRAST@content/crops/x_moon_melon.json:hue'));
-  assert.ok(bad((f) => { f['look.json'] = { palette: { skyTop: '#3A2010' } }; }).includes('LOW_CONTRAST@look.json:palette.skyTop'));
+  // release 1.0 (H2/M24): a palette reaches the compiler only from a version stored before 1.0: ignored, with a warning
+  const old = compile({ ...everything(), 'look.json': { palette: { skyTop: '#3A2010' }, sky: 'golden' } });
+  assert.equal(old.ok, true, JSON.stringify(old.problems));
+  assert.deepEqual(old.warnings.map((w) => `${w.code}@${w.file}:${w.path}`), ['IGNORED@look.json:palette']);
+  assert.deepEqual(old.overlay.look.palette, undefined);
+  assert.equal(old.overlay.look.sky, 'golden');
   assert.ok(bad((f) => { f['text/letters.json'][0].art = 'spaceship'; }).includes('UNKNOWN_REF@text/letters.json:0.art'));
   assert.ok(bad((f) => { f['tuning.json'] = { crops: { wheat: { growMin: 5 } } }; }).includes('OUT_OF_RANGE@tuning.json:crops.wheat.growMin'));
   assert.ok(compile(everything(), { tracks: ['day1'] }).problems.length === 0, 'no music preference, nothing to check');

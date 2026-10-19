@@ -38,7 +38,7 @@
     .why { display: none; }
     body[data-code="DENIED"] .why-DENIED, body[data-code="EXPIRED"] .why-EXPIRED, body[data-code="BAD_CODE"] .why-BAD_CODE,
     body[data-code="STATE"] .why-STATE, body[data-code="UNAVAILABLE"] .why-UNAVAILABLE, body[data-code="INTERNAL"] .why-INTERNAL,
-    body[data-code="USAGE_LIMIT"] .why-UNAVAILABLE, body[data-code=""] .why-INTERNAL { display: block; }
+    body[data-code="USAGE_LIMIT"] .why-UNAVAILABLE, body[data-result="error"][data-code=""] .why-INTERNAL { display: block; }
     html.one-lang .card[hidden] { display: none; }
   </style>
 </head>
@@ -49,7 +49,7 @@
     <section class="card" lang="en" data-lang="en">
       <div class="mark" aria-hidden="true"><span class="when-ok">✓</span><span class="when-error">!</span></div>
       <h1><span class="when-ok">You are signed in</span><span class="when-error">The sign-in did not work</span></h1>
-      <p class="when-ok">Your helper can work with your account now. You can close this tab and go back to your farm.</p>
+      <p class="when-ok">Harvey can work with your plan now. You can close this tab and go back to your farm.</p>
       <p class="why why-DENIED">You did not allow access, or this account cannot use its plan here. Try again from the game.</p>
       <p class="why why-EXPIRED">The sign-in took too long. Start it again from the game.</p>
       <p class="why why-BAD_CODE">The code was not accepted. Start the sign-in again from the game.</p>
@@ -61,8 +61,8 @@
     <section class="card" lang="bg" data-lang="bg">
       <div class="mark" aria-hidden="true"><span class="when-ok">✓</span><span class="when-error">!</span></div>
       <h1><span class="when-ok">Готово, влезе!</span><span class="when-error">Влизането не стана</span></h1>
-      <p class="when-ok">Помощникът ти вече може да работи с профила ти. Можеш да затвориш този раздел и да се върнеш във фермата.</p>
-      <p class="why why-DENIED">Не позволи достъпа или този профил не може да ползва абонамента си тук. Опитай пак от играта.</p>
+      <p class="when-ok">Харви вече може да работи с плана ти. Можеш да затвориш този раздел и да се върнеш във фермата.</p>
+      <p class="why why-DENIED">Не позволи достъпа или този профил не може да ползва плана си тук. Опитай пак от играта.</p>
       <p class="why why-EXPIRED">Влизането отне твърде дълго. Започни го отново от играта.</p>
       <p class="why why-BAD_CODE">Кодът не беше приет. Започни влизането отново от играта.</p>
       <p class="why why-STATE">Тази връзка за вход вече не важи. Започни влизането отново от играта.</p>

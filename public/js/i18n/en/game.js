@@ -44,7 +44,8 @@ export default {
   'game.giant.growing': 'A Giant {crop} is growing here',
   'game.giant.chop': "A Giant {crop}! Chop it (Axe, Sickle or Hand): quicker together, 15 a chop right after your partner's",
   'game.giant.chopLeft': "A Giant {crop}! Chop it (Axe, Sickle or Hand) · {hp} left: quicker together, 15 a chop right after your partner's",
-  'game.debris.axe': '{thing}: use the Axe (8).',
+  // QA r1 S-16 (optional): a finger has no 8 key: the touch words say where the Axe is
+  'game.debris.axe': { touch: '{thing}: use the Axe (tap the tool below ▴).', other: '{thing}: use the Axe (8).' },
   'game.pair.pet': 'Pets keep their own company: pick a farm animal.',
   'game.set.set': 'set',
   'game.set.out': 'The {set} set is out on the farm. Keep the pieces close together and it shines.',
@@ -87,7 +88,7 @@ export default {
   'game.moved.movedPinned': '{name} moved your pinned {thing}.',
   'game.moved.back': 'Move it back',
   'game.raceMany': { one: '{name} got to {n} of these first ♥', other: '{name} got to {n} of these first ♥' },
-  'game.golden.start': 'Golden Hour! Everything you start now grows 10 % faster.',
+  'game.golden.start': 'Golden Hour! Everything you start now grows 10% faster.',
 
   // the world card lines (game/targets.js)
   'game.seat.together': 'Sitting together: Golden Hour is on its way. Click to stand up',
@@ -130,7 +131,7 @@ export default {
 
   // M2 moments (game/m2-moments.js); the duel and fishing lines themselves are content (DUEL.lines, FISHING.lines)
   'game.duel.friendly': 'Friendly Duel',
-  'game.duel.invite': '{name} challenges you to a {duel}! Until Sunday evening. Just for fun.',
+  'game.duel.invite': '{name} challenges you to a duel: {duel}! Until Sunday evening. Just for fun.',
   'game.duel.see': 'See the duel',
   'game.duel.go': "Let's duel!",
   'game.duel.on': 'Game on!',
@@ -154,15 +155,15 @@ export default {
   // fishing (game/fishing.js, game/fishing-hud.js)
   'game.fish.together': 'Two lines in the water. Nobody is in a hurry.',
   'game.fish.fish': 'fish',
-  'game.fish.partnerRecord': '{name} landed a {cm} cm {fish}: a new record for the dock!',
+  'game.fish.partnerRecord': '{name} landed {cm:a} cm {fish}: a new record for the dock!',
   'game.fish.wait.moment': 'in a moment',
   'game.fish.wait.m': 'in {m} min',
   'game.fish.wait.hm': 'in {h} h {m} min',
   'game.fish.wait.h': 'in {h} h',
   'game.fish.catch': 'A catch!',
   'game.fish.joke': '{name}!',
-  'game.fish.caughtCm': 'A {cm} cm {name}!',
-  'game.fish.caught': 'A {name}!',
+  'game.fish.caughtCm': '{cm:A} cm {name}!',
+  'game.fish.caught': '{name:A}!',
   'game.fish.pressTouch': 'Tap Hook it!',
   'game.fish.press': 'Click or press Space',
   'game.fish.casting': 'Casting…',

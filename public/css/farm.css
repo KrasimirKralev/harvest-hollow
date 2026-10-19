@@ -3,8 +3,8 @@
    their tokens, .wood, .paper, .btn, .field and the painted .modal-layer. */
 
 /* ---- the farm gate: the slot picker's painted valley, a parchment card ------------------------------------------ */
-#farm-gate.modal-layer { background: url('/assets/art/welcome_960.webp') center / cover no-repeat, #F6C98F; overflow-y: auto; padding: 16px; }
-@media (min-width: 961px) { #farm-gate.modal-layer { background-image: url('/assets/art/welcome.webp'); } }
+#farm-gate.modal-layer { background: url('../assets/art/welcome_960.webp') center / cover no-repeat, #F6C98F; overflow-y: auto; padding: 16px; }
+@media (min-width: 961px) { #farm-gate.modal-layer { background-image: url('../assets/art/welcome.webp'); } }
 #farm-gate .gate-card { margin: 96px auto 24px; }
 #farm-gate .slot-title { line-height: 0; }
 .gate-title { margin: 2px 0 8px; font: 800 1.5rem/1.15 var(--font-display); color: var(--ink-900); outline: none; }

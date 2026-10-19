@@ -10,7 +10,7 @@ import { BARGE, COOP, itemOf } from '../../../../shared/content/index.js';
 import * as BR from '../../../../shared/rules/actions/barge.js';
 import { ACTIONS } from '../../../../shared/rules/index.js';
 import { systemLive, weekOf } from '../../../../shared/rules/coop.js';
-import { h, icon, svgIcon, fmt, playerMark, createKit, fill, price, hintable } from './kit.js';
+import { h, icon, svgIcon, fmt, playerMark, createKit, fill, price, hintable, phoneSheet } from './kit.js';
 import { levelOf, available } from './core.js';
 import { chest, s as sv } from './art.js';
 import { focusOn, actionOf, banner, clockChip, speech, flagButton, lockedBody, splitBar, need, toTop, tParts } from './fair.js';
@@ -149,14 +149,15 @@ export const bargePanel = {
         ? clockChip(kit, { label: t('weekly.barge.clock.leaves'), at: v.leavesAt, doneText: t('weekly.barge.clock.leavingNow'), glyph: 'crate' })
         : clockChip(kit, { label: t('weekly.barge.clock.docks'), at: v.arrivesAt, doneText: t('weekly.barge.clock.dockingNow'), glyph: 'crate', cls: 'closed' });
       const line = !v.docked ? REED.away : !v.rows.length ? REED.light : v.allDone ? REED.done : REED.docked;
-      fill(body,
-        v.docked
-          ? banner('f', t('weekly.barge.banner.docked'), v.total ? t('weekly.barge.banner.dockedSub', { n: v.loaded, total: v.total })
-            : t('weekly.barge.banner.light'), { chip })
-          : banner('f', t('weekly.barge.banner.away'), t('weekly.barge.banner.awaySub'), { chip }),
-        h('div.wk-barge-top', speech('reed', line), ladder(v)),
-        v.docked ? rowsEl(st, v) : awayEl(v),
-        v.docked && v.rows.length ? payout(st, v) : null);
+      const head = v.docked
+        ? banner('f', t('weekly.barge.banner.docked'), v.total ? t('weekly.barge.banner.dockedSub', { n: v.loaded, total: v.total })
+          : t('weekly.barge.banner.light'), { chip })
+        : banner('f', t('weekly.barge.banner.away'), t('weekly.barge.banner.awaySub'), { chip });
+      const main = v.docked ? rowsEl(st, v) : awayEl(v);
+      const pay = v.docked && v.rows.length ? payout(st, v) : null;
+      // a phone opens on the crates to load (ux-phone#15); the Captain's chest ladder follows them
+      if (phoneSheet()) fill(body, head, speech('reed', line), main, pay, ladder(v));
+      else fill(body, head, h('div.wk-barge-top', speech('reed', line), ladder(v)), main, pay);
       kit.refresh();
       kit.tick();
       if (Number.isInteger(ctx.args.i) && !ctx.wkRang) focusOn(ctx.wkRang = body.querySelector(`[data-crate="${ctx.args.i}"]`));
@@ -206,7 +207,7 @@ export const bargePanel = {
         const p = c.by ? st.players?.[c.by] : null;
         return h('article.wk-crate.loaded', { dataset: { crate: String(c.i) } },
           h('div.wk-crate-art', icon(c.item, { size: 48 }), h('span.wk-stamp', svgIcon('check', 14), t('weekly.barge.aboard'))),
-          h('b', `${fmt(c.qty)} × ${c.name}`),
+          h('b', `${fmt(c.qty)}\u00a0×\u00a0${c.name}`),
           h('span.wk-crate-by', p ? playerMark(c.by, p) : null, p ? t('weekly.barge.by', { name: p.name }) : t('weekly.barge.loaded')));
       }
       const args = crateArgs(loadType(), v, c);
@@ -238,7 +239,7 @@ export const bargePanel = {
       const lg = v.log;
       const next = v.next.length
         ? h('div.wk-next-goods', h('b', t('weekly.barge.nextManifest')),
-          h('div.wk-next-row', ...v.next.map((c) => hintable(h('span.wk-next-item', icon(c.item, { size: 40 }), h('span', `${fmt(c.qty)} × ${c.name}`)), c.item, { need: c.qty }))),
+          h('div.wk-next-row', ...v.next.map((c) => hintable(h('span.wk-next-item', icon(c.item, { size: 40 }), h('span', `${fmt(c.qty)}\u00a0×\u00a0${c.name}`)), c.item, { need: c.qty }))),
           h('small', t('weekly.barge.startNow')))
         : h('p.wk-away-note', v.has && lg ? t('weekly.barge.nothingFits')
           : t('weekly.barge.writtenDown'));

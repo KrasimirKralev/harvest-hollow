@@ -11,8 +11,8 @@ import crypto from 'node:crypto';
 import { MAX_PAYLOAD_BYTES } from './config.js';
 
 export const PAYLOAD_VERSION = 1;
-export const EVENTS = Object.freeze(['job.ready', 'job.applied', 'job.discarded', 'job.failed', 'mod.undone']);
-export const OUTCOMES = Object.freeze(['ready', 'applied', 'discarded', 'expired', 'cancelled', 'failed', 'undone']);
+export const EVENTS = Object.freeze(['job.ready', 'job.applied', 'job.discarded', 'job.failed', 'job.answered', 'mod.undone']);
+export const OUTCOMES = Object.freeze(['ready', 'applied', 'discarded', 'expired', 'cancelled', 'failed', 'answered', 'undone']);
 export const PROVIDERS = Object.freeze(['claude', 'chatgpt', 'mock']);
 export const LANGS = Object.freeze(['en', 'bg']);
 export const STAGES = Object.freeze(['schema', 'semantic', 'boot', 'render', 'done']);
@@ -22,7 +22,8 @@ export const PAYLOAD_LIMITS = Object.freeze({ prompts: 20, promptChars: 1000, co
 /** The event's top-level keys, in order (the receiver refuses any other). */
 export const PAYLOAD_KEYS = Object.freeze(['v', 'id', 'install', 'event', 'at', 'game', 'lang', 'provider', 'model', 'prompts', 'mod',
   'diff', 'validation', 'outcome']);
-const EVENT_OUTCOME = { 'job.ready': 'ready', 'job.applied': 'applied', 'job.discarded': 'discarded', 'job.failed': 'failed', 'mod.undone': 'undone' };
+const EVENT_OUTCOME = { 'job.ready': 'ready', 'job.applied': 'applied', 'job.discarded': 'discarded', 'job.failed': 'failed',
+  'job.answered': 'answered', 'mod.undone': 'undone' };
 
 const HEX128 = /^[0-9a-f]{32}$/;
 const DEF_ID = /^[a-z][a-z0-9_]{0,39}$/;

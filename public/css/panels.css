@@ -8,6 +8,10 @@
   --pn-gap: 14px;
   font-family: var(--font-ui);
   color: var(--ink-900);
+  /* QA r3 (P3-04, P3-05 and the siblings the P7 gate found): a short last word, a count above all ("готови:" / "12",
+     "from level" / "17"), moves down with the word before it instead of standing alone (Chrome 117+, Safari 26+);
+     the catalogs' no-break spaces keep the known ones together on older browsers */
+  text-wrap: pretty;
 }
 .hh-panel-body .pn-hidden { display: none !important; }
 /* <small> never drops under 12 px (the browser's "smaller" made 10 px notes; QA wave 1 UI-27); rules below may set more */
@@ -181,7 +185,9 @@
 .pn-stack-n { position: absolute; top: 46px; right: 8px; padding: 1px 6px; border-radius: var(--r-pill);
   background: var(--wood-700); color: #fff; font: 700 .8125rem/1.3 var(--font-ui); font-variant-numeric: tabular-nums;
   box-shadow: 0 0 0 2px var(--paper-50); }
-.pn-stack-name { font: 700 .82rem/1.1 var(--font-ui); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* QA r1 P-16: a name never ends in "…": two lines in every language, every tile as tall as a two-line name */
+.pn-stack-name { font: 700 .82rem/1.1 var(--font-ui); max-width: 100%; overflow: hidden; white-space: normal; text-align: center;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; min-height: 2.2em; }
 .pn-stack-price { display: inline-flex; align-items: center; gap: 2px; font: 600 .8125rem/1 var(--font-ui); color: var(--ink-500); }
 .pn-keep-tag { position: absolute; top: 4px; right: 4px; display: inline-flex; align-items: center; gap: 1px; padding: 1px 5px 1px 3px;
   border-radius: var(--r-pill); background: var(--paper-200); box-shadow: inset 0 0 0 1.5px var(--wood-300);
@@ -225,14 +231,17 @@
 .pn-chalk-body { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; margin-top: 6px; font: 600 1rem/1.2 var(--font-ui); }
 .pn-chalk-item { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px 2px 2px; border-radius: var(--r-pill);
   background: rgba(255, 255, 255, .12); box-shadow: inset 0 0 0 1.5px rgba(255, 255, 255, .45); }
-.pn-chalk-left { margin-left: auto; color: #CFE8C0; font-size: .9rem; }
+/* #E4F3DA: 4.8:1 against the chalkboard's worst 10 % (perf-a11y#9: the old green measured 4.38:1) */
+.pn-chalk-left { margin-left: auto; color: #E4F3DA; font-size: .9rem; }
 
 /* ---- motion & accessibility -------------------------------------------------------------------------------- */
 @media (prefers-reduced-motion: reduce) {
-  .pn-card, .pn-card:nth-child(3n+2), .pn-card:nth-child(3n) { transform: none; }
-  .pn-card:hover { transform: none; }
+  body:not(.motion-set) .pn-card, body:not(.motion-set) .pn-card:nth-child(3n+2),
+    body:not(.motion-set) .pn-card:nth-child(3n) { transform: none; }
+  body:not(.motion-set) .pn-card:hover { transform: none; }
 }
 body.motion-reduced .pn-card, body.motion-reduced .pn-card:hover { transform: none; }
+body.motion-reduced .pn-card:nth-child(3n+2), body.motion-reduced .pn-card:nth-child(3n) { transform: none; }
 
 /* ---- Market: extras ------------------------------------------------------------------------------------------ */
 .pn-later { font: 700 .85rem/1.2 var(--font-ui); color: var(--ink-500); }
@@ -240,7 +249,7 @@ body.motion-reduced .pn-card, body.motion-reduced .pn-card:hover { transform: no
   color: var(--wood-700); background: rgba(247, 217, 160, .35); box-shadow: inset 0 0 0 2px rgba(217, 182, 119, .5); }
 .pn-tip:empty { display: none; }
 .pn-chalk-lead { opacity: .9; }
-.pn-chalk-item small { margin-left: 4px; color: #CFE8C0; font-weight: 600; }
+.pn-chalk-item small { margin-left: 4px; color: #E4F3DA; font-weight: 600; }
 .pn-chalk-item.done { opacity: .55; text-decoration: line-through; }
 
 /* ---- Land ------------------------------------------------------------------------------------------------------ */
@@ -250,16 +259,24 @@ body.motion-reduced .pn-card, body.motion-reduced .pn-card:hover { transform: no
 .pn-map { display: block; width: 100%; height: auto; }
 .pn-parcel { transition: filter var(--t-micro); }
 .pn-parcel[role="button"] { cursor: pointer; }
-.pn-parcel[role="button"]:hover, .pn-parcel[role="button"]:focus-visible { filter: brightness(1.08) saturate(1.1); outline: none; }
+.pn-parcel[role="button"]:hover { filter: brightness(1.08) saturate(1.1); }
 .pn-parcel.sel { stroke: var(--sky-700); stroke-width: .8; stroke-dasharray: none; }
 /* wave 5: a parcel of several pieces is a group (one fill path + one outline): the selection rings the outline only */
 g.pn-parcel.sel { stroke: none; }
 g.pn-parcel.sel .pn-parcel-edge { stroke: var(--sky-700); stroke-width: .8; stroke-dasharray: none; }
+/* QA r3 P3-01: the keyboard focus is its own ring, ink and wider than the sky-blue selection (it was the hover's
+   brightening alone, 1.19:1, and the selected parcel's frame read as the focus). The page's 3 px outline would be drawn
+   in map units on an SVG shape, so the ring is the shape's own stroke. The Farm book's map does the same (panels-home) */
+.pn-parcel[role="button"]:focus-visible { outline: none; stroke: var(--ink-900); stroke-width: 1.2; stroke-dasharray: none; }
+g.pn-parcel[role="button"]:focus-visible { stroke: none; }
+g.pn-parcel[role="button"]:focus-visible .pn-parcel-edge { stroke: var(--ink-900); stroke-width: 1.2; stroke-dasharray: none; }
 .pn-map-label { font: 800 2.1px var(--font-display); text-anchor: middle; fill: #fff; paint-order: stroke;
   stroke: rgba(42, 106, 28, .9); stroke-width: .5px; pointer-events: none; }
 .pn-map-label.home { font-size: 1.9px; }
 .pn-map-label.sale { fill: var(--ink-900); stroke: #FFF4D6; font-size: 2px; }
-.pn-map-label.lvl { fill: #F4F7EC; stroke: rgba(62, 38, 18, .55); font-size: 1.9px; }
+/* QA r4: the level label's class is pn-map-lvl, never the bare .lvl: the level-up overlay styles .lvl (mobile.css
+   scale: .62), which shrank these labels toward the map's corner on phones ("Lv 27" on the wrong parcel, "Lv 21" cut) */
+.pn-map-label.pn-map-lvl { fill: #F4F7EC; stroke: rgba(62, 38, 18, .55); font-size: 1.9px; }
 .pn-map-dollar { font: 800 1.7px var(--font-display); text-anchor: middle; fill: var(--go-900); }
 .pn-maplegend { display: flex; gap: 12px; justify-content: center; margin-top: 8px; font: 700 .8125rem/1 var(--font-ui); color: var(--ink-700); }
 .pn-maplegend .k { display: inline-flex; align-items: center; gap: 5px; }
@@ -273,7 +290,7 @@ g.pn-parcel.sel .pn-parcel-edge { stroke: var(--sky-700); stroke-width: .8; stro
 .pn-landcard.sel { box-shadow: inset 0 0 0 3px var(--sky-500), 0 0 0 4px rgba(74, 168, 232, .25), var(--pn-shadow); }
 .pn-landcard.owned { background: #EEF6E0; }
 .pn-landcard header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.pn-landcard h4 { margin: 0; font: 800 1.15rem/1.1 var(--font-display); }
+.pn-landcard :is(h3, h4) { margin: 0; font: 800 1.15rem/1.1 var(--font-display); }
 .pn-land-reveals { margin: 4px 0 8px; font: 500 .88rem/1.35 var(--font-ui); color: var(--ink-700); }
 .pn-land-note { margin: 6px 0 0; font: 600 .8125rem/1.3 var(--font-ui); color: var(--ink-500); }
 .pn-land-note:empty { display: none; }
@@ -283,7 +300,8 @@ g.pn-parcel.sel .pn-parcel-edge { stroke: var(--sky-700); stroke-width: .8; stro
   background: var(--paper-200); box-shadow: inset 0 0 0 2px var(--paper-edge); font-weight: 800; color: var(--ink-500); }
 .pn-req.ok { color: var(--go-900); }
 .pn-req.ok .pn-req-mark { background: var(--go-300); box-shadow: inset 0 0 0 2px var(--go-700); color: var(--go-900); }
-.pn-req .pn-chip { min-width: 0; padding: 2px 4px; flex-direction: row; gap: 4px; margin-left: auto; }
+/* the chip never shrinks under its own count ("2/1" ran 3 px out of a land requirement's chip, P7 04:50) */
+.pn-req .pn-chip { min-width: 0; flex: none; padding: 2px 4px; flex-direction: row; gap: 4px; margin-left: auto; }
 .pn-req .pn-chip .pn-tick { display: none; }
 .pn-req-n { margin-left: auto; font: 700 .85rem/1 var(--font-ui); font-variant-numeric: tabular-nums; }
 .pn-landcard .pn-card-foot { justify-content: flex-end; margin-top: 10px; }
@@ -359,9 +377,13 @@ g.pn-parcel.sel .pn-parcel-edge { stroke: var(--sky-700); stroke-width: .8; stro
 .pn-bhead-sub { margin: 3px 0 0; font: 500 .82rem/1.3 var(--font-ui); color: var(--ink-500); }
 .pn-collect .btn, .btn.pn-collect { font-size: 1.05rem; }
 
+/* QA r1 P-10: every slot card, and the empty queue's strip, is one height (the running card's, with its Hurry button
+   from the Hurry level): the queue row does not grow under the first Make when the first batch starts */
+.pn-slots { --pn-slot-h: 112px; }
+.pn-slots.pn-hurry-on { --pn-slot-h: 128px; }
 .pn-slots { display: flex; flex-wrap: wrap; gap: 10px; margin: 0 0 16px; padding: 12px; border-radius: var(--r-m);
   background: linear-gradient(180deg, rgba(184, 117, 51, .18), rgba(184, 117, 51, .08)); box-shadow: inset 0 2px 4px rgba(62, 38, 18, .18); }
-.pn-slot { position: relative; width: 98px; min-height: 112px; display: flex; flex-direction: column; align-items: center;
+.pn-slot { position: relative; width: 98px; min-height: var(--pn-slot-h, 112px); display: flex; flex-direction: column; align-items: center;
   justify-content: flex-start; gap: 4px; padding: 10px 6px 8px; border-radius: var(--r-m); background: var(--pn-card);
   box-shadow: inset 0 0 0 2px rgba(217, 182, 119, .9), 0 3px 0 rgba(90, 50, 21, .2); }
 .pn-slot .ic { filter: drop-shadow(0 3px 2px rgba(62, 38, 18, .25)); }
@@ -468,7 +490,9 @@ body.motion-reduced .pn-slot.pn-holding, body.motion-reduced .pn-slot.dragging {
 .pn-recipe-art { position: relative; width: 72px; height: 72px; display: grid; place-items: center; border-radius: 12px;
   background: radial-gradient(60% 60% at 50% 55%, #FFF8DE 0, #F9E9BE 70%, rgba(249, 233, 190, 0) 100%); }
 .pn-recipe-art .ic { filter: drop-shadow(0 3px 2px rgba(62, 38, 18, .25)); }
-.pn-recipe-art .pn-ribbon { top: -4px; left: -10px; }
+/* QA r3 P3-02: "New recipe" is a tag in the recipe's top row (in flow, one line), not a ribbon over its icon */
+.pn-recipe-top .pn-ribbon { position: static; display: inline-block; white-space: nowrap; padding: 2px 9px; border-radius: 8px; }
+.pn-recipe-top .pn-ribbon::before { display: none; }
 .pn-recipe-out { position: absolute; right: 2px; bottom: 6px; padding: 0 5px; border-radius: var(--r-pill); background: var(--wood-700);
   color: #fff; font: 700 .8125rem/1.35 var(--font-ui); }
 .pn-recipe-main { min-width: 0; display: flex; flex-direction: column; gap: 4px; }
@@ -499,7 +523,8 @@ body.motion-reduced .pn-slot.pn-holding, body.motion-reduced .pn-slot.dragging {
 .pn-later-item { display: inline-flex; flex-direction: column; align-items: center; gap: 1px; opacity: .65; filter: grayscale(.6); }
 .pn-later-item small { font: 700 .8125rem/1 var(--font-ui); color: var(--ink-500); }
 @media (prefers-reduced-motion: reduce) {
-  .pn-slot.done .ic, .pn-sparkle, .pn-duet.theirs { animation: none; }
+  body:not(.motion-set) .pn-slot.done .ic, body:not(.motion-set) .pn-sparkle,
+    body:not(.motion-set) .pn-duet.theirs { animation: none; }
 }
 body.motion-reduced .pn-slot.done .ic, body.motion-reduced .pn-sparkle, body.motion-reduced .pn-duet.theirs { animation: none; }
 
@@ -560,13 +585,13 @@ body.motion-reduced .pn-slot.done .ic, body.motion-reduced .pn-sparkle, body.mot
 .pn-tree-when { font: 700 .95rem/1 var(--font-ui); color: var(--ink-700); font-variant-numeric: tabular-nums; }
 .pn-tree-give { display: flex; align-items: center; gap: 6px; font: 700 .9rem/1.2 var(--font-ui); }
 .pn-tree-give .pn-chip { flex-direction: row; min-width: 0; padding: 2px 8px 2px 2px; }
-.pn-tree-give small { font-weight: 600; color: var(--go-700); }
+.pn-tree-give small { font-weight: 600; color: var(--go-900); }   /* go-700 on paper was 3.7:1 (QA r2 a11y pass) */
 /* a tree's age (wave 4b, wish 4): "7 years old · Mature", the way to the next stage */
 .pn-tree-age { display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 4px 8px; padding: 6px 10px; border-radius: var(--r-m);
   background: rgba(93, 187, 63, .1); box-shadow: inset 0 0 0 2px rgba(93, 187, 63, .35); }
 .pn-tree-age-n { font: 800 1rem/1.1 var(--font-display); color: var(--ink-900); }
 .pn-tree-age-stage { justify-self: start; padding: 1px 8px 2px; border-radius: var(--r-pill); font: 700 .8125rem/1.3 var(--font-ui);
-  color: #fff; background: var(--go-700, #3F8A2A); }
+  color: #fff; background: #2E6B1E; }   /* 6:1 for the 13 px white words (axe: 4.05 on the old go-700) */
 .pn-tree-age[data-stage="grand"] .pn-tree-age-stage { background: linear-gradient(180deg, #E2A93B, #B9781A); }
 .pn-tree-age .pn-bar { grid-column: 1 / -1; }
 .pn-tree-age small { grid-column: 1 / -1; font: 600 .8125rem/1.25 var(--font-ui); color: var(--ink-500); }
@@ -688,13 +713,17 @@ body.motion-reduced .pn-slot.done .ic, body.motion-reduced .pn-sparkle, body.mot
   border-radius: 8px; background: var(--paper-100); box-shadow: inset 0 0 0 2px rgba(217, 182, 119, .7); }
 .pn-cal-day small { position: absolute; top: 2px; left: 4px; font: 700 .8125rem/1 var(--font-ui); color: var(--ink-500); }
 .pn-cal-day.big { background: #FFF2C4; }
-.pn-cal-day.done { opacity: .55; }
+/* a claimed day: its picture dims, its number keeps its ink (the whole day at .55 was 2.6:1, QA r2 a11y pass) */
+.pn-cal-day.done { background: #F1E8D2; }
+.pn-cal-day.done > :not(small) { opacity: .55; }
 .pn-cal-day.today { background: #FFF6CF; box-shadow: inset 0 0 0 3px var(--sun-500), 0 0 0 3px rgba(255, 200, 61, .35); animation: pn-pulse-sun 1s ease-in-out infinite alternate; }
 @keyframes pn-pulse-sun { to { box-shadow: inset 0 0 0 3px var(--sun-700), 0 0 0 5px rgba(255, 200, 61, .5); } }
 .pn-stamp { position: absolute; inset: 0; display: grid; place-items: center; font: 800 1.4rem/1 var(--font-display); color: var(--go-700);
   transform: rotate(-12deg); text-shadow: 0 1px 0 #fff; }
 .pn-gift-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 10px; }
-.pn-gift-foot p { margin: 0; font: 600 .88rem/1.3 var(--font-ui); }
+.pn-gift-foot p { margin: 0; font: 600 .88rem/1.3 var(--font-ui); flex: 1 1 0; min-width: 0; }
+/* the Claim button keeps its words inside it; the day's line wraps instead ("Отвори подаръка" ran 3 px out, P7 04:50) */
+.pn-gift-foot > .pn-act { flex: none; }
 .pn-streak { display: flex; align-items: center; gap: 12px; }
 .pn-streak-n { display: grid; place-items: center; width: 64px; height: 64px; border-radius: 50%; font: 800 1.8rem/1 var(--font-display);
   color: #fff; background: radial-gradient(circle at 40% 35%, #E07A2A, #C25E18 60%, #9A4A12); box-shadow: 0 3px 0 #7A3A0E, inset 0 2px 0 rgba(255, 255, 255, .4);
@@ -740,13 +769,13 @@ body.motion-reduced .pn-slot.done .ic, body.motion-reduced .pn-sparkle, body.mot
 .pn-rib.t0 .pn-rosette { opacity: .8; }
 .pn-rib.t3 { background: linear-gradient(180deg, #FFF8DA, #FFFDF5); }
 .pn-rib.secret { grid-template-columns: 64px 1fr; color: var(--ink-500); }
-.pn-rib.secret h4 { margin: 0; font: 800 1rem/1.1 var(--font-display); }
+.pn-rib.secret :is(h3, h4) { margin: 0; font: 800 1rem/1.1 var(--font-display); }
 .pn-rib.secret p { margin: 0; grid-column: 2; font: 600 .8125rem/1.2 var(--font-ui); }
 .pn-rosette { display: block; filter: drop-shadow(0 2px 0 rgba(62, 38, 18, .25)); }
 .pn-rosette-mark { font: 800 13px var(--font-display); }
 .pn-rib-main { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .pn-rib-top { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
-.pn-rib-top h4 { margin: 0; font: 800 1rem/1.1 var(--font-display); }
+.pn-rib-top :is(h3, h4) { margin: 0; font: 800 1rem/1.1 var(--font-display); }
 .pn-rib-main p { margin: 0; font: 500 .8125rem/1.25 var(--font-ui); color: var(--ink-700); }
 .pn-rib-main small { font: 600 .8125rem/1.2 var(--font-ui); color: var(--ink-500); }
 .pn-rib-main .pn-bar { height: 16px; }
@@ -822,19 +851,26 @@ body.motion-reduced .pn-slot.done .ic, body.motion-reduced .pn-sparkle, body.mot
 .pn-wish-ask { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 8px; border-radius: var(--r-s); background: #FFF0CF;
   font: 600 .8125rem/1.3 var(--font-ui); }
 .pn-land-one { grid-template-columns: minmax(220px, 300px) minmax(0, 1fr); }
-@media (prefers-reduced-motion: reduce) { .pn-cal-day.today, .pn-meter-chest.open, .pn-ani.ready .pn-ani-art .ic { animation: none; } }
+@media (prefers-reduced-motion: reduce) {
+  body:not(.motion-set) .pn-cal-day.today, body:not(.motion-set) .pn-meter-chest.open,
+    body:not(.motion-set) .pn-ani.ready .pn-ani-art .ic { animation: none; }
+}
 body.motion-reduced .pn-cal-day.today, body.motion-reduced .pn-meter-chest.open, body.motion-reduced .pn-ani.ready .pn-ani-art .ic { animation: none; }
 .pn-map-label.mine { font-size: 1.7px; }
 .pn-map-label.sale { font-size: 1.9px; }
 /* a phone draws the map ~330 px wide: its small labels ("Lv 22", a price) in map units that read at 8 px and more
    (mobile QA M-11; SVG user units, so this lives here and not in mobile.css with its 13 px floor) */
-@media (max-width: 600px), (max-height: 500px) { .pn-map-label.lvl, .pn-map-label.sale { font-size: 2.6px; } }
+@media (max-width: 600px), (max-height: 500px) { .pn-map-label.pn-map-lvl, .pn-map-label.sale { font-size: 2.6px; } }
 
 /* ---- fixes: specificity, store extras ------------------------------------------------------------------------ */
 .pn-streak .pn-streak-n { display: grid; font: 800 1.8rem/1 var(--font-display); color: #fff; }
 .pn-person .pn-person-dot { display: grid; font: 800 1.4rem/1 var(--font-display); color: #fff; }
 .pn-card.owned { background: #F2F8E6; }
-.pn-wishbtn { position: absolute; top: 4px; right: 4px; width: 28px; height: 28px; border: 0; border-radius: 50%; cursor: pointer;
+/* QA r3 P3-06: the Wish button draws over any ribbon (z-index 2, as on Grand decor's plinths), and a card that has one
+   puts its "N in your tray" ribbon at the art's foot (the bottom slot is free: tray and "in season" never show together),
+   so neither covers the other (the ribbon sat on the button: elementFromPoint at its centre was the ribbon) */
+.pn-card-art:has(> .pn-wishbtn) > .pn-ribbon.pn-free-tag { top: auto; bottom: 8px; }
+.pn-wishbtn { position: absolute; z-index: 2; top: 4px; right: 4px; width: 28px; height: 28px; border: 0; border-radius: 50%; cursor: pointer;
   font: 800 1rem/1 var(--font-ui); color: var(--stop-700); background: rgba(255, 253, 245, .96); box-shadow: 0 0 0 2px #FFC3CF, 0 2px 0 rgba(62, 38, 18, .2);
   opacity: .9; transition: opacity var(--t-micro), transform var(--t-micro) var(--ease-back); }
 .pn-card:hover .pn-wishbtn, .pn-wishbtn:focus-visible, .pn-wishbtn[aria-pressed="true"] { opacity: 1; }
@@ -915,7 +951,7 @@ body.motion-reduced .pn-cal-day.today, body.motion-reduced .pn-meter-chest.open,
 
 /* Even layouts (UI-39): the Animals tab is one even grid (homes and animals the same width, rows the same height),
    a single letter is centred, the order cards of a row share one height with Deliver at the bottom */
-.pn-cards.pn-cards-animals { grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); grid-auto-rows: 1fr; }
+.pn-cards.pn-cards-animals { grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); grid-auto-rows: auto; }
 .pn-cards.pn-cards-animals .pn-card-wide { grid-column: auto; }
 .pn-letters:has(> .pn-letter:only-child) { grid-template-columns: minmax(300px, 540px); justify-content: center; }
 .pn-board { grid-auto-rows: 1fr; }
@@ -985,7 +1021,12 @@ body.cb-safe .pn-req.ok .pn-req-mark { outline: 2px solid var(--go-900); }
 .pn-switch-knob .glyph { width: 14px; height: 14px; }
 .pn-switch-text { display: flex; flex-direction: column; gap: 1px; }
 .pn-switch-text b { font: 800 .875rem/1.1 var(--font-ui); }
-@media (prefers-reduced-motion: reduce) { .pn-switch-knob, .pn-switch-track, .pn-feedswitch { transition: none; } }
+@media (prefers-reduced-motion: reduce) {
+  body:not(.motion-set) .pn-switch-knob, body:not(.motion-set) .pn-switch-track,
+    body:not(.motion-set) .pn-feedswitch { transition: none; }
+}
+body.motion-reduced .pn-switch-knob, body.motion-reduced .pn-switch-track,
+  body.motion-reduced .pn-feedswitch { transition: none; }
 @media (max-width: 600px), (max-height: 500px) {
   .pn-skip { grid-template-columns: 24px minmax(0, 1fr); }
   .pn-skip .pn-act { grid-column: 1 / -1; align-items: flex-end; }
@@ -1107,3 +1148,99 @@ body.cb-safe .pn-req.ok .pn-req-mark { outline: 2px solid var(--go-900); }
 .pn-land-facts .ic { flex: none; }
 .pn-pair-cost.short { color: var(--stop-700); }
 .pn-pair-move { flex: none; min-height: 36px; }
+
+/* ==== release 1.0 (ui-panels lane): the sheets open on the thing to press ======================================== */
+/* "Buy & place · ●160": the coin and its number never part (a phone card puts them on a line of their own) */
+.pn-cost { display: inline-flex; align-items: center; gap: 3px; white-space: nowrap; vertical-align: middle; }
+.pn-cost svg { flex: none; }
+/* Orders (P1): the skip chip and the "⋯" for the co-op flags sit in the card head; the partner's pin stays in sight */
+.pn-order-tools { display: flex; align-items: center; gap: 6px; flex: none; }
+.pn-order-tools .pn-chipbtn { min-height: 32px; padding: 2px 10px; }
+.pn-order-moreBtn { min-width: 36px; font-weight: 800; letter-spacing: .05em; }
+.pn-order-status { display: inline-flex; align-items: center; gap: 4px; padding: 1px 8px 1px 3px; border-radius: var(--r-pill);
+  background: color-mix(in srgb, var(--who, #C79A55) 22%, #FFFDF5); box-shadow: inset 0 0 0 1.5px var(--who, #C79A55);
+  font: 700 .8125rem/1.3 var(--font-ui); color: var(--ink-900); }
+.pn-order-coop[hidden] { display: none; }
+.pn-meter-n { display: none; }
+.pn-speech p.pn-rule { font-style: normal; font-weight: 600; font-size: .875rem; }
+.pn-order-coop { flex-wrap: wrap; }
+/* Market (M18, astra#4): the receipt adds up, the Demand line is quiet; the Next strip (P5) */
+.pn-slip-wanted { margin: -6px 0 0; font: 600 .8125rem/1.3 var(--font-ui); color: var(--wood-700); text-align: right; }
+.pn-slip-wanted[hidden], .pn-slip-note[hidden] { display: none; }
+.pn-slip-each { white-space: nowrap; }
+.pn-slip-sum { justify-content: flex-end; }
+.pn-next-strip { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; margin: 14px 0 0; padding: 8px 12px;
+  border-radius: var(--r-m); background: rgba(255, 253, 245, .55); box-shadow: inset 0 0 0 2px rgba(217, 182, 119, .5);
+  font: 600 .875rem/1.3 var(--font-ui); color: var(--ink-700); }
+.pn-next-strip > b { font: 800 .95rem/1.2 var(--font-display); color: var(--wood-700); margin-right: 2px; }
+.pn-next-item { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+.pn-next-item .ic { filter: grayscale(.4) opacity(.85); }
+.pn-next-more { font-weight: 700; color: var(--ink-500); }
+.pn-dot-sep { color: var(--ink-500); }
+.hh-panel-body .pn-act .btn.pn-big { box-shadow: 0 0 0 3px var(--sun-500), 0 var(--lip, 4px) 0 var(--go-900); }
+.pn-land-ours { margin: 6px 0 4px; }
+.pn-land-ours-list[hidden] { display: none; }
+.pn-land-ours-list { display: grid; gap: 12px; }
+/* Workshops (P3, astra#6): one strip for an empty queue, inputs as words, a quiet ⓘ for the rule */
+/* QA r2 P2-C1: the strip's basis is the width of its --n slot cards (98 px and a 10 px gap each, as .pn-slot / .pn-slots):
+   the buy card wraps beside it exactly as it wraps beside the busy row, so the recipes never move a row */
+.pn-slot.pn-slot-strip { width: auto; min-height: var(--pn-slot-h, 112px); flex: 1 0 calc(var(--n, 6) * 98px + (var(--n, 6) - 1) * 10px);
+  max-width: 100%; flex-direction: row; align-items: center; gap: 8px; padding: 10px 14px;
+  background: transparent; box-shadow: none; border: 3px dashed rgba(138, 82, 36, .35); justify-content: flex-start;
+  font: 700 .95rem/1.2 var(--font-ui); color: var(--ink-700); }
+.pn-slot.pn-slot-strip .pn-slot-plus { font-size: 1.3rem; }
+/* words wrap inside the chip ("1 чувал брашно" is wider than a recipe's column on a phone): never past its edge */
+/* QA r1 P-15: the icon and its words on one row; the words (and "need 1 more") wrap inside their own column */
+.pn-ins { gap: 4px 6px; }
+.pn-ins .pn-chip.pn-input { flex-direction: row; flex-wrap: nowrap; align-items: center; gap: 4px; min-width: 0; max-width: 100%;
+  padding: 2px 10px 2px 2px; border-radius: var(--r-m, 12px); }
+.pn-input-txt { display: inline-flex; flex-wrap: wrap; align-items: baseline; gap: 0 4px; min-width: 0; }
+.pn-chip.pn-input .ic { flex: none; }
+.pn-input-n { font: 700 .875rem/1.2 var(--font-ui); color: var(--ink-900); white-space: normal; overflow-wrap: anywhere; min-width: 0; }
+.pn-input-need { font: 800 .8125rem/1.2 var(--font-ui); color: var(--stop-900); white-space: normal; }
+.pn-chip.pn-input.short { box-shadow: inset 0 0 0 2px rgba(200, 71, 58, .55); }
+.pn-ins .pn-plus { color: var(--ink-500); font-weight: 800; }
+.pn-info { min-height: 28px; min-width: 32px; margin-left: 6px; padding: 0 8px; vertical-align: middle; font-size: 1rem; }
+/* the tree card's reason gets a line of its own under the icon (copy#12) */
+.pn-tree-give { flex-wrap: wrap; }
+.pn-tree-give small { flex-basis: 100%; }
+/* copy#6: a long Bulgarian "what" wraps; the coins column always stays */
+.pn-ledger td { overflow-wrap: anywhere; }
+.pn-ledger td.num, .pn-ledger th.num { white-space: nowrap; width: 1%; }
+
+/* ---- QA r1 (docs/qa/release/qa-r1/fix-ui-panels.md) ------------------------------------------------------------- */
+/* P-04: the day's free new order says its rule under the button, never inside it */
+.pn-rush-note { flex-basis: 100%; font: 600 .8125rem/1.2 var(--font-ui); color: var(--ink-500); }
+/* P-17: the order the partner just filled keeps its place a moment (same height), then goes */
+.pn-order.pn-order-ghost { display: flex; flex-direction: row; align-items: center; justify-content: center; gap: 8px; padding: 8px 12px;
+  background: color-mix(in srgb, var(--who, #7CC243) 18%, #FFFDF5); box-shadow: inset 0 0 0 2px var(--who, #7CC243); transform: none; }
+.pn-order-ghost p { margin: 0; font: 700 .95rem/1.25 var(--font-display); color: var(--ink-900); text-align: center; }
+/* P-06: the Memory Book's pages */
+.pn-memory { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.pn-mem-row { display: grid; grid-template-columns: 38px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 8px 12px 8px 8px;
+  border-radius: var(--r-s); background: var(--pn-card); box-shadow: inset 4px 0 0 var(--who, #E7CFA0), inset 0 0 0 2px rgba(217, 182, 119, .55);
+  font: 600 .9rem/1.3 var(--font-ui); color: var(--ink-900); }
+.pn-mem-row > .glyph, .pn-mem-row > .ic { justify-self: center; }
+.pn-mem-text { display: grid; gap: 2px; min-width: 0; overflow-wrap: anywhere; }
+.pn-mem-note { font: italic 600 .875rem/1.3 var(--font-ui); color: var(--ink-700); }
+.pn-mem-when { font: 600 .8125rem/1.2 var(--font-ui); color: var(--ink-500); white-space: nowrap; }
+
+/* ---- workshop arrows (owner request 2026-10-19; panels/building.js): ‹ › on the title plank turn the open panel to
+   the previous / next workshop. A darker knob with the title's own white lettering (the plank's light wood would swallow
+   a btn--wood); the plank keeps one width from workshop to workshop, so the arrows stay under the pointer / thumb while
+   the player goes round (the longest names, EN "Preserves Kitchen" / BG "Фуражна мелница", fit inside it) */
+.hh-panel-title.pn-wsnav-on { min-width: min(400px, calc(100% - 124px)); padding-left: 10px; padding-right: 10px; }
+.hh-panel-title.pn-wsnav-on .hh-panel-title-text { flex: 1 1 auto; min-width: 0; text-align: center; }
+.btn.pn-wsnav { --top: var(--wood-500); --face: var(--wood-700); --body: var(--wood-900); --lipc: #3B200C; --o: var(--wood-900); --lip: 3px;
+  position: relative; flex: none; margin: -3px 0; padding: 0 0 4px; font: 800 2.25rem/1 var(--font-display); }
+/* a 44 px hit area round the 38 px knob (a thumb on a phone) */
+.btn.pn-wsnav::after { content: ''; position: absolute; inset: -3px; border-radius: 50%; }
+/* a phone sheet (upright or on its side): one bar from the sheet's left gutter to the ✕, the name centred between the
+   arrows (a centred plank leaves the name ~90 px between two arrows and the ✕ at 360; on its side the ✕ stands in by
+   the safe area, and a centred plank put the › under it) */
+@media (max-width: 600px), (max-height: 500px) {
+  /* (.hh-panel first: the narrow Bulgarian plank's 14 px padding must not push the arrows in) */
+  .hh-panel .hh-panel-title.pn-wsnav-on { left: 10px; right: calc(58px + var(--sar)); transform: none; min-width: 0; max-width: none;
+    padding: 6px 4px 8px; }
+  .btn.pn-wsnav { margin: -7px 0; }
+}

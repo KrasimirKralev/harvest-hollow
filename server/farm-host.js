@@ -141,9 +141,9 @@ export class WorkerFarm {
 
   /** Start the worker; resolves when the farm is open (or rejects: the farm failed to load). */
   start() {
-    const { cfg, dir, harnessDir, meta, persistOpts, pendingHx } = this.o;
+    const { cfg, dir, harnessDir, meta, persistOpts, pendingHx, build } = this.o;
     this.w = new Worker(path.join(HERE, 'farm-worker.js'), { workerData: { cfg: plainCfg(cfg), dir, harnessDir, meta,
-      persistOpts: persistOpts ?? {}, pendingHx: pendingHx ?? [] } });
+      persistOpts: persistOpts ?? {}, pendingHx: pendingHx ?? [], build: build ?? null } });
     this.w.unref?.();
     return new Promise((resolve, reject) => {
       let ready = false;

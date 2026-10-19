@@ -14,7 +14,7 @@ export default {
   'settings.q.medium': 'Средно',
   'settings.q.low': 'Ниско',
   'settings.q.eco': 'Еко',
-  'settings.qualityHelp': '„Авто“ пази фермата гладка на този компютър. „Еко“ пести батерия: по‑малко кадри, докато нищо не мърда.',
+  'settings.qualityHelp': '„Авто“ пази фермата гладка на това устройство. „Еко“ пести батерия: по‑малко кадри, докато нищо не мърда.',
   'settings.day': 'Ден и нощ',
   'settings.day.cycle': 'Смяна',
   'settings.day.always': 'Винаги ден',
@@ -96,7 +96,7 @@ export default {
   'settings.farm.lookHelp': 'Коса, дрехи, тен и шапка. Пази се с фермата: другият фермер също го вижда.',
   'settings.farm.screen': 'Този екран',
   'settings.farm.switch': 'Смени фермера',
-  'settings.farm.switchHelp': 'Избери другия фермер на този компютър (в два раздела можете да играете и двамата).',
+  'settings.farm.switchHelp': 'Избери другия фермер на това устройство (в два раздела можете да играете и двамата).',
 
   'settings.credits.loading': 'Зареждаме списъка с музика…',
   'settings.credits.tracks': 'Музика',

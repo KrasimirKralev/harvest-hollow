@@ -15,6 +15,8 @@ import * as THREE from 'three';
 import { TILE_M, WORLD_TILES, FARM_MIN, FARM_MAX } from '../../../shared/content/config.js';
 import { heightAt, noise2, riverZ, riverHalf, LAKE, WATER_Y, ROAD_Z, BRIDGE_X, liveRects, liveUnionDist, padMask } from './ground.js';
 import { WORLD } from './world-uniforms.js';
+import { SHADOW_INTENSITY } from './renderer.js';
+import { assetUrl } from '../net/asset-base.js';
 import { COTTAGES, TOWN_SLOTS, SQUARE, PAVILION_SLOT } from './town-view.js';
 import { inFeatureZone } from './land-features.js';
 
@@ -153,10 +155,14 @@ function createHills() {
 /** The art lane's painted ridge strip as the far horizon ring: one draw. RD-18 (QA wave 2): a 2048-px-wide copy
  *  (public/assets/textures/horizon-hills-2048.webp, resampled from assets/art/horizon-hills.webp): the 4096 x 962
  *  original took 20 MB of GPU memory with its mipmaps and is indistinguishable at this distance. */
-export const HILLS_TEXTURE = '/assets/textures/horizon-hills-2048.webp';
+export const HILLS_TEXTURE = assetUrl('/assets/textures/horizon-hills-2048.webp');   // option 2: maybe the public host
 function createPaintedHills(R = 470, repeats = 6) {
   const build = typeof document !== 'undefined' ? document.querySelector('meta[name="hh-build"]')?.content : null;
-  const tex = new THREE.TextureLoader().load(`${HILLS_TEXTURE}${build ? `?v=${build}` : ''}`);
+  // option 2 (option2#6): the static URL goes through assetUrl (HILLS_TEXTURE); a texture from another origin needs CORS
+  // (TextureLoader's ImageLoader sets crossOrigin from the loader)
+  const loader = new THREE.TextureLoader();
+  loader.setCrossOrigin('anonymous');
+  const tex = loader.load(`${HILLS_TEXTURE}${build ? `?v=${build}` : ''}`);
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.wrapS = THREE.MirroredRepeatWrapping;        // an even `repeats` makes the 360° wrap meet on a mirror line
   tex.repeat.set(repeats, 1);
@@ -267,7 +273,7 @@ export function createScene() {
   sun.shadow.bias = -0.0004;
   sun.shadow.normalBias = 0.035;
   sun.shadow.radius = 3;
-  sun.shadow.intensity = 0.62;
+  sun.shadow.intensity = SHADOW_INTENSITY;        // G2: 0.8 (HEAD 0.62)
   Object.assign(sun.shadow.camera, { left: -60, right: 60, top: 60, bottom: -60, near: 1, far: 320 });
   scene.add(sun, sun.target);
   return { scene, layers, sun, hemi, sky, hills, fireflies };

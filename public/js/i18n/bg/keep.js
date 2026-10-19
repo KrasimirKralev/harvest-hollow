@@ -44,7 +44,7 @@ export default {
   'keep.ago.day': { one: 'вчера', other: 'преди {n} дни' },
 
   // ---- making a new key (the confirm, the link card, the refusals)
-  'keep.rekey.confirm.title': 'Нов ключ за {name}?',
+  'keep.rekey.confirm.title': 'Нов ключ?',
   'keep.rekey.confirm.lead': 'Старите телефони ще изгубят достъп до фермата.',
   'keep.rekey.confirm.body': 'Получаваш еднократен линк, който отваря фермата като {name}, с всичко, което {name} има. Изпрати го на {name} или на човека, който ще заеме мястото.',
   'keep.rekey.confirm.ok': 'Направи нов ключ',

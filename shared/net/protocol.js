@@ -13,8 +13,9 @@
 //                                                                   issued; the slot's other devices keep theirs.
 //                                                                   caps: optional client capabilities, e.g.
 //                                                                   ['b'] = "I unpack `b` batch frames" (CAPS)
-//   act    { seq, type, args }                                      one game intent (seq: per-cid, 1, 2, 3...)
-//   acts   { list: [{ seq, type, args }, ...] }                     intents batched within one frame
+//   act    { seq, type, args, at? }                                 one game intent (seq: per-cid, 1, 2, 3...); at:
+//                                                                   its predicted server time, read only for rej.by
+//   acts   { list: [{ seq, type, args, at? }, ...] }                intents batched within one frame
 //   ping   { c }                                                    c = client performance.now()
 //   mv     { x, z, f, a, cx?, cz?, hop?, tool? }                    presence (tiles, floats; f radians; a anim id);
 //                                                                   hop: true = a teleport ("poof", tech §6.5),
@@ -53,7 +54,8 @@
 //   d       { v, by, cid, seq, now, ops, ev }                       accepted action, to ALL clients (doubles as ack)
 //   rej     { seq, code, by? }                                      rejected action, to the sender only; by: the
 //                                                                   other player who acted on one of its targets
-//                                                                   (args.id or args.ids) within 10 s
+//                                                                   (args.id or args.ids) within 10 s (+ how late
+//                                                                   the act came, by its `at`; 30 s at most)
 //   ack     { seq, v }                                              duplicate seq (already applied) after reconnect
 //   pong    { c, s }                                                s = server epoch ms at receipt
 //   pr      { ts, list: [[pid, x, z, f, a, cx, cz, rts, tool, hop], ...] }
@@ -88,6 +90,8 @@
 //
 // System actions (type starting with '_') are server-only: they arrive as ordinary `d` deltas with
 // by = 'sys', cid = 'sys'.
+
+import { stripBidi, cleanText, hasVisible } from './text.js';
 
 /** Bump on any incompatible change to this file's message shapes. */
 export const PROTOCOL_VERSION = 2;      // 2: per-row presence time, mv hop/tool, welcome known/rejected
@@ -184,11 +188,17 @@ const CAP_RE = /^[a-z]{1,8}$/;
 const MAX_COORD = 1e4;
 const PROTO_KEYS = new Set(['__proto__', 'constructor', 'prototype']);   // presence floats far outside the world are garbage, not "clamp me"
 
-/** Name sanitizer shared by the claim form and the server: trims, strips control chars, caps length. */
+// Player text hygiene lives in the leaf module ./text.js (the landing page uses it without this protocol): bidi
+// controls (QA r1 I-02), lone surrogates, stacked combining marks and text with nothing visible (QA r2 I2-02).
+export { stripBidi, cleanText, hasVisible };
+
+/**
+ * Name sanitizer shared by the claim form and the server: trims, strips control chars, bidi controls, lone surrogates
+ * and stacked combining marks, caps length; '' (no name) when nothing visible is left.
+ * Input only: a stored name is never rewritten, so an old save keeps working as it is.
+ */
 export function cleanName(s) {
-  if (typeof s !== 'string') return '';
-  // eslint-disable-next-line no-control-regex
-  return s.replace(/[\u0000-\u001f\u007f<>]/g, '').trim().slice(0, LIMITS.NAME_MAX);
+  return typeof s === 'string' ? cleanText(s.replace(/[<>]/g, ''), LIMITS.NAME_MAX) : '';
 }
 
 function parseAct(a) {
@@ -199,7 +209,9 @@ function parseAct(a) {
   const argv = args === undefined ? {} : args;
   if (!isPlainObject(argv) || Object.keys(argv).length > LIMITS.ARGS_MAX_KEYS) return null;
   if (Object.keys(argv).some((k) => PROTO_KEYS.has(k))) return null;
-  return { seq, type, args: argv };
+  const out = { seq, type, args: argv };
+  if (finite(a.at) && a.at > 0) out.at = a.at;    // QA r3 I3-01, additive; advisory, so a bad one is just dropped
+  return out;
 }
 
 /**
@@ -292,8 +304,7 @@ export function parseClientMessage(msg) {
         return { t: MSG.MARK, x: msg.x, z: msg.z, kind: msg.kind };
       case MSG.CHAT: {
         if (typeof msg.text !== 'string') return null;
-        // eslint-disable-next-line no-control-regex
-        const text = msg.text.replace(/[\u0000-\u001f\u007f]/g, ' ').trim().slice(0, LIMITS.CHAT_MAX);
+        const text = cleanText(msg.text, LIMITS.CHAT_MAX, ' ');
         return text ? { t: MSG.CHAT, text } : null;
       }
       case MSG.RESYNC:

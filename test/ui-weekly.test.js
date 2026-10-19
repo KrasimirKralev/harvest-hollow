@@ -346,7 +346,9 @@ test('every action the weekly panels send is a registered rule with the args the
 });
 
 test('helpers: points with one decimal, plural reasons, dock buttons only once a system is open', () => {
-  assert.equal(fmtPts(1712), '171.2');
+  assert.equal(fmtPts(1712), '171', 'from 100 points on a whole number (release astra#10)');
+  assert.equal(fmtPts(5486), '549');
+  assert.equal(fmtPts(992), '99.2');
   assert.equal(fmtPts(1710), '171');
   assert.equal(fmtPts(5), '0.5');
   assert.equal(fmtPts(123450), '12,345');

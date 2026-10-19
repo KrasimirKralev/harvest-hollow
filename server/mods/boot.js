@@ -19,14 +19,14 @@ import { CONTENT, xpForLevel, levelFromXp, live, isLive, defOf, cropOf } from '.
 import { FARM_MIN, FARM_MAX } from '../../shared/content/config.js';
 import { installOverlay } from '../../shared/mod/install.js';
 import { suspended } from '../../shared/mod/apply.js';
-import { contentPath } from '../../shared/mod/format.js';
+import { contentPath, LADDERS } from '../../shared/mod/format.js';
+import { ECON_LIMIT_BP, cropDayOf, guardHint } from './econ-guard.js';
 import { ERR } from '../../shared/net/protocol.js';
 
 const MIN = 60_000;
 const HOUR = 3_600_000;
 const CONFIRM = ['BIG_SPEND', 'RESERVED', 'PINNED'];
-/** Coins and XP per hour of the overlay's best crop day vs the base's, at most (tuning's 8000 bp floor gives 12500). */
-export const ECON_LIMIT_BP = 13_000;
+export { ECON_LIMIT_BP };
 
 class BootFail extends Error {
   constructor(code, file, path, message, hint) {
@@ -196,15 +196,7 @@ function playDecor(s, file, d) {
 
 /** The best greedy crop day at `level` with the content installed now: coins and XP per hour (x1000). */
 export function cropDay(level) {
-  let coins = 0;
-  let xp = 0;
-  for (const c of live('crops')) {
-    if (c.retired || (c.unlock ?? 1) > level) continue;
-    const cycles = Math.max(1, Math.floor((24 * HOUR) / c.growMs));
-    coins = Math.max(coins, Math.round(((c.sell * c.yield - c.seed) * cycles * 1000) / 24));
-    xp = Math.max(xp, Math.round((c.xp * cycles * 1000) / 24));
-  }
-  return { coins, xp };
+  return cropDayOf(live('crops'), level);
 }
 
 const fileOf = (family, id) => contentPath(family, id);
@@ -217,6 +209,7 @@ export function bootTest({ overlay, state, now, full = true }) {
     installOverlay(null);
     const level0 = levelFromXp(state.farm.xp);
     const baseDay = cropDay(Math.max(1, level0));
+    const baseCrops = new Map(live('crops').map((c) => [c.id, c]));
     installOverlay(overlay);
     const copy = structuredClone(state);
     s = sim(copy, now);
@@ -272,8 +265,9 @@ export function bootTest({ overlay, state, now, full = true }) {
       const xpBp = baseDay.xp ? Math.round((modDay.xp * 10_000) / baseDay.xp) : 10_000;
       checks.econ = { coinsBp, xpBp };
       if (coinsBp > ECON_LIMIT_BP || xpBp > ECON_LIMIT_BP) {
+        // the hint names the crop and the shortest step this farm allows (harvey#6), so the agent need not guess
         throw new BootFail('ECON_GUARD', 'tuning.json', '', `a crop day would pay ${coinsBp / 100} % coins and ${xpBp / 100} % experience of the game's`,
-          'make the times less short');
+          guardHint(live('crops'), baseDay, Math.max(1, level0), LADDERS.cropMin, baseCrops, { growTimeBp: overlay.tuning?.growTimeBp ?? null }));
       }
       // the retire check: what the farm has keeps working, nothing new can be bought
       const keep = {};

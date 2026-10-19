@@ -180,6 +180,34 @@ export function createCrates({ dyn, fx = null } = {}) {
       chute: modelKey(dyn, 'prop:parachute', fallbackChute).key,
     };
   }
+  // QA r3 R3-01: a failed load is tried again (1, 2, 4 … 30 s, or on `online`), never "loaded" with crates hidden
+  let fails = 0;
+  let retryT = 0;
+  function load() {
+    retryT = 0;
+    loading = models.ready(CRATE_KEYS.filter((k) => models.has(k))).then(() => {
+      loaded = true;
+      for (const r of recs.values()) if (r.waiting) { r.waiting = false; dyn.setVisible(r.body, true); dyn.setVisible(r.lid, true); r.still = false; }
+    }, () => {
+      loading = null;
+      fails++;
+      retryT = setTimeout(load, Math.min(30_000, 1000 * 2 ** (fails - 1)));
+    });
+  }
+  globalThis.addEventListener?.('online', () => { if (retryT) { clearTimeout(retryT); load(); } });
+  // R3-01: a crate drawn while the manifest was lost wears the stand-in; a late manifest re-keys it to the model
+  models.onManifest(() => {
+    if (!keys || !keys.body.startsWith('hh:') || !CRATE_KEYS.some((k) => models.has(k))) return;
+    keys = null; loaded = false;
+    ensureKeys();
+    for (const r of recs.values()) {
+      dyn.setKey(r.body, keys.body); dyn.setKey(r.lid, keys.lid); dyn.setKey(r.chute, keys.chute);
+      if (!r.waiting) { r.waiting = true; dyn.setVisible(r.body, false); dyn.setVisible(r.lid, false); }
+    }
+    loading = null;
+    if (!retryT) load();
+  });
+
   function add(c) {
     ensureKeys();
     const h = h32(c.id);
@@ -192,12 +220,7 @@ export function createCrates({ dyn, fx = null } = {}) {
     if (!loaded) {
       for (const h of [rec.body, rec.lid]) dyn.setVisible(h, false);
       rec.waiting = true;
-      if (!loading) {
-        loading = models.ready(CRATE_KEYS.filter((k) => models.has(k))).then(() => {
-          loaded = true;
-          for (const r of recs.values()) if (r.waiting) { r.waiting = false; dyn.setVisible(r.body, true); dyn.setVisible(r.lid, true); r.still = false; }
-        }, () => { loaded = true; });
-      }
+      if (!loading && !retryT) load();
     }
     // the balloon's place at the drop (both screens: server time), or high over the tile when it is not flying
     const bl = balloonAt(rec.at);
@@ -318,6 +341,12 @@ export function createCrates({ dyn, fx = null } = {}) {
     fx.burst('sparkle', v, { n: 16, colors: ['#FFE27A', '#FFFFFF', '#FFC83D'], speed: 2.4, up: 3.4, size: 0.4, grav: 0.4, life: 1.0, spread: 0.4 });
     fx.burst('confetti', v, { n: 18, colors: ['#FF7A6B', '#2BB3A3', '#FFC83D', '#4AA8E8', '#A98BE0', '#FF9FB0'], speed: 2.6, up: 4, size: 0.2, grav: 0.6, life: 1.4, spread: 0.3, spin: 6 });
     fx.ring(v.set(p.x, 0.05, p.z), { color: '#FFE27A', radius: 2.4, duration: 0.7, width: 0.25, additive: true });
+    // 1.0: a rare power-up inside: a rainbow of stars and a wider ring
+    if (rec.anim.pu) {
+      fx.burst('star', v.set(p.x, CRATE.height, p.z), { n: 22, colors: ['#FF7A6B', '#FFC83D', '#9BE06A', '#4AA8E8', '#A98BE0'], speed: 3, up: 5.5,
+        size: 0.5, grav: 0.25, drag: 0.6, life: 1.6, spread: 0.3, delay: 0.15 });
+      fx.ring(v.set(p.x, 0.05, p.z), { color: '#C9A8FF', radius: 3.6, duration: 1.0, width: 0.3, additive: true });
+    }
     // the loot jumps out of the crate and flies to the HUD (coins, XP and Acorns to their pills, items to the Barn)
     const loot = rec.anim.loot || [];
     v.set(p.x, CRATE.height * 0.9, p.z);
@@ -361,7 +390,8 @@ export function createCrates({ dyn, fx = null } = {}) {
       if (ev.e === 'crateOpened' || ev.e === 'crateOpen' || ev.e === 'crateStored' || ev.e === 'crateCollected' || ev.e === 'crateExpired') {
         // `auto`: nobody opened it in time and its loot went to the Barn by itself (a poof, the crate flies to the Barn)
         const open = (ev.e === 'crateOpened' || ev.e === 'crateOpen') && !ev.auto;
-        rec.anim = { kind: open ? 'open' : 'store', loot: open ? lootOf(ev) : [], by: meta.by ?? ev.by ?? null, local: meta.local !== false, burst: false, poofed: false };
+        rec.anim = { kind: open ? 'open' : 'store', loot: open ? lootOf(ev) : [], by: meta.by ?? ev.by ?? null, local: meta.local !== false, burst: false, poofed: false,
+          pu: open && ev.pu ? ev.pu : null };
         rec.animT = 0;
         rec.goneAt = null;
         if (fx) fx.twinkle(`crate:${id}`, null);

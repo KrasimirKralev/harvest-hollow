@@ -71,14 +71,14 @@ test('text: Title Case English, Bulgarian forms, no links, no XP, no markup, len
   assert.ok(codes(f).includes(`MISSING_FIELD@${CROP}:text.bg.count`), 'a masculine name needs its count form');
 });
 
-test('tuning, look, letters and tips; UNSUPPORTED says what cannot be tuned', () => {
+test('tuning, look and letters; UNSUPPORTED says what cannot be tuned (release 1.0: no palette, no tips)', () => {
   const f = moonlight();
   f['tuning.json'] = { growTimeBp: 7000, weather: { rain: 2 }, crops: { wheat: { growMin: 3 } } };
   f['look.json'] = { sky: 'neon', palette: { grass: '#00FF00', lava: '#FF0000' } };
   f['text/tips.json'] = Array.from({ length: LIMITS.tips + 1 }, (_, i) => ({ id: `x_tip_${i}`, en: 'A tip.', bg: 'Съвет.' }));
   const c = codes(f);
   for (const want of ['BAD_ENUM@tuning.json:growTimeBp', 'UNSUPPORTED@tuning.json:weather', 'NOT_LADDER@tuning.json:crops.wheat.growMin',
-    'BAD_ENUM@look.json:sky', 'UNKNOWN_FIELD@look.json:palette.lava', 'TOO_MANY@text/tips.json:']) assert.ok(c.includes(want), `${want} in ${c}`);
+    'BAD_ENUM@look.json:sky', 'UNSUPPORTED@look.json:palette', 'UNSUPPORTED@text/tips.json:']) assert.ok(c.includes(want), `${want} in ${c}`);
 });
 
 test('sizes: a file over 16 KB, the folder over 128 KB, more than 40 content files', () => {

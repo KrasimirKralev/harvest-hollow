@@ -24,6 +24,10 @@ import home from './en/home.js';
 import keep from './en/keep.js';
 import privacy from './en/privacy.js';
 import front from './en/front.js';
+import dock from './en/dock.js';
+import cheer from './en/cheer.js';
+import feat from './en/feat.js';
+import boot from './en/boot.js';
 
 /** [area, English catalog, Bulgarian loader] in load order. */
 export const AREAS = [
@@ -55,6 +59,12 @@ export const AREAS = [
   ['keep', keep, () => import('./bg/keep.js')],
   ['privacy', privacy, () => import('./bg/privacy.js')],
   ['front', front, () => import('./bg/front.js')],
+  // release 1.0 (docs/agent-briefs/release-scope.md §3 step 0): one new area per lane, so no two lanes share a
+  // catalog. dock: ui-shell; cheer: life-feel; feat: features; boot: infra (harvey keeps 'harness', infra 'front').
+  ['dock', dock, () => import('./bg/dock.js')],
+  ['cheer', cheer, () => import('./bg/cheer.js')],
+  ['feat', feat, () => import('./bg/feat.js')],
+  ['boot', boot, () => import('./bg/boot.js')],
 ];
 
 /**

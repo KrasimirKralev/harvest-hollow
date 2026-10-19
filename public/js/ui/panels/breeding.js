@@ -179,7 +179,7 @@ function pairCard(ctx, kit, v, sel, setSel) {
   const sp = v.sp;
   if (!sp) {
     return h('div.br-empty', careGlyph('heart', 56), h('p', t('home.breed.empty')),
-      h('button.btn.btn--sky.pn-sm', { type: 'button', on: { click: () => ctx.open('market', { tab: 'animals' }) } }, t('home.breed.marketAnimals')));
+      h('button.btn.btn--sky.pn-sm', { type: 'button', 'data-sfx': 'own', on: { click: () => ctx.open('market', { tab: 'animals' }) } }, t('home.breed.marketAnimals')));
   }
   const pickSp = h('div.br-species', { role: 'radiogroup', 'aria-label': t('home.breed.which') },
     ...v.species.filter((x) => x.owned > 0).map((x) => h(`button.br-sp${x.id === sp.id ? '.on' : ''}`, {
@@ -196,7 +196,7 @@ function pairCard(ctx, kit, v, sel, setSel) {
   };
   const adults = h('div.br-adults', ...sp.adults.map((a) => parentCard(a, { picked: Boolean(slotOf(a.id)), slot: slotOf(a.id), onClick: () => toggle(a.id) })));
   const facts = h('ul.br-facts',
-    h('li', svgIcon('star', 20), h('span', t('home.breed.takes', { d: fmtDuration(sp.ms), noun: sp.noun, def: nounDef(sp.id) }))),
+    h('li', svgIcon('star', 20), h('span', t('home.breed.takes', { d: fmtDuration(sp.ms, { trim: true }), noun: sp.noun, def: nounDef(sp.id) }))),
     h('li', icon(sp.cost.item, { size: 22, alt: '' }), h('span', t('home.breed.costs', { what: counted(sp.cost.qty, sp.cost.item) })), chip(sp.cost.item, { have: sp.have, need: sp.cost.qty, size: 26 })),
     h('li', svgIcon('heart', 20), h('span', sp.room > 0 ? t('home.breed.room') : t('home.breed.noRoom'))));
   const btn = kit.button({ label: v.a && v.b ? t('home.breed.pair') : t('home.breed.pickTwo'), glyph: 'heart', cls: 'btn--sun', type: 'breed',
@@ -267,7 +267,7 @@ export const breedingPanel = {
           h('p', t('home.breed.home', { name: shown.name ?? t('home.breed.theBaby'),
             who: shown.by === ctx.store.pid ? t('home.breed.withYou') : st.players[shown.by]?.name ?? t('home.breed.partner') })),
           h('div.br-reveal-acts', nameEditor(ctx, { id: shown.id, name: st.farm.objects[shown.id]?.name ?? null, noun: babyNoun(shown.species) }),
-            h('button.pn-chipbtn', { type: 'button', on: { click: () => ctx.open('nursery', { id: shown.id }) } }, t('home.breed.card')),
+            h('button.pn-chipbtn', { type: 'button', 'data-sfx': 'own', on: { click: () => ctx.open('nursery', { id: shown.id }) } }, t('home.breed.card')),
             h('button.pn-chipbtn', { type: 'button', on: { click: () => { reveal = null; update(true); } } }, t('common.close'))))) : null;
       fill(body, animalSwitch(ctx, 'breeding'),
         rv,

@@ -12,7 +12,10 @@ import { itemOf, defOf } from '../../../../shared/content/index.js';
 import * as C from '../../../../shared/content/index.js';
 import { lootOf, treasures, savingOf, usedToday, USE_OF } from './w4b-rules.js';
 import { levelOf } from './model.js';
+import { feedText } from '../feed.js';
 import { t, tn, lang, list, qty, ctext, nameEntry, N, name as cname } from '../../i18n/index.js';
+import { lazyImport, importFailed } from '../../net/lazy.js';
+import { livePowerups } from '../../../../shared/rules/powerups.js';
 
 /** How long after the lid pops the loot card comes (the loot first flies to the HUD: render's open animation). */
 export const LOOT_CARD_DELAY_MS = 900;
@@ -22,7 +25,7 @@ const relicName = (id) => ctext(null, id, 'name', (typeof C.relicOf === 'functio
 const bgName = (id) => (id === 'golden_seeds' ? t('farm.loot.goldenSeed')
   : nameEntry(id) ? cname(id) : ctext('finds', id, 'name', itemName(id, 1)));
 const bgCount = (id, n) => (id === 'golden_seeds' ? tn('farm.loot.goldenSeeds', n)
-  : nameEntry(id) && itemOf(id) ? qty(id, n) : `${bgName(id)} ×${fmt(n)}`);
+  : nameEntry(id) && itemOf(id) ? qty(id, n) : `${bgName(id)}\u00a0×${fmt(n)}`);
 const plural = (n, one, many = `${one}s`) => `${fmt(n)} ${n === 1 ? one : many}`;
 const itemName = (id, n) => {
   if (id === 'golden_seeds') return n === 1 ? 'Golden Seed' : 'Golden Seeds'; // i18n-ok: English path (Bulgarian: bgName)
@@ -75,6 +78,16 @@ export function lootText(ev) {
   return `${parts.slice(0, -1).join(', ')} and ${parts.at(-1)}`;
 }
 
+/** The feed row the rules write for a crate that went to the Barn by itself (shared/rules/progress.js crateOpened). */
+export function autoCrateRow(ev) {
+  const row = { k: 'crate', c: ev.coins ?? 0, auto: 1, by: 'sys' };
+  if (ev.acorns) row.a = ev.acorns;
+  if (ev.goldenSeeds) row.g = ev.goldenSeeds;
+  if (ev.item && ev.qty) Object.assign(row, { item: ev.item, q: ev.qty });
+  if (ev.decor) row.def = ev.decor;
+  return row;
+}
+
 // ---- "saving for" (wish 2): this browser's choice per farmer, when the rules keep none ---------------------------
 export const savingKey = (pid) => `hh.saving.${pid}`;
 export const localSaving = (pid) => { const v = kv.get(savingKey(pid), null); return typeof v === 'string' ? v : null; };
@@ -109,25 +122,41 @@ export default function installW4b(ui, deps = {}) {
   const nameOf = (pid) => store.state?.players?.[pid]?.name ?? t('common.partner');
   const timers = new Set();
   const later = (ms, fn) => { const t = setTimeout(() => { timers.delete(t); fn(); }, ms); timers.add(t); };
+  // 1.0: the power-ups' screen part, lazy while one works; if it fails, the crate's plain card and line
+  let pu = null;
+  const importPu = deps.importPowerups ?? (() => import('../powerups.js'));
+  const loadPu = () => (pu ??= lazyImport('powerups', importPu).then((m) => m.installPowerups(ui, { store, nameOf }))
+    .catch((err) => { if (!importFailed(err)) console.error('the power-ups did not start', err); return null; }));
+  const anyPu = () => Object.keys(store.state?.farm?.powerups ?? {}).length > 0
+    && livePowerups(store.state, store.now?.() ?? 0).length > 0;
+  off.push(store.subscribe?.('powerups', () => { if (anyPu()) loadPu(); }) ?? (() => {}));
+  if (anyPu()) loadPu();
+
+  function plainCrate(ev, by, local) {
+    const mine = by === store.pid && !ev.auto;
+    if (mine) {
+      // my crate: the lid pops, the loot flies to the HUD, then the card lists it (a fanfare: game/feedback.js)
+      if (!local) return;                  // own actions arrive predicted once; a confirmed echo never repeats it
+      later(LOOT_CARD_DELAY_MS, () => ui.banner?.({
+        id: `loot-${ev.id}`, kind: 'loot', ribbon: t('farm.loot.ribbon'), message: t('farm.loot.inside'),
+        things: lootThings(ev).map((x, i) => ({ ...x, name: () => lootThings(ev)[i]?.name ?? x.name })), ttl: 7000, actions: [{ label: t('farm.loot.lovely'), kind: 'go', fn: () => {} }],
+      }));
+      return;
+    }
+    if (ev.auto || by === 'sys') {
+      // the farm's line, said once in one wording: the toast is the feed's own sentence for the same crate (QA r1
+      // P-23: "A balloon crate nobody opened…, 469 XP and 2 Acorns" beside "An unopened balloon crate…")
+      ui.toast(() => feedText(autoCrateRow(ev), store.state, store.pid).text, { kind: 'info', icon: 'coins', ms: 5000 });
+      return;
+    }
+    ui.toast(() => t('farm.loot.opened', { name: nameOf(by), loot: lootText(ev) }), { kind: 'info', icon: 'coins', ms: 5000 });
+  }
 
   off.push(store.on('fx', ({ ev, by, local }) => {
     if (!ev || !store.state) return;
     if (ev.e === 'crateOpened') {
-      const mine = by === store.pid && !ev.auto;
-      if (mine) {
-        // my crate: the lid pops, the loot flies to the HUD, then the card lists it (a fanfare: game/feedback.js)
-        if (!local) return;                  // own actions arrive predicted once; a confirmed echo never repeats it
-        later(LOOT_CARD_DELAY_MS, () => ui.banner?.({
-          id: `loot-${ev.id}`, kind: 'loot', ribbon: t('farm.loot.ribbon'), message: t('farm.loot.inside'),
-          things: lootThings(ev).map((x, i) => ({ ...x, name: () => lootThings(ev)[i]?.name ?? x.name })), ttl: 7000, actions: [{ label: t('farm.loot.lovely'), kind: 'go', fn: () => {} }],
-        }));
-        return;
-      }
-      if (ev.auto || by === 'sys') {
-        ui.toast(() => t('farm.loot.auto', { loot: lootText(ev) }), { kind: 'info', icon: 'coins', ms: 5000 });
-        return;
-      }
-      ui.toast(() => t('farm.loot.opened', { name: nameOf(by), loot: lootText(ev) }), { kind: 'info', icon: 'coins', ms: 5000 });
+      if (ev.pu && !ev.auto) loadPu().then((m) => (m ? m.crate(ev, by, local) : plainCrate(ev, by, local)));
+      else plainCrate(ev, by, local);
       return;
     }
     if (ev.e === 'relicBought') {
@@ -162,6 +191,7 @@ export default function installW4b(ui, deps = {}) {
     }
   }));
   return () => {
+    pu?.then((m) => m?.off());
     for (const t of timers) clearTimeout(t);
     timers.clear();
     for (const f of off.splice(0)) { try { f(); } catch { /* gone */ } }

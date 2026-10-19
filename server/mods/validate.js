@@ -14,6 +14,7 @@ import { checkFiles, parseFiles } from '../../shared/mod/schema.js';
 import { compileMod } from '../../shared/mod/compile.js';
 import { applyMod } from '../../shared/mod/apply.js';
 import { modHash } from '../../shared/mod/hash.js';
+import { sameEffect } from '../../shared/mod/diff.js';
 import { renderCheck } from './render.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -81,6 +82,12 @@ export async function validateCandidate({ files: raw, prevOverlay = null, gravey
     return { result: result({ ok: false, stage: 'semantic', full, t0, files, overlay: null, errors: c.problems.slice(0, 60), warnings, checks }), overlay: null, icons: {} };
   }
   const ov = c.overlay;
+  // release 1.0 (H1): a mod that changes nothing the farm can see or play is never an empty "Changes ready"
+  if (sameEffect(prevOverlay, ov)) {
+    const errors = [{ stage: 'semantic', code: 'NO_CHANGE', file: '', path: '', message: 'nothing on the farm would change',
+      hint: 'if nothing in the request can be built, write no mod files and write summary.json with "possible": false, a kind reason and what you could build instead' }];
+    return { result: result({ ok: false, stage: 'semantic', full, t0, files, overlay: null, errors, warnings, checks }), overlay: null, icons: {} };
+  }
   let content = [];
   try {
     content = validateContent(applyMod(base().tables, ov));
@@ -108,6 +115,7 @@ export async function validateCandidate({ files: raw, prevOverlay = null, gravey
   // 4. render
   const r = renderCheck(ov, { root });
   checks.render = r.checks;
+  warnings.push(...(r.warnings ?? []));
   if (!r.ok) {
     return { result: result({ ok: false, stage: 'render', full, t0, files, overlay: ov, errors: r.errors, warnings, checks }), overlay: null, icons: {} };
   }

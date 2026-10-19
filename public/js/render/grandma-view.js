@@ -161,6 +161,8 @@ export function createGrandmaVisit({ layers, dyn = null, scenery = null, fx = nu
       rocker = scenery.add(key, m4);
     } else if (!on && rocker !== null) { scenery.remove(rocker); rocker = null; }
   }
+  // R3-01: a manifest lost at build kept the chair away for the session; a late one places it
+  models.onManifest(() => { if (state && porch) placeRocker(visit.phase === 'visiting'); });
 
   function apply(s, now) {
     state = s;

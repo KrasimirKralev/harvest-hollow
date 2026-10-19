@@ -21,7 +21,7 @@ export const FEATURES = [
     text: 'Stand next to each other and both press high-five: a Spark gives you both +10 % XP for 10 minutes.' }),
   f('tutorial', 'Fields and Barnyard tracks', 1, 'M1a'),
   f('orders', 'Orders Board', 2, 'M1a', { title: 'Mabel\'s Order Board',
-    text: 'Orders pay more than the market and never expire. A filled slot refills in 15 minutes.' }),
+    text: 'Orders pay more than the market, in coins and XP, and never expire. A filled slot refills in 15 minutes.' }),
   f('help_flags', 'Help flags and pins', 2, 'M1a', { title: 'I\'m on it',
     text: 'Pin an order you are working on, or flag it "Need help": when your partner fills it you both get '
       + 'a Heart.' }),
@@ -119,9 +119,9 @@ export const FEATURES = [
     text: 'A tree picked 60 times becomes an heirloom. Now you can see its blue-ribbon fruit on the branches.' }),
   f('bundle_flags', 'Help flags on bundle slots', 23, 'M1b', { title: 'Help with the bundles',
     text: 'Flag a Restoration slot "Need help": when your partner fills it, you both get a Heart.' }),
-  f('seasonal_track', 'Seasonal Ribbon Track', 24, 'M2', { title: 'The season\'s track',
-    text: 'Every XP you earn this season fills a 30-tier track of rewards. A fresh track starts with each '
-      + 'season.' }),
+  f('seasonal_track', 'Seasonal Ribbon Track', 16, 'M2', { title: 'The Ribbon Track',
+    text: 'Every XP you earn this season fills the 30-tier Ribbon Track (Farm book › Ribbon Track). A fresh '
+      + 'one starts each season.' }),
   f('horse_show', 'Horse show', 25, 'M2', { title: 'The horse show',
     text: 'A blue-ribbon horse brings Show Ribbons. Entered at the Fair tent, a Show Ribbon now scores double.' }),
   f('restoration_4', 'Restoration project 4', 25, 'M2', { title: 'The Orchard Pond',
@@ -220,4 +220,36 @@ export const FEATURES = [
   f('spices', 'Spices', 16, 'M1b', { title: 'A pinch of spice',
     text: 'Grow paprika and savory, grind them at the Spice Mill and mix Colourful Salt for warm bread, the way Grandma '
       + 'did.' }),
+  // Release 1.0 (features lane, M29; critique#16, #32, #34): the one-time introductions of what is new go through this
+  // same drip (one card per DRIP_FEED.minGapMs of play, once per farmer), never a client queue. Each waits for its own
+  // condition (shared/rules/actions/social.js cardReady): `drip` names it. `key` is the card's catalog prefix (area
+  // 'feat': `<key>.title`, `<key>.text`, `<key>.touchText`); `show` what its Show me opens ('gift' the gift sheet,
+  // 'farmbook' the Farm book, 'harvey' Harvey, or a { panel, args } target).
+  //   new_1_0      a save from before 1.0 (farm.coop.born absent) at L5+: says what moved; it replaces the gift
+  //                introduction for those farmers (QA r2 F2-06: not the brush tip, which they still need)
+  //   gift_intro   both farmers joined (a new 1.0 farm)
+  //   meet_harvey  the coach has retired (coachRetired) and this farm's server offers Harvey (opts.helper)
+  //   brush_tip    after a 1 x 1 harvest stroke of BRUSH_TIP_PLOTS or more while a bigger sickle is unlocked, unbought
+  // `shop: false`: none of them is a level's unlock (unlocksAt skips them: the level-up card lists content only).
+  f('new_1_0', 'New in 1.0', 1, 'M1a', { title: 'New in 1.0', key: 'feat.card.new_1_0', show: 'farmbook',
+    // QA r2 F2-06: the bigger brushes are new to these farmers too (their tip used to be barred here)
+    text: 'Every place you visit is in the Farm book now. The Sickle, the Watering Can and the other tools wait under '
+      + 'Tools ▸, and bigger brushes in the Market do several plots a touch. And something new: leave your partner a '
+      + 'surprise on the porch (Together).',
+    touchText: 'Every place you visit is in the Farm book now, on the bar at the bottom. The Sickle and the other '
+      + 'tools wait under Tools ▸, and bigger brushes in the Market do several plots a touch. And something new: leave '
+      + 'your partner a surprise on the porch.' }, { drip: 'news', shop: false }),
+  f('gift_intro', 'Surprise gifts', 2, 'M1a', { title: 'Leave a surprise', key: 'feat.card.gift_intro', show: 'gift',
+    text: 'Once a day, wrap something from the Barn for your partner. It waits on the porch until they open it.' },
+  { drip: 'gift', shop: false }),
+  f('meet_harvey', 'Harvey', 2, 'M1a', { title: 'Meet Harvey', key: 'feat.card.meet_harvey', show: 'harvey',
+    text: 'Harvey is your farm\'s own helper: tell him a wish, like "A blue pumpkin for autumn", and he builds it '
+      + 'while you play.' }, { drip: 'harvey', shop: false }),
+  f('brush_tip', 'Bigger brushes', 12, 'M1a', { title: 'Fewer strokes', key: 'feat.card.brush_tip',
+    show: { panel: 'market', args: { tab: 'tools', focus: 'wide_sickle' } },
+    text: 'The Wide Sickle in the Market harvests 4 plots in one touch. Your field, in a quarter of the strokes.' },
+  { drip: 'brush', shop: false }),
 ];
+
+/** The brush tip waits for a harvest stroke this long (plots) with the 1 x 1 sickle (features#F3). */
+export const BRUSH_TIP_PLOTS = 20;

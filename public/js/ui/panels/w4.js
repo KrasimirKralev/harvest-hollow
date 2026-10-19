@@ -12,6 +12,7 @@ import { h, fmt } from '../dom.js';
 import { defOf } from '../../../../shared/content/index.js';
 import { upgradeTargetOf } from './w4-rules.js';
 import { t, N, ctext, lang, name as cname } from '../../i18n/index.js';
+import { lazyImport, importFailed } from '../../net/lazy.js';
 
 const CSS_HREF = '/css/panels-w4.css';
 let cssReady = null;
@@ -42,12 +43,12 @@ export function lazyPanel(spec, load) {
       let inst = null;
       let dead = false;
       body.append(h('p.w4-wait', { role: 'status' }, t('farm.w4.wait')));
-      Promise.all([load(), loadCss()]).then(([mod]) => {
+      Promise.all([lazyImport(ctx.name, load), loadCss()]).then(([mod]) => {
         if (dead) return;
         body.replaceChildren();
         inst = mod.mount(body, ctx) || {};
       }).catch((err) => {
-        console.error(`panel '${ctx.name}' did not load`, err);
+        if (!importFailed(err)) console.error(`panel '${ctx.name}' did not load`, err);
         if (!dead) body.replaceChildren(h('p.empty-note', t('farm.w4.failed')));
       });
       return {
@@ -62,7 +63,7 @@ const UPGRADES = lazyPanel({
   title: (a, st) => {
     const o = a?.id && st?.farm?.objects?.[a.id];
     // a phone's title ribbon holds about 14 letters: "Market Stand: up…" was cut, the object's card names it anyway
-    const narrow = typeof globalThis.matchMedia === 'function' && globalThis.matchMedia('(max-width: 520px)').matches;
+    const narrow = typeof globalThis.matchMedia === 'function' && globalThis.matchMedia('(max-width: 520px), (max-height: 500px)').matches;
     if (!(o && upgradeTargetOf(o.def))) return narrow && lang() !== 'en' ? t('farm.w4.ups') : t('farm.w4.upTitle');
     const name = defOf(o.def) ? cname(o.def) : t('farm.w4.farm');
     return narrow && (name.length > 6 || lang() !== 'en') ? t('farm.w4.ups') : t('farm.w4.upsOf', { name });

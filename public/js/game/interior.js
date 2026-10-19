@@ -44,6 +44,8 @@ export function interiorOpenNow(state) {
 /** The panels the room's own pieces open (the Hand on them): ui-collect's Ribbon Wall, the Journal's Memory Book. */
 export const PIECE_PANELS = Object.freeze({ ribbon_wall: ['ribbonwall', 'journal'], memory_wall: ['memorybook', 'journal'],
   keepsake_shelf: ['keepsakes', 'journal'] });
+/** The tab a piece's panel opens on: the Memory Book's pieces open on its pages (Journal › Memories, QA r1 P-06). */
+export const PIECE_TABS = Object.freeze({ memory_wall: 'memory', keepsake_shelf: 'memory' });
 
 /**
  * The spot a piece of `def` takes for a pick under the pointer (pure): wall pieces on a wall slot (the pick's own, or
@@ -286,7 +288,7 @@ export function createInterior({ store, view, avatar, audio = null, toast = () =
       const it = store.state.farm.interior.items[p.id];
       const def = it ? furnitureOf(it.def) : furnitureOf(p.def);
       if (tool === 'hammer') { move(p.id); return true; }
-      if (def && PIECE_PANELS[def.id]) { openPanel(PIECE_PANELS[def.id], {}); return true; }
+      if (def && PIECE_PANELS[def.id]) { openPanel(PIECE_PANELS[def.id], PIECE_TABS[def.id] ? { tab: PIECE_TABS[def.id] } : {}); return true; }
       // the piece's name and words in the language in effect (they were the content's English)
       if (def) {
         // a function: the description is content text, so a language switch while it is up asks it again

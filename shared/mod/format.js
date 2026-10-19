@@ -10,6 +10,8 @@
 //   VALUE_BP        humble / normal / rich in basis points
 //   FILE_KINDS      the content families and the folder each lives in
 //   SEASONS CROP_CLASSES YIELDS SKIES LETTER_FROM PALETTE_VARS TUNING_BP UNLOCK_RANGE   enums and ranges
+//   REMOVED         knobs a NEW mod may no longer use (release 1.0, H2: they changed nothing on screen); a stored version
+//                   that uses one still compiles, the knob ignored with a warning (M24, shared/mod/removed.js)
 
 export const FORMAT = 1;
 export const ID_PREFIX = 'x_';
@@ -58,7 +60,9 @@ export const FILE_KINDS = Object.freeze({
   decor: 'content/decor',
 });
 /** The other files a mod may have (mod.json is required). */
-export const SINGLE_FILES = Object.freeze(['mod.json', 'tuning.json', 'look.json', 'text/letters.json', 'text/tips.json']);
+export const SINGLE_FILES = Object.freeze(['mod.json', 'tuning.json', 'look.json', 'text/letters.json']);
+/** Files a version stored before 1.0 may still hold (read, recompiled, the removed knobs ignored). */
+export const STORED_FILES = Object.freeze([...SINGLE_FILES, 'text/tips.json']);
 
 export const SEASONS = Object.freeze(['spring', 'summer', 'autumn', 'winter']);
 export const CROP_CLASSES = Object.freeze(['grain', 'root', 'veg', 'fruit', 'cane', 'flower', 'fibre', 'bean', 'spice']);
@@ -68,10 +72,22 @@ export const SKIES = Object.freeze(['default', 'golden', 'pastel', 'cool', 'stor
 /** Who may write a letter: Grandma Hazel and the townsfolk (shared/content/npcs.js). */
 export const LETTER_FROM = Object.freeze(['hazel', 'mabel', 'ollie', 'fern', 'juniper', 'reed', 'pemberton', 'pip',
   'rosie', 'tom', 'lucia']);
-/** look.json palette keys -> the CSS variables of public/css/style.css :root they set. */
+/** look.json palette keys of format 1 before 1.0 (read only from stored versions, never compiled: see REMOVED). */
 export const PALETTE_VARS = Object.freeze({
   grass: '--grass-lit', leaf: '--leaf-mid', skyTop: '--sky-top', skyHorizon: '--sky-horizon', barn: '--barn-red',
 });
+/**
+ * What a new mod may no longer use, and why (release 1.0, harvey#2: the palette's CSS variables and the tips reached no
+ * pixel and no screen, so a change that "applied" them changed nothing). The schema answers UNSUPPORTED with the hint
+ * for a new candidate; a stored version keeps compiling without them (compile.js warns IGNORED).
+ */
+export const REMOVED = Object.freeze({
+  palette: Object.freeze({ file: 'look.json', path: 'palette', hint: 'colours of the barn, grass, leaves and sky cannot be '
+    + 'changed yet: leave "palette" out and tell the player in summary.json; a new thing\'s own hue and a sky preset still work' }),
+  tips: Object.freeze({ file: 'text/tips.json', path: '', hint: 'tips are not shown anywhere in the game yet: leave '
+    + 'text/tips.json out (write it empty) and tell the player; a letter from a townsperson still works' }),
+});
+
 /** tuning.json *TimeBp / *CycleBp range (basis points of the normal time). */
 export const TUNING_BP = Object.freeze([8000, 12500]);
 export const TUNING_KEYS = Object.freeze(['growTimeBp', 'treeCycleBp', 'craftTimeBp', 'animalCycleBp']);
@@ -84,9 +100,9 @@ export const CODES = Object.freeze({
   schema: Object.freeze(['BAD_JSON', 'UNKNOWN_FILE', 'UNKNOWN_FIELD', 'MISSING_FIELD', 'BAD_TYPE', 'BAD_ID', 'ID_TAKEN',
     'TOO_BIG', 'TOO_MANY', 'BAD_ENUM', 'NOT_LADDER', 'BAD_HEX', 'BAD_TEXT', 'UNSUPPORTED']),
   semantic: Object.freeze(['BAD_ANCHOR', 'UNKNOWN_REF', 'BAD_UNLOCK', 'OUT_OF_RANGE', 'ECON_BOUND', 'CYCLE', 'NAME_TAKEN',
-    'LOW_CONTRAST', 'BG_FORMS', 'CONTENT_CHECK']),
+    'LOW_CONTRAST', 'BG_FORMS', 'CONTENT_CHECK', 'NO_CHANGE', 'IGNORED']),
   boot: Object.freeze(['BOOT_THROW', 'ACTION_REJECTED', 'STATE_INVALID', 'ECON_GUARD', 'RETIRE_FAILED', 'TIMEOUT', 'OOM']),
-  render: Object.freeze(['NO_MODEL', 'ICON_FAILED', 'NAME_TOO_LONG']),
+  render: Object.freeze(['NO_MODEL', 'ICON_FAILED', 'NAME_TOO_LONG', 'COLOUR_FAR']),
 });
 
 /** The file path of a content family's thing. */

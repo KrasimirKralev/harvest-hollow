@@ -75,7 +75,8 @@ export const GOALS_EVENTS = Object.freeze({
   joined: 'pid                                     (_join)',
   orderNew: 'slot, golden                         (_orders materialised an order)',
   orderFilled: 'slot, n, coins, xp, acorns, golden, giver, simple, value, items, by, helped (the flag owner\'s pid '
-    + 'when the OTHER player filled it, else null; giver = the golden order\'s townsperson)',
+    + 'when the OTHER player filled it, else null; giver = the golden order\'s townsperson), ticket? (1.0: the coins a '
+    + 'crate\'s Golden Ticket granted on top; `coins` stays the order\'s own)',
   orderGone: 'slot, n, by                         (discarded; the slot refills in ORDERS.refillMs)',
   orderPinned: 'slot, pin, by                     (pin = pid | null)',
   orderFlagged: 'slot, flag, by                   (flag = pid | null)',
@@ -93,7 +94,9 @@ export const GOALS_EVENTS = Object.freeze({
   noted: 'id, x, z, by',
   unnoted: 'id, by',
   thanked: 'i, to, by, hearts',
-  keepsake: 'item, to, by',
+  keepsake: 'item, to, by, id, x, z, note?        (release 1.0: a wrapped surprise left on the porch, farm.gifts[id])',
+  giftOpened: 'id, item, from, to, at, x, z, by, note?, auto?  (release 1.0: a surprise unwrapped onto `to`\'s shelf; auto '
+    + '= nobody opened it in COOP.keepsake.shelfMs, `_gift` shelved it, by \'sys\')',
   named: 'what, id?, species?, text, first, by     (first = the farm\'s / animal\'s first name)',
   seated: 'pid, id',
   stood: 'pid, id',
@@ -581,6 +584,12 @@ function handle(tx, ctx, run, ev) {
       teamwork(tx, run, ev.pair);
       roll(tx, ctx, run, ['clear', `clear:${ev.def}`], by);
       break;
+    case 'weedsCleared':
+      // QA r3 F3-07 (fbp#4): a wild tuft looks like the yard's weeds Grandma asks for ("Click the weeds and rocks around
+      // the yard"): it counts toward that step. The tutorial only (`wild`: never a track picked by a tuft); quests and the
+      // Almanac keep counting debris, so nothing in the economy moves
+      if (Array.isArray(ev.cells) && ev.cells.length) tutorialDeed(tx, ctx, run, { verb: 'clear', ref: 'debris', n: ev.cells.length, by, wild: true });
+      break;
     case 'collected': {
       productive(tx, ctx, run, by);
       bumpStat(tx, run, null, 'animalsCollected');
@@ -641,6 +650,9 @@ function handle(tx, ctx, run, ev) {
         deed(tx, ctx, run, { verb: 'make', ref: ev.item, n: qty, by, add: isFeed ? 0 : addedValue(ev.recipe, qty),
           recipe: isFeed ? null : ev.recipe, feed: isFeed });
       }
+      // release 1.0 (M22): a duet recipe slow-cooked alone counts for the Together chain (h2, h5) when it is collected;
+      // the Hearts, the ribbon and the together deed stay with the cooked-together version (`duet` above)
+      if (ev.solo && recipe && recipe.duet) questDeed(tx, ctx, run, { verb: 'together', ref: 'duet', n: 1, by });
       if (recipe) {
         madeAdd(tx, ctx, ev.item);
         roll(tx, ctx, run, ['craft', `craft:${ev.building}`], by);
@@ -720,6 +732,7 @@ function handle(tx, ctx, run, ev) {
       // goods (Fertilizer) on the crate's line; a collection find has its own album line
       if (ev.item && ev.qty) Object.assign(row, { item: ev.item, q: ev.qty });
       if (ev.decor) row.def = ev.decor;
+      if (ev.pu) row.pu = ev.pu;                             // 1.0: a rare power-up found in it (the line names it)
       feedAdd(tx, { ...ctx, pid: by }, row);
       break;
     }
@@ -734,7 +747,7 @@ function handle(tx, ctx, run, ev) {
       break;
     // ---- wave 5 (the owners' wish list) -----------------------------------------------------------------------
     case 'penBorn':
-      // a baby in the pen (system `_pen`): the line is the pairing player's ("Деси's hens had a chick")
+      // a baby in the pen (system `_pen`): the line is the pairing player's ("Rosa's hens had a chick")
       bumpStat(tx, run, null, 'penBabies');
       feedAdd(tx, { ...ctx, pid: hasPlayer(tx.state, ev.pid) ? ev.pid : by }, { k: 'pen', def: ev.species, id: ev.id });
       break;
@@ -814,7 +827,9 @@ function handle(tx, ctx, run, ev) {
       helpFlagFilled(tx, ctx, run, by, ev.helped);
       meterAdd(tx, ctx, run, ev.value ?? 0);
       if (ev.golden && ev.giver) befriend(tx, ctx, ev.giver, TOWNSFOLK.friendship.goldenOrder, 'golden');
-      feedAdd(tx, { ...ctx, pid: by }, { k: 'order', c: ev.coins, x: ev.xp, g: ev.golden ? 1 : 0 });
+      // tk (1.0): a crate's Golden Ticket paid these coins on top
+      feedAdd(tx, { ...ctx, pid: by }, { k: 'order', c: ev.coins, x: ev.xp, g: ev.golden ? 1 : 0,
+        ...(ev.ticket > 0 ? { tk: ev.ticket } : {}) });
       bumpStat(tx, run, null, 'ordersQ', ev.simple ? 1 : 4);
       if (actor) bumpStat(tx, run, actor, 'ordersFilled');
       duelDeed(tx, ctx, 'fill', 'order', by, ev.simple ? 1 : 4);      // Friendly Duel "orders" (quarters)
@@ -841,10 +856,33 @@ function handle(tx, ctx, run, ev) {
       }
       break;
     case 'keepsake':
+      // release 1.0 (D1, M30): a wrapped surprise; Hearts only if content still pays them (it does not: 0); the feed line
+      // never names what is inside (it is a surprise until opened)
       if (actor) bumpStat(tx, run, actor, 'keepsakesGiven');
-      for (const pid of [by, ev.to]) giveHearts(tx, ctx, pid, COOP.keepsake.hearts, 'keepsake');
-      feedAdd(tx, { ...ctx, pid: by }, { k: 'keepsake', item: ev.item, to: ev.to });
+      if (COOP.keepsake.hearts > 0) for (const pid of [by, ev.to]) giveHearts(tx, ctx, pid, COOP.keepsake.hearts, 'keepsake');
+      // a walled-in porch (ev.shelf): it went straight onto the shelf, as before 1.0
+      // (QA r1 L-01: a shelved surprise's row carries its note, so the recipient's feed line never depends on the shelf ring)
+      feedAdd(tx, { ...ctx, pid: by }, ev.shelf ? { k: 'surprise', what: 'shelved', item: ev.item, from: by, to: ev.to,
+        ...(ev.note ? { note: ev.note } : {}) }
+        : { k: 'surprise', what: 'left', to: ev.to });
       roll(tx, ctx, run, ['coop'], by);
+      break;
+    case 'giftOpened':
+      // opened by its recipient: a Memory Book page and the Together chain's "help each other" (M22); shelved by itself
+      // after two days: the shelf line only. No Hearts either way (M30)
+      feedAdd(tx, { ...ctx, pid: ev.auto ? 'sys' : by }, { k: 'surprise', what: ev.auto ? 'shelved' : 'opened', item: ev.item,
+        from: ev.from, to: ev.to, ...(ev.note ? { note: ev.note } : {}) });
+      if (!ev.auto) {
+        if (actor) bumpStat(tx, run, actor, 'giftsOpened');
+        addPage(tx, ctx, 'gift', { by: ev.from, ref: ev.item, ...(ev.note ? { text: ev.note } : {}) });
+        questDeed(tx, ctx, run, { verb: 'together', ref: 'help_flag', n: 1, by });
+      }
+      break;
+    case 'seated':
+      sameDay(tx, ctx, run, 'sat', ev.pid);
+      break;
+    case 'fishCast':
+      sameDay(tx, ctx, run, 'cast', ev.pid);
       break;
     case 'thanked':
       if (actor) bumpStat(tx, run, actor, 'thanksSent');
@@ -853,7 +891,8 @@ function handle(tx, ctx, run, ev) {
       feedAdd(tx, { ...ctx, pid: by }, { k: 'note', x: ev.x, z: ev.z });
       break;
     case 'named':
-      feedAdd(tx, { ...ctx, pid: by }, { k: 'name', what: ev.what, text: ev.text });
+      feedAdd(tx, { ...ctx, pid: by }, { k: 'name', what: ev.what, text: ev.text,
+        ...(ev.was !== undefined ? { was: ev.was, wasBy: ev.wasBy } : {}) });
       if (ev.what === 'farm') deed(tx, ctx, run, { verb: 'name', ref: 'farm', n: 1, by });
       // the Memory Book: the farm's first name and an animal's first name (GDD §5.9; a rename is no new page)
       if (ev.first) addPage(tx, ctx, ev.what, { by, ref: ev.id ?? null, text: ev.text });
@@ -1016,6 +1055,27 @@ function teamwork(tx, run, pair) {
   bumpStat(tx, run, null, 'teamworkFelled');
   for (const pid of pair) bumpStat(tx, run, pid, 'teamworkFelled');
   return true;
+}
+
+/**
+ * The Together chain at any hour (release 1.0, D2 / M22; GDD §6.5 "quests never need both"): what each farmer did on
+ * the current farm day, farm.coop.days = { d, sat: { pid: 1 }, cast: { pid: 1 }, done: { bench?, dock? } }. Once every
+ * joined farmer (two or more) has sat on a two-seat bench (`seated`) or cast a line (`fishCast`) on the same farm day,
+ * the quests count `together:bench` (h1, h7) or `together:dock` (h6) once for that day. Only the quests: Golden Hour,
+ * its buff, the Hearts and the ribbons stay with doing it at the same moment.
+ */
+function sameDay(tx, ctx, run, what, pid) {
+  const co = tx.state.farm.coop;
+  if (!co || !hasPlayer(tx.state, pid)) return;
+  const day = dayOf(tx.state, ctx.now);
+  const cur = co.days && co.days.d === day ? co.days : { d: day, sat: {}, cast: {}, done: {} };
+  const kind = what === 'sat' ? 'bench' : 'dock';
+  const next = { ...cur, [what]: { ...cur[what], [pid]: 1 } };
+  const all = playerIds(tx.state);
+  const together = all.length >= 2 && all.every((p) => next[what][p] === 1);
+  if (together && !cur.done[kind]) next.done = { ...cur.done, [kind]: 1 };
+  if (JSON.stringify(next) !== JSON.stringify(co.days ?? null)) tx.set(['farm', 'coop', 'days'], next);
+  if (together && !cur.done[kind]) questDeed(tx, ctx, run, { verb: 'together', ref: kind, n: 1, by: pid });
 }
 
 /** The OTHER player filled a help flag (orders, barge crates, GDD §6.2 #3): +1 Heart each, the ribbon, the deed. */

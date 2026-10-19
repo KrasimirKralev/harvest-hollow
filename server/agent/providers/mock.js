@@ -6,11 +6,25 @@
 //   "broken"   writes the bad crop and never fixes it (the job ends `failed` after the fix rounds)
 //   "slow"     every step takes five times longer
 //   "now"/"сега"  the Moon Melon unlocks at the farm's own level (request.md), so a young farm can plant it at once
+//   "nothing"  writes no mod file, only summary.json with "possible": false (release 1.0, H1: the job ends `answered`)
+//   "fixture:<name>"  plays mock-fixtures/<name>.json (release 1.0, H9: the honesty set's scripted answers): writes its
+//              `files` (null removes a file), calls validate, writes `fix` when the check failed (a refused knob taken
+//              out), validates again, then writes its `summary`
 //   a follow-up request ("ask for changes") adds a Moon Lantern decoration on top.
 // The files are the guide's own examples, so they are what the validator accepts for real.
 import path from 'node:path';
 import fsp from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
 import { readJson, writeJson, randomHex } from '../fsutil.js';
+
+/** The scripted answers of `fixture:<name>` (one JSON file each). */
+export const FIXTURES = path.join(path.dirname(fileURLToPath(import.meta.url)), 'mock-fixtures');
+
+/** A fixture by name ({ files?, fix?, summary }), or null. */
+export async function readFixture(name) {
+  if (!/^[a-z0-9_-]{1,40}$/.test(String(name))) return null;
+  try { return JSON.parse(await fsp.readFile(path.join(FIXTURES, `${name}.json`), 'utf8')); } catch { return null; }
+}
 
 const userKey = (u) => `${u.farmKey}/${u.pid}`;
 const j = (v) => `${JSON.stringify(v, null, 2)}\n`;
@@ -37,8 +51,8 @@ export const MOCK_FILES = Object.freeze({
   },
   letters: [{
     id: 'x_letter_melons', from: 'mabel', art: 'melon',
-    en: { title: 'Melons by moonlight', body: 'Dear both, I hear something pale and round is growing on your farm. Bring me the first pie!' },
-    bg: { title: 'Пъпеши под луната', body: 'Мили мои, чух, че на фермата ви расте нещо бледо и кръгло. Донесете ми първия пай!' },
+    en: { title: 'Melons by moonlight', body: 'Dear both, I hear something pale and round is growing on your farm. I hope it glows for you on summer nights!' },
+    bg: { title: 'Пъпеши под луната', body: 'Мили мои, чух, че на фермата ви расте нещо бледо и кръгло. Дано ви свети в летните нощи!' },
   }],
   decor: {
     id: 'x_moon_lantern', like: 'lantern', cost: 600, hue: '#9FD3E8',
@@ -49,12 +63,23 @@ export const MOCK_FILES = Object.freeze({
     },
   },
   summary: {
-    en: 'Moon Melons now grow in summer, and the Pie Oven bakes a Melon Pie from them. Mabel wrote you a letter about it.',
-    bg: 'Вече можете да садите лунни пъпеши през лятото, а пещта за пайове пече от тях пай с пъпеш. Мейбъл ви написа писмо.',
+    en: 'Moon Melons grow in summer from level 14, and the Pie Oven bakes a Melon Pie from them. Mabel wrote you a letter about it.',
+    bg: 'От ниво 14 през лятото растат лунни пъпеши, а пещта за пайове пече от тях пай с пъпеш. Мейбъл ти написа писмо.',
+  },
+  // "now" (release 1.0, H5): the melon at the farm's level; the pie keeps its oven's level 15, and says so
+  summaryNow: {
+    en: 'You can plant Moon Melons now; from level 15 the Pie Oven bakes a Melon Pie from them. Mabel wrote you a letter about it.',
+    bg: 'Лунните пъпеши можеш да садиш още сега; от ниво 15 пещта за пайове пече от тях пай с пъпеш. Мейбъл ти написа писмо.',
+  },
+  summaryNothing: {
+    en: 'I cannot give you coins: prices and rewards are the game\'s own, so a change cannot set them. I can make your crops grow a little faster instead.',
+    bg: 'Не мога да ти дам монети: цените и наградите са на играта и промяна не може да ги задава. Мога вместо това да направя посевите ти малко по‑бързи.',
+    possible: false,
+    try: [{ en: 'Crops grow 20% faster', bg: 'Посевите да растат с 20 % по‑бързо' }],
   },
   summaryLantern: {
     en: 'I added a Moon Lantern to the shop, a soft blue light for your evenings. Everything from before is still there.',
-    bg: 'Добавих лунен фенер в магазина – мека синя светлина за вечерите ви. Всичко от преди си остава.',
+    bg: 'Добавих лунен фенер в магазина – мека синя светлина за вечерите. Всичко от преди си остава.',
   },
 });
 
@@ -119,6 +144,13 @@ export function createProvider({ cfg, now = Date.now, notify = () => {} }) {
         await fsp.rm(mark(user), { force: true });
         return { provider: 'mock', state: 'signed_out' };
       },
+      /** A sign-in started and not finished is forgotten (H4); a finished one stays. */
+      async cancel(user) {
+        const st = pendingOf.get(userKey(user));
+        if (st) pending.delete(st);
+        pendingOf.delete(userKey(user));
+        return status(user);
+      },
     },
     /** GET /api/harness/mock/signin?state= (the "sign-in page" of the mock) */
     async callback({ state }) {
@@ -146,6 +178,13 @@ export function createProvider({ cfg, now = Date.now, notify = () => {} }) {
       if (stopped()) return { ok: false, code: 'CANCELLED', turns };
 
       io.emit({ type: 'step', step: 'building' });
+      const fx = /fixture:([a-z0-9_-]+)/.exec(words);
+      if (fx) return playFixture(fx[1]);
+      if (/\bnothing\b/.test(words)) {
+        await call('write_file', { path: 'summary.json', content: j(MOCK_FILES.summaryNothing) });
+        await step();
+        return { ok: true, turns };
+      }
       const broken = /\bbroken\b/.test(words);
       const failFirst = /\bfail\b/.test(words) && !/full check found/.test(req.content || '');
       const lvl = /The farm is at level (\d+)\./.exec(req.content || '');
@@ -171,10 +210,32 @@ export function createProvider({ cfg, now = Date.now, notify = () => {} }) {
       }
       if (stopped()) return { ok: false, code: 'CANCELLED', turns };
       if (v.ok) await call('preview');
-      await call('write_file', { path: 'summary.json', content: j(revising ? MOCK_FILES.summaryLantern : MOCK_FILES.summary) });
+      const said = revising ? MOCK_FILES.summaryLantern : now.unlock && now.unlock < MOCK_FILES.crop.unlock ? MOCK_FILES.summaryNow : MOCK_FILES.summary;
+      await call('write_file', { path: 'summary.json', content: j(said) });
       await step();
       if (stopped()) return { ok: false, code: 'CANCELLED', turns };
       return { ok: true, turns };
+
+      /** A scripted answer: write, check, take out what the check refused, answer. */
+      async function playFixture(name) {
+        const spec = await readFixture(name);
+        if (!spec) return { ok: false, code: 'PROVIDER', detail: `no fixture ${name}`, turns };
+        const writeAll = async (files) => {
+          for (const [rel, v] of Object.entries(files ?? {})) await call('write_file', { path: `mod/${rel}`, content: v === null ? '' : j(v) });
+        };
+        await writeAll(spec.files);
+        await step();
+        if (stopped()) return { ok: false, code: 'CANCELLED', turns };
+        if (spec.files && Object.keys(spec.files).length) {
+          io.emit({ type: 'step', step: 'testing' });
+          let v = await call('validate');
+          if (!v.ok && spec.fix) { await writeAll(spec.fix); v = await call('validate'); }
+          if (v.ok) await call('preview');
+        }
+        if (spec.summary) await call('write_file', { path: 'summary.json', content: j(spec.summary) });
+        await step();
+        return stopped() ? { ok: false, code: 'CANCELLED', turns } : { ok: true, turns };
+      }
     },
     cancel() { /* run() stops on io.signal */ },
     forget(farmKey) {

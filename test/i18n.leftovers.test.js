@@ -199,7 +199,7 @@ const KEY_HINT = / \((?:[A-Z0-9]|(?:Ctrl|Shift|Alt)\+\w+|Space|Esc|Del|Enter|whe
 // The lines a touch player reads through ui/dom.js touchText: HUD tooltips, the panel close title, the coach.
 const TOUCH_KEYS = ['common.closeEsc', 'shell.html.barnTip', 'hud.barn.full', 'hud.barn.overflow', 'hud.barn.tip', 'hud.farmer.tipMe',
   'hud.farmer.tipOn', 'social.ping.tip', 'social.emotes.label', 'goals.j.dockHint', 'market.dock.hint', 'market.barn.dockHint',
-  'market.orders.dockHint'];
+  'market.orders.dockHint', 'game.debris.axe'];
 const TOUCH_TEXTS = [['TUTORIAL', 'step.say_hello', 'text'], ['TUTORIAL', 'firstUse.hammer', 'text'], ['tools', 'hand', 'desc']];
 // Every other Bulgarian line that names a key, and why a finger never reads it through touchText (reviewed 2026-10-06).
 const NOT_ON_TOUCH = {
@@ -217,7 +217,6 @@ const NOT_ON_TOUCH = {
   'social.ping.label': 'the button name for a screen reader; its tip has touch words',
   'game.seedFirst': 'a finger reads game.seedFirstTouch',
   'game.giant.fell': 'a toast; English names the Axe key too',
-  'game.debris.axe': 'a toast; English names the Axe key too',
   'game.moved.stored': 'a toast; English names the B key too',
   'game.moved.storedPinned': 'a toast; English names the B key too',
   'game.ride.click': 'the world card line; English names the V key too',

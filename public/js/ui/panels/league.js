@@ -23,6 +23,7 @@ import {
 } from './league-rules.js';
 import { hubNav, hubBadge, hubView, hubSig, crest, farmBarn, rewardChips, rewardParts } from './league-kit.js';
 import { t, ordinal as ord, list } from '../../i18n/index.js';
+import { lazyImport, importFailed } from '../../net/lazy.js';
 
 const CSS_HREF = '/css/panels-league.css';
 
@@ -104,7 +105,7 @@ export const leaguePanel = {
         h('div.lg-top', speech('pemberton', v.line), leagueCard(v)),
         h('div.lg-cols',
           h('section.lg-col', h('h3.pn-h', h('span', tb.open ? t('league.table.week') : t('league.table.final'))), tableCard(st, v)),
-          h('aside.lg-col.lg-side', ladderCard(v), platinumCard(st, v), historyCard(v), rulesCard(v))));
+          h('section.lg-col.lg-side', ladderCard(v), platinumCard(st, v), historyCard(v), rulesCard(v))));
       kit.refresh();
       kit.tick();
     }
@@ -268,7 +269,7 @@ export const leagueResultPanel = {
       r.acorns ? h('div.lg-res-pay', h('span', t('league.res.paid')), rewardChips({ acorns: r.acorns })) : null,
       h('div.wk-cere-acts',
         h('button.btn.btn--sun', { type: 'button', on: { click: () => ctx.close() } }, r.move > 0 ? t('league.res.wonderful') : r.move < 0 ? t('league.res.back') : t('league.res.onwards')),
-        h('button.btn.btn--paper.btn--small', { type: 'button', on: { click: () => { ctx.close(); ctx.ui.panels.open('league'); } } }, t('league.res.see')))));
+        h('button.btn.btn--paper.btn--small', { type: 'button', 'data-sfx': 'own', on: { click: () => { ctx.close(); ctx.ui.panels.open('league'); } } }, t('league.res.see')))));
     return {};
   },
 };
@@ -278,6 +279,21 @@ export const leagueResultPanel = {
 /** The "Progress" dock button: one mini, on the hub's first open panel (the drip-feed: no button before anything opens). */
 export const HUB_DOCK = Object.freeze({ get label() { return t('league.dock'); }, icon: 'rainbow_rosette', order: 5.5, mini: true,
   get hint() { return t('league.dockHint'); } });
+
+/**
+ * The hub's dock button says what it opens (ux-first#13: "Progress" opened a sheet titled "Your Perks"): "Perks" when
+ * Perks is the first open panel, "Ribbon Track" from L16 on, … ; the hint still lists the whole hub.
+ */
+const HUB_LABEL = { seasonTrack: 'league.hub.track', league: 'league.hub.league', horseShow: 'league.hub.show', perks: 'league.hub.perks',
+  duel: 'league.hub.duel', legacy: 'league.hub.legacy' };
+const hubDocks = new Map();
+export function hubDock(name) {
+  if (!hubDocks.has(name)) {
+    hubDocks.set(name, Object.freeze({ get label() { return HUB_LABEL[name] ? t(HUB_LABEL[name]) : t('league.dock'); }, icon: HUB_DOCK.icon,
+      order: HUB_DOCK.order, mini: true, get hint() { return t('league.dockHint'); } }));
+  }
+  return hubDocks.get(name);
+}
 
 /** The panel that carries the hub's dock button for this farmer now (the first open one), or null. Pure. */
 export function hubOwner(state, pid, now) {
@@ -295,13 +311,13 @@ export function installLeague(ui, deps = {}) {
   let dead = false;
   const store = deps.store || ui.store || globalThis.__hh?.store || null;
   (async () => {
-    const [{ horseShowPanel }, { seasonTrackPanel }, { perksPanel }, { legacyPanel }, D] = await Promise.all([
-      import('./horseshow.js'), import('./season-track.js'), import('./perks.js'), import('./legacy.js'), import('./duel.js')]);
+    const [{ horseShowPanel }, { seasonTrackPanel }, { perksPanel }, { legacyPanel }, D] = await lazyImport('league', () => Promise.all([
+      import('./horseshow.js'), import('./season-track.js'), import('./perks.js'), import('./legacy.js'), import('./duel.js')]));
     if (dead) return;
     // copy descriptors, not values: a spec's title is a getter that follows the language
     const docked = (name, spec) => Object.defineProperty(Object.defineProperties({}, Object.getOwnPropertyDescriptors(spec)), 'dock', {
       enumerable: true,
-      get: () => (store && hubOwner(store.state, store.pid, store.now()) === name ? HUB_DOCK : null),
+      get: () => (store && hubOwner(store.state, store.pid, store.now()) === name ? hubDock(name) : null),
     });
     const specs = { seasonTrack: seasonTrackPanel, league: leaguePanel, horseShow: horseShowPanel, perks: perksPanel,
       duel: D.duelPanel, legacy: legacyPanel };
@@ -314,7 +330,7 @@ export function installLeague(ui, deps = {}) {
       off.push(D.startDuel(ui, store));
       off.push(startBanners(ui, store));
     }
-  })().catch((err) => console.error('league panels failed to install', err));
+  })().catch((err) => { if (!importFailed(err)) console.error('league panels failed to install', err); });
   return () => { dead = true; for (const f of off.splice(0)) { try { f(); } catch { /* gone */ } } };
 }
 

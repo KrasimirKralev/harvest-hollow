@@ -808,7 +808,9 @@ function plotMound() {
 // (performance-03): a ripe plot <= 500 triangles, a growing one <= 250, plus a ~120-triangle far-band key.
 const GREEN = { Green: '#5BB040', DarkGreen: '#3F8F36', DarkGreen2: '#2F7D33', LightGreen: '#9CD45A', Green_Bush: '#4C9A3E' };
 const CROPS = {
-  wheat: { arch: 'tall', proc: 'grain', h: [0.34, 0.75, 1.1], layout: 'rows12', tuft: 8, tufts: [3, 4, 8], ear: '#D9A845', tip: '#E8C46A', stalk: '#C99A43', leafHex: '#6BB040',
+  // fatFar: the ripe far twin's straw and ears are fuller (first-time FT-3: its 12 thin stalks read as bare soil at a
+  // phone's default zoom, which is the far band)
+  wheat: { arch: 'tall', proc: 'grain', h: [0.34, 0.75, 1.1], layout: 'rows12', tuft: 8, tufts: [3, 4, 8], fatFar: true, ear: '#D9A845', tip: '#E8C46A', stalk: '#C99A43', leafHex: '#6BB040',
     recolor: { Yellow: '#E8B84A' } },
   carrot: { arch: 'root', proc: 'carrot', h: [0.24, 0.5, 0.62], layout: 'grid9', top: '#F08A2C', leafHex: '#5BB040' },
   corn: { arch: 'tall', proc: 'corn', h: [0.4, 1.05, 1.85], layout: 'rows6', cob: '#F2D04B', leafHex: '#6BB040', noFit: true },
@@ -1197,7 +1199,7 @@ function berryBush(id, s, r) {
   return g;
 }
 /** Grain (wheat, oats): blades, then a stalk with an ear that ripens golden and nods (cheap: ~30 tris). */
-function grainPlant(id, s, r) {
+function grainPlant(id, s, r, { far = false } = {}) {
   // grain (VISUAL-AFTER B6): ripe wheat is a straw stalk under a fat golden ear (1.5x the old width) with a lighter
   // tip; oats hang their pale ears over in a nod. Height varies +-12 %. Five triangles a stalk, so a plot holds
   // 1.4x the stalks of wave 1 within the 500-triangle budget.
@@ -1208,8 +1210,10 @@ function grainPlant(id, s, r) {
   const oats = id === 'oats';
   const stalkHex = ripe ? c.stalk : '#6FAE45';
   const earHex = ripe ? c.ear : '#9CCB5A';
-  const st = xform(leaf(h * 0.8, 0.035, stalkHex, { bend: 0.05, seg: 1 }), { ry: r() * 3 });
-  const earLen = h * (oats ? 0.24 : 0.28);
+  // the ripe far twin (FT-3): a thicker straw under a fuller, longer ear, so one stalk a spot covers pixels at the far zoom
+  const fat = far && ripe && !oats;
+  const st = xform(leaf(h * 0.8, fat ? 0.06 : 0.035, stalkHex, { bend: 0.05, seg: 1 }), { ry: r() * 3 });
+  const earLen = h * (oats ? 0.24 : fat ? 0.36 : 0.28);
   if (oats && !ripe) {
     // growing oats: two crossed spikelet kites nod from the top of the stalk (6 triangles a stalk)
     const sp = mergeAll([0, 1].map((k) => xform(leaf(earLen, 0.075, k ? earHex : boost(lin(earHex), 0, 0.05).getStyle(), { bend: 0.2, seg: 1 }), { ry: k * Math.PI / 2 })));
@@ -1233,7 +1237,7 @@ function grainPlant(id, s, r) {
     xform(og, { rz: (r() - 0.5) * 0.28 });
     return og;
   }
-  const ear = xform(P(new THREE.ConeGeometry(0.054, earLen, 3, 1, true), earHex, { creaseDeg: 70 }), { rx: Math.PI });
+  const ear = xform(P(new THREE.ConeGeometry(fat ? 0.13 : 0.054, earLen, 3, 1, true), earHex, { creaseDeg: 70 }), { rx: Math.PI });
   // a lighter tip: the ear's apex vertices
   if (ripe) { const cc = ear.getAttribute('color'); const pp = ear.getAttribute('position'); const tip = lin(c.tip || '#E8C46A'); for (let i = 0; i < pp.count; i++) if (pp.getY(i) < -earLen * 0.2) cc.setXYZ(i, tip.r, tip.g, tip.b); }
   const head = mergeAll([ear]);
@@ -1383,7 +1387,7 @@ async function cropPlant(id, s, r, opts = {}) {
   else if (c.proc === 'strawberry') g = strawberryPlant(s, r);
   else if (c.proc === 'lavender') g = lavenderPlant(s, r);
   else if (c.proc === 'onion') g = onionPlant(s, r);
-  else if (c.proc === 'grain') g = grainPlant(id, s, r);
+  else if (c.proc === 'grain') g = grainPlant(id, s, r, opts);
   else if (c.proc === 'berrybush') g = berryBush(id, s, r);
   else if (c.proc === 'raspberry') g = raspberryPlant(s, r, opts);
   else if (c.proc === 'rose') g = rosePlant(s, r);
@@ -1477,7 +1481,7 @@ function seededCluster(id, r) {
   return mergeAll(parts);
 }
 
-async function cropCluster(id, s, { tufts = null } = {}) {
+async function cropCluster(id, s, { tufts = null, far = false } = {}) {
   const c = CROPS[id];
   const r = rng(`${id}:${s}`);
   const pts = LAYOUTS[c.layout];
@@ -1493,7 +1497,7 @@ async function cropCluster(id, s, { tufts = null } = {}) {
   // Two plant variants per cluster so neighbours differ a little.
   const variants = [];
   for (let v = 0; v < 2; v++) {
-    let p0 = await cropPlant(id, s, rng(`${id}:${s}:v${v}`));
+    let p0 = await cropPlant(id, s, rng(`${id}:${s}:v${v}`), { far });
     if (width) {
       const b = bounds(p0);
       const k = Math.min(2.6, Math.max(0.45, width / Math.max(1e-3, Math.max(b.max.x - b.min.x, b.max.z - b.min.z))));
@@ -1534,7 +1538,9 @@ async function cropCluster(id, s, { tufts = null } = {}) {
 /** The far-band key of a plot (~120 triangles): four plants of the same kind, spread to the same coverage. */
 async function farCluster(id, s) {
   const c = CROPS[id];
-  if (c.proc === 'grain') return cropCluster(id, s, { tufts: 1 });
+  // grain: one stalk a spot; `fatFar` makes the ripe one's straw and ear fuller, same triangles (first-time FT-3: a phone
+  // opens in the far band, where ripe Wheat's 12 thin stalks read as bare soil)
+  if (c.proc === 'grain') return cropCluster(id, s, { tufts: 1, far: s === 2 && Boolean(c.fatFar) });
   if (c.layout === 'one') {
     const g = await cropCluster(id, s);
     return tris(g) > CROP_BUDGET.far * 1.5 ? simplify(g, CROP_BUDGET.far / tris(g), { error: 0.1, deg: 45 }) : g;
@@ -3437,12 +3443,29 @@ job('building:grand_windmill:sails', 'decor/grand_windmill.glb', { family: 'deco
 const DEBRIS = {
   // <= 150 triangles (performance-03): a low mound, six leaves, two flat flowers
   // RD-08 (QA wave 2: spiky weeds scattered through the core): 40 % lower, a soft round clump of broad leaves
+  // release 1.0 M9 (ux-first#9): the first Barnyard task is "pull the weeds", and the old 0.65 m clump was a 12 px blob
+  // among the bigger grass tufts. Now a dandelion-style rosette about twice the size: long toothy leaves lying out in a
+  // star (a darker, bluer green than the lawn and its tufts), three yellow flower heads on stalks above it and one
+  // white seed clock standing highest, so it reads as "a weed" at the default zoom. On screen (m9-weed-*.png, 07:00) the
+  // first version's thin leaves melted into the lawn and only its 0.11 m heads showed (about 17 px at the default zoom):
+  // broader, darker leaves, 0.16 m heads and the white clock are what the eye finds now. 130 triangles (budget 150).
   weed: [[1, 1], () => {
     const r = rng('weed');
-    const parts = [xform(blob(0.3, '#5E9E3A', { seed: 5, sy: 0.45, flatBottom: 0.4, amp: 0.3, detail: 1 }), { y: 0.05 })];
-    for (let i = 0; i < 6; i++) parts.push(xform(leaf(0.26 + r() * 0.1, 0.13, i % 2 ? '#4E8F35' : '#6BAA3F', { bend: 0.9, seg: 2 }), { rx: 0.35, ry: (i / 6) * 6.28 + r() * 0.3, y: 0.04 }));
-    parts.push(xform(flatFlower('#FFE14A', 0.08), { y: 0.25, x: 0.1 }), xform(flatFlower('#FFFFFF', 0.065), { y: 0.2, x: -0.16, z: 0.1 }));
-    return sway(mergeAll(parts), { y1: 0.3 });
+    const parts = [xform(blob(0.2, '#2F6B25', { seed: 5, sy: 0.55, flatBottom: 0.3, amp: 0.25, detail: 0 }), { y: 0.05 })];
+    for (let i = 0; i < 9; i++) {
+      const long = i % 3 !== 2;
+      parts.push(xform(leaf(long ? 0.68 + r() * 0.08 : 0.5, long ? 0.27 : 0.22, i % 2 ? '#2E6824' : '#3F7D2B', { bend: 0.75, seg: 2 }),
+        { rx: 0.5 + r() * 0.12, ry: (i / 9) * 6.28 + r() * 0.25, y: 0.03 }));
+    }
+    // three dandelions: a stalk and a yellow head facing up, one leaning out on each side
+    for (const [x, z, hh] of [[0.06, 0.04, 0.5], [-0.15, 0.11, 0.42], [0.13, -0.14, 0.38]]) {
+      parts.push(xform(stalk(0.016, 0.012, hh, '#5C9A38'), { x, z }));
+      parts.push(xform(flatFlower('#FFD21F', 0.16), { x, y: hh, z }));
+    }
+    // and one gone to seed: a white clock on the tallest stalk
+    parts.push(xform(stalk(0.014, 0.011, 0.62, '#5C9A38'), { x: -0.05, z: -0.1 }));
+    parts.push(ball(0.1, '#F6F2E4', { x: -0.05, y: 0.66, z: -0.1 }, 0));
+    return sway(mergeAll(parts), { y1: 0.5 });
   }],
   rock: [[1, 1], async () => srcFit(UN('Rock_2'), { w: 1.3, d: 1.3, sat: 0.1, recolor: { Rock: '#A7A39A' } })],
   stump: [[1, 1], async () => srcFit(UN('TreeStump'), { w: 1.6, d: 1.6, sat: 0.2, recolor: { Wood: '#8A5A35', LightWood: '#E2C08A', Green: '#5E9E3A' } })],
@@ -7774,8 +7797,58 @@ function parachuteW4b() {
 job('prop:loot_crate', 'props/loot-crate.glb', { family: 'prop', def: 'loot_crate', footprint: [1, 1] }, async () => sway(lootCrateBody(), { rigid: true }));
 job('prop:loot_crate:lid', 'props/loot-crate.glb', { family: 'prop', footprint: [1, 1], part: true }, async () => sway(lootCrateLid(), { rigid: true }));
 job('prop:parachute', 'props/loot-crate.glb', { family: 'prop', footprint: [2, 2], part: true, doubleSided: true }, async () => sway(parachuteW4b(), { rigid: true }));
+// ---- release 1.0 D1 (features#F1): the surprise gift box on the porch ----------------------------------------------------
+// Four parts in one small file of its own (a '-' in its name: no boot pack; it loads with the first box a farm shows),
+// all drawn in the dynamic batch by render/gift-view.js (no draw call of its own): the paper body, its hinged lid, and
+// the ribbon in two parts (the bands down the body; the cross, the lid's bands and the bow). The ribbon is modelled
+// WHITE: the batch's instance colour tints it with the giver's colour (the paper keeps its own, instance colour white).
+const GB = Object.freeze({ s: 0.9, h: 0.66, lid: 0.15, lidS: 0.98, band: 0.15, paper: '#FFF1DC', dotA: '#F7C9D2', dotB: '#BFE3EE',
+  dotC: '#FBE29A', white: '#FFFFFF' });
+/** The paper box (prop:gift_box, 1 x 1): a 0.9 m cream box with soft pastel dots on its four sides. */
+function giftBoxBody() {
+  const { s, h } = GB; const parts = [box(s, h, s, GB.paper)];
+  const dots = [GB.dotA, GB.dotB, GB.dotC];
+  for (let side = 0; side < 4; side++) {
+    for (const [u, v, k] of [[-0.3, 0.16, 0], [-0.24, 0.48, 1], [0.27, 0.3, 2], [0.3, 0.55, 0]]) {
+      const d = xform(P(new THREE.CircleGeometry(0.05, 6), dots[(k + side) % 3]), { x: u, y: v, z: s / 2 + 0.004 });
+      parts.push(xform(d, { ry: (side * Math.PI) / 2 }));
+    }
+  }
+  return mergeAll(parts);
+}
+/** The bands down the body's four sides (prop:gift_box:band), white: tinted per giver. */
+function giftBoxBand(hex = GB.white) {
+  const { s, h, band } = GB; const parts = [];
+  for (const sg of [-1, 1]) parts.push(box(band, h, 0.02, hex, { z: sg * (s / 2 + 0.006) }), box(0.02, h, band, hex, { x: sg * (s / 2 + 0.006) }));
+  return mergeAll(parts);
+}
+/** The lid (prop:gift_box:lid): its origin at the middle of its underside (the box's top), a little wider than the box. */
+function giftBoxLid() {
+  return box(GB.lidS, GB.lid, GB.lidS, GB.paper);
+}
+/** The ribbon on the lid and the bow (prop:gift_box:bow), white, with the lid's origin: the cross over the top, down the
+ *  lid's four sides, two loops, the knot and two tails curling down the front. */
+function giftBoxBow(hex = GB.white) {
+  const { lid, lidS, band } = GB; const top = lid + 0.003; const parts = [];
+  parts.push(box(lidS + 0.012, 0.022, band, hex, { y: top - 0.012 }), box(band, 0.022, lidS + 0.012, hex, { y: top - 0.01 }));
+  for (const sg of [-1, 1]) parts.push(box(band, lid, 0.02, hex, { z: sg * (lidS / 2 + 0.006) }), box(0.02, lid, band, hex, { x: sg * (lidS / 2 + 0.006) }));
+  // two loops leaning out from the knot, a knot, two tails lying on the lid toward the front
+  for (const sg of [-1, 1]) {
+    parts.push(xform(P(new THREE.TorusGeometry(0.12, 0.045, 5, 10), hex, { creaseDeg: 60 }), { x: sg * 0.13, y: top + 0.1, rz: sg * 0.5, sy: 0.8, sz: 0.55 }));
+    parts.push(xform(box(0.06, 0.016, 0.32, hex), { x: sg * 0.07, y: top, z: 0.16, ry: sg * 0.4 }));
+  }
+  parts.push(ball(0.065, hex, { y: top + 0.04, sx: 1.2, sy: 0.85 }, 1));
+  return mergeAll(parts);
+}
+job('prop:gift_box', 'props/gift-box.glb', { family: 'prop', def: 'gift_box', footprint: [1, 1] }, async () => sway(mergeAll([giftBoxBody()]), { rigid: true }));
+job('prop:gift_box:band', 'props/gift-box.glb', { family: 'prop', footprint: [1, 1], part: true }, async () => sway(giftBoxBand(), { rigid: true }));
+job('prop:gift_box:lid', 'props/gift-box.glb', { family: 'prop', footprint: [1, 1], part: true }, async () => sway(giftBoxLid(), { rigid: true }));
+job('prop:gift_box:bow', 'props/gift-box.glb', { family: 'prop', footprint: [1, 1], part: true }, async () => sway(giftBoxBow(), { rigid: true }));
+// the icon: the closed box with a red ribbon (the panel and the recap show it; the farm tints the ribbon per giver)
+item('gift_box', () => mergeAll([giftBoxBody(), giftBoxBand('#E8473A'), xform(mergeAll([giftBoxLid(), giftBoxBow('#E8473A')]), { y: GB.h })]), { yaw: 30, pitch: 24 });
+
 // the crate's icon: closed, its parachute folded on top
-item('loot_crate', () => mergeAll([lootCrateBody(), xform(lootCrateLid(), { y: 0.86, z: -0.71 }),
+item('loot_crate',() => mergeAll([lootCrateBody(), xform(lootCrateLid(), { y: 0.86, z: -0.71 }),
   xform(blob(0.3, CR.red, { seed: 5, sx: 1.4, sy: 0.55, detail: 1 }), { x: 0.25, y: 1.18, z: -0.2 }),
   xform(blob(0.22, CR.cream, { seed: 6, sx: 1.3, sy: 0.5, detail: 1 }), { x: 0.12, y: 1.27, z: -0.28 })]), { yaw: 30, pitch: 24 });
 

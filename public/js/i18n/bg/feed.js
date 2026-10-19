@@ -1,5 +1,5 @@
 // Bulgarian catalog, area 'feed' (lane C): the same keys and {params} as en/feed.js (test/i18n.test.js checks it).
-// Lines about a farmer use the aorist ("Деси прибра", "Ти прибра"), so they never need the farmer's gender, and every
+// Lines about a farmer use the aorist ("Роза прибра", "Ти прибра"), so they never need the farmer's gender, and every
 // line starts with {actor}, as in English.
 export default {
   'feed.farm': 'Фермата',
@@ -54,6 +54,7 @@ export default {
   'feed.chest.almanac': '{actor} отвори сандъчето на алманаха',
   'feed.name.farm': '{actor} кръсти фермата „{text}“',
   'feed.name.animal': '{actor} кръсти едно животно „{text}“',
+  'feed.name.renamed': '{actor} преименува „{was}“ на „{text}“',
   'feed.wish.deposit': { one: '{actor} отдели {n} монета за {w:defObj}', other: '{actor} отдели {n} монети за {w:defObj}' },
   'feed.wish.deposit.any': { one: '{actor} отдели {n} монета за едно желание', other: '{actor} отдели {n} монети за едно желание' },
   'feed.wish.withdraw': { one: '{actor} си взе обратно {n} монета от {w:defObj}', other: '{actor} си взе обратно {n} монети от {w:defObj}' },
@@ -71,7 +72,7 @@ export default {
   'feed.weed': { one: '{actor} оскубна един бурен на нашата земя', other: '{actor} оскубна {n} бурена на нашата земя' },
   'feed.look': '{actor} смени вида си ✨',
   'feed.crate': '{actor} отвори сандъче от балона: {loot}',
-  'feed.crate.auto': 'Сандъче от балона, което никой не отвори, отиде в хамбара: {loot}',
+  'feed.crate.auto': 'Неотворено сандъче от балона отиде в хамбара: {loot}',
   'feed.crate.coins': { one: '{n} монета', other: '{n} монети' },
   'feed.crate.golden': { one: '{n} златно семе', other: '{n} златни семена' },
   'feed.crate.item': '{q}',
@@ -141,7 +142,7 @@ export default {
   'feed.j.buy.c': '{actor} купи {b:lc} за {c} монети',
   'feed.j.buy.a': { one: '{actor} купи {b:lc} и {n} жълъд', other: '{actor} купи {b:lc} и {n} жълъда' },
   'feed.j.buy.ca': { one: '{actor} купи {b:lc} за {c} монети и {n} жълъд', other: '{actor} купи {b:lc} за {c} монети и {n} жълъда' },
-  'feed.j.expand': '{actor} купи {land}',
+  'feed.j.expand': '{actor} купи {land:defObj}',
   'feed.j.ribbon.1': '{actor} спечели бронзова панделка „{r}“',
   'feed.j.ribbon.2': '{actor} спечели сребърна панделка „{r}“',
   'feed.j.ribbon.3': '{actor} спечели златна панделка „{r}“',
@@ -159,10 +160,17 @@ export default {
   'feed.j.chest.together': '{actor} завърши общата задача',
   'feed.j.name.farm': '{actor} кръсти фермата „{text}“',
   'feed.j.name.animal': '{actor} кръсти едно животно „{text}“',
+  'feed.j.name.renamed': '{actor} преименува „{was}“ на „{text}“',
   'feed.j.wish.bought': '{actor} получи {w:defObj} от касичката!',
-  'feed.j.wish.bought.c': '{actor} получи {w:defObj} от касичката ({n} спестени монети)!',
+  'feed.j.wish.bought.c': {
+    one: '{actor} получи {w:defObj} от касичката ({n} спестена монета)!',
+    other: '{actor} получи {w:defObj} от касичката ({n} спестени монети)!',
+  },
   'feed.j.wish.bought.any': '{actor} получи едно желание от касичката!',
-  'feed.j.wish.bought.any.c': '{actor} получи едно желание от касичката ({n} спестени монети)!',
+  'feed.j.wish.bought.any.c': {
+    one: '{actor} получи едно желание от касичката ({n} спестена монета)!',
+    other: '{actor} получи едно желание от касичката ({n} спестени монети)!',
+  },
   'feed.j.wish.withdraw': { one: '{actor} си взе обратно {n} монета от {w:defObj}', other: '{actor} си взе обратно {n} монети от {w:defObj}' },
   'feed.j.wish.withdraw.any': { one: '{actor} си взе обратно {n} монета от касичката', other: '{actor} си взе обратно {n} монети от касичката' },
   'feed.j.wish.asked': '{actor} помоли да използва монетите, спестени за {w:defObj}',

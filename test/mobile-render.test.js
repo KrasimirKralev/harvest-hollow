@@ -50,7 +50,8 @@ test('quality knobs: a desktop keeps QUALITY exactly; phones cap the pixel ratio
     assert.equal(d.scenery, t, 'the backdrop density by tier name, as before');
     const p = qualityOf(t, 'phone');
     assert.ok(p.pixelRatio <= 1.5, `phone ${t} pixel ratio ${p.pixelRatio}`);
-    assert.equal(p.shadowMap, 0, 'no shadow map on phones (blob shadows instead)');
+    // release 1.0 (G4): phone High draws a 1024 map (refreshed only at rest); Medium and Low keep blob shadows
+    assert.equal(p.shadowMap, t === 'high' ? 1024 : 0, `phone ${t}: ${t === 'high' ? 'a 1024 shadow map' : 'blob shadows'}`);
     assert.equal(p.panShadows, false, 'never a shadow refresh while panning');
     assert.ok(p.lodK < 1, 'zoom bands pulled in');
     assert.ok(p.skinned < 8);

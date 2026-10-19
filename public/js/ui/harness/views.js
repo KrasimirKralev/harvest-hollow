@@ -3,8 +3,12 @@
 //
 //   providerLabel(id)                         'ChatGPT' | 'Claude' | 'Test helper' | the id
 //   stepsEl(job)                              the four steps (reading · building · testing · ready) as an <ol>
-//   changeList(changes, lang)                 what a change adds / changes / retires, with icons and numbers
+//   changeList(changes, lang, ctx?)           what a change adds / changes / retires, with icons and facts (release
+//                                             1.0 H3: every row kind; ctx { level, season } for "From level 33 (your
+//                                             farm is 21)" and the season)
 //   testList(validation)                      what was tested and how it went
+//   testFold(validation)                      the same, folded to one "Tested on a copy of your farm" line that opens
+//                                             (open by itself when a test failed)
 //   errorList(job, lang)                      what went wrong, in the player's words
 //   jobCard(job, ctx)                         the current job in the panel (mine or the partner's)
 //   consentCard({ onYes, onNo, busy })        the one-time question before the first change
@@ -13,7 +17,8 @@
 //   historyList(history, ctx)                 the versions, with undo
 //   letterCard(letter, lang)                  a letter a change brought
 import { h, fmtDuration } from '../dom.js';
-import { t, tn, has, fmtPct, fmtDate, list, name } from '../../i18n/index.js';
+import { t, tn, has, fmtPct, fmtDate, list, name, lang as curLang, N } from '../../i18n/index.js';
+import { assetUrl } from '../../net/asset-base.js';
 import { defOf, itemOf } from '../../../../shared/content/index.js';
 import { glyph } from './glyphs.js';
 import { STEPS, stepOf, stepIndex, changeRows, testRows, errorRows, errKey, jobErrLine, pickText, pasteFieldOf, noteRows } from './model.js';
@@ -42,25 +47,70 @@ export function signedPct(n) {
   return `${sign}${fmtPct(Math.abs(v), Math.abs(v) % 1 ? 1 : 0)}`;
 }
 
+/** A name inside a sentence: Bulgarian lower-cases it ("добави лунен пъпеш"), English keeps its Title Case. */
+const inSentence = (s) => (curLang() === 'bg' && s ? s[0].toLocaleLowerCase('bg') + s.slice(1) : s);
+const dur = (ms) => fmtDuration(ms, { trim: true });
+
 /** One fact of a change row in words. */
 export function factText(f) {
-  if (Number.isFinite(f.ms)) return t(f.key, { time: fmtDuration(f.ms, { trim: true }) });
-  if (f.key === 'harness.fact.sell' || f.key === 'harness.fact.seed') return tn(f.key, f.n);
-  return t(f.key, { n: f.n });
+  switch (f.key) {
+    case 'harness.fact.sell': case 'harness.fact.seed': case 'harness.fact.cost': return tn(f.key, f.n);
+    case 'harness.fact.gives': return tn(f.key, f.n, { product: inSentence(f.product), time: dur(f.ms) });
+    case 'harness.fact.growFromTo': return t(f.key, { from: dur(f.from), to: dur(f.to) });
+    case 'harness.fact.later': return t(f.key, f.params);
+    case 'harness.fact.workshop': return t(f.key, { building: N(f.building) });
+    case 'harness.fact.inputs': return t(f.key, { inputs: list(f.inputs.map((x) => `${inSentence(x.name)} ×${x.n}`)) });
+    case 'harness.fact.season':
+      return f.now ? t(f.key, { season: t(`harness.season.${f.season}`), now: t(`harness.season.${f.now}`) })
+        : t('harness.fact.seasonOnly', { season: t(`harness.season.${f.season}`) });
+    case 'harness.fact.seasonNow': return t(f.key, { season: t(`harness.season.${f.season}`) });
+    case 'harness.letter.row': {
+      let who = f.from;
+      try { who = name(f.from); } catch { /* not a content id */ }
+      if (!who || who === f.from) who = String(f.from).replace(/^./, (c) => c.toUpperCase());
+      return t(f.key, { name: who });
+    }
+    default:
+      if (Number.isFinite(f.ms)) return t(f.key, { time: dur(f.ms) });
+      return t(f.key, { n: f.n });
+  }
 }
 
-export function changeList(changes, lang) {
-  const rows = changeRows(changes, lang);
+/** The headline of a row that is not a thing (a speed knob, the sky, the music), else its name. */
+function rowTitle(r) {
+  const x = r.title;
+  if (!x) return r.name;
+  if (r.kind === 'tuning') return t(x.key, { pct: fmtPct(x.pct) });
+  if (r.kind === 'sky') return t(x.key, { sky: t(`harness.sky.${x.sky}`) });
+  if (r.kind === 'music') return x.tracks ? t(x.key, { tracks: list(x.tracks) }) : t(x.key);
+  return r.name;
+}
+const KIND_GLYPH = { tuning: 'speed', tuned: 'speed', sky: 'sky', music: 'music', letter: 'letter' };
+
+/** A row's picture: the thing's own icon (a base thing's through assetUrl: option 2), else a glyph of its kind. */
+function rowIcon(r) {
+  if (r.icon) {
+    // a game icon is a static file (option 2: through assetUrl); a mod's icon is this farm's own and stays here
+    const isStatic = r.icon.startsWith('/assets/'); // asset-ok: a comparison; the URL itself goes through assetUrl below
+    const img = h('img', { alt: '', width: 40, height: 40, loading: 'lazy', decoding: 'async', draggable: 'false' });
+    if (isStatic) img.setAttribute('crossorigin', 'anonymous');
+    img.setAttribute('src', isStatic ? assetUrl(r.icon) : r.icon);
+    return img;
+  }
+  return glyph(KIND_GLYPH[r.kind] ?? 'sparkle', 32);
+}
+
+export function changeList(changes, lang, ctx = {}) {
+  const rows = changeRows(changes, lang, ctx);
   if (!rows.length) return h('p.hx-none', t('harness.ready.none'));
-  return h('ul.hx-changes', rows.map((r) => h(`li.hx-change.op-${r.op}`, { dataset: { id: r.id, op: r.op } },
-    h('span.hx-change-ico', { 'aria-hidden': 'true' },
-      r.icon ? h('img', { src: r.icon, alt: '', width: 40, height: 40, loading: 'lazy', decoding: 'async', draggable: 'false' }) : glyph('sparkle', 32)),
+  return h('ul.hx-changes', rows.map((r) => h(`li.hx-change.op-${r.op}.kind-${r.kind}${r.warn ? '.is-later' : ''}`, { dataset: { id: r.id, op: r.op, kind: r.kind } },
+    h('span.hx-change-ico', { 'aria-hidden': 'true' }, rowIcon(r)),
     h('span.hx-change-main',
       h('span.hx-change-head',
-        h('b.hx-change-name', r.name),
+        h('b.hx-change-name', rowTitle(r)),
         h(`span.hx-op.op-${r.op}`, t(`harness.op.${r.op}`)),
-        r.family ? h('span.hx-family', t(`harness.family.${r.family}`)) : null),
-      r.facts.length ? h('span.hx-facts', r.facts.map((f) => h('span.hx-fact', factText(f)))) : null,
+        r.family && r.kind === 'thing' ? h('span.hx-family', t(`harness.family.${r.family}`)) : null),
+      r.facts.length ? h('span.hx-facts', r.facts.map((f) => h(`span.hx-fact${f.warn ? '.is-warn' : ''}`, factText(f)))) : null,
       r.op === 'retire' ? h('span.hx-facts', h('span.hx-fact', t('harness.retire.note'))) : null))));
 }
 
@@ -79,9 +129,29 @@ export function testList(validation) {
     h('span.sr-only', ` (${t(r.ok === true ? 'harness.test.passed' : r.ok === false ? 'harness.test.failedWord' : 'harness.test.skippedWord')})`))));
 }
 
+/** The tests folded to one line (harvey#8, astra#5: the change comes first); a failed test keeps the list open. */
+export function testFold(validation) {
+  const rows = testRows(validation);
+  if (!rows.length) return null;
+  const bad = rows.some((r) => r.ok === false);
+  return h(`details.hx-tested${bad ? '.is-bad' : ''}`, { open: bad || null, dataset: { tested: bad ? 'bad' : 'ok' } },
+    h('summary.hx-tested-line', h('span.hx-test-mark', { 'aria-hidden': 'true' }, glyph(bad ? 'cross' : 'check', 20)),
+      h('span', t(bad ? 'harness.test.foldedBad' : 'harness.test.folded'))),
+    testList(validation));
+}
+
 /** What went wrong with a failed job: its own code first (with the provider's page when its docs name one), then the
  *  validation's findings. */
 export function errorList(job, lang) {
+  return errorItems(job, lang);
+}
+
+/** The same list folded behind "What went wrong" (H1, harvey#10: Harvey's own words come first, the codes after). */
+export function errorFold(job, lang) {
+  return h('details.hx-what', { dataset: { what: 'wrong' } }, h('summary', t('harness.job.whatWrong')), errorItems(job, lang));
+}
+
+function errorItems(job, lang) {
   const items = [];
   const own = jobErrLine(job);
   if (own) items.push(t(own.key));
@@ -99,6 +169,34 @@ export function errorList(job, lang) {
 
 const lastPrompt = (job) => (Array.isArray(job?.prompts) && job.prompts.length ? String(job.prompts.at(-1)?.text ?? '') : '');
 
+/** Harvey's own words for a job (its summary, or the answer to the last follow-up) in the language, or ''. */
+export const sayOf = (job, lang) => pickText(job?.result?.answer ?? job?.result?.summary, lang);
+
+/**
+ * A failed job's summary tells the change the agent meant to make unless it says "possible": false (then it is his
+ * answer): the heading for it, so a failure never reads as if the farm had the thing.
+ */
+export const failSaidKey = (job) => (job?.result?.answer || job?.result?.summary?.possible === false ? 'harness.answer.says' : 'harness.answer.planned');
+
+/**
+ * The wish as the farmer asked it. A long one (a dictated wish runs long) shows its first three lines and a "Show all"
+ * toggle, so the card's buttons stay near (QA r1 H-18: a 1000-character wish put "See the changes" two screens down).
+ */
+export function quoteEl(text) {
+  const s = String(text ?? '');
+  const q = h('blockquote.hx-quote', s);
+  if (s.length <= 140 && s.split('\n').length <= 3) return q;
+  q.classList.add('is-clamped');
+  q.id = `hx-quote-${Math.random().toString(36).slice(2, 8)}`;
+  const more = h('button.btn.btn--paper.btn--small.hx-quote-more', { type: 'button', 'aria-expanded': 'false', 'aria-controls': q.id, dataset: { act: 'quoteMore' } }, t('harness.quote.more'));
+  more.addEventListener('click', () => {
+    const open = q.classList.toggle('is-clamped') === false;
+    more.setAttribute('aria-expanded', String(open));
+    more.textContent = t(open ? 'harness.quote.less' : 'harness.quote.more');
+  });
+  return h('div.hx-quote-wrap', q, more);
+}
+
 /**
  * The current job in the panel. ctx: { me, nameOf(pid), lang, onCancel, onSee, onRetry, onDismiss, onKeepPlaying,
  * onSignIn(provider), busy }.
@@ -107,21 +205,38 @@ export function jobCard(job, ctx) {
   const mine = job.by === ctx.me;
   const partner = ctx.nameOf(job.by);
   // a job that ended in a failure is no longer "working on": it was asked for
-  const who = job.state === 'failed'
+  // a job that ended was asked for; a ready one waits (harvey#11: never "working on" once it is ready)
+  const who = job.state === 'failed' || job.state === 'answered'
     ? (mine ? t('harness.job.askedMine') : partner ? t('harness.job.askedBy', { name: partner }) : t('harness.job.someone'))
-    : mine ? t('harness.job.mine') : partner ? t('harness.job.partner', { name: partner }) : t('harness.job.someone');
+    : job.state === 'ready'
+      ? (mine ? t('harness.job.readyMine') : partner ? t('harness.job.readyPartner', { name: partner }) : t('harness.job.someone'))
+      : mine ? t('harness.job.mine') : partner ? t('harness.job.partner', { name: partner }) : t('harness.job.someone');
   const quote = lastPrompt(job);
   // tabindex -1: the panel moves the focus here when the request box gives way to the job (ui/harness/index.js)
   const card = h(`section.hx-job.state-${job.state}`, { dataset: { job: job.id, state: job.state }, 'aria-labelledby': 'hx-job-who', tabindex: '-1' },
     h('p.hx-job-who#hx-job-who', who),
-    quote ? h('blockquote.hx-quote', quote) : null);
-  if (job.state === 'failed') {
-    card.append(h('p.hx-job-failed', glyph('cross', 22), h('span', t('harness.job.failed'))),
-      h('p.hx-sub', t('harness.job.failedWhy')), errorList(job, ctx.lang), h('p.hx-sub', t('harness.job.nothingChanged')));
+    quote ? quoteEl(quote) : null);
+  if (job.state === 'answered') {
+    // H1: Harvey's answer, not a failure: his words, then what to do next
+    const said = sayOf(job, ctx.lang) || t('harness.answer.nothing');
+    card.append(h('p.hx-job-answered', glyph('helper', 22), h('span', t('harness.job.answered'))), h('p.hx-answer-text', said));
     if (mine) {
       card.append(h('div.hx-actions',
-        h('button.btn.btn--small', { type: 'button', dataset: { act: 'retry' }, disabled: ctx.busy || null, on: { click: () => ctx.onRetry(quote) } }, t('harness.job.retry')),
+        h('button.btn.btn--small', { type: 'button', dataset: { act: 'change' }, on: { click: () => ctx.onChange?.(quote) } }, t('harness.job.change')),
         h('button.btn.btn--paper.btn--small', { type: 'button', dataset: { act: 'dismiss' }, on: { click: () => ctx.onDismiss(job) } }, t('harness.job.dismiss'))));
+    }
+    return card;
+  }
+  if (job.state === 'failed') {
+    // H1 (harvey#10): what Harvey said first; the primary action changes the wish (the same wish fails the same way)
+    const said = sayOf(job, ctx.lang);
+    card.append(...[h('p.hx-job-failed', glyph('cross', 22), h('span', t('harness.job.failed'))),
+      said ? h('p.hx-h.hx-said-h', t(failSaidKey(job))) : null, said ? h('p.hx-answer-text', said) : null, errorFold(job, ctx.lang),
+      h('p.hx-sub', t('harness.job.nothingChanged'))].filter(Boolean));
+    if (mine) {
+      card.append(h('div.hx-actions',
+        h('button.btn.btn--small', { type: 'button', dataset: { act: 'change' }, on: { click: () => ctx.onChange?.(quote) } }, t('harness.job.change')),
+        h('button.btn.btn--paper.btn--small', { type: 'button', dataset: { act: 'retry' }, disabled: ctx.busy || null, on: { click: () => ctx.onRetry(quote) } }, t('harness.job.retry'))));
     }
     return card;
   }
@@ -131,6 +246,10 @@ export function jobCard(job, ctx) {
   if (job.state !== 'ready') {
     const now = mine && step === 'signin' ? t('harness.pill.signin') : t(`harness.pill.step.${step}`);
     card.append(h('p.hx-now', h('span.hx-spin', { 'aria-hidden': 'true' }), h('span', now)));
+    // harvey#13: how long so far, and how long it usually takes
+    if (mine && Number.isFinite(job.startedAt) && Date.now() - job.startedAt < 6 * 3_600_000) {
+      card.append(h('p.hx-sub.hx-elapsed', t('harness.pill.elapsed', { time: fmtDuration(Math.max(0, Date.now() - job.startedAt), { trim: true }) })));
+    }
   }
   if (ctx.notes !== false) {
     const notes = jobNotes(job, ctx.lang);
@@ -176,9 +295,10 @@ export function consentCard({ onYes, onNo, busy = false, error = null, privacy =
     h('p', t('harness.consent.what')),
     h('p', t('harness.consent.keep')),
     error ? h('p.hx-error', { role: 'alert' }, t(error)) : null,
-    h('div.hx-actions',
-      h('button.btn.btn--small', { type: 'button', dataset: { consent: 'yes' }, disabled: busy || null, on: { click: onYes } }, t('harness.consent.yes')),
-      h('button.btn.btn--paper.btn--small', { type: 'button', dataset: { consent: 'no' }, disabled: busy || null, on: { click: onNo } }, t('harness.consent.no'))),
+    // harvey#16: opt-in, default off: the two answers weigh the same (one paper style, one size; keeping them first)
+    h('div.hx-actions.hx-consent-acts',
+      h('button.btn.btn--paper.btn--small', { type: 'button', dataset: { consent: 'no' }, disabled: busy || null, on: { click: onNo } }, t('harness.consent.no')),
+      h('button.btn.btn--paper.btn--small', { type: 'button', dataset: { consent: 'yes' }, disabled: busy || null, on: { click: onYes } }, t('harness.consent.yes'))),
     h('p.hx-sub', t('harness.consent.later'),
       privacy ? [' ', h('a.hx-link', { href: privacy, target: '_blank', rel: 'noopener noreferrer' }, t('harness.set.privacy'))] : null));
 }
@@ -202,13 +322,17 @@ export function safeUrl(u) {
 export function signInFlow(provider, signin, ctx) {
   const name = providerLabel(provider);
   const box = h('section.hx-signin', { dataset: { signin: provider }, 'aria-labelledby': `hx-signin-${provider}` },
-    h('h3', { id: `hx-signin-${provider}` }, t('harness.signin.title', { provider: name })));
+    h('h3', { id: `hx-signin-${provider}` }, t('harness.signin.title', { provider: name })),
+    // why this sign-in is here (QA r2 H2-C1: "Your sign-in ran out…"), at the top of the card the tab scrolls to
+    ctx.note?.key ? h(`p.hx-flash.hx-signin-note.tone-${ctx.note.tone ?? 'info'}`, { role: 'status' }, t(ctx.note.key, ctx.note.params ?? {})) : null);
   const state = signin?.state ?? 'pending';
   if (state === 'signed_in') {
     box.append(h('p.hx-ok', { role: 'status' }, glyph('check', 22), h('span', t('harness.signin.done', { provider: name }))));
     return box;
   }
-  const err = signin?.error?.code ? errKey(signin.error.code) : ctx.error;
+  // a provider that cannot be reached is named, with what to do (QA r1 H-10: never "The helper is not available")
+  const code = signin?.error?.code;
+  const err = code === 'UNAVAILABLE' ? ['harness.signin.unavailable', { provider: name }] : code ? [errKey(code)] : ctx.error ? [ctx.error] : null;
   const url = signin?.step?.kind === 'open_url' ? safeUrl(signin.step.url) : null;
   const field = pasteFieldOf(provider, signin);
   if (!signin || (!url && signin.step?.kind !== 'paste' && state !== 'error')) {
@@ -225,7 +349,7 @@ export function signInFlow(provider, signin, ctx) {
   }
   if (field === 'redirect_url' && url) box.append(h('p.hx-sub', t('harness.signin.url.auto')));
   if (state === 'pending' && url && !field) box.append(h('p.hx-wait', { role: 'status' }, h('span.hx-spin', { 'aria-hidden': 'true' }), h('span', t('harness.signin.waiting'))));
-  if (err) box.append(h('p.hx-error', { role: 'alert' }, t(err)));
+  if (err) box.append(h('p.hx-error', { role: 'alert' }, t(...err)));
   const priv = `harness.signin.${provider}.private`;
   if (has(priv)) box.append(h('p.hx-sub.hx-private', t(priv)));
   box.append(h('div.hx-actions',
@@ -249,7 +373,9 @@ function pasteForm(provider, field, ctx) {
     h('p', t(isUrl ? 'harness.signin.url.step' : 'harness.signin.code.step')),
     h('label.hx-label', { for: id }, t(isUrl ? 'harness.signin.url.label' : 'harness.signin.code.label')),
     h('div.hx-inline', input,
-      h('button.btn.btn--small', { type: 'button', dataset: { act: 'continue' }, disabled: ctx.busy || null, on: { click: go } }, t('harness.signin.send'))));
+      // a mouse press keeps the focus in the field (the panel frame's typing room would shrink under the pointer: QA r1)
+      h('button.btn.btn--small', { type: 'button', dataset: { act: 'continue' }, disabled: ctx.busy || null,
+        on: { mousedown: (e) => { if (e.button === 0) e.preventDefault(); }, click: go } }, t('harness.signin.send'))));
 }
 
 /**
@@ -271,6 +397,7 @@ export function providerCard(p, ctx) {
       : h('span.hx-status', t('harness.prov.signedOut'));
   const li = h(`div.hx-provider${using ? '.is-current' : ''}${p.available === false ? '.is-off' : ''}`, { dataset: { provider: p.id } },
     h('div.hx-provider-head', h('b.hx-provider-name', providerLabel(p.id)), using ? h('span.hx-op.op-add', t('harness.prov.using')) : null),
+    has(`harness.prov.${p.id}.plan`) ? h('p.hx-plan', t(`harness.prov.${p.id}.plan`)) : null,
     has(`harness.prov.${p.id}.desc`) ? h('p.hx-sub', t(`harness.prov.${p.id}.desc`)) : null,
     status);
   const flow = ctx.flow(p.id);
@@ -289,45 +416,131 @@ export function providerCard(p, ctx) {
   if (using && models.length > 1) {
     const id = `hx-model-${p.id}`;
     const sel = h('select.field.hx-model', { id, on: { change: (e) => ctx.onModel(p.id, e.target.value || null) } },
-      h('option', { value: '' }, t('harness.prov.modelDefault')),
+      h('option', { value: '' }, ((d) => (d ? t('harness.prov.modelPicked', { model: String(d.label ?? d.id) }) : t('harness.prov.modelDefault')))(
+        models.find((m) => String(m.id) === ctx.modelDefault?.[p.id]))),
       models.map((m) => h('option', { value: String(m.id), selected: String(m.id) === ctx.model || null }, String(m.label ?? m.id))));
     li.append(h('div.hx-model-row', h('label.hx-label', { for: id }, t('harness.prov.model')), sel));
   }
   return li;
 }
 
-const KIND_KEYS = { apply: 'harness.hist.kind.apply', undo: 'harness.hist.kind.undo', suspend: 'harness.hist.kind.suspend' };
+const KIND_KEYS = { apply: 'harness.hist.kind.apply', undo: 'harness.hist.kind.undo', revive: 'harness.hist.kind.revive',
+  rebuild: 'harness.hist.kind.rebuild', suspend: 'harness.hist.kind.suspend' };
+const LEFT_OUT = ['palette', 'tips'];
+/** Why a version offers no "Go back to this" (the server's `go.code`, QA r4 H4-07). */
+const GO_WHY = { NO_CHANGE: 'harness.hist.sameAsNow', DAMAGED: 'harness.hist.cannotGo.DAMAGED', INVALID: 'harness.hist.cannotGo.INVALID' };
 
-/** The versions, newest first. ctx: { lang, nameOf(pid), onUndo(to | null, n | null), busy }. */
+/** Versions the game made, not a farmer (a rebuild for a new game version, a pause): nobody asked for them. */
+const GAME_MADE = new Set(['rebuild', 'suspend']);
+/** A wish at most `max` characters long, cut on a character (never half an emoji), trimmed, and "…" when cut (QA r2 H2-09). */
+export function shortWish(text, max = 160) {
+  const chars = Array.from(String(text ?? ''));
+  if (chars.length <= max) return chars.join('');
+  return `${chars.slice(0, max).join('').trimEnd()}…`;
+}
+
+/**
+ * Where "Undo the last change" goes from the active version: the server's word (`history.undo`), else the same walk on the
+ * list: a rebuild or a pause is see-through, the last change is the farmer's own below it (QA r2 H2-01). Returns
+ * { to, last, revive } (n numbers) or null.
+ */
+export function undoPlan(history) {
+  const versions = Array.isArray(history?.versions) ? history.versions : [];
+  const active = Number.isInteger(history?.active) ? history.active : null;
+  if (active === null || active <= 0) return null;
+  const u = history.undo;
+  if (u && typeof u === 'object') {
+    // the server's word; `to: null` = nothing to undo or bring back (QA r3 H3-05: the change it would bring back has a
+    // damaged file or no longer fits the game, so no button that can only fail)
+    if (!Number.isInteger(u.to) || !Number.isInteger(u.last)) return null;
+    return { to: u.to, last: u.last, revive: Boolean(u.revive) };
+  }
+  const byN = new Map(versions.map((v) => [v.n, v]));
+  // a list without `parent` (a server before 1.0): the version just below, as History always did
+  const parentOf = (v) => (Number.isInteger(v.parent) ? v.parent : versions.filter((x) => x.n < v.n).sort((a, b) => b.n - a.n)[0]?.n ?? 0);
+  let cur = byN.get(active);
+  for (let i = 0; i < 64 && cur && GAME_MADE.has(cur.kind) && byN.has(parentOf(cur)); i++) cur = byN.get(parentOf(cur));
+  if (!cur) return null;
+  let to = Math.max(0, parentOf(cur));
+  // an undo of a pause brings back the farmer's own change below the pause, never the pause (QA r3 H3-05)
+  if (cur.kind === 'undo') for (let i = 0; i < 64 && byN.get(to)?.kind === 'suspend' && byN.has(parentOf(byN.get(to))); i++) to = parentOf(byN.get(to));
+  return { to, last: cur.n, revive: cur.kind === 'undo' && to > 0 };
+}
+
+/** The versions, newest first. ctx: { lang, nameOf(pid), onUndo(to | null, n | null, { revive, title } | null), busy }. */
 export function historyList(history, ctx) {
   const versions = Array.isArray(history?.versions) ? history.versions : [];
   if (!versions.length) return h('p.hx-none', t('harness.hist.empty'));
   const active = Number.isInteger(history.active) ? history.active : null;
-  const prev = active === null ? null : versions.filter((v) => v.n < active).sort((a, b) => b.n - a.n)[0] ?? null;
+  const byN = new Map(versions.map((v) => [v.n, v]));
+  // the number History shows (QA r2 H2-07: a discarded candidate takes none); an older server's list shows its own n
+  const noOf = (n) => (Number.isInteger(byN.get(n)?.no) ? byN.get(n).no : n);
   const wrap = h('div.hx-history');
-  if (active !== null && active > 0) {
-    wrap.append(h('div.hx-actions', h('button.btn.btn--paper.btn--small', { type: 'button', dataset: { act: 'undoLast' }, disabled: ctx.busy || null,
-      on: { click: () => ctx.onUndo(null, prev ? prev.n : null) } }, glyph('back', 20), t('harness.hist.undoLast'))));
+  // the versions the active one rebuilt (a rebuild holds their files): going back to one changes nothing, so it has no
+  // "Go back to this" (QA r2 H2-01; the server refuses it NO_CHANGE anyway)
+  const sameAsActive = new Set();
+  for (let c = byN.get(active), i = 0; i < 64 && c && c.kind === 'rebuild' && Number.isInteger(c.parent); i++, c = byN.get(c.parent)) sameAsActive.add(c.parent);
+  const plan = undoPlan(history);
+  if (plan) {
+    // harvey#17: on an undo version the same button brings the undone change back: it says so, by its title. A rebuild or
+    // a pause on top is looked through (H2-01): the farmer's last change decides, and the confirm names where it goes
+    const undone = plan.revive ? byN.get(plan.to) ?? null : null;
+    const back = undone ? pickText(undone.title, ctx.lang) : '';
+    const toNo = plan.to > 0 ? noOf(plan.to) : 0;
+    // what it takes out of the shop and brings back, when the server said (QA r4 H4-04: the confirm names it)
+    const u = history.undo && typeof history.undo === 'object' ? history.undo : null;
+    const eff = u && (Array.isArray(u.left) || Array.isArray(u.back)) ? { left: u.left ?? [], back: u.back ?? [] } : null;
+    wrap.append(h('div.hx-actions', h('button.btn.btn--paper.btn--small', { type: 'button', dataset: { act: back ? 'bringBack' : 'undoLast' }, disabled: ctx.busy || null,
+      on: { click: () => ctx.onUndo(null, toNo, back ? { revive: true, title: undone.title, eff } : eff ? { eff } : null) } },
+      glyph('back', 20), back ? t('harness.hist.bringBack', { title: back }) : t('harness.hist.undoLast'))));
   }
   wrap.append(h('ol.hx-versions', versions.map((v) => {
     const isActive = v.n === active || v.state === 'active';
-    const who = ctx.nameOf(v.by) ?? '';
+    const gameMade = GAME_MADE.has(v.kind);
+    // a version the game made names no farmer (QA r2 H2-02: a pause stored before 1.0 still carried the old farmer)
+    const who = gameMade ? '' : ctx.nameOf(v.by) ?? '';
     const when = Number.isFinite(v.at) ? fmtDate(v.at, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false }) : '';
     const chips = changeRows(v.changes, ctx.lang);
     const shown = chips.slice(0, 4);
+    // an undo that only brought things back (History's "Go back to this" on a version with more in it) is no "Undo" (QA r4
+    // H4-04): it says where it went
+    const wentBack = v.kind === 'undo' && Number.isInteger(v.undoTo) && v.undoTo > 0 && byN.has(v.undoTo)
+      && Array.isArray(v.changes) && v.changes.length > 0 && v.changes.every((c) => c && c.op !== 'retire');
     const li = h(`li.hx-version${isActive ? '.is-active' : ''}`, { dataset: { n: String(v.n) } },
       h('div.hx-version-head',
-        h('b', t('harness.hist.version', { n: v.n })),
-        KIND_KEYS[v.kind] ? h(`span.hx-kind.kind-${v.kind}`, t(KIND_KEYS[v.kind])) : null,
+        h('b', t('harness.hist.version', { n: noOf(v.n) })),
+        wentBack ? h('span.hx-kind.kind-back', t('harness.hist.kind.back', { n: noOf(v.undoTo) }))
+          : KIND_KEYS[v.kind] ? h(`span.hx-kind.kind-${v.kind}`, t(KIND_KEYS[v.kind])) : null,
         isActive ? h('span.hx-op.op-add', t('harness.hist.active')) : null),
       pickText(v.title, ctx.lang) ? h('p.hx-version-title', pickText(v.title, ctx.lang)) : null,
       who || when ? h('p.hx-sub', who && when ? t('harness.hist.byWhen', { name: who, when }) : who || when) : null,
-      v.prompt ? h('p.hx-asked', t('harness.hist.asked', { prompt: String(v.prompt).slice(0, 160) })) : null,
-      shown.length ? h('ul.hx-chips', shown.map((c) => h(`li.hx-chip.op-${c.op}`, c.icon ? h('img', { src: c.icon, alt: '', width: 20, height: 20, loading: 'lazy' }) : null, c.name)),
+      // the first wish, then how many follow-ups changed it (harvey#17: not only the last follow-up's words); a version the
+      // game rebuilt for a new game version says what it left out instead (QA r1 H-14: nobody asked for anything again),
+      // a pause says why (QA r2 H2-02)
+      ...(v.kind === 'rebuild'
+        ? ((left) => (left.length ? [h('p.hx-sub.hx-left-out', t('harness.hist.leftOut', { what: list(left.map((k) => t(`harness.hist.leftOut.${k}`))) }))] : []))(
+          (Array.isArray(v.leftOut) ? v.leftOut : []).filter((k) => LEFT_OUT.includes(k)))
+        : v.kind === 'suspend'
+          ? [h('p.hx-sub.hx-paused', t(v.reason === 'BAD_JSON' ? 'harness.hist.paused.BAD_JSON' : 'harness.hist.paused.other'))]
+          : ((ps) => (ps.length ? [h('p.hx-asked', t('harness.hist.asked', { prompt: shortWish(ps[0]) }),
+            ps.length > 1 ? h('span.hx-plus', ` ${tn('harness.hist.plus', ps.length - 1)}`) : null)] : []))(
+            Array.isArray(v.prompts) && v.prompts.length ? v.prompts : v.prompt ? [v.prompt] : [])),
+      // a chip words its row as the ready sheet does (QA r3 H3-04: "Sky: golden", "All crops grow 20 % faster", never the
+      // raw "sky", "music" or "growTimeBp")
+      shown.length ? h('ul.hx-chips', shown.map((c) => h(`li.hx-chip.op-${c.op}`, c.icon ? h('img', { src: c.icon, alt: '', width: 20, height: 20, loading: 'lazy' }) : null, rowTitle(c))),
         chips.length > shown.length ? h('li.hx-chip.more', tn('harness.hist.more', chips.length - shown.length)) : null) : null);
+    // QA r4 H4-07: the server's word on each version (`go`: one compile per version and active version): a version with
+    // the farm's own effect, a damaged one, or one that no longer fits offers no "Go back to this" that can only be
+    // refused; it says why instead. A list without the word (an older server) keeps the rebuild walk above
+    const go = v.go && typeof v.go === 'object' ? v.go : null;
     if (!isActive && v.kind !== 'suspend' && active !== null) {
-      li.append(h('div.hx-actions', h('button.btn.btn--paper.btn--small', { type: 'button', dataset: { act: 'goBack' }, disabled: ctx.busy || null,
-        on: { click: () => ctx.onUndo(v.n, v.n) } }, t('harness.hist.goBack'))));
+      if (go ? go.ok === true : !sameAsActive.has(v.n)) {
+        const eff = go ? { left: go.left ?? [], back: go.back ?? [] } : null;
+        li.append(h('div.hx-actions', h('button.btn.btn--paper.btn--small', { type: 'button', dataset: { act: 'goBack' }, disabled: ctx.busy || null,
+          on: { click: () => ctx.onUndo(v.n, noOf(v.n), { go: true, eff }) } }, t('harness.hist.goBack'))));
+      } else if (go && GO_WHY[go.code]) {
+        li.append(h('p.hx-sub.hx-cannot-go', t(GO_WHY[go.code])));
+      }
     }
     return li;
   })));

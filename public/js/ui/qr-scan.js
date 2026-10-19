@@ -7,6 +7,7 @@
 //   readPhoto(file) -> Promise<string | null>      the text of the QR code in a picture file
 //   scanCamera({ onText, onFail }) -> { close() }   the camera view; onText(text) once, onFail(message) if it cannot start
 import { t } from '../i18n/keep.js';
+import { lazyImport } from '../net/lazy.js';
 
 const MAX_SIDE = 1400;
 const FRAME_MS = 200;
@@ -44,7 +45,7 @@ async function bitmapOf(file) {
 
 export async function readPhoto(file) {
   try {
-    const { readQr } = await import('./qr-read.js');
+    const { readQr } = await lazyImport('qr-read', () => import('./qr-read.js'));
     const bmp = await bitmapOf(file);
     const w = bmp.width || bmp.naturalWidth;
     const h = bmp.height || bmp.naturalHeight;
@@ -98,7 +99,7 @@ export function scanCamera({ onText, onFail, doc = globalThis.document, nav = gl
   (async () => {
     let readQr;
     try {
-      ({ readQr } = await import('./qr-read.js'));
+      ({ readQr } = await lazyImport('qr-read', () => import('./qr-read.js')));
       stream = await nav.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false });
       if (done) { close(); return; }
       video.srcObject = stream;

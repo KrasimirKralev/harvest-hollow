@@ -436,7 +436,7 @@ function slotCard(ctx, kit, p, b, sl) {
 function bundleCard(ctx, kit, p, b) {
   const partial = !b.done && b.slots.some((x) => !x.done && x.n > 0);
   return h(`section.pc-bundle${b.done ? '.done' : ''}`, { dataset: { bundle: b.id } },
-    h('header', h('h4', b.name), h('span.pc-need', b.done ? t('collect.rest.doneTick') : t('collect.rest.anyOf', { need: b.need, of: b.of })),
+    h('header', h('h3', b.name), h('span.pc-need', b.done ? t('collect.rest.doneTick') : t('collect.rest.anyOf', { need: b.need, of: b.of })),
       b.done ? null : h('small', b.toGo === 1 ? t('collect.rest.oneMore') : t('collect.rest.nMore', { n: b.toGo }))),
     h('ul.pc-slots', ...b.slots.map((sl) => slotCard(ctx, kit, p, b, sl))),
     partial && b.toGo <= 1 ? h('p.pc-bundle-note', t('collect.rest.backNote')) : null);
@@ -542,7 +542,7 @@ export function restoreText(state, ev, me) {
   const done = p.bundles.filter((x) => restoreA.bundleDone(state, p.id, x.id)).length;
   if (done >= p.bundles.length) return null;                          // the project's own banner follows
   const english = (x) => (x.coins ? `${fmt(x.coins)} coins` : `${fmt(x.qty)} ${itemOf(x.item)?.name ?? x.item}`); // i18n-ok: the English list
-  const back = (ev.back ?? []).map((x) => (t('collect.rest.backItem', { en: english(x), q: x.coins ? t('market.land.coins', { n: x.coins }) : itemOf(x.item) ? Q(x.item, x.qty) : `${x.item} ×${fmt(x.qty)}` })));
+  const back = (ev.back ?? []).map((x) => (t('collect.rest.backItem', { en: english(x), q: x.coins ? t('market.land.coins', { n: x.coins }) : itemOf(x.item) ? Q(x.item, x.qty) : `${x.item}\u00a0×${fmt(x.qty)}` })));
   const msg = { who, bundle: bundleName(p, b), ...pr, done, n: p.bundles.length };
   return { ribbon: t('collect.rest.bundleBang'), kind: 'quest',
     message: back.length ? t('collect.rest.bundleDoneBack', { ...msg, back: lang() === 'en' ? back.join(' and ') : list(back) }) : t('collect.rest.bundleDone', msg) };

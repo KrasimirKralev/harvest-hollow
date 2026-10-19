@@ -50,6 +50,22 @@
 // fx.warmup(on) / fx.materials()   shader warm-up at boot (render/index.js): every lazily created mesh exists,
 //                               hidden, so renderer.compileAsync() compiles its program before the first harvest
 // Arrivals dispatch window 'hh:fly-arrive' { detail: { kind, item, qty, by, local } } (the UI rolls counters).
+//
+// Release 1.0 (life-feel, rel-life-feel.md):
+//   createFx(layer, overlay, toScreenM, { iconRetryMs = 5000 }?)  (the 4th argument is additive)
+//   M4 (feel#1): flights fly in their own fixed layer #fx-top (z 60, pointer-events none, created here) above #panels
+//     (z 40), so a reward earned inside a panel is seen; a flight starts at `meta.from` (an Element: the Sell, Deliver,
+//     Claim or Buy button, from ui-panels' `hh:act-from`) when the event has one. F2 (feel#6): an arrival at a HUD pill
+//     no longer bumps it (the HUD rolls and bumps once on 'hh:fly-arrive'); a flight to an explicit element still does.
+//   M5 (feel#2): orderFilled, folkFilled and questDelivered play the `delivered` recipe; the claims (seedBasket,
+//     meterChest, almanacChest, trackClaimed, gift) pop their loot from the claim button; a purchase (purchased,
+//     toolBought, wishBought) sends one coin from the coins pill to the bought card; upgrades with a place raise dust
+//     and confetti; `stallDone` (feedback.js, after the Orders panel closes) puffs at Mabel's board.
+//     fx.recipes() -> the event names with a recipe (test/rel-feel.fx.test.js checks progress.FX_EVENTS against it).
+//   M15 (perf-a11y#6): an icon texture that failed to load is asked for again after iconRetryMs (createIconCache).
+//   S7 (feel#7): fx.float(pos, text, { kind: 'why' } | { style: 'paper', ms }) draws a refusal's reason as ink on a
+//     paper slip at the object for 1.4 s.
+//   G11b (feel#12): ripe-crop glints grow to 0.55 m in the mid and far bands (glintScale, mirrored in the shader).
 import * as THREE from 'three';
 import { CONTENT, TREE_AGE, cropOf, itemOf } from '../../../shared/content/index.js';
 import { TILE_M, WORLD_TILES } from '../../../shared/content/config.js';
@@ -90,6 +106,44 @@ export function particleWant(pools, time, { busy = false, twinkles = 0, rain = 0
   return (twinkles && motion !== 'still') || rain > 0 ? 1 : 0;
 }
 
+/**
+ * Icon textures by id with a retry (M15, perf-a11y#6): a load that failed is not kept, so a pop after `backoffMs` asks
+ * again (the probe-once class: one dropped request on the Funnel used to leave a white dot for the whole evening). A
+ * loaded texture is kept. `load(id)` returns a Promise of the texture; `onLoad(fn(id, tex))` hears every arrival. Pure.
+ */
+export function createIconCache(load, { backoffMs = 5000, now = () => performance.now() } = {}) {
+  const map = new Map();                     // id -> { tex, failedAt }
+  const subs = new Set();
+  return {
+    get(id) {
+      let e = map.get(id);
+      if (e && e.tex === null && e.failedAt !== null && now() - e.failedAt >= backoffMs) { map.delete(id); e = null; }
+      if (!e) {
+        const entry = { tex: null, failedAt: null };
+        e = entry;
+        map.set(id, entry);
+        let p;
+        try { p = Promise.resolve(load(id)); } catch (err) { p = Promise.reject(err); }
+        p.then((tex) => { entry.tex = tex; for (const fn of subs) fn(id, tex); }, () => { entry.failedAt = now(); });
+      }
+      return e.tex;
+    },
+    onLoad(fn) { subs.add(fn); return () => subs.delete(fn); },
+    get size() { return map.size; },
+  };
+}
+
+/** Ripe-crop glint scale by view depth (G11b, feel#12): 1 in the near band, 0.55 / 0.38 from the mid band on (the
+ *  camera's default 55 m showed a 5 px flash). Mirrored in the twinkle shader (GLINT_GLSL). Pure. */
+export const GLINT = Object.freeze({ from: 30, to: 40, far: 0.55 / 0.38 });
+export function glintScale(depth) {
+  const k = Math.min(1, Math.max(0, (depth - GLINT.from) / (GLINT.to - GLINT.from)));
+  return 1 + (GLINT.far - 1) * k * k * (3 - 2 * k);
+}
+
+/** Is `x` a DOM element (duck-typed: node tests and other realms have no `Element`)? */
+const isEl = (x) => Boolean(x && typeof x === 'object' && typeof x.getBoundingClientRect === 'function');
+
 /** Which HUD target an item flies to. */
 export function targetFor(kind) {
   if (kind === 'coins' || kind === 'coin') return 'coins';
@@ -101,6 +155,23 @@ export function targetFor(kind) {
 /** Collection finds by id (they are not items): { name, set }. */
 const FINDS = new Map();
 for (const set of (CONTENT.collections ? CONTENT.collections.values() : [])) for (const it of set.items || []) FINDS.set(it.id, { name: it.name, set: set.id });
+
+/**
+ * A reward as a flat list for the loot flights (M5): { coins, acorns, xp, items: { id: n } | [...], item + qty, decor }
+ * -> [{ kind: 'coins' | 'acorns' | 'xp' | 'item', id, qty }]. Pure.
+ */
+export function lootList(src) {
+  const out = [];
+  if (!src || typeof src !== 'object') return out;
+  const add = (kind, id, qty) => { const n = Number(qty); if (n > 0) out.push({ kind, id, qty: n }); };
+  for (const k of ['coins', 'acorns', 'xp']) if (Number.isFinite(src[k])) add(k, k, src[k]);
+  const items = src.items;
+  if (Array.isArray(items)) for (const r of items) { if (typeof r === 'string') add('item', r, 1); else if (r && (r.item || r.id)) add('item', r.item || r.id, r.qty ?? r.n ?? 1); }
+  else if (items && typeof items === 'object') for (const [id, n] of Object.entries(items)) add('item', id, n);
+  if (typeof src.item === 'string') add('item', src.item, src.qty ?? 1);
+  for (const d of [].concat(src.decor || [])) if (typeof d === 'string') add('item', d, 1);
+  return out;
+}
 
 /** Display name for an item id (content first, then a collection find, then a readable fallback). */
 export function itemName(id) {
@@ -138,6 +209,9 @@ export function medalFamily(medal) {
   const m = String(medal || '').toLowerCase();
   return m.startsWith('plat') ? 'platinum' : m.startsWith('gold') ? 'gold' : m.startsWith('silver') ? 'silver' : m.startsWith('bronze') ? 'bronze' : null;
 }
+
+/** The twinkle vertex shader as built (tests read it: the glint scale in GLSL matches glintScale). */
+export const shaders = {};
 
 const colorCache = new Map();
 function col(hex) {
@@ -264,7 +338,23 @@ function createPool(cap, additive, atlas, uTime) {
 }
 
 // ---------------------------------------------------------------------------------------------------
-export function createFx(layer, overlay, toScreenM) {
+/** QA r4 L4-02: a reason slip's bottom centre [x, y]: inside the screen (8 px; vh = the bottom HUD's top), off the
+ *  placement bar over its rise, on the bar's side nearer its object when it fits. Pure. */
+export function slipSpot(x, y, w = 0, h = 0, rise = 0, bar = null, vw = globalThis.innerWidth ?? 0, vh = globalThis.innerHeight ?? 0) {
+  const M = 8;
+  if (w > 0) x = Math.min(Math.max(x, M + w / 2), Math.max(M + w / 2, vw - M - w / 2));
+  if (h > 0) y = Math.min(Math.max(y, M + h + rise), vh - M);
+  if (bar && w > 0 && x - w / 2 < bar.right && bar.left < x + w / 2 && y - h - rise < bar.bottom && bar.top < y) {
+    const below = bar.bottom + M + h + rise;
+    const fitsBelow = below <= vh - M;
+    const fitsAbove = bar.top - M - h - rise >= M;
+    const near = y - h / 2 > (bar.top + bar.bottom) / 2 ? fitsBelow || !fitsAbove : !fitsAbove && fitsBelow;
+    y = near ? below : bar.top - M;
+  }
+  return [x, y];
+}
+
+export function createFx(layer, overlay, toScreenM, { iconRetryMs = 5000 } = {}) {
   const uTime = { value: 0 };
   const atlas = drawAtlas();
   let cap = CAPS.high;
@@ -374,7 +464,9 @@ export function createFx(layer, overlay, toScreenM) {
     vec4 mv = modelViewMatrix * vec4(aPos + vec3(0.0, mote * 0.12 * sin(uTime * 0.7 + aPhase.x * 9.0), 0.0), 1.0);
     float a = uTime * 0.6 + aPhase.x * 6.28;
     mat2 r = mat2(cos(a), -sin(a), sin(a), cos(a));
-    mv.xy += r * position.xy * aPhase.y * mix(0.15 + 1.1 * glint, 0.7 + 0.3 * soft, mote);
+    // G11b: a glint grows to 0.55 m from the mid band on (glintScale); motes keep their size
+    float gs = mix(1.0, ${GLINT.far.toFixed(4)}, smoothstep(${GLINT.from.toFixed(1)}, ${GLINT.to.toFixed(1)}, -mv.z));
+    mv.xy += r * position.xy * aPhase.y * mix((0.15 + 1.1 * glint) * gs, 0.7 + 0.3 * soft, mote);
     gl_Position = projectionMatrix * mv;
     vUv = (position.xy * vec2(1.0, -1.0) + 0.5) / 4.0; vUv.y = 1.0 - vUv.y;
     vColor = aCol; vA = mix(0.12 + 0.88 * glint, 0.3 + 0.3 * soft, mote);
@@ -389,6 +481,7 @@ export function createFx(layer, overlay, toScreenM) {
     #include <colorspace_fragment>
   }`;
   const uCore = { value: new THREE.Color('#FFF3C4') };
+  shaders.twinkle = TW_VS;
   const twinkles = { map: new Map(), cap: 0, mesh: null, dirty: false };
   function buildTwinkleMesh(capN) {
     if (twinkles.mesh) { layer.remove(twinkles.mesh); twinkles.mesh.geometry.dispose(); }
@@ -509,8 +602,12 @@ export function createFx(layer, overlay, toScreenM) {
   // -------------------------------------------------------------------------------------------------
   // DOM: floaters and flights
   const floaters = [];
-  function float(pos, text, { color = '#ffffff', size = 1.25, rise = 48, delay = 0, icon = null, life = 900, dy = 0 } = {}) {
+  const OUTLINE = '2px 0 0 #5A3418,-2px 0 0 #5A3418,0 2px 0 #5A3418,0 -2px 0 #5A3418,1.5px 1.5px 0 #5A3418,-1.5px 1.5px 0 #5A3418,1.5px -1.5px 0 #5A3418,-1.5px -1.5px 0 #5A3418,0 4px 0 rgba(60,30,10,.45)';
+  function float(pos, text, { color = '#ffffff', size = 1.25, rise = 48, delay = 0, icon = null, life = 900, dy = 0, kind = null, style = null, ms = null } = {}) {
     if (!pos) return;
+    // S7 (feel#7): a refusal's reason is ink on a paper slip at the object for 1.4 s (`kind: 'why'` from the controller)
+    const paper = kind === 'why' || style === 'paper';
+    if (paper) { color = '#3E2612'; size = 0.95; rise = 16; life = ms ?? 1400; }
     const s = toScreenM(pos.x, pos.z, (pos.y || 0) + 1.6);
     if (!s.visible) return;
     let f = floaters.find((x) => !x.busy);
@@ -522,7 +619,7 @@ export function createFx(layer, overlay, toScreenM) {
       inner.className = 'floater';
       // a chunky cartoon outline (8-way text-shadow) so floaters read on bright grass and on soil
       inner.style.cssText = 'position:relative;white-space:nowrap;font-weight:800;letter-spacing:.02em;display:flex;align-items:center;gap:4px;transform-origin:50% 100%;'
-        + 'text-shadow:2px 0 0 #5A3418,-2px 0 0 #5A3418,0 2px 0 #5A3418,0 -2px 0 #5A3418,1.5px 1.5px 0 #5A3418,-1.5px 1.5px 0 #5A3418,1.5px -1.5px 0 #5A3418,-1.5px -1.5px 0 #5A3418,0 4px 0 rgba(60,30,10,.45)';
+        + `text-shadow:${OUTLINE}`;
       outer.appendChild(inner);
       overlay.appendChild(outer);
       f = { outer, inner, busy: false, anim: null };
@@ -530,6 +627,11 @@ export function createFx(layer, overlay, toScreenM) {
     }
     f.busy = true;
     f.inner.textContent = '';
+    f.inner.className = paper ? 'floater floater--paper' : 'floater';
+    Object.assign(f.inner.style, paper
+      ? { textShadow: 'none', background: '#FFF7E6', padding: '4px 11px 5px', borderRadius: '10px', fontWeight: '700',
+        boxShadow: 'inset 0 0 0 2px #E7CFA0, 0 0 0 2px #7A4E26, 0 3px 6px rgba(60,30,10,.35)' }
+      : { textShadow: OUTLINE, background: '', padding: '', borderRadius: '', fontWeight: '800', boxShadow: '' });
     if (icon) {
       const img = document.createElement('img');
       img.src = iconUrl(icon, 64); img.alt = ''; img.width = 26; img.height = 26;
@@ -538,8 +640,18 @@ export function createFx(layer, overlay, toScreenM) {
     f.inner.appendChild(document.createTextNode(text));
     f.inner.style.color = color;
     f.inner.style.fontSize = `${size}rem`;
-    f.outer.style.transform = `translate3d(${Math.round(s.x)}px, ${Math.round(s.y + dy)}px, 0) translate(-50%, -100%)`;
     const bouncy = motion === 'full';
+    // L4-02: a slip above the coach's arrow (#fx-top), inside the screen, off the placement bar
+    const host = paper ? flightLayer() : overlay;
+    if (f.outer.parentNode !== host) host.appendChild(f.outer);
+    f.inner.style.whiteSpace = paper ? 'normal' : 'nowrap';
+    f.inner.style.maxWidth = paper ? `${innerWidth - 16}px` : '';
+    let x = s.x;
+    let y = s.y + dy;
+    // (its pop scales it to 1.15)
+    const sw = (f.inner.offsetWidth || 0) * (bouncy ? 1.15 : 1);
+    if (paper) [x, y] = slipSpot(x, y, sw, f.inner.offsetHeight || 0, bouncy ? rise : 0, barRect(), innerWidth, floorY(x - sw / 2, x + sw / 2));
+    f.outer.style.transform = `translate3d(${Math.round(x)}px, ${Math.round(y)}px, 0) translate(-50%, -100%)`;
     f.anim = f.inner.animate(bouncy ? [
       { transform: 'translateY(0) scale(0.6)', opacity: 0 },
       { transform: `translateY(${-rise * 0.3}px) scale(1.15)`, opacity: 1, offset: 0.28 },
@@ -549,13 +661,50 @@ export function createFx(layer, overlay, toScreenM) {
     f.anim.onfinish = () => { f.busy = false; f.outer.style.transform = 'translate3d(-999px,-999px,0)'; };
   }
 
+  /** The bottom HUD's top (toolbar / phone bar, dock) under [l, r], else the screen's foot. */
+  function floorY(l, r) {
+    let y = innerHeight;
+    for (const id of ['toolbar', 'dock']) {
+      const el = typeof document !== 'undefined' ? document.getElementById(id) : null;
+      const b = el && !el.hidden && el.getClientRects().length ? el.getBoundingClientRect() : null;
+      if (b && b.width > 0 && b.top > innerHeight / 2 && b.left < r && l < b.right) y = Math.min(y, b.top);
+    }
+    return y;
+  }
+  /** The touch placement bar while it shows (and its reason line, outside its box), else null. */
+  function barRect() {
+    const b = typeof document !== 'undefined' ? document.getElementById('touch-build') : null;
+    const r = b && !b.hidden && b.getClientRects().length ? b.getBoundingClientRect() : null;
+    if (!r || !(r.width > 0)) return null;
+    const w = b.querySelector?.('.tb-why:not([hidden])')?.getBoundingClientRect?.();
+    return w && w.height > 0 ? { left: Math.min(r.left, w.left), right: Math.max(r.right, w.right), top: r.top, bottom: Math.max(r.bottom, w.bottom) } : r;
+  }
+
+  // M4 (feel#1): flights fly in their own fixed layer above the panels (#panels z 40): a coin from a Sell button inside
+  // the Market used to fly under the panel for its whole path (scope §7.1: #fx-top z 60, pointer-events none)
+  let topLayer = null;
+  function flightLayer() {
+    if (topLayer && topLayer.isConnected) return topLayer;
+    const doc = typeof document !== 'undefined' ? document : null;
+    if (!doc || !doc.body) return overlay;
+    topLayer = doc.getElementById('fx-top');
+    if (!topLayer) {
+      topLayer = doc.createElement('div');
+      topLayer.id = 'fx-top';
+      topLayer.setAttribute('aria-hidden', 'true');
+      // the look lives in css/feel.css; inline the essentials so a page without it still layers them right
+      topLayer.style.cssText = 'position:fixed;inset:0;pointer-events:none;overflow:hidden;z-index:60';
+      doc.body.appendChild(topLayer);
+    }
+    return topLayer;
+  }
   const flights = [];
   let flying = 0;
   const centres = new Map();          // HUD target key -> { at, point, el } (qa2 CL-05: one layout read per 400 ms)
   globalThis.addEventListener?.('resize', () => centres.clear());
   function resolveTarget(to, kind, meta) {
+    if (isEl(to)) return { point: centerOf(to), el: to, own: true };
     if (to && typeof to === 'object' && 'x' in to) return { point: to, el: null };
-    if (to instanceof Element) return { point: centerOf(to), el: to };
     if (meta && meta.by && me && meta.by !== me && meta.local === false) {
       const p = locator(meta.by);
       if (p) return { point: p, el: null };
@@ -565,19 +714,22 @@ export function createFx(layer, overlay, toScreenM) {
     const hit = centres.get(key);
     if (hit && now - hit.at < 400 && (!hit.el || hit.el.isConnected)) return hit;
     const sel = targets[key];
-    const el = sel instanceof Element ? sel : (typeof sel === 'string' ? document.querySelector(sel) : null);
-    const out = el && el.getClientRects().length ? { point: centerOf(el), el } : { point: null, el: null };
+    const el = isEl(sel) ? sel : (typeof sel === 'string' && typeof document !== 'undefined' ? document.querySelector(sel) : null);
+    const out = el && el.getClientRects().length ? { point: centerOf(el), el, hud: true } : { point: null, el: null, hud: true };
     centres.set(key, { ...out, at: now });
     return out;
   }
   function centerOf(el) { const r = el.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; }
 
-  function fly(kind, from, { qty = 1, to = null, by = null, local = true, delay = 0, item = null, size = 40 } = {}) {
+  function fly(kind, from, { qty = 1, to = null, by = null, local = true, delay = 0, item = null, size = 40, fromEl = null } = {}) {
     let start = from;
-    if (from && from.isVector3) { const s = toScreenM(from.x, from.z, from.y || 0); if (!s.visible) start = null; else start = s; }
+    if (isEl(from)) start = from.isConnected === false ? null : centerOf(from);
+    else if (from && from.isVector3) { const s = toScreenM(from.x, from.z, from.y || 0); if (!s.visible) start = null; else start = s; }
+    // M4: the button that caused it (meta.from) wins over a world point: the player looks at the button they pressed
+    if (isEl(fromEl) && fromEl.isConnected !== false) { const r = fromEl.getBoundingClientRect(); if (r.width > 0 || r.height > 0) start = centerOf(fromEl); }
     if (!start) start = { x: innerWidth / 2, y: innerHeight * 0.6 };
     const meta = { by, local };
-    const { point, el } = resolveTarget(to, kind, meta);
+    const { point, el, own, hud } = resolveTarget(to, kind, meta);
     const icon = item || (kind === 'coins' ? 'coins' : kind === 'xp' ? 'xp' : kind === 'acorns' ? 'acorns' : kind);
     let f = flights.find((x) => !x.busy);
     if (!f) {
@@ -588,10 +740,10 @@ export function createFx(layer, overlay, toScreenM) {
       img.alt = '';
       img.style.cssText = 'display:block;will-change:transform;filter:drop-shadow(0 2px 2px rgba(60,30,10,.4))';
       outer.appendChild(img);
-      overlay.appendChild(outer);
+      flightLayer().appendChild(outer);
       f = { outer, img, busy: false };
       flights.push(f);
-    }
+    } else if (f.outer.parentNode !== flightLayer()) flightLayer().appendChild(f.outer);
     f.busy = true;
     flying++;
     f.img.src = iconUrl(icon, 64);
@@ -610,34 +762,29 @@ export function createFx(layer, overlay, toScreenM) {
       f.outer.style.transform = 'translate3d(-999px,0,0)';
       a.cancel();                       // its own two tracks: getAnimations() would flush the styles (CL-05)
       ax.cancel();
-      if (el && motion !== 'still') el.animate([{ transform: 'scale(1)' }, { transform: 'scale(1.15)', offset: 0.4 }, { transform: 'scale(1)' }], { duration: 220, easing: 'ease-out' });
-      try { dispatchEvent(new CustomEvent('hh:fly-arrive', { detail: { kind: targetFor(kind), item: icon, qty, by, local } })); } catch { /* no window in tests */ }
+      // F2 (feel#6): a HUD pill rolls and bumps ONCE on 'hh:fly-arrive' (ui-shell hud.js); only a flight to an element
+      // of its own (a purchase's coin to the bought card) bumps its target here
+      if (el && own && motion !== 'still') el.animate([{ transform: 'scale(1)' }, { transform: 'scale(1.15)', offset: 0.4 }, { transform: 'scale(1)' }], { duration: 220, easing: 'ease-out' });
+      // only an arrival AT a HUD pill is one (a spend's coin to a card, a feed flying to an animal is not a gain landing)
+      if (hud) try { dispatchEvent(new CustomEvent('hh:fly-arrive', { detail: { kind: typeof to === 'string' ? to : targetFor(kind), item: icon, qty, by, local } })); } catch { /* no window in tests */ }
     };
   }
 
   // -------------------------------------------------------------------------------------------------
   // produce pop: a billboard of the item icon launches, bounces once, then flies to the HUD
   const pops = [];
-  const iconTex = new Map();
   // a soft round placeholder while an icon texture loads (a square sprite looks broken)
   const dotTex = (() => {
     const c = document.createElement('canvas'); c.width = c.height = 32;
     const g = c.getContext('2d'); g.fillStyle = '#fff'; g.beginPath(); g.arc(16, 16, 12, 0, Math.PI * 2); g.fill();
     const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
   })();
-  function texFor(id) {
-    let t = iconTex.get(id);
-    if (!t) {
-      t = { tex: null };
-      iconTex.set(id, t);
-      loadTexture(iconUrl(id, 128)).then((x) => {
-        t.tex = x;
-        for (const p of pops) if (p.busy && p.item === id) { p.sprite.material.map = x; p.sprite.material.color.set('#ffffff'); p.sprite.material.needsUpdate = true; }
-      })
-        .catch(() => { /* fallback icon stays a coloured dot */ });
-    }
-    return t.tex;
-  }
+  // M15: a failed icon is asked for again after iconRetryMs (the coloured dot stands in meanwhile)
+  const icons = createIconCache((id) => loadTexture(iconUrl(id, 128)), { backoffMs: iconRetryMs });
+  icons.onLoad((id, x) => {
+    for (const p of pops) if (p.busy && p.item === id) { p.sprite.material.map = x; p.sprite.material.color.set('#ffffff'); p.sprite.material.needsUpdate = true; }
+  });
+  const texFor = (id) => icons.get(id);
   /** Start loading item icon textures ahead of their first pop (e.g. when a crop is planted). */
   function preload(ids) { for (const id of [].concat(ids || [])) if (typeof id === 'string') texFor(id); }
 
@@ -766,12 +913,90 @@ export function createFx(layer, overlay, toScreenM) {
   R.set('stored', R.get('removed'));
   R.set('sold', (f, ev, pos, meta) => {
     const n = Math.min(8, Math.max(1, Math.ceil((ev.coins || 1) / 25)));
-    for (let i = 0; i < n; i++) f.fly('coins', pos || null, { qty: i === 0 ? ev.coins : 0, by: meta.by, local: meta.local, delay: i * 40, size: 34 });
+    // M4: the coins leave the Sell button the player pressed (meta.from), above the panel
+    for (let i = 0; i < n; i++) f.fly('coins', pos || null, { qty: i === 0 ? ev.coins : 0, by: meta.by, local: meta.local, delay: i * 40, size: 34, fromEl: meta.from });
     if (pos) f.float(pos, tn('game.fx.coins', ev.coins), { color: '#FFE58A' });
   });
+  // M5 (feel#2): an order, a folk order or a quest hand-in: its coins, XP and Acorns fly from the Deliver button to the
+  // pills (the GDD §7.2 "coins and XP fly to the HUD"); a quest that pays nothing here sends its goods out of the Barn to
+  // the button instead (the quest card follows as its celebration)
   R.set('delivered', (f, ev, pos, meta) => {
-    R.get('sold')(f, { coins: ev.coins || 0 }, pos, meta);
-    if (ev.xp) for (let i = 0; i < 3; i++) f.fly('xp', pos || null, { qty: i ? 0 : ev.xp, by: meta.by, local: meta.local, delay: 120 + i * 60, size: 34 });
+    const coins = ev.coins || 0;
+    const o = { by: meta.by, local: meta.local, size: 34, fromEl: meta.from };
+    if (coins > 0) R.get('sold')(f, { coins }, pos, meta);
+    if (ev.xp) for (let i = 0; i < 3; i++) f.fly('xp', pos || null, { ...o, qty: i ? 0 : ev.xp, delay: 120 + i * 60 });
+    if (ev.acorns) for (let i = 0; i < Math.min(3, ev.acorns); i++) f.fly('acorns', pos || null, { ...o, qty: i ? 0 : ev.acorns, delay: 200 + i * 70 });
+    if (!coins && !ev.xp && ev.items && typeof ev.items === 'object') {
+      const start = resolveTarget('barn', 'barn', meta).point || screenAt(0.88, 0.06);
+      const end = isEl(meta.from) ? meta.from : screenAt(0.5, 0.45);
+      Object.keys(ev.items).slice(0, 4).forEach((id, i) => f.fly(id, start, { to: end, qty: 0, item: id, delay: i * 70, size: 34 }));
+    }
+    if (pos) f.burst('sparkle', up(pos, 1), { n: 10, colors: ['#FFE27A', '#FFFFFF'], speed: 1.6, up: 2.2, size: 0.34, grav: 0.2, life: 0.9 });
+  });
+  for (const e of ['orderFilled', 'folkFilled', 'questDelivered']) R.set(e, (f, ev, pos, meta) => R.get('delivered')(f, ev, pos, meta));
+  // the claims: the loot pops from the claim button (meta.from) into its pills, one icon per kind (at most six)
+  const lootShow = (f, src, pos, meta) => {
+    lootList(src).slice(0, 6).forEach((l, i) => {
+      const id = l.kind === 'item' ? l.id : l.kind;
+      const n = l.kind === 'item' ? 1 : Math.min(3, Math.max(1, Math.round(Math.log2(l.qty + 1))));
+      for (let k = 0; k < n; k++) {
+        f.fly(id, pos || null, { qty: k === 0 ? l.qty : 0, item: id, to: l.kind === 'item' ? null : l.kind, by: meta.by, local: meta.local,
+          delay: 60 + i * 90 + k * 45, size: 36, fromEl: meta.from });
+      }
+    });
+    if (pos) f.burst('sparkle', up(pos, 1), { n: 12, colors: ['#FFE27A', '#FFFFFF', '#FFC83D'], speed: 2, up: 2.6, size: 0.36, grav: 0.3, life: 0.9 });
+  };
+  for (const e of ['meterChest', 'almanacChest', 'gift']) R.set(e, (f, ev, pos, meta) => lootShow(f, ev, pos, meta));
+  R.set('trackClaimed', (f, ev, pos, meta) => lootShow(f, ev.reward && typeof ev.reward === 'object' ? ev.reward : ev, pos, meta));
+  R.set('seedBasket', (f, ev, pos, meta) => lootShow(f, { items: { [ev.crop || 'wheat']: ev.n || 1 } }, pos, meta));
+  // S6 (feel#13): the level-up's reward chips fly into their pills (ui/levelup.js plays it from each chip)
+  R.set('levelLoot', (f, ev, pos, meta) => lootShow(f, ev, null, meta));
+  // a purchase: one coin leaves the purse for the bought card (a small "spend" cue), then the goods fly to the Barn
+  const spend = (f, ev, meta) => {
+    if (!meta.local) return;                       // the partner's spend is their heads-up toast
+    const kind = ev.acorns > 0 && !(ev.coins > 0) ? 'acorns' : 'coins';
+    if (!(ev.coins > 0) && !(ev.acorns > 0)) return;
+    // from the pill (a phone may fold it away: then from the top of the screen)
+    const start = resolveTarget(kind, kind, meta).point || screenAt(0.6, 0.04);
+    const end = isEl(meta.from) ? meta.from : screenAt(0.5, 0.45);
+    f.fly(kind, start, { to: end, qty: 0, item: kind, size: 30 });
+  };
+  R.set('purchased', (f, ev, pos, meta) => {
+    spend(f, ev, meta);
+    if (meta.local && ev.item) f.fly(ev.item, pos || null, { qty: ev.qty ?? 1, item: ev.item, delay: 260, size: 36, fromEl: meta.from, by: meta.by, local: meta.local });
+  });
+  R.set('toolBought', (f, ev, pos, meta) => spend(f, ev, meta));
+  R.set('wishBought', (f, ev, pos, meta) => { spend(f, ev, meta); if (pos) dustRing(f, pos, 1); });
+  // an upgrade with a place: hammer dust round it, confetti and stars (the coins leave the purse for the button)
+  const upgradeShow = (f, ev, pos, meta) => {
+    spend(f, ev, meta);
+    if (!pos) return;
+    dustRing(f, pos, 1);
+    f.burst('confetti', up(pos, 2.4), { n: 22, colors: confetti, speed: 2.6, up: 3.4, size: 0.36, grav: 0.35, drag: 0.6, life: 1.5, spread: 1.4, delay: 0.12 });
+    f.burst('star', up(pos, 1.6), { n: 8, colors: ['#FFE27A', '#FFFFFF'], speed: 2, up: 2.6, size: 0.4, grav: 0.2, life: 1.0, delay: 0.18 });
+  };
+  for (const e of ['homeUpgraded', 'slotUpgraded', 'barnUpgraded']) R.set(e, upgradeShow);
+  // F3 (feel#8): the farm's name carved on its sign: three bursts of wood chips with the chisel taps (120 ms apart),
+  // then a few stars and the new name in gold (ui/naming.js plays it at the sign after the camera's glide)
+  R.set('carved', (f, ev, pos) => {
+    if (!pos) return;
+    for (let k = 0; k < 3; k++) f.burst('dirt', up(pos, 1.0), { n: 7, colors: ['#E3A65E', '#F2C27E', '#A8703A'], speed: 2.2, up: 2.6, size: 0.14, grav: 0.9, life: 0.7, spin: 6, delay: k * 0.12 });
+    f.burst('star', up(pos, 1.4), { n: 10, colors: ['#FFE27A', '#FFFFFF'], speed: 1.6, up: 2.4, size: 0.36, grav: 0.2, life: 1.0, delay: 0.42 });
+    if (ev.text) f.float(up(pos, 1.6), String(ev.text), { color: '#FFE58A', size: 1.25, delay: 420, life: 1700 });
+  });
+  // G11b (feel#12): a plot turned ripe on screen: a small gold burst over it (game/feedback.js throttles it per field)
+  R.set('ripened', (f, ev, pos) => {
+    if (!pos) return;
+    f.burst('sparkle', up(pos, 0.7), { n: 12, colors: ['#FFE27A', '#FFFFFF', '#FFC83D'], speed: 1.6, up: 2.4, size: 0.36, grav: 0.15, life: 0.9, spread: 0.7 });
+    f.burst('glow', up(pos, 0.6), { n: 3, color: '#FFE9A8', speed: 0.3, up: 0.8, size: 0.9, sizeEnd: 0.3, grav: 0, life: 0.6 });
+  });
+  // Mabel's board after the Orders panel closes (feedback.js plays it once per filled order batch): a crate's thump,
+  // wood chips and a puff of dust at the stall (GDD §7.2's truck can wait)
+  R.set('stallDone', (f, ev, pos) => {
+    if (!pos) return;
+    f.burst('dust', pos, { n: 7, color: '#E3CFA8', speed: 1.3, up: 0.9, size: 0.8, sizeEnd: 1.5, grav: 0, life: 0.7 });
+    f.burst('dirt', up(pos, 0.6), { n: 8, colors: ['#E3A65E', '#F2C27E', '#A8703A'], speed: 2.2, up: 3, size: 0.16, grav: 0.9, life: 0.7, spin: 6 });
+    f.burst('sparkle', up(pos, 1.6), { n: 8, colors: ['#FFE27A', '#FFFFFF'], speed: 1.2, up: 1.8, size: 0.3, grav: 0.2, life: 0.8, delay: 0.1 });
   });
   R.set('levelUp', (f, ev, pos) => {
     // 240 BPM: four confetti pulses 250 ms apart, sparkles, a Bloom ripple across the fields (GDD §7.2)
@@ -810,6 +1035,13 @@ export function createFx(layer, overlay, toScreenM) {
   R.set('petted', (f, ev, pos) => {
     f.burst('heart', up(pos, 1.0), { n: ev.both ? 5 : 3, colors: ['#FF5A7A', '#FF9FB0'], speed: 0.6, up: 1.8, size: 0.32, grav: -0.08, life: 1.1, spin: 0.5 });
   });
+  // a bottle in the Nursery (M2): milk drops and hearts at the baby; the partner's second bottle of the hour sparkles
+  R.set('bottled', (f, ev, pos) => {
+    if (!pos) return;
+    f.burst('droplet', up(pos, 0.8), { n: 6, color: '#FFFFFF', speed: 0.8, up: 1.4, size: 0.14, grav: 0.8, life: 0.6 });
+    f.burst('heart', up(pos, 1.0), { n: ev.partner ? 5 : 3, colors: ['#FF5A7A', '#FF9FB0'], speed: 0.6, up: 1.7, size: 0.32, grav: -0.08, life: 1.1, delay: 0.15 });
+    if (ev.partner) f.burst('sparkle', up(pos, 1.2), { n: 8, colors: ['#FFE27A', '#FFFFFF'], speed: 1.2, up: 1.8, size: 0.3, life: 0.9, delay: 0.2 });
+  });
   R.set('tended', (f, ev, pos, meta) => {
     if (ev.feed && pos) {
       // the feed icon flies from the Barn button to the animal (250 ms), then hearts and the product
@@ -829,7 +1061,9 @@ export function createFx(layer, overlay, toScreenM) {
     if (!item) return;
     const qty = ev.qty ?? 1;
     f.pop(item, up(pos, 0.4), { qty, by: meta.by, local: meta.local });
-    f.float(pos, gotText(item, qty), { color: '#FFFFFF' });
+    // D4 (features#F4): a named animal's gift floats with its name and the good's icon: "Rada Petrova +2"
+    if (meta.name) f.float(pos, t('cheer.named.float', { name: meta.name, n: qty }), { color: '#FFFFFF', icon: item });
+    else f.float(pos, gotText(item, qty), { color: '#FFFFFF' });
     if (ev.ribbon || ev.premium) R.get('blueRibbon')(f, ev, pos, meta);
   });
   R.set('trayCollected', (f, ev, pos, meta) => {
@@ -1026,6 +1260,8 @@ export function createFx(layer, overlay, toScreenM) {
   R.set('harvested', (f, ev, pos, meta) => {
     if (ev.giant) { f.burst('leaf', pos, { n: 3, colors: leafColors, speed: 1.2, up: 2.0, size: 0.22, grav: 0.45, life: 0.8 }); return; }
     plainHarvest(f, ev, pos, meta);
+    // 1.0: the crate's Lucky Ladybugs found one more: they fly up off the plot
+    if (ev.lady) f.burst('glow', up(pos, 0.5), { n: 5, colors: ['#E8463A', '#D2352B'], speed: 1.2, up: 2.2, size: 0.16, grav: 0.1, life: 1.2, additive: false });
   });
   R.set('picked', R.get('shaken'));
   R.set('heirloom', (f, ev, pos) => {
@@ -1295,7 +1531,8 @@ export function createFx(layer, overlay, toScreenM) {
   // -------------------------------------------------------------------------------------------------
   function play(ev, pos, meta = {}) {
     if (!ev || typeof ev.e !== 'string') return;
-    const m = { by: meta.by ?? ev.by ?? null, local: meta.local ?? (ev.by ? ev.by === me : true) };
+    const m = { by: meta.by ?? ev.by ?? null, local: meta.local ?? (ev.by ? ev.by === me : true), from: isEl(meta.from) ? meta.from : null,
+      name: typeof meta.name === 'string' && meta.name ? meta.name : null };
     const r = recipes.get(ev.e);
     try {
       if (r) r(api, ev, pos || null, m);
@@ -1407,6 +1644,8 @@ export function createFx(layer, overlay, toScreenM) {
     },
     warmup,
     recipe(name, fn) { recipes.set(name, fn); },
+    /** The event names with a recipe (release 1.0 M5: tests check progress.FX_EVENTS against them). */
+    recipes() { return [...recipes.keys()]; },
     stats() {
       return { particles: (time < pools.alpha.aliveUntil ? 1 : 0) + (time < pools.add.aliveUntil ? 1 : 0),
         ambient: (time < pools.alpha.ambientUntil ? 1 : 0) + (time < pools.add.ambientUntil ? 1 : 0),

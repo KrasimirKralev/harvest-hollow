@@ -141,11 +141,14 @@ test('Smart Hand: an empty plot opens the seed picker there (it never plants by 
   assert.equal(o(plots[0]).crop, null, 'with a seed chosen earlier the Hand still asks (live requests 2026-10-04)');
   assert.equal(cmds.at(-1).cmd, 'seedPicker');
   assert.equal(cmds.at(-1).crop, 'wheat', 'the picker knows the last seed');
-  // a press on an empty plot that drags pans: no picker, nothing planted
+  // a press on an empty plot that drags asks which seed there too, nothing planted (QA r2 S-07: the drag the card
+  // promised panned the farm; test/rel-shell.stroke-r2.test.js)
   ptr.down(o(plots[1]).x, o(plots[1]).z);
   ptr.move(o(plots[1]).x + 3, o(plots[1]).z + 3);
   ptr.up(o(plots[1]).x + 3, o(plots[1]).z + 3);
-  assert.equal(cmds.length, 2, 'a drag from an empty plot is a pan');
+  assert.equal(cmds.length, 3, 'a bare-Hand drag from an empty plot opens the picker once');
+  assert.deepEqual([cmds.at(-1).cmd, cmds.at(-1).id], ['seedPicker', plots[1]]);
+  assert.equal(o(plots[1]).crop, null, 'and plants nothing');
   // the seeds that the Seed Bag plants do as before
   c.setTool('seed_bag', { crop: 'wheat' });
   ptr.click(o(plots[0]).x, o(plots[0]).z);
@@ -164,7 +167,7 @@ test('Smart Hand: an empty plot opens the seed picker there (it never plants by 
   assert.deepEqual(plain(store.state), plain(h.state));
 });
 
-test('the seed picker\'s pick plants that plot at once and leaves the Seed Bag in hand with that crop', async () => {
+test('the seed picker\'s pick plants that plot at once and leaves the Hand in hand, armed with that crop (1.0 M2)', async () => {
   const { h, store, c, ptr, toasts } = await setup();
   const plots = plotsSorted(store.state);
   const o = (id) => store.state.farm.objects[id];
@@ -175,8 +178,8 @@ test('the seed picker\'s pick plants that plot at once and leaves the Seed Bag i
   assert.equal(r.ok, true);
   assert.equal(o(plots[2]).crop?.def, 'wheat', 'planted through the predicted path');
   assert.equal(store.seq - seq0, 1, 'one action');
-  assert.deepEqual([c.tool.id, c.tool.crop], ['seed_bag', 'wheat'], 'seed mode with that crop');
-  assert.ok(tools.includes('seed_bag'));
+  assert.deepEqual([c.tool.id, c.tool.crop, c.tool.seeding], ['hand', 'wheat', true], 'the Hand, armed with that crop');
+  assert.ok(tools.includes('hand'));
   // then a drag over the next plots plants more of it
   const row = plots.filter((id) => o(id).z === o(plots[0]).z && !o(id).crop);
   ptr.down(o(row[0]).x, o(row[0]).z);

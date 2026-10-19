@@ -64,7 +64,8 @@ const DECK = '#C99257';
 /** 3 x 3 crate spots on the open hold (model metres, deck top y). */
 export const BARGE_SLOTS = Object.freeze([-2.6, -1.4, -0.2].flatMap((x) => [-0.95, 0, 0.95].map((z) => Object.freeze([x + 1.6, 0.62, z]))));
 
-function hullGeometry() {
+/** The stand-in barge's hull, deck, cabin and mast (merged; exported for the warnings test). */
+export function bargeHullGeometry() {
   const sh = new THREE.Shape();
   sh.moveTo(-6, -1.8); sh.lineTo(3.2, -1.8); sh.quadraticCurveTo(5.6, -1.6, 6.1, 0); sh.quadraticCurveTo(5.6, 1.6, 3.2, 1.8);
   sh.lineTo(-6, 1.8); sh.quadraticCurveTo(-6.3, 0, -6, -1.8);
@@ -76,15 +77,15 @@ function hullGeometry() {
   const parts = [];
   const hull = ext(1.05);   // the hull: 0.5 m under the waterline, its sides up to the deck
   hull.translate(0, -0.5, 0);
-  parts.push({ g: hull.toNonIndexed(), c: null, hex: HULL });
+  parts.push({ g: hull, c: null, hex: HULL });     // an ExtrudeGeometry is already non-indexed (F6a: no warning)
   const stripe = ext(0.14);
   stripe.scale(1.012, 1, 1.03);
   stripe.translate(0, 0.32, 0);
-  parts.push({ g: stripe.toNonIndexed(), hex: STRIPE });
+  parts.push({ g: stripe, hex: STRIPE });
   const gun = ext(0.1);
   gun.scale(1.02, 1, 1.04);
   gun.translate(0, 0.55, 0);
-  parts.push({ g: gun.toNonIndexed(), hex: CREAM });
+  parts.push({ g: gun, hex: CREAM });
   const out = [];
   for (const p of parts) {
     p.g.deleteAttribute('uv');
@@ -137,7 +138,7 @@ export function createBargeView({ dyn, fx = null, mooring }) {
 
   function ensure() {
     if (barge !== null) return;
-    const mk = modelKey(dyn, 'prop:barge', hullGeometry);
+    const mk = modelKey(dyn, 'prop:barge', bargeHullGeometry);
     bargeKey = mk.key;
     const info = mk.real ? models.info('prop:barge') : null;
     if (info && Array.isArray(info.slots) && info.slots.length) slots = info.slots;

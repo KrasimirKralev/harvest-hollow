@@ -30,6 +30,7 @@ import installW5 from './w5.js';
 import { PETS } from '../../../../shared/content/index.js';
 import { ensureStylesheet } from '../dom.js';
 import { t } from '../../i18n/index.js';
+import { lazyImport, importFailed } from '../../net/lazy.js';
 
 const CSS_HREF = '/css/panels.css';
 
@@ -55,6 +56,19 @@ export default function install(ui, deps = {}) {
   ensureCss();
   const off = [];
   for (const [name, spec] of Object.entries(PANELS)) off.push(ui.panels.register(name, spec));
+  // release 1.0 (features' D1): the gift sheet; its code (panels/gift.js, features' file) loads on the first open
+  off.push(ui.panels.register('gift', {
+    get title() { return t('feat.gift.title'); },
+    icon: null,
+    size: 'side',
+    topics: ['inventory', 'objects', 'players'],
+    mount(body, ctx) {
+      let inst = null;
+      lazyImport('gift', () => import('./gift.js')).then((m) => { if (body.isConnected) inst = m.giftPanel.mount(body, ctx) || {}; })
+        .catch((err) => { if (!importFailed(err)) console.error('gift sheet', err); });
+      return { update: (ch) => inst?.update?.(ch), destroy: () => inst?.destroy?.() };
+    },
+  }));
   off.push(installWeekly(ui, deps));     // ui-weekly (wave 2): fair, fairCeremony, barge, townsfolk, town + dock minis
   const store = deps.store || ui.store || null;
   // pets (M1b, L10): adopt, treat and pet; a mini dock button once pets are open on this farm

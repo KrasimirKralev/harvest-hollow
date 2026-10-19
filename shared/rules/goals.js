@@ -23,10 +23,13 @@
 import {
   CONTENT, ORDERS, COOP, FEED, TUTORIAL, ALMANAC, isLive, itemOf, questOf, ribbonOf, cropOf, recipeOf, recipesOf,
   levelFromXp, xpForLevel, unlocksAt, liveAt, MASTERY, BOOSTS, BARGE, TOWNSFOLK, MEDAL_RANKS,
-  FAIR, MILESTONE, DUEL, NURSERY, BREEDING, animalOf, expansionOf, homeOf,
+  FAIR, MILESTONE, DUEL, NURSERY, BREEDING, animalOf, expansionOf, homeOf, decorOf,
 } from '../content/index.js';
 import { PLAYER_SLOTS } from '../content/config.js';
-import { dayOf, systemLive } from './coop.js';
+import { dayOf, systemLive, goldenHourAllowed, hasPlayer, playerIds } from './coop.js';
+import { localHour, localTime, readyClock } from './calendar.js';
+import { plantPreview, seedPrice } from './actions/farming.js';
+import { MAX_BATCH, isBigSpend, mulBp } from './economy.js';
 import { initialQuests, taskProgress, isStateTask, blockerOf } from './actions/quests.js';
 import { initialDaily, initialChallenge, initialPlayerPlay, initialAlmanac, almanacLiveSlot } from './daily.js';
 import { initialTut, initialFarmTut } from './actions/tutorial.js';
@@ -66,6 +69,7 @@ import { homesWithRoom } from './actions/animals.js';
 import { upgradeView } from './actions/upgrades.js';
 import { UPGRADES, UPGRADE_TARGETS, upgradeTargetOf, tierOf } from './upgrades.js';
 import { GRID_VERSION, hide } from './grid-cache.js';
+import { RULES_VERSION } from './version.js';
 import { FERTILIZER, fertilizerLive } from './actions/farming.js';
 import { relicView } from './relics.js';
 import { cratesOn } from './actions/crates.js';
@@ -77,7 +81,7 @@ import {
 
 export const GOALS_FARM_KEYS = Object.freeze(['orders', 'quests', 'ribbons', 'daily', 'challenge', 'coop', 'feed',
   'notes', 'tut', 'stars', 'names', 'fair', 'barge', 'album', 'folk', 'made', 'memory',
-  'league', 'track', 'duel', 'legacy', 'grandma']);
+  'league', 'track', 'duel', 'legacy', 'grandma', 'gifts']);
 export const GOALS_PLAYER_KEYS = Object.freeze(['play', 'almanac', 'caps', 'ribbons', 'title', 'tut', 'spark', 'shelf',
   'seen', 'perks', 'rested']);
 
@@ -90,7 +94,10 @@ export function createGoalsFarm(now, tz) {
     ribbons: {},
     daily: initialDaily(s, now),
     challenge: initialChallenge(),
-    coop: { bench: {}, golden: null, goldenAt: null, hf: null, hfAt: null, combo: null, named: null },
+    // release 1.0: `born` = the RULES_VERSION the farm was created under (absent in a save from before 1.0: its
+    // farmers get the "New in 1.0" card, M29); `days` = who sat on a bench / cast a line on the current farm day (D2)
+    coop: { bench: {}, golden: null, goldenAt: null, hf: null, hfAt: null, combo: null, named: null, born: RULES_VERSION,
+      days: null },
     feed: { n: 0, rows: {} },
     notes: {},
     tut: initialFarmTut(),
@@ -110,6 +117,9 @@ export function createGoalsFarm(now, tz) {
     duel: initialDuel(),
     legacy: initialLegacy(),
     grandma: null,
+    // release 1.0 (D1): the wrapped surprises waiting on the porch, { [giftId]: { by, to, item, at, note? } }; each
+    // has its box object farm.objects[giftId] (GIFT_DEF)
+    gifts: {},
   };
 }
 
@@ -212,7 +222,16 @@ export function validateGoalsFarm(f, bad) {
     if (!(cb === null || (isObj(cb) && isInt(cb.d) && isCount(cb.n) && isCount(cb.at)))) bad('farm.coop.combo');
     const nm = co.named;
     if (!(nm === null || (isObj(nm) && isActor(nm.by) && isCount(nm.at)))) bad('farm.coop.named');
+    // release 1.0: both optional (absent in older saves; the backfill never looks inside farm.coop)
+    if (co.born !== undefined && !isCount(co.born)) bad('farm.coop.born');
+    const dy = co.days;
+    const flags = (o) => isObj(o) && Object.entries(o).every(([k, v]) => isPid(k) && v === 1);
+    if (!(dy === undefined || dy === null || (isObj(dy) && isInt(dy.d) && flags(dy.sat) && flags(dy.cast)
+      && isObj(dy.done) && Object.entries(dy.done).every(([k, v]) => (k === 'bench' || k === 'dock') && v === 1)))) {
+      bad('farm.coop.days');
+    }
   }
+  validateGifts(f, bad);
   const fd = f.feed;
   if (!isObj(fd) || !isCount(fd.n) || !isObj(fd.rows)) bad('farm.feed');
   else {
@@ -244,6 +263,30 @@ export function validateGoalsFarm(f, bad) {
   if (!isObj(f.names) || !Object.values(f.names).every(nameOk)) bad('farm.names');
   validateWeekly(f, bad);
   validateM2(f, bad);
+}
+
+/**
+ * Release 1.0 (D1): farm.gifts = { [id]: { by, to, item, at, note? } }, each with its GIFT_DEF box in farm.objects and
+ * every box with its record; one waiting box per giver.
+ */
+function validateGifts(f, bad) {
+  const g = f.gifts;
+  if (!isObj(g)) { bad('farm.gifts'); return; }
+  const givers = new Set();
+  for (const [id, r] of Object.entries(g)) {
+    const box = isObj(f.objects) && Object.hasOwn(f.objects, id) ? f.objects[id] : null;
+    if (!isObj(r) || !isPid(r.by) || !isPid(r.to) || r.by === r.to || !itemOf(r.item) || !isCount(r.at)
+      || !(r.note === undefined || (typeof r.note === 'string' && r.note.length >= 1 && r.note.length <= COOP.keepsake.noteMax))
+      || !Object.keys(r).every((k) => ['by', 'to', 'item', 'at', 'note'].includes(k))) bad(`farm.gifts.${id}`);
+    else if (!box || box.def !== COOP.keepsake.def || box.by !== r.by) bad(`farm.gifts.${id}: no box`);   // i18n-ok: a validator message, never shown
+    else if (givers.has(r.by)) bad(`farm.gifts.${id}: a second waiting box by ${r.by}`);   // i18n-ok: a validator message, never shown
+    if (isObj(r)) givers.add(r.by);
+  }
+  if (isObj(f.objects)) {
+    for (const [id, o] of Object.entries(f.objects)) {
+      if (isObj(o) && o.def === COOP.keepsake.def && !Object.hasOwn(g, id)) bad(`farm.objects.${id}: a gift box with no gift`);   // i18n-ok: a validator message, never shown
+    }
+  }
 }
 
 /** The M2 goals keys (league, Seasonal Ribbon Track, Friendly Duel, Legacy rows, Grandma's visit). */
@@ -476,11 +519,26 @@ function readiness(state, now) {
   const kinds = new Map();
   const readyCrops = new Map();
   const giants = new Map();
+  // release 1.0 (M6): where each ready group stands, so the collect card can name one place to go
+  //   at: domain -> Map(tile key 'x,z' -> { x, z, n, id, axe })   (an animal counts at its home's tile)
+  const at = new Map();
+  const idleIds = [];
+  const ripeIds = [];
   const objs = state.farm.objects;
+  const mark = (dom, host, hostId, axe = false) => {
+    if (!host || !Number.isFinite(host.x)) return;
+    const m = at.get(dom) ?? new Map();
+    at.set(dom, m);
+    const k = `${host.x},${host.z}`;
+    const e = m.get(k) ?? { x: host.x, z: host.z, n: 0, id: hostId, axe };
+    e.n++;
+    if (hostId < e.id) e.id = hostId;
+    m.set(k, e);
+  };
   for (const id of Object.keys(objs)) {
     const o = objs[id];
     if (o.def === 'plot') {
-      if (o.crop === null) idle++;
+      if (o.crop === null) { idle++; idleIds.push(id); }
       else if (typeof o.crop.giant === 'string') {
         // a Giant is felled with chops, not collected (rules-economy's giant.js): one thing to do, not nine
         if (o.crop.readyAt <= now && o.crop.giant === id) giants.set(id, o);
@@ -489,15 +547,49 @@ function readiness(state, now) {
         ready++;
         kinds.set('fields', (kinds.get('fields') ?? 0) + 1);
         readyCrops.set(o.crop.def, (readyCrops.get(o.crop.def) ?? 0) + 1);
+        ripeIds.push(id);
+        mark('fields', o, id);
       }
       else if (o.crop.readyAt < next) next = o.crop.readyAt;
     } else if (Number.isSafeInteger(o.readyAt)) {
       const dom = typeof o.home === 'string' ? 'barnyard' : CONTENT.trees.has(o.def) ? 'orchard' : 'workshop';
-      if (o.readyAt <= now) { ready++; kinds.set(dom, (kinds.get(dom) ?? 0) + 1); }
+      if (o.readyAt <= now) {
+        ready++;
+        kinds.set(dom, (kinds.get(dom) ?? 0) + 1);
+        if (dom === 'barnyard') mark(dom, objs[o.home], o.home);
+        else mark(dom, o, id, CONTENT.trees.get(o.def)?.tool === 'axe');
+      }
       else if (o.readyAt < next) next = o.readyAt;
     }
   }
-  return { ready, idle, next, kinds, readyCrops, giants };
+  idleIds.sort();
+  ripeIds.sort();
+  return { ready, idle, next, kinds, readyCrops, giants, at, idleIds, ripeIds };
+}
+
+/** The groups a collect card can name, biggest first (ties: fields, barnyard, orchard, workshop). */
+const GROUP_ORDER = ['fields', 'barnyard', 'orchard', 'workshop'];
+
+/**
+ * The tile of a ready group the Hand should go to (M6): the member nearest the group's middle, an axe tree only when
+ * nothing else stands there (the Hand only opens a Pine's panel). Deterministic: ties by id.
+ */
+function groupTarget(r, dom) {
+  const m = r.at.get(dom);
+  if (!m || m.size === 0) return null;
+  const list = [...m.values()];
+  const pool = list.some((e) => !e.axe) ? list.filter((e) => !e.axe) : list;
+  let sx = 0;
+  let sz = 0;
+  let n = 0;
+  for (const e of pool) { sx += e.x * e.n; sz += e.z * e.n; n += e.n; }
+  let best = null;
+  let bestD = Infinity;
+  for (const e of pool) {
+    const d = (e.x * n - sx) * (e.x * n - sx) + (e.z * n - sz) * (e.z * n - sz);
+    if (d < bestD || (d === bestD && e.id < best.id)) { best = e; bestD = d; }
+  }
+  return { tile: { x: best.x, z: best.z }, tool: best.axe ? 'axe' : 'hand', id: best.id };
 }
 
 /** A wait for a card: "4:05" (m:ss) under an hour, "2:15 h" (h:mm) under 10 hours, then "23 h 59 m" (RC-26). */
@@ -516,9 +608,14 @@ const sameCard = (c, k) => c.kind === k.kind && (c.id ?? null) === (k.id ?? null
  * NOW is never empty: the fallback chain ends in "Everything is growing — next ready in m:ss. Tip: <fastest crop>".
  * score = urgency + proximity (have / need) + novelty - partner-is-doing-it + different-domain bonus (GDD §5.1).
  * @param {object} state @param {string} pid @param {number} now
- * @param {{ recent?: string[], keep?: object, ranked?: boolean }} [opts]  recent: card kinds this player was shown
- *   in the last 10 minutes (novelty); keep: the NOW card shown now (hysteresis, KEEP_MARGIN); ranked: also return
- *   the scored NOW candidates; all: also return every candidate card of every slot
+ * @param {{ recent?: string[], keep?: object, ranked?: boolean, online?: Iterable<string> }} [opts]  recent: card
+ *   kinds this player was shown in the last 10 minutes (novelty); keep: the NOW card shown now (hysteresis,
+ *   KEEP_MARGIN); ranked: also return the scored NOW candidates; all: also return every candidate card of every slot;
+ *   online (release 1.0, additive): the pids online now (the client knows presence): Golden Hour's card needs both
+ *
+ * The NOW priority (release 1.0, M29; critique#32): the client's coach mirror first (ui/tracker.js), then these
+ * scores: Golden Hour ready with both online (NOW_SCORE.golden) > today's half (NOW_SCORE.half) > collect (10) > Plant
+ * for later (NOW_SCORE.later) > the calm "All done for now" (NOW_SCORE.calm). Other cards keep their scores between.
  */
 export function goals(state, pid, now, opts = {}) {
   const L = levelFromXp(state.farm.xp);
@@ -535,7 +632,10 @@ export function goals(state, pid, now, opts = {}) {
     cands.push({ ...c, score: s });
   };
   nowCandidates(state, pid, now, r, add);
-  soonCandidates(state, now, L, add);
+  goldenCandidate(state, pid, now, opts.online, add);
+  calmCandidate(state, now, r, add);
+  brushCandidate(state, now, L, add);
+  soonCandidates(state, pid, now, L, add);
   bigCandidates(state, pid, L, add);
   weeklyCandidates(state, now, add);
   longTermCandidates(state, now, add);
@@ -572,10 +672,14 @@ export function goals(state, pid, now, opts = {}) {
     nowCard = { slot: 'now', kind: 'tip', ...said(m), ref, eta: next ? r.next : null };
   }
   const lvl = levelProgress(state, L);
+  const bigCard = strip(pick('big'));
+  // M7 (ux-first#7): with nothing for SOON, the level card stood in for it, the same card BIG shows. Now SOON shows
+  // it only when BIG holds something else; otherwise SOON stays empty (never two copies of one card)
   const soonCard = strip(pick('soon'))
-    ?? { slot: 'soon', kind: 'level', ...said(msg('goals.r.level.away', { level: int(L + 1), xp: int(lvl.need - lvl.have) })),
-      ...lvl };
-  const out = { now: nowCard, soon: soonCard, big: strip(pick('big')) };
+    ?? (bigCard && bigCard.kind === 'level' ? null
+      : { slot: 'soon', kind: 'level', ...said(msg('goals.r.level.away', { level: int(L + 1), xp: int(lvl.need - lvl.have) })),
+        ...lvl });
+  const out = { now: nowCard, soon: soonCard, big: bigCard };
   // opts.ranked: the scored NOW candidates too (tests and tools; the tracker never asks)
   if (opts.ranked) {
     out.ranked = cands.filter((c) => c.slot === 'now').sort((a, b) => b.score - a.score)
@@ -603,9 +707,14 @@ function nowCandidates(state, pid, now, r, add) {
       need: barnCap(state) }, 12);
   }
   if (r.ready > 0) {
-    const dom = [...r.kinds.entries()].sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1))[0]?.[0] ?? 'fields';
-    add({ slot: 'now', kind: 'collect', ...said(msg('goals.r.collect', { n: int(r.ready) })),
-      domain: dom, need: r.ready }, 10);
+    // M6 (ux-first#6): the biggest group with its own verb ("Harvest 31 crops", "Tend 48 animals") and the place the
+    // Hand goes; the next group gets its turn once this one is done
+    const dom = [...r.kinds.entries()].sort((a, b) => b[1] - a[1]
+      || GROUP_ORDER.indexOf(a[0]) - GROUP_ORDER.indexOf(b[0]))[0]?.[0] ?? 'fields';
+    const n = r.kinds.get(dom) ?? r.ready;
+    const target = groupTarget(r, dom);
+    add({ slot: 'now', kind: 'collect', ref: dom, ...said(msg(`feat.r.collect.${dom}`, { n: int(n) })),
+      domain: dom, need: n, total: r.ready, ...(target ? { target } : {}) }, 10);
   }
   for (const [id, o] of [...r.giants].sort((a, b) => (a[0] < b[0] ? -1 : 1))) {
     const crop = cropOf(o.crop.def);
@@ -614,11 +723,20 @@ function nowCandidates(state, pid, now, r, add) {
       ...said(msg('goals.r.giant', { crop: name(o.crop.def, crop?.name ?? o.crop.def, 'crops'), n: int(chops) })), domain: 'fields',
     target: { tile: { x: o.x + 1, z: o.z + 1 }, tool: 'axe' } }, 10.5);
   }
-  if (r.idle > 0) {
-    // `ref`: the crop that best fills the wait for the next ready thing (RC-09: not always the fastest)
-    const crop = cropForWait(levelFromXp(state.farm.xp), Number.isFinite(r.next) ? r.next - now : Infinity);
-    add({ slot: 'now', kind: 'plant', ...said(msg('goals.r.plant', { n: int(r.idle) })),
-      domain: 'fields', need: r.idle, ref: crop.id }, 8);
+  // release 1.0 (D3): from the first crop of LATER_MIN_MS the plant card becomes "Plant for later" (laterCard)
+  const seen = new Map();                 // each crop's plan on the empty plots, once per call (laterPlan)
+  const later = laterCard(state, pid, now, r, seen);
+  if (later) add(later.card, later.score);
+  else if (r.idle > 0) {
+    // `ref`: the crop that best fills the wait for the next ready thing (RC-09: not always the fastest); before bed on a
+    // Plant for later farm, the crop that fills the field nearest the morning, with its clock and cost (QA r2 F2-07)
+    const bed = bedPlainPlan(state, pid, now, r.idleIds.slice(0, MAX_BATCH), seen);
+    const crop = bed ? bed.crop
+      : cropForWait(levelFromXp(state.farm.xp), Number.isFinite(r.next) ? r.next - now : Infinity);
+    const clock = bed ? { sub: msg('feat.r.plant.sub', { crop: name(crop.id, crop.name, 'crops'),
+      when: sub(whenMsg(now, bed.readyAt, state.meta.tz)), c: bed.cost }), readyAt: bed.readyAt, cost: bed.cost } : {};
+    add({ slot: 'now', kind: 'plant', ...said(msg('feat.r.plant', { n: int(r.idle) })),
+      domain: 'fields', need: r.idle, ref: crop.id, ...clock }, 8);
   }
   const slots = state.farm.orders?.slots ?? {};
   for (const k of sortedKeys(slots)) {
@@ -649,6 +767,272 @@ function nowCandidates(state, pid, now, r, add) {
   }
   if (debris > 0) add({ slot: 'now', kind: 'debris', ...said(msg('goals.r.debris')), domain: 'farm' }, 3);
   spendCandidates(state, now, add);
+}
+
+// ---- release 1.0 NOW cards (features lane) ----------------------------------------------------------------------
+
+/**
+ * The NOW scores of the 1.0 cards (M29's one priority: golden > half (over a full Barn's 12) > collect 10 > later >
+ * calm). The calm card has no domain, so it misses the +1 different-domain bonus the others get (add()): 3.6 still
+ * beats a decoration to buy (2.5 + 1) or a line to cast, and loses to a real chore (debris 3 + 1, the Almanac, a pet's
+ * treat, Grandma).
+ */
+export const NOW_SCORE = Object.freeze({ golden: 13, half: 12.5, later: 8, calm: 3.6 });
+/** Plant for later starts with the first crop that grows this long (6 h: Pumpkin at L9; critique#35). */
+export const LATER_MIN_MS = 6 * 60 * MIN;
+/** "Before bed" (D3): from this farm-local hour until BED_UNTIL the card plants for the morning. */
+export const BED_FROM = 19;
+export const BED_UNTIL = 4;
+/** The morning a Before bed crop aims at (farm-local hour), and the longest crop a daytime card plants. */
+export const MORNING = 8;
+export const DAY_CROP_MAX_MS = 12 * 60 * MIN;
+/** The calm card waits for a next ready thing at least this far away (shorter waits keep the "next ready" tip). */
+export const CALM_MIN_MS = 20 * MIN;
+
+/** "at 21:40" / "tomorrow at 08:40" / "in 2 days at 07:00" (the farm's clock, DST-safe). */
+export function whenMsg(now, at, tz) {
+  const c = readyClock(now, at - now, tz);
+  if (c.days <= 0) return msg('feat.r.when.today', { t: c.t });
+  if (c.days === 1) return msg('feat.r.when.tomorrow', { t: c.t });
+  return msg('feat.r.when.later', { n: int(c.days), t: c.t });
+}
+
+/** True from 19:00 until 04:00 farm-local: the Plant for later card says "Before bed" and aims at the morning. */
+export const bedTime = (now, tz) => {
+  const h = localHour(now, tz);
+  return h >= BED_FROM || h < BED_UNTIL;
+};
+
+/**
+ * Plant for later never spends more than this share of the spendable coins in its one stroke (QA r1 F-01: the card
+ * planted 8 of 82 plots with Pumpkins and left 314 of 3,082 coins). A stroke above GDD §6.3's BIG_SPEND line still asks
+ * first (the card carries `big`; the tracker asks before it sends).
+ */
+export const LATER_SPEND_BP = 5_000;
+
+/** The next 08:00 farm-local after `now` (DST-safe: no hour arithmetic on the clock, only on instants). */
+function nextMorning(now, tz) {
+  for (let k = 1; k <= 30; k++) {
+    const t = now + k * 60 * MIN;
+    if (localHour(t, tz) === MORNING) return t - localTime(t, tz).m * MIN;
+  }
+  return now + 24 * 60 * MIN;
+}
+
+/**
+ * What a Plant for later stroke plants on `ids` (D3; QA r1 F-01, F-02): { crop, cost, readyAt } or null. Only crops of
+ * LATER_MIN_MS or more (from L9) whose seeds for EVERY plot of the stroke cost at most LATER_SPEND_BP of the coins
+ * (seed packets first, free); null when none does (the plain "Plant N plots" card then, never one plot). The ready time
+ * is the planted crops' own (plantPreview: season, mastery, rain, a Sprinkler, Cold Frame or Totem by the plots).
+ * After 19:00 the crop that lands closest to 08:00 the next morning (ties: the longer crop, more value per plot); by
+ * day the longest one ready within 12 hours (the farm's usual next session).
+ */
+function laterPlan(state, pid, now, ids, minMs = LATER_MIN_MS, seen = new Map()) {
+  if (ids.length === 0) return null;
+  const L = levelFromXp(state.farm.xp);
+  const cap = mulBp(state.farm.wallet.coins, LATER_SPEND_BP);
+  const plans = [];
+  for (const c of liveAt('crops', L)) {
+    if (c.retired || c.growMs < minMs) continue;
+    // the price first (cheap), the ready time of every plot only for a crop that fits the cap; `seen` keeps each
+    // crop's answer for the other plans of the same goals() call (QA r2 F2-07: three plans before bed)
+    if (!seen.has(c.id)) {
+      const cost = Math.max(0, ids.length - (state.farm.seeds?.[c.id] ?? 0)) * seedPrice(state, c, pid);
+      seen.set(c.id, cost <= cap ? { crop: c, cost, readyAt: plantPreview(state, c.id, ids, pid, now).readyAt } : null);
+    }
+    if (seen.get(c.id)) plans.push(seen.get(c.id));
+  }
+  const better = (a, b) => a.crop.growMs > b.crop.growMs || (a.crop.growMs === b.crop.growMs && a.crop.id < b.crop.id);
+  let best = null;
+  if (bedTime(now, state.meta.tz)) {
+    const goal = nextMorning(now, state.meta.tz);
+    for (const p of plans) {
+      const d = Math.abs(p.readyAt - goal);
+      const bd = best ? Math.abs(best.readyAt - goal) : Infinity;
+      if (d < bd || (d === bd && better(p, best))) best = p;
+    }
+    return best;
+  }
+  for (const p of plans) {
+    if (p.readyAt - now > DAY_CROP_MAX_MS) continue;
+    if (!best || p.readyAt - now > best.readyAt - now || (p.readyAt === best.readyAt && better(p, best))) best = p;
+  }
+  return best;
+}
+
+/**
+ * QA r2 F2-07 (fe#7): before bed, a farm that has a 6 h crop but cannot fill its field with one within the spend cap
+ * (L9-L15 with real-sim's treasury: 226-17,428 coins) still plants for the night with the crop of at least BED_MIN_MS
+ * that does, nearest the morning; with nothing of an hour, the plain plant card names the crop that does fill the field
+ * (bedPlainPlan), never Wheat when anything longer fits.
+ */
+export const BED_MIN_MS = 60 * MIN;
+const hasLongCrop = (L) => liveAt('crops', L).some((c) => !c.retired && c.growMs >= LATER_MIN_MS);
+
+/** Plant for later's plan on `ids` now: the 6 h rule, and before bed (from L9) the crops of an hour or more too. */
+function laterPlanNow(state, pid, now, ids, seen = new Map()) {
+  const plan = laterPlan(state, pid, now, ids, LATER_MIN_MS, seen);
+  if (plan || !bedTime(now, state.meta.tz) || !hasLongCrop(levelFromXp(state.farm.xp))) return plan;
+  return laterPlan(state, pid, now, ids, BED_MIN_MS, seen);
+}
+
+/**
+ * The plain plant card before bed (QA r2 F2-07), on a farm Plant for later is for (L9+) when no crop of an hour fills the
+ * field within the cap: the crop that does fill it and lands nearest the morning, its ready time and cost; null when
+ * nothing fills it (a broke farm: the card stays as it was).
+ */
+function bedPlainPlan(state, pid, now, ids, seen = new Map()) {
+  if (!bedTime(now, state.meta.tz) || !hasLongCrop(levelFromXp(state.farm.xp))) return null;
+  return laterPlan(state, pid, now, ids, 0, seen);
+}
+
+/**
+ * The crop a Plant for later card would plant on the farm's empty plots now (or on `ids`), null when no long crop fills
+ * them within the spend cap (laterPlan; before bed, laterPlanNow's crops of an hour or more too).
+ */
+export function laterCrop(state, pid, now, ids = null) {
+  return laterPlanNow(state, pid, now, ids ?? readiness(state, now).idleIds.slice(0, MAX_BATCH))?.crop ?? null;
+}
+
+/**
+ * "Plant 51 plots with Pumpkins · ready tomorrow at 08:40 · 1,530 coins" (D3, features#F3; critique#35): whenever plots
+ * are empty and a crop of 6 h or more fills every one of them within the spend cap; "Before bed: …" from 19:00. Its
+ * target plants every empty plot in one `plant` stroke (up to MAX_BATCH ids, predicted like a drag); `big` = the stroke
+ * is a BIG_SPEND (GDD §6.3), so the tracker asks first. Ripe plots are the collect card's (QA r1 F-03: collect always
+ * outranked the old "Harvest N first" variant, which never reached NOW). null when nothing fits.
+ */
+function laterCard(state, pid, now, r, seen = new Map()) {
+  if (r.idle === 0) return null;
+  const ids = r.idleIds.slice(0, MAX_BATCH);
+  const plan = laterPlanNow(state, pid, now, ids, seen);
+  if (!plan) return null;
+  const { crop, cost, readyAt } = plan;
+  const tz = state.meta.tz;
+  const bed = bedTime(now, tz);
+  const cropName = name(crop.id, crop.name, 'crops');
+  const crops = noun(crop.id, 2, crop.name, 'crops');
+  return { score: NOW_SCORE.later, card: { slot: 'now', kind: 'later', ref: crop.id, id: 'plant',
+    ...said(msg(bed ? 'feat.r.later.bed' : 'feat.r.later', { n: int(ids.length), crop: cropName, crops })),
+    sub: msg('feat.r.later.sub', { when: sub(whenMsg(now, readyAt, tz)), c: cost }), bed, domain: 'fields', need: ids.length,
+    cost, readyAt, big: isBigSpend(state, pid, now, cost),
+    target: { act: 'plant', args: { ids, crop: crop.id }, tile: tileOf(state, ids[0]) } } };
+}
+
+const tileOf = (state, id) => {
+  const o = state.farm.objects[id];
+  return o && Number.isFinite(o.x) ? { x: o.x, z: o.z } : null;
+};
+
+/** The farm's two-seat benches (Golden Hour seats), sorted by id. */
+export function benchesOf(state) {
+  const out = [];
+  for (const id of sortedKeys(state.farm.objects)) {
+    const o = state.farm.objects[id];
+    const d = decorOf(o.def);
+    if (d && d.effect && d.effect.seats >= 2 && Number.isFinite(o.x)) out.push(id);
+  }
+  return out;
+}
+
+/**
+ * "Golden Hour is ready: sit on the bench together" (D2, features#F2): only with both farmers online (opts.online, the
+ * client's presence), Golden Hour unlocked, a two-seat bench on the farm, no Golden Hour running and the session gap
+ * passed (`goldenAt + COOP.goldenHour.sessionGapMs <= now`). Nothing at all when the partner is away (no FOMO).
+ */
+function goldenCandidate(state, pid, now, online, add) {
+  if (!online || !hasPlayer(state, pid)) return;
+  const on = new Set([...online].filter((p) => hasPlayer(state, p)));
+  if (!on.has(pid) || on.size < 2) return;
+  const G = COOP.goldenHour;
+  if (levelFromXp(state.farm.xp) < G.unlock || !systemLive(G)) return;
+  const g = state.farm.coop?.golden;
+  if (g && g.until > now) return;
+  if (!goldenHourAllowed(state, now)) return;
+  // QA r4 F4-02: a farmer on a bench waits (the card pings); the other is told who waits there
+  const seat = (p) => {
+    const id = state.farm.coop.bench[p]?.id;
+    return id && Object.hasOwn(state.farm.objects, id) ? id : null;
+  };
+  const other = [...on].sort().find((p) => p !== pid);
+  const mine = seat(pid);
+  const theirs = seat(other);
+  if (mine && mine === theirs) return;
+  const bench = theirs ?? mine ?? benchesOf(state)[0];
+  if (!bench) return;
+  const o = state.farm.objects[bench];
+  const tile = { x: o.x, z: o.z };
+  const [key, target] = theirs ? ['feat.r.golden.join', { tile, tool: 'hand', sit: bench }]
+    : mine ? ['feat.r.golden.wait', { tile, ping: true }] : ['feat.r.golden', { tile, tool: 'hand', sit: bench }];
+  const m = msg(key, { name: state.players[other].name });
+  add({ slot: 'now', kind: 'golden', id: bench, ...said(m), domain: 'farm', target }, NOW_SCORE.golden);
+}
+
+/**
+ * "All done for now · next ready in 2:15 h" (astra cut list, the gentle version of "never empty"): nothing ripe, no
+ * idle plot, and the next ready thing at least CALM_MIN_MS away. It outranks the invented chores (a decoration to
+ * buy, a line to cast) but not a real one (an order to fill, a building to buy, debris).
+ */
+function calmCandidate(state, now, r, add) {
+  if (r.ready > 0 || r.idle > 0 || r.giants.size > 0) return;
+  if (Number.isFinite(r.next) && r.next - now < CALM_MIN_MS) return;
+  add({ slot: 'now', kind: 'calm', ...said(msg('feat.r.calm')),
+    ...(Number.isFinite(r.next) ? { sub: msg('feat.r.calm.sub', { t: ms(r.next - now) }), eta: r.next } : {}) },
+  NOW_SCORE.calm);
+}
+
+/** A brush tool is "cheap" at or under this share of the spendable coins (basis points: 5 %). */
+export const BRUSH_CHEAP_BP = 500;
+/**
+ * QA r2 F2-06 (fe#6): at the first look of each farm day and for this long after the farm's first play that day
+ * (farm.daily.play.first) the brush card has SOON over the quest cards (the owners always have some, and the card
+ * never showed); then it takes its usual place under them. Once a day, never a takeover.
+ */
+export const BRUSH_FEATURE_MS = 30 * MIN;
+/** The brush card's SOON scores: in that daily window (above a quest card's 5 + 3 · progress, +1.5) and otherwise. */
+export const BRUSH_SCORE = Object.freeze({ daily: 9.6, usual: 4.6 });
+/** How much a brush of each base tool saves (QA r2 F2-06): the sickle harvests every crop, the spreader plants it. */
+const BRUSH_USE = Object.freeze({ sickle: 3, seed_bag: 2, watering_can: 1 });
+const brushArea = (t) => (Array.isArray(t.brush) ? t.brush[0] * t.brush[1] : 1);
+
+/**
+ * "Wide Sickle: 4 plots a touch, 6,000" (D3, SOON): a brush upgrade that is unlocked, not bought yet, bigger than the
+ * brush the farm already has for that tool, and costs at most 5 % of the spendable coins; Show me opens Market › Tools
+ * focused on it. QA r2 F2-06: the one that saves the most strokes (the biggest sickle first, then the seed spreader,
+ * then the watering can), not the cheapest (the Big Watering Can, which waters what most farms never water).
+ */
+function brushCandidate(state, now, L, add) {
+  const coins = state.farm.wallet.coins;
+  const owned = state.farm.tools ?? {};
+  const have = new Map();                                   // base tool -> the biggest brush area the farm owns
+  for (const id of Object.keys(owned)) {
+    const t = CONTENT.tools.get(id);
+    if (t && t.upgrades) have.set(t.upgrades, Math.max(have.get(t.upgrades) ?? 1, brushArea(t)));
+  }
+  // QA r3 F3-12 (fe#5): by what the base tool is used for first (the sickle, then the seed bag, then the watering can),
+  // then by size: "use x area" put the Big Watering Can (1 x 9) before the Seed Spreader (2 x 4) once the Wide Sickle
+  // was bought, the order this comment always promised the other way round
+  const better = (t, b) => {
+    const u = (BRUSH_USE[t.upgrades] ?? 0) - (BRUSH_USE[b.upgrades] ?? 0);
+    if (u !== 0) return u > 0;
+    if (brushArea(t) !== brushArea(b)) return brushArea(t) > brushArea(b);
+    return t.cost < b.cost || (t.cost === b.cost && t.id < b.id);
+  };
+  let best = null;
+  for (const t of CONTENT.tools.values()) {
+    if (!t.upgrades || !isLive(t) || t.unlock > L || Object.hasOwn(owned, t.id) || !(t.cost > 0)) continue;
+    if (brushArea(t) <= (have.get(t.upgrades) ?? 1)) continue;
+    if (t.cost * 10_000 > coins * BRUSH_CHEAP_BP) continue;
+    if (!best || better(t, best)) best = t;
+  }
+  if (!best) return;
+  // the day's turn: the farm has not been played yet today (the first look of the day), or it was first played less
+  // than BRUSH_FEATURE_MS ago
+  const play = state.farm.daily?.play;
+  const daily = Boolean(play && (play.d !== dayOf(state, now) || (now >= play.first && now - play.first < BRUSH_FEATURE_MS)));
+  const [w, d] = best.brush;
+  add({ slot: 'soon', kind: 'brush', id: best.id, ...said(msg('feat.r.brush', { tool: name(best.id, best.name, 'tools'),
+    n: int(w * d), c: best.cost })), domain: 'fields',
+  target: { panel: 'market', args: { tab: 'tools', focus: best.id } } }, daily ? BRUSH_SCORE.daily : BRUSH_SCORE.usual);
 }
 
 /** How long one spend card holds the NOW slot before the next one takes its turn (integration-qa1 open item 5). */
@@ -902,14 +1286,89 @@ export function w4bCandidates(state, pid, now, add) {
 }
 
 /** SOON: about fifteen minutes: story-card tasks and new recipes to try. */
-function soonCandidates(state, now, L, add) {
+/**
+ * QA r3 F3-05 (coop#3): half of a same-day Together task (D2, M22: h1 / h7 "sit on a bench, each of you, on the same
+ * day", h6 "cast a line, each of you, on the same day"; progress.js sameDay keeps farm.coop.days) is done when some of
+ * the farmers did it today and some did not. { what: 'sat' | 'cast', kind: 'bench' | 'dock', mine, other } (other: the
+ * farmer to name: the one still to do it for the one who did, else one who did), or null. Pure.
+ */
+export function togetherHalf(state, pid, now, task) {
+  const what = task && task.verb === 'together' ? HALF_OF[task.ref] : null;
+  if (!what) return null;
+  const all = playerIds(state);
+  if (all.length < 2 || !all.includes(pid)) return null;
+  const days = state.farm.coop?.days;
+  if (!days || days.d !== dayOf(state, now) || days.done?.[task.ref]) return null;
+  const did = all.filter((p) => days[what]?.[p] === 1);
+  if (did.length === 0 || did.length === all.length) return null;
+  const mine = did.includes(pid);
+  return { what, kind: task.ref, mine, other: mine ? all.find((p) => !did.includes(p)) : did[0] };
+}
+const HALF_OF = Object.freeze({ bench: 'sat', dock: 'cast' });
+
+/**
+ * Every half of a same-day Together task `pid` stands in today: [{ qid, i, half }] over the active quests in id order
+ * (togetherHalf on each open task). life-feel's toast for the one who just sat or cast reads it (QA r3 F3-05). Pure.
+ */
+export function halvesOf(state, pid, now) {
+  const out = [];
   const active = state.farm.quests?.active ?? {};
   for (const qid of sortedKeys(active)) {
     const q = questOf(qid);
     if (!q) continue;
     q.tasks.forEach((t, i) => {
+      if (taskProgress(state, qid, i, now).done) return;
+      const half = togetherHalf(state, pid, now, t);
+      if (half) out.push({ qid, i, half });
+    });
+  }
+  return out;
+}
+/** The sitter's half card in SOON: just above the plain quest card (the other's is NOW: NOW_SCORE.half, F4-C1). */
+export const HALF_SCORE = Object.freeze({ mine: 5.5 });
+
+/** "Mia ✓ · you: sit on any bench before midnight" / "Your half is done ✓ · Sam sits on a bench today". */
+export function halfMsg(state, half) {
+  return msg(`feat.r.half.${half.kind}${half.mine ? 'Mine' : ''}`, { name: state.players[half.other]?.name ?? '' });
+}
+
+/** The half card for quest `qid`'s task `i` (SOON): its words, and where a tap takes the one still to do it. */
+function halfCandidate(state, qid, q, i, half, add) {
+  let target = { panel: 'journal', args: { tab: 'stats', focus: qid } };
+  if (!half.mine && half.kind === 'bench') {
+    const bench = benchesOf(state)[0];
+    const o = bench ? state.farm.objects[bench] : null;
+    if (o) target = { tile: { x: o.x, z: o.z }, tool: 'hand', sit: bench };
+  } else if (!half.mine && half.kind === 'dock' && fishingSpots(state).length) target = { panel: 'fishing' };
+  const title = ctextRef('quests', qid, 'title', q.title);
+  const hm = halfMsg(state, half);
+  // QA r4 F4-C1: the one still to do it today hears it as NOW ("Sit on any bench before midnight — Mia ✓ · …")
+  if (!half.mine) {
+    const nm = msg(`feat.r.half.now.${half.kind}`, { name: state.players[half.other]?.name ?? '', title });
+    add({ slot: 'now', kind: 'half', id: qid, ref: String(i), mine: false, half: hm, domain: 'farm', target,
+      ...said(nm) }, NOW_SCORE.half);
+    return;
+  }
+  const qm = msg('goals.r.quest', { title, task: sub(hm) });
+  add({ slot: 'soon', kind: 'half', id: qid, ref: String(i), mine: true, ...said(qm), half: hm, domain: 'farm',
+    target }, HALF_SCORE.mine);
+}
+
+/** QA r4 F4-05: a Together task only two farmers can move (each sits, each casts, both chop, the other's flag). */
+export const needsPartner = (t) => t?.verb === 'together' && ['bench', 'dock', 'giant', 'help_flag'].includes(t.ref);
+
+function soonCandidates(state, pid, now, L, add) {
+  const active = state.farm.quests?.active ?? {};
+  const solo = playerIds(state).length < 2;
+  for (const qid of sortedKeys(active)) {
+    const q = questOf(qid);
+    if (!q) continue;
+    q.tasks.forEach((t, i) => {
       const p = taskProgress(state, qid, i, now);
-      if (p.done) return;
+      if (p.done || (solo && needsPartner(t))) return;
+      // F3-05: today's half of a same-day Together task is the card (both farmers hear of it), not the plain task
+      const half = togetherHalf(state, pid, now, t);
+      if (half) { halfCandidate(state, qid, q, i, half, add); return; }
       // a card that waits on something names it (RC-10): "Baby Steps: build the Dairy first"
       const b = blockerOf(state, t, now);
       const qm = msg('goals.r.quest', { title: ctextRef('quests', qid, 'title', q.title), task: sub(b ? b.msg : taskMsg(t)) });

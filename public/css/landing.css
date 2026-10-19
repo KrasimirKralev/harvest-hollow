@@ -1,6 +1,7 @@
 /* The multi-farm front door (public/landing.html), one screen: golden hour over the hollow. A sunset sky (magenta and
    ember at the hills, violet and teal above) that slowly breathes, fireflies and pollen, the living farm in a glass orb
-   with a turning halo, the carved logo, and a glass dock with the three actions: Play, Star us, Open GitHub.
+   with a turning halo, the carved logo, and a glass dock with ONE big action, Play, and how the partner joins (release
+   1.0 O7, astra#9); Star us and GitHub sit in the quiet pill row with the other small links.
    Stand-alone on purpose: the game's css/style.css, css/farm.css and css/ideas.css come later, with the sheets
    (js/landing.js), so the first view is this file and one font. Every animation moves transform or opacity only, and
    everything is still under prefers-reduced-motion. Words sit on the glass dock, on the dark hills or on a solid sheet:
@@ -8,21 +9,23 @@
 
 @font-face {
   font-family: 'Fredoka'; font-style: normal; font-weight: 300 700; font-display: swap;
-  src: url('/assets/fonts/fredoka-latin.woff2') format('woff2');
+  src: url('../assets/fonts/fredoka-latin.woff2') format('woff2');
   unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
     U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
 }
 @font-face {
   font-family: 'Fredoka'; font-style: normal; font-weight: 300 700; font-display: swap;
-  src: url('/assets/fonts/fredoka-latin-ext.woff2') format('woff2');
+  src: url('../assets/fonts/fredoka-latin-ext.woff2') format('woff2');
   unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+1D00-1DBF, U+1E00-1E9F,
     U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
 }
-/* Cyrillic (the Bulgarian pass): Fredoka has none; Nunito's, as in css/style.css */
+/* Cyrillic (the Bulgarian pass): Fredoka has none; Nunito's, as in css/style.css (the same size match). A Bulgarian
+   display line keeps to that one face: its words carry no Latin brand word and no digit (bg/front.js: copy#19) */
 @font-face {
   font-family: 'Fredoka'; font-style: normal; font-weight: 300 700; font-display: swap;
-  src: url('/assets/fonts/nunito-cyrillic.woff2') format('woff2');
+  src: url('../assets/fonts/nunito-cyrillic.woff2') format('woff2');
   unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+  size-adjust: 103%;
 }
 
 :root {
@@ -151,15 +154,14 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .ld-tag { margin: 6px 0 0; max-width: 30ch; text-wrap: balance; font: 600 clamp(1.0625rem, 2.2vw, 1.3125rem)/1.3 var(--font);
   letter-spacing: .005em; text-shadow: 0 2px 14px rgba(28, 10, 66, .75), 0 1px 2px rgba(28, 10, 66, .6); }
 
-/* ---- the dock: the three actions on glass -------------------------------------------------------------------------- */
-.ld-dock { position: relative; width: min(900px, 100%); margin-top: clamp(14px, 2.6svh, 26px); padding: 12px; border-radius: 30px;
+/* ---- the dock: Play on glass, the one big button ------------------------------------------------------------------ */
+.ld-dock { position: relative; width: min(560px, 100%); margin-top: clamp(14px, 2.6svh, 26px); padding: 12px; border-radius: 30px;
   background: var(--glass-solid); border: 1px solid var(--glass-edge);
   box-shadow: 0 24px 60px -18px rgba(14, 4, 36, .7), inset 0 1px 0 rgba(255, 255, 255, .22); text-align: center; }
 @supports ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
   .ld-dock { background: var(--glass); -webkit-backdrop-filter: blur(18px) saturate(1.5); backdrop-filter: blur(18px) saturate(1.5); }
 }
-.ld-acts { display: grid; gap: 10px; }
-@media (min-width: 700px) { .ld-acts { grid-template-columns: repeat(3, 1fr); gap: 12px; } }
+.ld-acts { display: flex; justify-content: center; }
 
 .ld-act { --c1: #fff; --c2: #ddd; --c3: #bbb; --ink: #111; --sub: #333; --glow: rgba(0, 0, 0, .4); --icbg: rgba(0, 0, 0, .8); --icfg: #fff;
   position: relative; display: flex; align-items: center; gap: 14px; min-height: 64px; padding: 10px 16px 10px 10px;
@@ -167,16 +169,12 @@ button { font: inherit; color: inherit; cursor: pointer; }
   background: linear-gradient(135deg, var(--c1), var(--c2) 52%, var(--c3));
   box-shadow: 0 12px 26px -12px var(--glow), 0 2px 0 rgba(255, 255, 255, .5) inset, 0 -3px 0 rgba(0, 0, 0, .14) inset;
   transition: transform .28s var(--ease-out), box-shadow .28s var(--ease-out); -webkit-tap-highlight-color: transparent; }
-.ld-act--play { --c1: #E4FF7A; --c2: #8DE45C; --c3: #2CC98C; --ink: #0B2A18; --sub: #174A2C; --glow: rgba(122, 230, 90, .85); --icbg: #0B2A18; --icfg: #B8F46A; }
-.ld-act--star { --c1: #FFF27E; --c2: #FFC93E; --c3: #FF8A3D; --ink: #3A1A00; --sub: #5E2E00; --glow: rgba(255, 176, 60, .85); --icbg: #3A1A00; --icfg: #FFD84D; }
-/* white words: >= 4.6:1 even at the magenta end (sub-labels are small text) */
-.ld-act--gh { --c1: #6C3CF0; --c2: #8A3DD8; --c3: #C22F7A; --ink: #fff; --sub: #F6EBFF; --glow: rgba(196, 70, 220, .85); --icbg: rgba(255, 255, 255, .18); --icfg: #fff; }
-/* a sheen that crosses each button now and then, one after the other */
+.ld-act--play { --c1: #E4FF7A; --c2: #8DE45C; --c3: #2CC98C; --ink: #0B2A18; --sub: #174A2C; --glow: rgba(122, 230, 90, .85); --icbg: #0B2A18; --icfg: #B8F46A;
+  width: min(420px, 100%); min-height: 76px; gap: 16px; padding: 12px 22px 12px 12px; border-radius: 26px; }
+/* a sheen that crosses the button now and then */
 .ld-act::after { content: ''; position: absolute; top: -30%; bottom: -30%; left: -45%; width: 34%; z-index: -1; pointer-events: none;
   background: linear-gradient(100deg, transparent, rgba(255, 255, 255, .55) 50%, transparent); transform: translateX(-60%) skewX(-16deg);
   animation: ld-sheen 8s var(--ease-out) infinite; }
-.ld-act--star::after { animation-delay: 1.1s; }
-.ld-act--gh::after { animation-delay: 2.2s; }
 @keyframes ld-sheen { 0%, 78% { transform: translateX(-60%) skewX(-16deg); } 100% { transform: translateX(520%) skewX(-16deg); } }
 .ld-act:hover, .ld-act:focus-visible { transform: translateY(-3px) scale(1.015); box-shadow: 0 20px 34px -12px var(--glow), 0 0 0 1px rgba(255, 255, 255, .35),
   0 2px 0 rgba(255, 255, 255, .5) inset, 0 -3px 0 rgba(0, 0, 0, .14) inset; }
@@ -191,20 +189,21 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .ld-act--play .ld-act-ic svg { margin-left: 3px; }
 .ld-act:hover .ld-act-ic, .ld-act:focus-visible .ld-act-ic { transform: scale(1.1); }
 .ld-act--play:hover .ld-act-ic svg, .ld-act--play:focus-visible .ld-act-ic svg { animation: ld-nudge .7s var(--ease-out); }
-.ld-act--star:hover .ld-act-ic, .ld-act--star:focus-visible .ld-act-ic { transform: scale(1.12) rotate(72deg); }
-.ld-act--gh:hover .ld-act-ic, .ld-act--gh:focus-visible .ld-act-ic { transform: scale(1.1) rotate(-10deg); }
 @keyframes ld-nudge { 0% { transform: translateX(0); } 40% { transform: translateX(4px); } 100% { transform: translateX(0); } }
 .ld-act-txt { display: flex; flex-direction: column; min-width: 0; }
 .ld-act-t { font: 700 1.375rem/1.1 var(--font); letter-spacing: .005em; }
 .ld-act-s { margin-top: 2px; font: 500 .9375rem/1.2 var(--font); color: var(--sub); }
-.ld-act--play .ld-act-t { font-size: 1.5rem; }
-/* the live star count: a dark pill on the honey button */
-.ld-star-n { margin-left: auto; flex: none; padding: 5px 11px 6px; border-radius: 999px; font: 700 1rem/1 var(--font);
-  font-variant-numeric: tabular-nums; color: #FFE7A0; background: rgba(58, 26, 0, .88); box-shadow: 0 0 0 2px rgba(255, 255, 255, .25); }
+.ld-act--play .ld-act-ic { width: 52px; height: 52px; }
+.ld-act--play .ld-act-ic svg { width: 28px; height: 28px; }
+.ld-act--play .ld-act-t { font-size: 1.75rem; }
+.ld-act--play .ld-act-s { font-size: 1rem; }
 
-.ld-why { margin: 12px 0 0; padding: 0 8px; font: 500 .9375rem/1.4 var(--font); color: #fff; text-wrap: balance; }
-.ld-ttl { display: inline-flex; align-items: center; gap: 8px; margin: 6px 0 2px; font: 600 .875rem/1.35 var(--font); color: var(--lilac); }
-.ld-ttl-moon { flex: none; width: 13px; height: 13px; border-radius: 50%; box-shadow: inset -4px -2px 0 0 var(--honey); transform: rotate(-20deg); }
+/* how the second farmer comes in: one line under Play */
+.ld-invite { margin: 12px 0 0; padding: 0 8px; font: 600 1rem/1.35 var(--font); color: #fff; text-wrap: balance; }
+/* the moon flows with the words: a line that wraps on a narrow phone starts with it instead of hanging beside two lines */
+.ld-ttl { display: block; margin: 6px 0 2px; padding: 0 8px; font: 600 .875rem/1.35 var(--font); color: var(--lilac); text-wrap: balance; }
+.ld-ttl-moon { display: inline-block; width: 13px; height: 13px; margin-right: 8px; vertical-align: -1px; border-radius: 50%;
+  box-shadow: inset -4px -2px 0 0 var(--honey); transform: rotate(-20deg); }
 .ld-status { margin: 8px 0 0; font: 600 1rem/1.35 var(--font); color: #fff; }
 .ld-status:empty { display: none; }
 .ld-note { margin: 10px 0 0; padding: 10px 14px; border-radius: 16px; text-align: left; font: 500 .9375rem/1.4 var(--font); color: #fff;
@@ -248,6 +247,11 @@ button { font: inherit; color: inherit; cursor: pointer; }
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .26); transition: background .2s, box-shadow .2s; }
 .ld-link:hover { background: rgba(255, 255, 255, .16); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .5); }
 .ld-link:focus-visible { outline: 3px solid #fff; outline-offset: 2px; }
+/* Star us and GitHub: pills like the others, each with its glyph; the star's count rides in a small honey pill */
+.ld-link-ic { flex: none; width: 18px; height: 18px; margin-right: 7px; fill: currentColor; }
+.ld-link--star .ld-link-ic { fill: var(--honey); }
+.ld-star-n { flex: none; margin-left: 8px; padding: 3px 8px 4px; border-radius: 999px; font: 700 .8125rem/1 var(--font);
+  font-variant-numeric: tabular-nums; color: #3A1A00; background: var(--honey); }
 /* the language: "English · Български" (ui/lang-toggle.js) in the top corner, glass like the links; on a phone it takes a
    row of its own above the orb (in a corner it would cover the orb). The game's .lang-pick rules (css/style.css) come
    later with the sheets and lose to these. A Bulgarian page waits (a second at most) for its words: landing.html. */
@@ -272,7 +276,7 @@ html.i18n-wait body.landing { visibility: hidden; }
   .ld:has(> .ld-lang .lang-pick):not(:has(> .ld-farms:not([hidden]))) { --orb: clamp(150px, min(33svh, 54vw), 460px); }
   .ld:has(> .ld-lang .lang-pick):has(> .ld-farms:not([hidden])) { --orb: clamp(130px, min(27svh, 48vw), 420px); }
 }
-/* a narrow phone: the five small links in two rows in both languages (Bulgarian's words are longer) */
+/* a narrow phone: the seven small links in three rows in both languages (Bulgarian's words are longer) */
 @media (max-width: 420px) {
   .ld-more { gap: 6px; }
   .ld-link { padding: 8px 10px; }

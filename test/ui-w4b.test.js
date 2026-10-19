@@ -171,7 +171,7 @@ test('crates: the loot card lists coins, XP and the extra; one line for the part
   assert.deepEqual(W.lootOf({ decor: 'garden_gnome' }).decor, ['garden_gnome']);
   const st = { players: { p1: { name: 'Rowan' }, p2: { name: 'Mia' } } };
   assert.match(M.feed.feedText({ k: 'crate', by: 'p1', c: 1240, a: 2 }, st, 'p2').text, /opened a balloon crate: 1,240 coins and 2 Acorns/);
-  assert.match(M.feed.feedText({ k: 'crate', by: 'sys', c: 300, auto: 1 }, st, 'p2').text, /nobody opened went to the Barn/);
+  assert.match(M.feed.feedText({ k: 'crate', by: 'sys', c: 300, auto: 1 }, st, 'p2').text, /An unopened balloon crate went to the Barn/);
 });
 
 test('crates: the tooltip says how to open it and when it goes to the Barn', () => {

@@ -32,7 +32,7 @@ test('intents: every intent names a registered action and builds schema-valid ar
     buyAnimal: ['chicken', false, 'a.1.0'], tend: ['a.1.0'], feed: ['a.1.0'], collect: ['a.1.0'], pet: ['a.1.0'], bottle: ['a.1.0'],
     upgradeHome: ['a.1.0'], harvestTree: ['a.1.0'], chop: ['a.1.0'], water: ['a.1.0'], compost: ['a.1.0'],
     fillOrder: [0, 5], discardOrder: [0, 5], pinOrder: [0, 5], flagOrder: [0, 5], rushOrder: [0], claimGift: [], rerollTask: [0],
-    deliverQuest: ['a1'], postNote: ['hi', 20, 30], removeNote: ['a.1.0'], thank: [3], keepsake: ['wheat'],
+    deliverQuest: ['a1'], postNote: ['hi', 20, 30], removeNote: ['a.1.0'], thank: [3], keepsake: ['wheat', 'p2', 'for you'], openGift: ['a.1.0'],
     markSeen: ['level', undefined, 3], titlePick: [], nameAnimal: ['a.1.0', 'Clover'], sellSurplus: [],
   };
   const missing = [];

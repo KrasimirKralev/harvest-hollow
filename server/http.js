@@ -11,9 +11,22 @@ import { CONTENT_HASH } from '../shared/content/index.js';
 import { RULES_VERSION } from '../shared/rules/index.js';
 import { PROTOCOL_VERSION } from '../shared/net/protocol.js';
 import { StaticFiles, REVALIDATE } from './static.js';
+import { AssetOrigin } from './asset-origin.js';
+import { firstViewPacks, modelFileOf, packShares, PREFETCHABLE, SINGLE_SHARE } from '../shared/net/packs-plan.js';
+import { spawnAt } from '../shared/rules/grid.js';
 import { farmMethods } from './farm-host.js';
 
 export const isLoopback = (ip) => ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1';
+
+/**
+ * WebSocket compression for big frames only (release 1.0 O5, option2#11): the welcome and resyncs (the owners'
+ * farm: a 153 KB welcome deflates to ~29 KB) are the slow link's whole job once option 2 moves the game files, on every
+ * boot and every reconnect; small deltas and pongs (< 8 KB) are sent as they are and keep their latency. A small window
+ * and memLevel keep the per-socket zlib memory low; two compressions at once at most. Both servers use it.
+ * This replaces tech-architecture decision 9 ("LAN bandwidth is free"): the owners play over a 85 KB/s link.
+ */
+export const WS_DEFLATE = Object.freeze({ threshold: 8192, concurrencyLimit: 2, serverMaxWindowBits: 13,
+  zlibDeflateOptions: Object.freeze({ level: 6, memLevel: 7 }) });
 
 /** express.static options: the Cache-Control decided by StaticFiles.serveFiles (res.locals), else revalidate. */
 export const staticOpts = { etag: true, lastModified: true,
@@ -31,6 +44,8 @@ export function status(hh) {
     rules: RULES_VERSION,
     contentHash: CONTENT_HASH,
     buildHash: hh.static ? hh.static.build : null,
+    // option 2: where the game files come from (null: this server only; server/asset-origin.js)
+    assets: hh.assetOrigin ? hh.assetOrigin.status : null,
     schema: hh.engine.state.schema,
     v: hh.engine.v,
     serverNow: now,
@@ -50,10 +65,12 @@ export function status(hh) {
 }
 
 /**
- * The game's files after the page itself: asset packs, versioned/gzip'ed files, vendored three.js, shared modules,
- * public/. Shared by the single-farm app and the multi-farm host (server/multi.js).
+ * The game's files after the page itself: option 2's /b/<build>/ guard first (both modes; `host: false` is
+ * HH_ASSET_HOST=off), asset packs, versioned/gzip'ed files, vendored three.js, shared modules, public/. Shared by the
+ * single-farm app and the multi-farm host (server/multi.js).
  */
-export function mountAssets(app, staticFiles, root) {
+export function mountAssets(app, staticFiles, root, { host = true } = {}) {
+  app.use(staticFiles.serveBuild({ enabled: host }));
   app.use(staticFiles.servePacks());        // /assets/packs/<id>.bin: a model family or the sounds in one response (qa2 SV-03)
   app.use(staticFiles.serveFiles());
   app.use('/vendor/three', express.static(path.join(root, 'node_modules', 'three'), staticOpts));
@@ -97,6 +114,25 @@ export function devRouter(farmOf) {
   return dev;
 }
 
+/**
+ * Option 2's first-view hint: the high-use model families near every farmer's spawn on this farm (shared/net/packs-plan.js),
+ * which a host page starts before the welcome: only families this farm reads at least SINGLE_SHARE of (the others load
+ * file by file, the client's per-member rule) and the farmers' avatars. [] when anything is missing (the page then waits
+ * for the welcome).
+ */
+export function firstPacksHint(hh) {
+  try {
+    const state = hh.engine.state;
+    const points = Object.keys(state.players || {}).map((pid) => spawnAt(state, pid));
+    const fileOf = modelFileOf(hh.static.modelManifest());
+    const shares = packShares(state, fileOf, hh.static.packIndex().index);
+    return firstViewPacks(state, points, fileOf).filter((id) => PREFETCHABLE.includes(id)
+      && (id === 'models-avatars' || (shares[id] ?? 0) >= SINGLE_SHARE));
+  } catch {
+    return [];
+  }
+}
+
 /** @param {object} hh  the server context ({ cfg, engine, sessions, clock, scheduler, persist, static? }) */
 export function createApp(hh) {
   const { root } = hh.cfg;
@@ -104,8 +140,22 @@ export function createApp(hh) {
   const app = express();
   app.disable('x-powered-by');
   app.use((_req, res, next) => { res.setHeader('X-Content-Type-Options', 'nosniff'); next(); });
-  app.use(hh.static.serveIndex());
-  mountAssets(app, hh.static, root);
+  // option 2 (HH_ASSET_ORIGIN): the public host's build, checked now and every HH_ASSET_CHECK_MS; each page request
+  // gets the host variant only when server/asset-origin.js says so, and a self page that may one day get it carries
+  // the once-per-browser integrity probe
+  const assets = hh.cfg.assets;
+  if (assets?.origin && !hh.assetOrigin) {
+    hh.assetOrigin = new AssetOrigin({ origin: assets.origin, probe: assets.probe, build: hh.static.build, everyMs: assets.checkMs,
+      timeoutMs: assets.timeoutMs, log: hh.log });
+    hh.assetOrigin.start();
+  }
+  app.use(hh.static.serveIndex((req) => {
+    if (!hh.assetOrigin) return null;
+    const base = hh.assetOrigin.baseFor(req);
+    return { base, probe: true, hint: base ? firstPacksHint(hh) : null };
+  }));
+  app.use(hh.static.serveSriProbe());
+  mountAssets(app, hh.static, root, { host: assets?.host !== false });
 
   app.get('/api/status', (_req, res) => res.json(status(hh)));
 

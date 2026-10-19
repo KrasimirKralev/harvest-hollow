@@ -142,7 +142,7 @@ export const beautyPanel = {
       const settleNote = v.settleIn !== null
         ? h('p.pc-bsettle', svgIcon('sun', 20),
           t('collect.beauty.settle', { n: v.settledStars + 1, d: fmtDuration(v.settleIn, { cut: 's' }) })) : null;
-      const hero = h('header.pc-bhero',
+      const hero = h('div.pc-bhero',
         h('div.pc-bscore', beautyFlower(v.stars, 88),
           h('div.pc-bscore-text', h('b', fmt(v.score)), h('span', t('collect.beauty.label')), starRow(v.stars, v.maxStars))),
         h('div.pc-bhero-main', track,
@@ -180,9 +180,9 @@ export const beautyPanel = {
             h('span', i.text))))) : null;
       const foot = h('div.pc-bfoot',
         ctx.ui.panels.has('market') ? h('button.btn.btn--sun.pn-sm',
-          { type: 'button', on: { click: () => ctx.ui.panels.open('market', { tab: 'decor' }) } },
+          { type: 'button', 'data-sfx': 'own', on: { click: () => ctx.ui.panels.open('market', { tab: 'decor' }) } },
             svgIcon('flower', 22), t('collect.beauty.buy')) : null,
-        h('button.btn.btn--sky.pn-sm', { type: 'button', on: { click: () => ctx.open('decorsets') } },
+        h('button.btn.btn--sky.pn-sm', { type: 'button', 'data-sfx': 'own', on: { click: () => ctx.open('decorsets') } },
           svgIcon('star', 22), t('collect.sets.title')));
       body.replaceChildren(...[
         v.open ? null : h('p.pn-intro.pc-locked', svgIcon('lock', 20), t('collect.beauty.countsFrom', { n: v.unlock })),

@@ -9,6 +9,8 @@
 //                                    Android home-screen app needs (it shares the browser's storage). A device that keeps
 //                                    a home-screen app's storage apart (iOS) gets a client-built one with the key in the
 //                                    start URL's fragment instead (public/js/ui/farm-gate.js installFarmManifest)
+//         GET /manifest[.bg].webmanifest   the landing's; every manifest here carries the landing's tagline, not the
+//                                    home server's "shared over your home network" (QA r1 I-04)
 // API:    GET  /api/status            global health: farm counts, no ids
 //         GET  /api/stars             { stars: n | null }: the GitHub star count, fetched by this server (server/stars.js)
 //         POST /api/farms             -> 201 { id, secret } | 429 { error: 'RATE', retryAfter } | 503 { error: 'FULL' }
@@ -39,7 +41,7 @@ import { WebSocketServer } from 'ws';
 import { createLogger } from './log.js';
 import { Perf } from './perf.js';
 import { StaticFiles } from './static.js';
-import { mountAssets, devRouter, isLoopback } from './http.js';
+import { mountAssets, devRouter, isLoopback, WS_DEFLATE } from './http.js';
 import { FarmRegistry, ID_RE, redactArg, redactLog } from './farms.js';
 import { WindowLimiter, Counter, clientIp, maskIp } from './ip-limits.js';
 import { multiConfig } from './config.js';
@@ -50,6 +52,8 @@ import { LIMITS, PROTOCOL_VERSION } from '../shared/net/protocol.js';
 import { CONTENT_HASH } from '../shared/content/index.js';
 import { RULES_VERSION } from '../shared/rules/index.js';
 import { PLAYER_SLOTS } from '../shared/content/config.js';
+import FRONT_EN from '../public/js/i18n/en/front.js';
+import FRONT_BG from '../public/js/i18n/bg/front.js';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -158,23 +162,40 @@ export function createMultiApp(hh) {
   // any well-formed id gets one (no existence leak), and never a key: see the header
   // ?lang=bg: the Bulgarian description (public/manifest.bg.webmanifest), the device's language (ui/farm-gate.js)
   const baseManifests = new Map();
-  app.get('/f/:id/manifest.webmanifest', (req, res) => {
-    if (!ID_RE.test(req.params.id)) return res.status(404).type('text').send('Not found');
-    const file = req.query.lang === 'bg' ? 'manifest.bg.webmanifest' : 'manifest.webmanifest';
-    let baseManifest = baseManifests.get(file);
+  /** A home-screen manifest of this host (parsed once), or null. Strangers play here over the internet: the files'
+   *  "shared over your home network" (a home server's line) becomes the landing's tagline (QA r1 I-04). */
+  const hostManifest = (file) => {
+    let m = baseManifests.get(file);
+    if (m) return m;
     try {
-      baseManifest ??= JSON.parse(fs.readFileSync(path.join(cfg.root, 'public', file), 'utf8'));
-      baseManifests.set(file, baseManifest);
+      m = JSON.parse(fs.readFileSync(path.join(cfg.root, 'public', file), 'utf8'));
     } catch (err) {
       log.error(`${file} could not be read`, redactArg(err));
-      return res.status(404).type('text').send('Not found');
+      return null;
     }
+    const tag = (file === 'manifest.bg.webmanifest' ? FRONT_BG : FRONT_EN)['front.hero.tag'];
+    m = { ...m, ...(typeof tag === 'string' && tag ? { description: tag } : {}) };
+    baseManifests.set(file, m);
+    return m;
+  };
+  app.get('/f/:id/manifest.webmanifest', (req, res) => {
+    if (!ID_RE.test(req.params.id)) return res.status(404).type('text').send('Not found');
+    const baseManifest = hostManifest(req.query.lang === 'bg' ? 'manifest.bg.webmanifest' : 'manifest.webmanifest');
+    if (!baseManifest) return res.status(404).type('text').send('Not found');
     const at = `/f/${req.params.id}`;
     res.set('Cache-Control', 'public, max-age=3600');
     res.set('X-Robots-Tag', 'noindex');
     return res.type('application/manifest+json').send(JSON.stringify({ ...baseManifest, id: at, start_url: at, scope: '/' }));
   });
-  mountAssets(app, hh.static, cfg.root);
+  // the landing page's own (public/landing.html links /manifest.webmanifest): the same description, its own start
+  app.get(['/manifest.webmanifest', '/manifest.bg.webmanifest'], (req, res, next) => {
+    // express matches routes ignoring case: only the two names ever reach the disk
+    const m = hostManifest(/bg/i.test(req.path) ? 'manifest.bg.webmanifest' : 'manifest.webmanifest');
+    if (!m) return next();
+    res.set('Cache-Control', 'no-cache');
+    return res.type('application/manifest+json').send(JSON.stringify(m));
+  });
+  mountAssets(app, hh.static, cfg.root, { host: cfg.assets?.host !== false });   // /b/<build>/: this host serves option 2's files
 
   app.get('/api/status', (_req, res) => res.set('Cache-Control', NO_STORE).json(multiStatus(hh)));
 
@@ -382,7 +403,7 @@ export async function startMultiServer(cfg) {
   hh.harness = await createMultiHarness(hh);
   const app = createMultiApp(hh);
   const server = http.createServer(app);
-  const wss = new WebSocketServer({ server, path: '/ws', maxPayload: LIMITS.MAX_PAYLOAD, perMessageDeflate: false,
+  const wss = new WebSocketServer({ server, path: '/ws', maxPayload: LIMITS.MAX_PAYLOAD, perMessageDeflate: WS_DEFLATE,
     verifyClient: (info, cb) => {
       const { req } = info;
       const origin = req.headers.origin;

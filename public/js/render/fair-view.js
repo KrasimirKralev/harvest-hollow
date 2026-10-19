@@ -329,10 +329,11 @@ export function createFair({ scenery, dyn = null, glows = null, fx = null }) {
     const sun = Math.floor(localWeekMs(now, s?.meta?.tz || 'UTC') / 86_400_000) === 6;
     const g = restorationView(s, now).find((p) => p.id === 'fair_grounds');
     const gs = g && g.live ? g.stage : 0;
-    const k = `${view.live}|${view.medal?.rank || ''}|${sun}|${gs}`;
+    // (R3-01: a late manifest, epoch, rebuilds)
+    const k = `${view.live}|${view.medal?.rank || ''}|${sun}|${gs}|${models.epoch}`;
     if (k === key) return;
-    const [wasLive, , wasSun, wasG] = key.split('|');
-    const liveChanged = wasLive !== String(view.live) || wasSun !== String(sun) || wasG !== String(gs);
+    const [wasLive, , wasSun, wasG, wasEpoch] = key.split('|');
+    const liveChanged = wasLive !== String(view.live) || wasSun !== String(sun) || wasG !== String(gs) || wasEpoch !== String(models.epoch);
     if (wasG !== undefined && Number(wasG) < gs && fx) fx.play(gs === 4 ? { e: 'restored', project: 'fair_grounds' } : { e: 'bundleDone', project: 'fair_grounds' }, new THREE.Vector3(FAIR_GROUNDS.stand[0], 0, FAIR_GROUNDS.stand[1]), {});
     grounds = gs;
     key = k;

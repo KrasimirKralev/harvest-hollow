@@ -151,7 +151,7 @@ test('a run: restricted flags, our MCP bridge, settings, clean env; the bridge r
   assert.equal(val('--disallowedTools'), 'Bash,WebFetch,WebSearch,Task,Agent,NotebookEdit');
   assert.equal(val('--permission-mode'), 'dontAsk');
   assert.equal(val('--permission-prompts'), 'none');
-  assert.match(val('--append-system-prompt'), /^You are the Harness Hollow helper/);
+  assert.match(val('--append-system-prompt'), /^You are Harvey, the helper of the cozy co-op farm game/);
   assert.equal(argv.includes('setup-token'), false);
   const priv = path.join(s.ctx.dirOf(FK), 'jobs', job.id, 'private');
   assert.equal(val('--mcp-config'), path.join(priv, 'mcp.json'));

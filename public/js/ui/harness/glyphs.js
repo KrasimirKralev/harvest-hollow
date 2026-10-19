@@ -1,7 +1,8 @@
 // The helper's inline glyphs, drawn like the shell's (ui/dom.js GLYPHS: 48 viewBox, 2.5 ink outline, flat fill with one
 // highlight). Their own set so the helper needs no edit of the shell's file.
 //
-//   glyph(name, size?) -> SVGElement   names: helper mic micOn speaker stop check cross wait sparkle down back
+//   glyph(name, size?) -> SVGElement   names: helper mic micOn speaker stop check cross wait sparkle down back speed sky
+//                                      music letter
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const INK = '#3E2612';
 
@@ -34,6 +35,18 @@ const GLYPHS = {
   down: `<path d="M13 19l11 11 11-11" fill="none" stroke="${INK}" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>`,
   back: `<path d="M14 18a13 13 0 1 1-2 13" fill="none" stroke="${INK}" stroke-width="6" stroke-linecap="round"/>
     <path d="M6 13l6 7 8-4" fill="none" stroke="${INK}" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>`,
+  // release 1.0 (H3): the change list's rows that are not a thing: a speed knob, the sky, the music, a letter
+  speed: `<circle cx="24" cy="26" r="16" fill="#E2F4D2" stroke="${INK}" stroke-width="2.5"/>
+    <path d="M24 26l8-8" stroke="${INK}" stroke-width="4" stroke-linecap="round"/><circle cx="24" cy="26" r="3" fill="${INK}"/>
+    <path d="M14 12l-4-4M34 12l4-4" stroke="${INK}" stroke-width="3" stroke-linecap="round"/>`,
+  sky: `<circle cx="18" cy="18" r="9" fill="#FFC83D" stroke="${INK}" stroke-width="2.5"/>
+    <path d="M14 38h22a7 7 0 0 0 0-14 10 10 0 0 0-19 2 6 6 0 0 0-3 12z" fill="#fff" stroke="${INK}" stroke-width="2.5" stroke-linejoin="round"/>`,
+  music: `<path d="M18 34V12l20-5v22" fill="none" stroke="${INK}" stroke-width="3" stroke-linejoin="round"/>
+    <ellipse cx="13" cy="34" rx="6" ry="5" fill="#9B6BD6" stroke="${INK}" stroke-width="2.5"/>
+    <ellipse cx="33" cy="29" rx="6" ry="5" fill="#9B6BD6" stroke="${INK}" stroke-width="2.5"/>`,
+  letter: `<rect x="7" y="12" width="34" height="24" rx="3" fill="#FFF4D6" stroke="${INK}" stroke-width="2.5"/>
+    <path d="M8 14l16 12 16-12" fill="none" stroke="${INK}" stroke-width="2.5" stroke-linejoin="round"/>
+    <circle cx="24" cy="27" r="3.5" fill="#E8554A" stroke="${INK}" stroke-width="1.5"/>`,
 };
 
 export function glyph(name, size = 24) {

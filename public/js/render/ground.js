@@ -20,7 +20,9 @@
 //                                       expansion rect), 0 inside it (pure; the forest edge, scene.js)
 //   wildOnSale(land, signs) -> [{ key, x, z, yaw, s, exp }]   the overgrowth on live land for sale (pure, tested)
 //   cheapShadows(shader)                a 2-tap hardware-PCF shadow lookup instead of three's 5-tap Vogel disk
-//                                       (onBeforeCompile helper for the ground, tufts and soil: performance-04)
+//                                       (onBeforeCompile helper for the ground, tufts and soil: performance-04); 4 taps
+//                                       when SHADOW_KERNEL.taps is 4 (QA r3 R3-02), 8 past SHADOW_KERNEL.wideAbove texels of
+//                                       radius (QA r4 R4-01); shadowKernelKey() its program key
 //   addOcclusionFade(material, groundMap) scenery that stands between the camera and the OWNED farm dithers
 //                                       away (the forest wall never hides a plot)
 //   createGround(layers, { scenery, quality }) -> ground
@@ -39,6 +41,7 @@ import { footprint } from '../../../shared/rules/grid.js';
 import * as grid from '../../../shared/rules/grid.js';
 import { models, addShaderPatch, LOOK, LAMPS_PARS, LAMPS_FRAG } from './models.js';
 import { WORLD, addSway, addFoliageTint } from './world-uniforms.js';
+import { gradeUniforms } from './renderer.js';
 import { rewardLandRects, liveNow, isLandRow, ownedLand } from './world-state.js';
 
 export const WATER_Y = -0.45;
@@ -180,10 +183,14 @@ function pondAt(h, P, x, z) {
 }
 
 /** Signed distance (metres) from a point to a rounded rectangle pad [cx, cz, hx, hz, r] (negative inside). */
-export function padDist(x, z, [cx, cz, hx, hz, r]) {
-  const qx = Math.abs(x - cx) - hx + r;
-  const qz = Math.abs(z - cz) - hz + r;
-  return Math.hypot(Math.max(qx, 0), Math.max(qz, 0)) + Math.min(Math.max(qx, qz), 0) - r;
+export function padDist(x, z, p) {
+  // F6a (perf-a11y#15): index access, not parameter destructuring (249 ms of a phone's boot in the per-vertex loops),
+  // and a square root only outside the rounded rectangle
+  const r = p[4];
+  const qx = Math.abs(x - p[0]) - p[2] + r;
+  const qz = Math.abs(z - p[1]) - p[3] + r;
+  const ox = qx > 0 ? qx : 0; const oz = qz > 0 ? qz : 0;
+  return (ox || oz ? Math.sqrt(ox * ox + oz * oz) : 0) + Math.min(qx > qz ? qx : qz, 0) - r;
 }
 
 /** 1 on a place's flat pad, easing to 0 over `feather` metres outside it (pure). */
@@ -657,6 +664,16 @@ const glslLin = (hex) => {
   return `vec3( ${c.r.toFixed(4)}, ${c.g.toFixed(4)}, ${c.b.toFixed(4)} )`;
 };
 // The lawn (visual-02): a meadow green, not neon; HSV saturation <= 0.55 at noon.
+/** G6 (graphics#7, release 1.0): the lawn's 1.5-3 m clump layer (linear multipliers, shadowed -> sunny grass). QA r1
+ *  R-02: a gentle swing behind a soft edge (HEAD-era 0.56-0.62 / 1.08-1.16, a 2x swing, read as camouflage). */
+export const LAWN_CLUMP = Object.freeze({ dark: Object.freeze([0.82, 0.85, 0.83]), light: Object.freeze([1.06, 1.07, 1.04]), size: 9, near: 50, far: 100 });
+/** G6: autumn on the lawn: the colour shift, the ochre drifts and the straw margins (HEAD 1.1/1.0/0.78, 0.6, 0.6): the
+ *  lawn stays a fresh autumn green (a measured 15 degrees greener than HEAD's mustard), the trees carry the season. */
+/** G5/G6: how much the lawn is quietened before the grade (HEAD 0.93; the grade's vibrance adds back). */
+export const LAWN_DESAT = 0.8;
+/** G6: the share of the 6-12 m tone regions in the lawn colour (HEAD 0.38). */
+export const LAWN_PATCH_K = 0.42;
+export const AUTUMN = Object.freeze({ warm: Object.freeze([0.88, 1.0, 1.06]), drift: 0.08, margin: 0.1 });
 export const LAWN = Object.freeze({ grassLit: '#84B452', grassVar: '#6EA044', meadow: '#5A8C3A', shade: '#3F6B2E',
   path: '#D8B98A', sand: '#EED9A6', snow: '#F2F6FB', snowShade: '#B8C8E6' });
 
@@ -692,6 +709,16 @@ uniform vec4 uTracks[ 11 ];
 uniform float uTrackOn[ 11 ];
 uniform vec4 uOval;
 uniform float uOvalOn;
+uniform vec3 uClumpDark;
+uniform vec3 uClumpLight;
+uniform vec3 uAutumnWarm;
+uniform float uAutumnDrift;
+uniform float uAutumnMargin;
+uniform float uLawnDesat;
+uniform float uPatchK;
+uniform float uClumpScale;
+uniform float uClumpNear;
+uniform float uClumpFar;
 varying vec3 vW;
 varying float vCloud;
 float hhPad( vec2 p, vec4 P, float r ) {
@@ -746,11 +773,21 @@ const GROUND_FRAG = /* glsl */`
   // fine blade layer below is quiet (the lawn read as a high-contrast mottle)
   float pn = smoothstep( 0.18, 0.82, nz2.r * 0.62 + nz.g * 0.38 );
   vec3 patchC = pn < 0.5 ? mix( ${glslLin('#476B36')}, ${glslLin('#789746')}, smoothstep( 0.0, 0.5, pn ) ) : mix( ${glslLin('#789746')}, ${glslLin('#9DA05B')}, smoothstep( 0.55, 1.0, pn ) );
-  lawn = mix( lawn, patchC * 1.1, 0.38 );
+  lawn = mix( lawn, patchC * 1.1, uPatchK );          // G6: the tone regions' share (HEAD 0.38)
   lawn = mix( lawn, shade * 1.1, smoothstep( 0.66, 0.84, nz2.r ) * 0.25 );
   lawn *= 0.95 + 0.1 * nz.g;
-  // the sun and the tone curve push greens up: quieten the lawn to FV2's (rendered HSV saturation ~0.75)
-  lawn = hhDesat( lawn, 0.93 );
+  // G5 (release 1.0): the tone-mapping grade now carries the saturation (vibrance weighted to quiet colours), so the
+  // lawn is quietened less here (HEAD 0.93, against the old flat Neutral)
+  lawn = hhDesat( lawn, uLawnDesat );
+  #ifndef HH_GROUND_LOW
+    // G6 (graphics#7): 0.5-1.5 m clumps of shadowed and sunny grass that survive at play distance (55-90 m), where the
+    // blade detail is sub-pixel: the lawn reads as grass, not a flat sheet. One more noise fetch, not on Low.
+    // unwarped (the warp stretched them into marbled streaks), three octaves of value noise: round soft clumps
+    float clump = smoothstep( 0.2, 0.8, texture2D( uNoise, mat2( -0.276, 0.961, -0.961, -0.276 ) * wxz * uClumpScale + 0.13 ).g );
+    // near the camera the blade detail is the texture and the clumps stay soft; they carry the lawn where the blades are
+    // sub-pixel (past ~60 m: the far view), and quieten at night (on a dark lawn they read as blotches)
+    lawn *= mix( vec3( 1.0 ), mix( uClumpDark, uClumpLight, clump ), ( 0.3 + 0.7 * smoothstep( uClumpNear, uClumpFar, length( vViewPosition ) ) ) * ( 1.0 - 0.6 * uNight ) );
+  #endif
   #ifndef HH_GROUND_LOW
     float st = smoothstep( 0.18, 0.32, abs( fract( wxz.x / 4.0 + 0.25 ) - 0.5 ) );
     lawn *= 1.0 + 0.035 * ( st * 2.0 - 1.0 );
@@ -853,10 +890,12 @@ const GROUND_FRAG = /* glsl */`
     // autumn (RD-05): a drier, warmer lawn with drifts of ochre grass, straw on the margins (paths' edges, the wild
     // land outside the farm, round every object's footprint)
     float ochreP = smoothstep( 0.4, 0.75, nz.r * 0.55 + nz2.b * 0.45 );
-    // the final release (V-05): the lawn stays a lawn, a touch warmer, with ochre in drifts, not mustard wall to wall
-    vec3 autumnCol = mix( hhDesat( col, 0.85 ) * vec3( 1.1, 1.0, 0.78 ), ${glslLin('#B5B347')} * ( 0.45 + 0.25 * det ), ochreP * 0.6 );
+    // the final release (V-05): the lawn stays a lawn, a touch warmer, with ochre in drifts, not mustard wall to wall;
+    // release 1.0 (G6, graphics#7: still mustard on 70 % of the lawn): thin ochre drifts and straw margins, a lawn that
+    // stays green; the trees carry the season (world-uniforms.js)
+    vec3 autumnCol = mix( col * uAutumnWarm, ${glslLin('#B5B347')} * ( 0.45 + 0.25 * det ), ochreP * uAutumnDrift );
     float margin = clamp( smoothstep( 0.05, 0.45, gm.g + ( nz2.b - 0.5 ) * 0.3 ) + ( 1.0 - owned ) * 0.6 + gm.r * 0.8, 0.0, 1.0 );
-    autumnCol = mix( autumnCol, ${glslLin('#C9B26E')} * ( 0.7 + 0.3 * det ), margin * 0.6 );
+    autumnCol = mix( autumnCol, ${glslLin('#C9B26E')} * ( 0.7 + 0.3 * det ), margin * uAutumnMargin );
     col = mix( col, autumnCol, autumn * ( 1.0 - pathAll ) * 0.7 );
   }
   float winter = smoothstep( 2.5, 3.0, uSeason ) * ( 1.0 - smoothstep( 3.6, 4.0, uSeason ) );
@@ -889,7 +928,8 @@ const GROUND_FRAG = /* glsl */`
     }
   }
   // moonlight (RD-05): greens quieten toward a blue-lavender grey (#7889AD), never teal
-  if ( uNight > 0.0 ) col = mix( col, vec3( dot( col, vec3( 0.3, 0.59, 0.11 ) ) ) * vec3( 0.92, 0.88, 1.12 ), uNight * 0.62 );
+  // release 1.0 (G3): bluer, less violet than the old 0.92 / 0.88 / 1.12 (paths read violet), never teal (RD-05)
+  if ( uNight > 0.0 ) col = mix( col, vec3( dot( col, vec3( 0.3, 0.59, 0.11 ) ) ) * vec3( 0.92, 0.9, 1.12 ), uNight * 0.62 );
   if ( uGold > 0.0 ) col = mix( col, col * vec3( 1.12, 1.05, 0.96 ), uGold * 0.35 );    // Golden Hour: the light does most of the work (RD-05)
 
   // Build mode: the tile grid, full strength around the ghost, gone 5 tiles away (visual-25).
@@ -908,7 +948,29 @@ const GROUND_FRAG = /* glsl */`
 
 // three's PCF shadow is 5 Vogel-disk taps with a sqrt and a sin/cos each, on every shadow-receiving pixel; the
 // shadow map is static and 2048 px, so two hardware-PCF taps keep the soft edge for a fraction of the cost.
-let cheapChunk = null;
+// QA r3 R3-02: two taps on one diagonal leave the map's texels as stairs (a comb on phones), and the golden sun stretches
+// each texel 2.5x on the ground. Four taps on a rotated grid (no screen noise: visual-16's weave stays away); index.js
+// picks the taps per profile before the first frame (renderer.js PHONE_SHADOW_TAPS).
+// QA r4 R4-01: spread under a low sun, 4 taps sat 2.6-3 texels apart (each tap ramps over ~1): flat bands. Past
+// `wideAbove` texels the grid turned 45 degrees joins (8 taps; a branch on the uniform radius, no recompile at sunset),
+// and the spread stops at `maxRadius` (3.5: no band over 4 px on the porch at dusk; 4 left some, 4 taps at 3 left teeth).
+export const SHADOW_KERNEL = { taps: 2, wideAbove: 0, maxRadius: Infinity };
+export const SHADOW_WIDE = Object.freeze({ wideAbove: 3.05, maxRadius: 3.5 });
+export const shadowKernelKey = () => `t${SHADOW_KERNEL.taps === 4 ? 4 : 2}${SHADOW_KERNEL.taps === 4 && SHADOW_KERNEL.wideAbove > 0 ? `w${SHADOW_KERNEL.wideAbove}` : ''}`;
+export const SHADOW_TAPS = Object.freeze({
+  2: [[0.45, 0.28], [-0.45, -0.28]],
+  4: [[-0.25, -0.75], [0.75, -0.25], [0.25, 0.75], [-0.75, 0.25]],
+  wide: [[0.3536, -0.7071], [0.7071, 0.3536], [-0.3536, 0.7071], [-0.7071, -0.3536]],
+});
+const tapSum = (list) => list.map(([x, y]) => `texture( shadowMap, vec3( shadowCoord.xy + vec2( ${x}, ${y} ) * radius, shadowCoord.z ) )`).join(' + ');
+const LOOKUP = {
+  2: `shadow = ( ${tapSum(SHADOW_TAPS[2])} ) * 0.5;`,
+  4: `shadow = ( ${tapSum(SHADOW_TAPS[4])} ) * 0.25;`,
+  wide: (above) => `shadow = ${tapSum(SHADOW_TAPS[4])};\n`
+    + `\t\t\tif ( shadowRadius > ${Number(above).toFixed(2)} ) shadow = ( shadow + ${tapSum(SHADOW_TAPS.wide)} ) * 0.125;\n`
+    + '\t\t\telse shadow *= 0.25;',
+};
+const cheapChunks = new Map();          // taps -> the chunk ('' when three's changed)
 /** One object's blob shadow (mobile wave): an ellipse from the footprint centre stretched away from the sun, half
  *  its length beyond the footprint; metres, `u` the unit shadow direction. Pure (tested). */
 export function blobShadow(o, w, d, height, sunDir) {
@@ -925,15 +987,37 @@ export function blobShadow(o, w, d, height, sunDir) {
 }
 
 export function cheapShadows(shader) {
-  if (cheapChunk === null) {
+  const key = shadowKernelKey();
+  let chunk = cheapChunks.get(key);
+  if (chunk === undefined) {
     const src = THREE.ShaderChunk.shadowmap_pars_fragment;
-    const out = src.replace(/float phi = interleavedGradientNoise[\s\S]*?\) \* 0\.2;/,
-      'shadow = ( texture( shadowMap, vec3( shadowCoord.xy + vec2( 0.45, 0.28 ) * radius, shadowCoord.z ) )'
-      + ' + texture( shadowMap, vec3( shadowCoord.xy - vec2( 0.45, 0.28 ) * radius, shadowCoord.z ) ) ) * 0.5;');
-    cheapChunk = out === src ? '' : out;
-    if (!cheapChunk) console.warn('cheapShadows: three changed its PCF chunk; keeping the 5-tap shadows');
+    const look = SHADOW_KERNEL.taps !== 4 ? LOOKUP[2] : SHADOW_KERNEL.wideAbove > 0 ? LOOKUP.wide(SHADOW_KERNEL.wideAbove) : LOOKUP[4];
+    const out = src.replace(/float phi = interleavedGradientNoise[\s\S]*?\) \* 0\.2;/, look);
+    chunk = out === src ? '' : out;
+    cheapChunks.set(key, chunk);
+    if (!chunk) console.warn('cheapShadows: three changed its PCF chunk; keeping the 5-tap shadows');
   }
-  if (cheapChunk) shader.fragmentShader = shader.fragmentShader.replace('#include <shadowmap_pars_fragment>', cheapChunk);
+  if (chunk) shader.fragmentShader = shader.fragmentShader.replace('#include <shadowmap_pars_fragment>', chunk);
+}
+
+let termChunk = null;
+/** QA r1 R-03: a surface turned away from the sun is in its own shadow. three draws back faces into the shadow map, so
+ *  such a surface is compared with ITSELF and the result flickers between lit and shadowed in diagonal bands (acne); a
+ *  plain Lambert hides it (no sun there), the wrap lighting (models.js) shows it on roofs and eaves, and the 2-tap
+ *  lookup lines it up into stripes. Past the terminator the sun's light is the shadowed amount and the map is not read
+ *  there; it blends in over N.L 0-0.3 (a thin roof the sun only skims, N.L 0.15-0.3, still striped at 0.15 with the
+ *  High tier's 2048 map and radius 3). For the statics' material (objects-view.js). */
+export function terminatorShadows(shader) {
+  if (termChunk === null) {
+    const src = THREE.ShaderChunk.lights_fragment_begin;
+    const out = src.replace(
+      /directLight\.color \*= \( directLight\.visible && receiveShadow \) \? (getShadow\( directionalShadowMap\[ i \][^;]*?vDirectionalShadowCoord\[ i \] \)) : 1\.0;/,
+      'directLight.color *= ( directLight.visible && receiveShadow ) ? mix( 1.0 - directionalLightShadow.shadowIntensity, $1,'
+      + ' smoothstep( 0.0, 0.3, dot( geometryNormal, directLight.direction ) ) ) : 1.0;');
+    termChunk = out === src ? '' : out;
+    if (!termChunk) console.warn('terminatorShadows: three changed its light loop; keeping the plain lookup');
+  }
+  if (termChunk) shader.fragmentShader = shader.fragmentShader.replace('#include <lights_fragment_begin>', termChunk);
 }
 
 /** The occlusion fade's shared switch: index.js sets `moving` to 1 while the camera moves (RD-03). */
@@ -1109,7 +1193,9 @@ function starHead(cx, y, cz, r, hex, centre = '#F7D24A') {
 }
 /** A small faceted stone (an octahedron, 8 triangles) as a part. */
 function stonePart(r, sx, sy, sz, cx, cy, cz, hex) {
-  const g = new THREE.OctahedronGeometry(r, 0).toNonIndexed();
+  // three builds the polyhedra without an index (a toNonIndexed() here warned three times on every load: QA r1 R-01)
+  const g0 = new THREE.OctahedronGeometry(r, 0);
+  const g = g0.index ? g0.toNonIndexed() : g0;
   g.scale(sx, sy, sz); g.translate(cx, cy, cz); g.computeVertexNormals();
   const P = Array.from(g.getAttribute('position').array); const N = Array.from(g.getAttribute('normal').array); const c = lin(hex);
   return { pos: P, nor: N, idx: P.map((_, k) => k).slice(0, P.length / 3), colAt: (k) => c.map((v) => v * (N[k * 3 + 1] > 0.5 ? 1.05 : 0.8)) };
@@ -1173,6 +1259,9 @@ function mushroomGeometry() {
   }
   return partsGeometry(parts);
 }
+/** The parcel ground's small geometries, built as createGround builds them (tests: no three.js warning on any load). */
+export const parcelGroundGeometries = () => ({ clover: cloverGeometry(), pebbles: pebbleGeometry(), leaves: leafLitterGeometry(),
+  mushrooms: mushroomGeometry() });
 
 /**
  * Each parcel's own ground (wave 3, GDD §3.9 "reveals"): on land the farm owns, about `share` of the scattered tufts
@@ -1239,12 +1328,18 @@ export function createGround(layers, { scenery = null, quality = 'high' } = {}) 
     uTrackOn: { value: [...TRACKS.map(() => 1), ...FEATURE_TRACKS.map(() => 0)] },
     uOval: { value: new THREE.Vector4(RIDING.x, RIDING.z, RIDING.rx, RIDING.rz) },
     uOvalOn: { value: 0 },
+    // G6 (release 1.0): the lawn's clump layer and autumn (uniforms, so look-dev can tune them without a recompile)
+    uClumpDark: { value: new THREE.Vector3(...LAWN_CLUMP.dark) }, uClumpLight: { value: new THREE.Vector3(...LAWN_CLUMP.light) },
+    uAutumnWarm: { value: new THREE.Vector3(...AUTUMN.warm) }, uAutumnDrift: { value: AUTUMN.drift }, uAutumnMargin: { value: AUTUMN.margin },
+    uLawnDesat: { value: LAWN_DESAT }, uPatchK: { value: LAWN_PATCH_K }, uClumpScale: { value: 1 / LAWN_CLUMP.size },
+    uClumpNear: { value: LAWN_CLUMP.near }, uClumpFar: { value: LAWN_CLUMP.far },
   };
   const mat = new THREE.MeshLambertMaterial({ color: 0xffffff });
   mat.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, U, { uTime: WORLD.uTime, uSeason: WORLD.uSeason, uWet: WORLD.uWet, uNight: WORLD.uNight, uGold: WORLD.uGold });
     // wave 4 (owner wish 11): the nearest lamps light the ground at night (models.js LAMPS)
     for (const k of ['uLampPos', 'uLampR', 'uLampColor', 'uLampK']) shader.uniforms[k] = LOOK[k];
+    gradeUniforms(shader.uniforms);                  // G5: the tone-mapping chunk's grade (renderer.js)
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', `#include <common>\n${GROUND_PARS_V}`)
       .replace('#include <begin_vertex>', `#include <begin_vertex>
@@ -1256,7 +1351,7 @@ export function createGround(layers, { scenery = null, quality = 'high' } = {}) 
       .replace('#include <opaque_fragment>', `${LAMPS_FRAG}\n#include <opaque_fragment>`);
     cheapShadows(shader);
   };
-  mat.customProgramCacheKey = () => `hh-ground-v14-${mat.defines && 'HH_GROUND_LOW' in mat.defines ? 'low' : 'full'}`;
+  mat.customProgramCacheKey = () => `hh-ground-v15-${mat.defines && 'HH_GROUND_LOW' in mat.defines ? 'low' : 'full'}-${shadowKernelKey()}`;
   const groundTier = (qt) => {
     mat.defines = qt === 'low' ? { HH_GROUND_LOW: '' } : {};
     mat.needsUpdate = true;
@@ -1277,7 +1372,7 @@ export function createGround(layers, { scenery = null, quality = 'high' } = {}) 
   const tuftMat = models.createMaterial({ side: THREE.DoubleSide });
   addSway(tuftMat, { stiffness: 0.8, push: 1.3 });
   addFoliageTint(tuftMat, { autumn: 0.75 });   // RD-05: the grass turns with the trees
-  addShaderPatch(tuftMat, 'hh-shadow2', cheapShadows, 'v1');
+  addShaderPatch(tuftMat, 'hh-shadow2', cheapShadows, shadowKernelKey);
   // grass in the lawn's own palette (visual-02), one flower (cream or butter yellow) per ~6 tufts
   // (the flower kinds have room for Farm Beauty's extra wild flowers and the Hollow Meadow: `room`)
   const tuftKinds = [
@@ -1972,9 +2067,16 @@ function createWater(layer) {
     uShallow: { value: new THREE.Color('#7DB9B5') }, uDeep: { value: new THREE.Color('#3A88A2') },
     uFoam: { value: new THREE.Color('#F4FBF8') }, uLight: { value: new THREE.Color(1, 1, 1) },
     uRip: { value: Array.from({ length: 8 }, () => new THREE.Vector4(0, 0, 0, 0)) }, uRipR: { value: new Array(8).fill(-1) },
+    // G7 (graphics#8, release 1.0): the sky in the water: the sun (or moon) for sharp glints, the horizon colour at
+    // grazing angles, and the golden hour's warmth (setSun, from the sky state)
+    uSunDir: { value: new THREE.Vector3(-0.55, 0.75, 0.25).normalize() }, uSunCol: { value: new THREE.Color(1, 0.95, 0.85) },
+    uSkyCol: { value: new THREE.Color('#D6F1FF') }, uWarm: { value: 0 }, uGlints: { value: 1 },
+    uWarmTint: { value: new THREE.Vector3(1.36, 1.04, 0.62) }, uWaveSpeed: { value: 0.7 },
+    uWaterFx: { value: 1 },             // 0 = the low version (no wave normal, fresnel, glints): G7's cut-order switch
   }]);
   uniforms.uTime = WORLD.uTime;
   uniforms.uWet = WORLD.uWet;
+  gradeUniforms(uniforms);                         // G5: the water is graded like the land
   const mat = new THREE.ShaderMaterial({
     uniforms,
     fog: true,
@@ -2002,6 +2104,14 @@ function createWater(layer) {
       uniform vec3 uLight;
       uniform vec4 uRip[ 8 ];
       uniform float uRipR[ 8 ];
+      uniform vec3 uSunDir;
+      uniform vec3 uSunCol;
+      uniform vec3 uSkyCol;
+      uniform float uWarm;
+      uniform vec3 uWarmTint;
+      uniform float uGlints;
+      uniform float uWaveSpeed;
+      uniform float uWaterFx;
       varying float vDepth;
       varying vec3 vWorld;
       #include <common>
@@ -2009,10 +2119,28 @@ function createWater(layer) {
       void main() {
         float d = clamp( vDepth, 0.0, 1.0 );
         vec3 col = mix( uShallow, uDeep, smoothstep( 0.05, 0.9, d ) );
+        // G7: at golden hour the water warms (a gold multiply: the river turns a deeper, greener teal, never grey)
+        col *= mix( vec3( 1.0 ), uWarmTint, uWarm );
+        // the sky's part (uWaterFx 0: HEAD's flat water, the cut-order's low version): a uniform branch, skipped whole
+        vec3 hhN = vec3( 0.0, 1.0, 0.0 );
+        vec3 hhV = normalize( cameraPosition - vWorld );
+        if ( uWaterFx > 0.5 ) {
+        // a moving two-train wave normal (plus a fine third train): gentle, so only a few facets meet the sun
+        vec2 hhP = vWorld.xz;
+        float hhA1 = dot( hhP, vec2( 0.83, 0.56 ) ) * 1.9 - uTime * uWaveSpeed;
+        float hhA2 = dot( hhP, vec2( -0.47, 0.88 ) ) * 2.7 - uTime * uWaveSpeed * 1.3;
+        float hhA3 = dot( hhP, vec2( 0.12, -0.99 ) ) * 4.3 - uTime * uWaveSpeed * 1.7;
+        vec2 hhG = vec2( 0.83, 0.56 ) * cos( hhA1 ) * 0.1 + vec2( -0.47, 0.88 ) * cos( hhA2 ) * 0.08 + vec2( 0.12, -0.99 ) * cos( hhA3 ) * 0.06;
+        hhN = normalize( vec3( -hhG.x, 1.0, -hhG.y ) );
+        // the sky at grazing angles (fresnel, at most 25 %: the farm camera looks down, so it is subtle)
+        float hhF = min( 0.25, 0.02 + 0.98 * pow( 1.0 - max( dot( hhN, hhV ), 0.0 ), 5.0 ) );
+        col = mix( col, uSkyCol, hhF );
+        }
         // a broken foam line: the lip comes and goes along the bank
         float brk = 0.5 + 0.5 * sin( vWorld.x * 0.83 + sin( vWorld.z * 0.57 + vWorld.x * 0.21 ) * 2.4 );
         float lip = ( 1.0 - smoothstep( 0.0, 0.05 + 0.05 * brk, d ) ) * ( 0.45 + 0.55 * brk );
-        float rings = step( 0.93, sin( d * 26.0 - uTime * 1.6 ) ) * ( 1.0 - smoothstep( 0.0, 0.24, d ) ) * step( 0.35, brk );
+        // G7: soft rings (smoothstep), not ruled white vector lines
+        float rings = smoothstep( 0.94, 0.99, sin( d * 26.0 - uTime * 1.6 ) ) * ( 1.0 - smoothstep( 0.0, 0.24, d ) ) * smoothstep( 0.25, 0.45, brk );
         // slow rings round piles and hulls
         float rip = 0.0;
         for ( int i = 0; i < 8; i ++ ) {
@@ -2020,13 +2148,16 @@ function createWater(layer) {
           vec2 pa = vWorld.xz - uRip[ i ].xy; vec2 ba = uRip[ i ].zw - uRip[ i ].xy;
           float hT = clamp( dot( pa, ba ) / max( dot( ba, ba ), 1e-4 ), 0.0, 1.0 );
           float e = length( pa - ba * hT ) - uRipR[ i ];
-          if ( e > 0.0 && e < 1.8 ) rip = max( rip, step( 0.86, sin( e * 7.0 - uTime * 2.2 ) ) * ( 1.0 - e / 1.8 ) );
+          if ( e > 0.0 && e < 1.8 ) rip = max( rip, smoothstep( 0.78, 0.93, sin( e * 7.0 - uTime * 2.2 ) ) * ( 1.0 - e / 1.8 ) );
         }
-        vec2 q = vWorld.xz * 0.9 + vec2( uTime * 0.15, uTime * 0.11 );
-        float glint = smoothstep( 0.9, 0.985, sin( q.x * 3.1 ) * sin( q.y * 2.3 + 1.7 ) * sin( ( q.x + q.y ) * 1.3 ) );
-        col = mix( col, uFoam, max( max( lip, rings ) * 0.75, rip * 0.45 ) );
-        col += glint * 0.12 * ( 1.0 - 0.6 * uWet );
+        float hhFoam = max( max( lip, rings ) * 0.75, rip * 0.45 );
+        col = mix( col, uFoam, hhFoam );
         col *= uLight;
+        // G7: sun glints only where a facet faces the half vector (dot(N, H) > 0.995): sparse, sharp, sun-coloured
+        if ( uWaterFx > 0.5 && uGlints > 0.5 ) {
+          float hhS = smoothstep( 0.9965, 0.9994, dot( hhN, normalize( normalize( uSunDir ) + hhV ) ) );
+          col += uSunCol * hhS * 1.6 * ( 1.0 - 0.6 * uWet ) * ( 1.0 - hhFoam );
+        }
         gl_FragColor = vec4( col, 1.0 );
         #include <tonemapping_fragment>
         #include <colorspace_fragment>
@@ -2042,6 +2173,15 @@ function createWater(layer) {
     uniforms,
     /** light: linear rgb multiplier from the sky (night moonlight, dusk warmth). */
     setLight(rgb) { uniforms.uLight.value.setRGB(rgb[0], rgb[1], rgb[2]); },
+    /** G7: the sun (or moon) for the glints (direction, linear colour x strength), the horizon colour for the grazing
+     *  sky, the golden hour's warmth 0..1, and whether glints draw (off on the low tier). */
+    setSun(dir, col, sky, warm = 0, glints = true) {
+      uniforms.uSunDir.value.set(dir[0], dir[1], dir[2]).normalize();
+      uniforms.uSunCol.value.setRGB(col[0], col[1], col[2]);
+      uniforms.uSkyCol.value.setRGB(sky[0], sky[1], sky[2]);
+      uniforms.uWarm.value = warm;
+      uniforms.uGlints.value = glints ? 1 : 0;
+    },
     /** Ripple sources (metres): [[ax, az, bx, bz, r], ...] capsules (a pile: a = b), at most 8. */
     setRipples(list) {
       for (let i = 0; i < 8; i++) {

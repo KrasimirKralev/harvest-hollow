@@ -13,6 +13,8 @@
 //   POST /providers/:id/signin    { method? }  SignInState (claude: method claudeai|console|sso, all the binary offers)
 //   POST /providers/:id/signin/continue { code? | redirectUrl? }  SignInState
 //   POST /providers/:id/signout                SignInState
+//   POST /providers/:id/signin/cancel          SignInState (release 1.0, H4: a pending sign-in nobody finished ends; a
+//                                              Claude Code login child is killed; a signed-in account is kept)
 // Global routes (loopbackRoutes(app)):
 //   POST /internal/agent/:jobId/(validate|preview)   the MCP bridge; loopback callers with the job's token only
 //   GET  /auth/callback                              Sign in with ChatGPT's loopback redirect (matched by `state`)
@@ -55,7 +57,9 @@ function sameOrigin(req, res, next) {
 export async function sendCallbackPage(res, { ok, code }) {
   let html;
   try { html = await fsp.readFile(CALLBACK_PAGE, 'utf8'); } catch { html = '<!doctype html><title>Harness Hollow</title><body data-result="RESULT" data-code="CODE"></body>'; }
-  const safeCode = CODES.has(code) ? code : ok ? '' : 'INTERNAL';
+  // success stamps OK, a code no "what went wrong" line answers to (QA r1 H-02: an empty code showed the INTERNAL line
+  // under "You are signed in")
+  const safeCode = ok ? 'OK' : CODES.has(code) ? code : 'INTERNAL';
   html = html.replace('data-result="RESULT"', `data-result="${ok ? 'ok' : 'error'}"`).replace('data-code="CODE"', `data-code="${safeCode}"`);
   res.set({ 'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer', 'X-Content-Type-Options': 'nosniff',
     'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src 'self'; font-src 'self'; frame-ancestors 'none'" });
@@ -145,7 +149,10 @@ export function createRoutes({ ctx, runtime, providers, log, pushSignIn }) {
       const av = await p.available();
       if (!av.ok) throw new HttpError(503, 'UNAVAILABLE', { reason: av.reason });
       try {
-        return { models: await p.models(runtime.userOf(farmKey, pid)) };
+        const list = await p.models(runtime.userOf(farmKey, pid));
+        // harvey#13: which one "Recommended" is (the UI says it)
+        const def = typeof p.defaultModel === 'function' ? p.defaultModel(list) : null;
+        return { models: list, ...(def ? { default: def.id } : {}) };
       } catch (err) {
         if (err && err.code === 'SIGN_IN') throw new HttpError(428, 'SIGN_IN', { provider: p.id });
         throw new HttpError(502, 'PROVIDER');
@@ -172,6 +179,14 @@ export function createRoutes({ ctx, runtime, providers, log, pushSignIn }) {
       const st = await p.signIn.continue(runtime.userOf(farmKey, pid), {
         code: typeof b.code === 'string' ? b.code : undefined, redirectUrl: typeof b.redirectUrl === 'string' ? b.redirectUrl : undefined });
       if (st.state === 'signed_in') pushSignIn(farmKey, pid, p.id, st);
+      return st;
+    }));
+    prov.post('/:id/signin/cancel', wrap(async (req) => {
+      const { farmKey, pid } = await who(req);
+      const p = providerOf(req.params.id);
+      const user = runtime.userOf(farmKey, pid);
+      const st = typeof p.signIn.cancel === 'function' ? await p.signIn.cancel(user) : await p.signIn.status(user);
+      pushSignIn(farmKey, pid, p.id, st);
       return st;
     }));
     prov.post('/:id/signout', wrap(async (req) => {

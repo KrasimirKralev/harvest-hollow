@@ -128,7 +128,7 @@ export const perksPanel = {
     /** A confirm title that fits a phone's title ribbon (about 16 letters; "Unlearn Steady Han…" was cut): the lead names
      *  the perk there. */
     function fitTitle(long, short) {
-      const narrow = typeof globalThis.matchMedia === 'function' && globalThis.matchMedia('(max-width: 520px)').matches;
+      const narrow = typeof globalThis.matchMedia === 'function' && globalThis.matchMedia('(max-width: 520px), (max-height: 500px)').matches;
       return narrow && long.length > 16 ? short : long;
     }
 
@@ -164,7 +164,7 @@ export const perksPanel = {
         h('div', h('b', r.xp ? t('league.perks.rested.xp', { n: r.xp }) : t('league.perks.rested.not')),
           h('small', r.xp ? t('league.perks.rested.double') : t('league.perks.rested.bank')),
           h('span.pn-bar.pn-thin.pn-sky', { role: 'progressbar', 'aria-valuemin': '0', 'aria-valuemax': String(r.cap), 'aria-valuenow': String(r.xp),
-            style: { '--p': String(p) } }, h('span.pn-bar-fill'))));
+            'aria-label': `${t('league.perks.rested.label')}: ${r.xp} / ${r.cap}`, style: { '--p': String(p) } }, h('span.pn-bar-fill'))));
     }
 
     function treeCard(v, tr) {
@@ -182,7 +182,7 @@ export const perksPanel = {
           learn);
       });
       return h(`section.lg-tree.t-${tr.id}`, { style: { '--tree': look.color, '--tree-ink': look.ink }, 'aria-label': t('league.perks.treeLabel', { name: tr.name, n: tr.owned }) },
-        h('header.lg-tree-head', h('span.lg-tree-ic', icon(look.icon, { size: 40, alt: '' })),
+        h('div.lg-tree-head', h('span.lg-tree-ic', icon(look.icon, { size: 40, alt: '' })),
           h('div', h('b', tr.name), h('small', look.blurb)),
           h('span.lg-tree-n', `${tr.owned}/5`)),
         h('ol.lg-perks', ...nodes),

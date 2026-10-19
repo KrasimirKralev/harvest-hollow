@@ -24,7 +24,7 @@ export const LANDMARKS = [
     text: 'Sell anything, any amount, at once. Mabel\'s chalkboard shows the Market Demand.' },
   { id: 'order_board', name: 'Mabel\'s Order Board', m: 'M1a', kind: 'landmark', layer: 'object', size: [2, 1],
     shop: false, movable: true, panel: 'orders', unlock: 2, model: 'landmarks/order_board',
-    text: 'Orders pay more than the market, and they never expire.' },
+    text: 'Orders pay more than the market, in coins and XP, and they never expire.' },
   // The restored Old Greenhouse (GDD §5.9 Restoration 1, M1b): a frame on the GROUND layer whose 12 plots (object
   // layer) sit inside it, beyond the plot cap and always in season. It arrives in the build tray when the project
   // is complete (rules: actions/restoration.js greenhouseDef()), so the couple chooses where it stands.

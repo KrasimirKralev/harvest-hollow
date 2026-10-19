@@ -13,7 +13,7 @@ import { CONTENT, MASTERWORK, FARM_BEAUTY, defOf, isLive, decorOf } from '../../
 import * as beautyA from '../../../../shared/rules/actions/beauty.js';
 import { levelOf } from './model.js';
 import { startPlacement } from './placement.js';
-import { h, fmt, createKit, pill, icon, svgIcon, price, phoneTitle } from './kit.js';
+import { h, fmt, createKit, pill, icon, svgIcon, price, phoneTitle, scrollBehavior } from './kit.js';
 import { s } from './art.js';
 import { t, lang, list, name as cname } from '../../i18n/index.js';
 
@@ -206,7 +206,7 @@ function setCard(ctx, kit, set) {
     new: [t('collect.sets.st.new'), ''],
   }[set.status];
   return h(`article.pc-set.${set.status}${set.open ? '' : '.locked'}`, { dataset: { set: set.id } },
-    h('header.pc-set-head', h('div', h('h4', set.name), h('small', set.cosmeticText)), pill(status[0], status[1])),
+    h('div.pc-set-head', h('div', h('h3', set.name), h('small', set.cosmeticText)), pill(status[0], status[1])),
     h('div.pc-set-body', h('figure.pc-plan-box', plan(set), h('figcaption', t('collect.sets.reach', { r: set.radius }))),
       h('ul.pc-pieces', ...set.pieces.map((x, i) => pieceRow(ctx, kit, set, x, i)))),
     placeSetButton(ctx, set),
@@ -256,8 +256,8 @@ function mwGroup(ctx, kit, g, ui) {
   const open = ui.open.has(g.def) || g.copies.findIndex((c) => c.id === ui.focus) >= SHOWN;
   const shown = open ? g.copies : g.copies.slice(0, SHOWN);
   return h(`article.pc-mwg${g.copies.some((c) => c.mw === 2) ? '.gold' : ''}`, { dataset: { def: g.def } },
-    h('header.pc-mwg-head', h('span.pc-mw-art', icon(g.def, { size: 52, alt: '' })),
-      h('div', h('h4', g.name),
+    h('div.pc-mwg-head', h('span.pc-mw-art', icon(g.def, { size: 52, alt: '' })),
+      h('div', h('h3', g.name),
         h('small', g.sets.length ? t('collect.sets.copiesSets', { n: g.copies.length, sets: g.sets.join(', ') }) : t('collect.sets.copies', { n: g.copies.length })))),
     h('ul.pc-mw-copies', ...shown.map((r, k) => mwCopy(ctx, kit, r, k, ui.focus === r.id, g.copies.length === 1))),
     g.copies.length > SHOWN ? h('button.pn-chipbtn.pc-mw-more',
@@ -315,7 +315,7 @@ export const decorSetsPanel = {
       if (focus) {
         const el = body.querySelector(`[data-id="${CSS.escape(focus)}"], [data-set="${CSS.escape(focus)}"]`);
         focus = null;
-        if (el) requestAnimationFrame(() => el.scrollIntoView({ block: 'center', behavior: 'smooth' }));
+        if (el) requestAnimationFrame(() => el.scrollIntoView({ block: 'center', behavior: scrollBehavior() }));
       }
     }
     update(true);
@@ -340,6 +340,6 @@ export function shopTags(defId, level) {
 export function shopSetsLink(ctx, level) {
   const sets = [...CONTENT.decorSets.values()].filter(isLive);
   if (!sets.length || level < Math.min(...sets.map((x) => x.unlock))) return null;
-  return h('button.pn-chipbtn.pc-shoplink', { type: 'button', on: { click: () => ctx.open('decorsets') } },
+  return h('button.pn-chipbtn.pc-shoplink', { type: 'button', 'data-sfx': 'own', on: { click: () => ctx.open('decorsets') } },
     `✿ ${t('collect.sets.title')}`);
 }

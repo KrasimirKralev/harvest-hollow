@@ -1,4 +1,5 @@
-/* Harvest Hollow on phones and tablets (mobile wave 2026-10-03, layout lane). Linked last in index.html.
+/* Harvest Hollow on phones and tablets (mobile wave 2026-10-03, layout lane). Linked after the base sheets in
+   index.html; only the release's mobile-panels.css and feel.css come after it.
    EVERY rule of this file sits in one of the media queries of ui/layout.js LAYOUT_Q (or in `(hover: none)`), so a
    desktop window (wider than 1180 px and taller than 500 px) never sees any of it; test/mobile-ui.test.js checks that.
 
@@ -27,7 +28,7 @@
   /* buttons too (pan-x pan-y has no double-tap zoom, so a tap is as quick as with `manipulation`, minus the pinch) */
   #hud button, #panels button, .seed-pop button, .emote-wheel button, .modal-layer button { touch-action: pan-x pan-y; }
   /* key hints mean nothing without a keyboard */
-  .tool .key, .social-btn .key, .edge-item kbd { display: none; }
+  .tool .key, .social-btn .key, .edge-item kbd, .tool-flyout .tool .key { display: none; }
 
   /* ---- top row: players shrink to their faces (name and title in the button's label and tooltip) ---- */
   .hud-tl { top: calc(var(--safe) + var(--sat)); left: calc(var(--safe) + var(--sal)); }
@@ -36,46 +37,19 @@
   .players .tag { display: none; }
   .pill, .pill-coins { min-width: 0; padding-right: 8px; }
   .hud-right { right: calc(var(--safe) + var(--sar)); }
-  /* the photo / settings / sound menu lives in the farm menu */
-  .hud-right .edge-more, .hud-right .edge-gap:nth-last-child(2) { display: none; }
+  .hud-gear { right: calc(var(--safe) + var(--sar)); top: calc(var(--safe) + 66px + var(--sat)); }
+  .hud-right { top: calc(var(--safe) + 122px + var(--sat)); }
 
-  /* ---- the bottom bar: the tools (they scroll sideways when they do not fit), the dock, the farm menu button ---- */
-  .tray-wrap { left: 0; right: 0; bottom: 0; transform: none; align-items: flex-start; gap: 8px;
-    padding: 0 calc(8px + var(--sar)) calc(8px + var(--sab)) calc(8px + var(--sal)); }
+  /* ---- the bottom (tablets; release 1.0 S1, S2): the toolbar of 3 at the left, the dock of 4 + the Farm book at the
+     right, both on the bottom edge; the flyouts, the coach and the trays above the toolbar ---- */
+  .tray-wrap { left: 0; right: auto; bottom: 0; transform: none; align-items: flex-start; gap: 8px;
+    padding: 0 0 calc(8px + var(--sab)) calc(8px + var(--sal)); max-width: calc(100vw - 16px - var(--sal) - var(--sar)); }
   .tray-wrap > * { max-width: 100%; }
-  #toolbar { max-width: calc(100% - var(--menu-w) - 8px - var(--dock-w, 0px)); overflow-x: auto; overflow-y: hidden;
-    scrollbar-width: none; overscroll-behavior-x: contain; padding-top: 12px; }
-  #toolbar::-webkit-scrollbar { display: none; }
   .tool { flex: none; }
-  /* the chevron of a bar with tools past the edge (toolbar.js paintMore): forward at the bar's visible end, back at
-     its start once the far end is reached */
-  .tool-more:not([hidden]) { position: absolute; z-index: 3; display: grid; place-items: center; width: 32px; height: 50px; padding: 0;
-    right: calc(var(--menu-w) + 4px + var(--sar) + var(--dock-w, 0px)); bottom: calc(17px + var(--sab));
-    border: 0; border-radius: var(--r-pill); pointer-events: auto; color: var(--wood-900); font: 800 1.875rem/1 var(--font-display);
-    background: radial-gradient(110% 90% at 50% 30%, var(--paper-50), var(--paper-100) 55%, var(--paper-300));
-    box-shadow: inset 0 0 0 2px var(--paper-edge), 0 0 0 2.5px var(--wood-900), 0 3px 0 2.5px rgba(62, 38, 18, .3); }
-  .tool-more::before { content: ''; position: absolute; inset: -4px -6px; }
-  .tool-more span { display: block; margin-top: -4px; }
-  .tool-more[data-dir="back"] span { transform: scaleX(-1); }
-  .tool-more[data-dir="back"] { right: auto; left: calc(4px + var(--sal)); }
-  .tool-more:active { translate: 0 2px; }
+  .tool-more { display: none !important; }
   .tool[aria-pressed="true"] { transform: translateY(-5px); }
-  .m-menu-btn { position: absolute; right: calc(8px + var(--sar)); bottom: calc(8px + var(--sab)); z-index: 2; display: flex; flex-direction: column;
-    align-items: center; justify-content: center; gap: 3px; width: var(--menu-w); height: 74px; padding: 0; border: 0; border-radius: var(--r-l);
-    pointer-events: auto; color: var(--ink-900);
-    background: radial-gradient(110% 90% at 50% 30%, var(--paper-50), var(--paper-100) 55%, var(--paper-300));
-    box-shadow: inset 0 0 0 2px var(--paper-edge), 0 0 0 3px var(--wood-900), 0 5px 0 3px rgba(62, 38, 18, .35); }
-  .m-menu-btn:active { transform: translateY(2px); }
-  .m-menu-btn[aria-expanded="true"] { background: radial-gradient(110% 90% at 50% 30%, var(--sun-300), var(--sun-500) 70%, var(--sun-700)); }
-  .m-menu-ico { display: grid; gap: 4px; width: 28px; }
-  .m-menu-ico i { display: block; height: 4px; border-radius: 2px; background: var(--wood-900); }
-  .m-menu-btn .lbl { font: 800 .875rem/1 var(--font-display); color: var(--wood-900); }
-  .m-menu-btn .badge { position: absolute; top: -8px; right: -4px; }
-  .m-menu-btn .badge:not(.badge--calm):not(.badge--new) { animation: bob 500ms var(--ease-inout) infinite alternate; }
-  /* the dock sits in the bar between the tools and the menu */
-  #hud > .dock { right: calc(8px + var(--sar) + var(--menu-w) + 10px); bottom: calc(8px + var(--sab)); }
-  /* the small dock buttons and the together buttons live in the farm menu */
-  #hud .dock-minis, #hud .hud-bl > .social { display: none; }
+  #hud > .dock { right: calc(8px + var(--sar)); bottom: calc(8px + var(--sab)); }
+  #hud .dock-minis { display: none; }
 
   /* ---- above the bar: the coach, the feed (it steps aside for the coach), the trays ---- */
   .coach { width: min(540px, calc(100vw - 16px - var(--sal) - var(--sar))); }
@@ -85,6 +59,8 @@
   body.coach-on .hud-bl .feed { display: none; }
   .seed-tray, .seed-strip { max-width: calc(100vw - 16px - var(--sal) - var(--sar)); }
   .chat-box { width: min(420px, calc(100vw - 16px)); }
+  /* the chat line a thumb uses: 44 px field and Send (S9a, ux-phone#16) */
+  .chat-box .field, .chat-box .btn { min-height: 44px; }
 
   /* ---- toasts never squeeze between a banner and the tracker; with a banner up they sit over the bar. The column
      spans the screen (left: 50% alone let an absolute box shrink-wrap to half of it and wrap every toast) ---- */
@@ -92,10 +68,14 @@
   .notice, #hud:has(#banners > :not(.banner-more)) .notice { left: 50%; width: max-content; }
   #hud:has(#banners > :not(.banner-more)) .toast, #hud:has(#banners > :not(.banner-more)) .notice { max-width: min(560px, calc(100vw - 24px)); }
   #hud:has(#banners > .unlock-banner, #banners > .rosette, #banners > .bloom-banner) .toasts { top: auto; bottom: calc(var(--bar-h) + var(--sab) + 16px); }
+  /* an urgent notice (Reload) never under a card: it sits over the bar too, above the toasts (QA r4 I4-01) */
+  #hud:has(#banners > .unlock-banner, #banners > .rosette, #banners > .bloom-banner) .notice { top: auto; bottom: calc(var(--bar-h) + var(--sab) + 16px); }
   .toast { max-width: min(560px, calc(100vw - 24px)); }
 
   /* the tutorial's arrow over a tool gets its own room above the bar (tutorial.js body.tut-bar) */
-  body.tut-bar #toolbar { margin-top: 66px; }
+  /* grown by tutorial.js (--tut-room) until Grandma's card stands clear of the arrow (QA r2 S-08) */
+  body.tut-bar #toolbar { margin-top: var(--tut-room, 66px); }
+  body.tut-tray #build-tray, body.tut-tray #seed-tray { margin-top: var(--tut-room, 0px); }
   /* small buttons on cards a finger presses: 44 px tall at least */
   .unlock-banner .x { width: 44px; height: 44px; }
   .unlock-banner .btn--small, .toast .btn--small, .coach .btn--small { min-height: 42px; }
@@ -111,55 +91,46 @@
   .hh-panel-body input[type="range"], .settings input[type="range"] { height: 44px; }
   .hh-panel-body input.pn-num { min-height: 44px; }
   .hh-tab, .coach-more, .tracker-chip, .hint-btn { min-height: 44px; }
+  .panel-tip-x { width: 44px; height: 44px; }
   .coach-more { min-width: 44px; }
   .swatch { width: 44px; height: 44px; }
   /* the farmer dots stay small to look at; the finger gets 44 px across them (two stacked dots share the height) */
   .players .farmer { position: relative; }
   .players .farmer::before { content: ''; position: absolute; inset: -1px -10px; }
+  /* two dots stacked share their height: the top one reaches up, the bottom one down (QA r1 S-23: 26 px tall); each
+     gets 37 x 44 px (the 24 px dots meet WCAG 2.5.8's 24 px; the 44 px exception is in the lane notes) */
+  .players li:first-child:not(:only-child) .farmer::before { inset: -12px -10px -1px; }
+  .players li:last-child:not(:only-child) .farmer::before { inset: -1px -10px -12px; }
+  .players li:only-child .farmer::before { inset: -10px; }
   .ss-seed .ic { width: 34px; height: 34px; }
   /* a card is flicked away with a finger (toasts.js swipeAway): the browser must not take that drag */
   .unlock-banner { touch-action: none; }
   /* a chat line typed while Grandma's card is up sits over the card, not under it */
   .hud-bl { z-index: 3; }
 
-  /* ---- the farm menu (ui/layout.js): the HUD's own dock, small dock and together buttons move in while it is open ---- */
-  .m-menu { display: flex; flex-direction: column; gap: 16px; }
-  .m-sec h3 { margin: 0 0 12px; font: 800 1.125rem/1 var(--font-display); color: var(--wood-700); }
-  .m-menu .dock, .m-menu .dock-minis, .m-menu .social, .m-menu .m-tiles {
-    position: static; display: grid; grid-template-columns: repeat(auto-fill, minmax(72px, 1fr)); justify-items: center; gap: 22px 6px;
-    padding: 2px 0 12px; margin: 0; background: none; box-shadow: none; border-radius: 0; transform: none; }
-  .m-menu .dock[hidden] { display: none; }
-  .m-menu .dock::after { content: none; }
-  .m-menu .dock-btn { width: 76px; height: 80px; }
-  .m-menu .dock-mini, .m-menu .social-btn, .m-tile .m-ico { width: 60px; height: 60px; }
-  .m-menu .dock-mini .lbl, .m-menu .social-btn::after, .m-tile .lbl { position: absolute; bottom: -12px; left: 50%; transform: translateX(-50%); padding: 2px 9px;
-    border-radius: var(--r-pill); font: 700 .875rem/1.1 var(--font-ui); color: #fff; background: var(--wood-900); white-space: nowrap; }
-  .m-menu .social-btn::after { content: attr(data-label); }
-  .m-menu .social-btn .glyph { width: 34px; height: 34px; }
-  .m-tile { position: relative; display: grid; place-items: center; width: 72px; height: 60px; padding: 0; border: 0; background: none; }
-  .m-tile .m-ico { display: grid; place-items: center; border-radius: 50%;
-    background: radial-gradient(110% 90% at 50% 30%, var(--paper-50), var(--paper-100) 55%, var(--paper-300));
-    box-shadow: inset 0 0 0 2px var(--paper-edge), 0 0 0 3px var(--wood-900), 0 5px 0 3px rgba(62, 38, 18, .35); }
-  .m-tile:active .m-ico, .m-menu .social-btn:active, .m-menu .dock-mini:active { transform: translateY(2px); }
-  .m-tile[aria-checked="false"] .m-ico { filter: grayscale(.6); }
-  .m-stats { display: flex; flex-wrap: wrap; gap: 8px; }
-  .m-stat { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 4px 16px 4px 8px; border: 0; border-radius: var(--r-pill);
-    font: 600 .9375rem/1.2 var(--font-ui); color: var(--ink-700); background: linear-gradient(180deg, var(--paper-50), var(--paper-200));
-    box-shadow: inset 0 0 0 2px var(--paper-edge), 0 3px 0 rgba(62, 38, 18, .25); }
-  .m-stat b { font: 800 1.125rem/1 var(--font-ui); color: var(--ink-900); font-variant-numeric: tabular-nums; }
-  .m-stat .ic { width: 30px; height: 30px; }
-  .m-stat[data-mode="overflow"], .m-stat[data-mode="full"] { background: linear-gradient(180deg, #FFE1B8, #FFC27A); box-shadow: inset 0 0 0 2px var(--sun-700); }
+  /* ---- the Farm book (ui/layout.js; release 1.0 S3): tiles a thumb presses, the last row clear of the home bar ---- */
+  .farm-book .m-places, .farm-book .m-tiles, .farm-book #social { gap: 20px 6px; }
+  /* the captions' pills a little narrower, the same for every one: five Bulgarian captions keep the book's one size in
+     the iPhone's Together row (QA r2 S-21: "Изненада" was set at 11.5 px, "Бележки" at 12.5 px) */
+  .farm-book .dock-mini .lbl, .farm-book .social-btn > .lbl, .farm-book .m-tile .lbl { padding-left: 5px; padding-right: 5px; }
+  /* five Together tiles in a column too narrow for five (360): three over two, centred, never the surprise alone on a
+     second row (QA r2 S2-C1, coop#9; five 13 px captions do not fit 5 x 65 px) */
+  @media (max-width: 374px) {
+    .farm-book #social .together-menu:not(:has(> button[hidden])):has(> button:nth-of-type(5)) { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+    .farm-book #social .together-menu:not(:has(> button[hidden])):has(> button:nth-of-type(5)) > button { grid-column: span 2; }
+    .farm-book #social .together-menu:not(:has(> button[hidden])):has(> button:nth-of-type(5)) > button:nth-of-type(4) { grid-column: 2 / span 2; }
+  }
+  .farm-book { padding-bottom: calc(12px + var(--sab)); }
 }
 
 /* ======== tablets wide enough for the dock in the bar (960-1180 px) ============================================== */
 @media (min-width: 960px) and (max-width: 1180px) and (min-height: 501px) {
-  :root { --dock-w: 270px; }
+  .dock-btn, .dock .m-menu-btn { width: 76px; }
 }
 
 /* ======== dockless: Build / Market / Barn in the farm menu (tablets under 960 px and every phone) ================ */
 @media (max-width: 959px), (max-height: 500px) {
-  #hud > .dock { display: none; }
-  /* a narrow top row: the farm's name and the pills' "+" step aside (the pills still open their panels) */
+  /* a narrow top row: the farm's name and the pills' chevron step aside (the pills still open their panels) */
   .farm-name, .pill > .more, .pill-hearts { display: none; }
   #hud-xp-bar { width: 130px; }
   .pill { padding-right: 12px; }
@@ -191,11 +162,15 @@
   .pill .badge { top: -9px; right: -9px; }
   .buffs { left: 0; top: 102px; }
   .buff { height: 30px; font-size: .875rem; }
-  /* Farm Beauty: a small flower under the pills */
-  #hud-beauty { top: calc(54px + var(--sat)); right: calc(6px + var(--sar)); transform: scale(.82); transform-origin: 100% 0; }
+  /* Settings, the together buttons and Farm Beauty live in the Farm book on a phone (release 1.0 S3) */
+  #hud-gear, #hud .hud-bl > .social { display: none; }
+  .bench-chip { left: calc(6px + var(--sal)); top: calc(108px + var(--sat)); max-width: calc(100vw - 80px); }
+  /* the Golden Hour / Spark pill sits at the chip's top-left: the chip goes under it (QA r2 L2-04, life-feel's note) */
+  #hud:has(.buffs > *) .bench-chip { top: calc(150px + var(--sat)); }
+  .hud-right { top: calc(56px + var(--sat)); }
 
   /* ---- the Goal Tracker: one chip under the top row; a tap opens every card under it ---- */
-  .tracker-chip-wrap { display: flex; position: absolute; top: calc(58px + var(--sat)); left: calc(6px + var(--sal)); right: calc(66px + var(--sar)); }
+  .tracker-chip-wrap { display: flex; position: absolute; top: calc(58px + var(--sat)); left: calc(6px + var(--sal)); right: calc(6px + var(--sar)); }
   .tracker-chip { position: relative; display: flex; align-items: center; gap: 7px; min-width: 0; max-width: 100%; height: 42px; padding: 0 12px 0 5px;
     border: 0; border-radius: var(--r-pill); text-align: left; pointer-events: auto; color: var(--ink-900);
     background: radial-gradient(120% 90% at 30% 30%, var(--paper-50), var(--paper-100) 60%, var(--paper-200));
@@ -204,7 +179,13 @@
     color: #fff; background: var(--go-900); }
   .tracker-chip .tc-art { flex: none; display: grid; place-items: center; width: 26px; height: 26px; }
   .tracker-chip .tc-art .ic, .tracker-chip .tc-art .glyph { width: 26px; height: 26px; }
-  .tracker-chip .tc-t { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 700 .9375rem/1.1 var(--font-ui); }
+  /* the NOW chip says its whole line (release 1.0 M12a, ux-phone#4, copy#4): no "NOW" tag (the chip is always NOW), the
+     line wraps to two lines and the chip grows instead of cutting its noun */
+  .tracker-chip .tc-t { min-width: 0; overflow: hidden; white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+    font: 700 .9375rem/1.1 var(--font-ui); }
+  .tracker-chip { height: auto; min-height: 44px; padding-top: 3px; padding-bottom: 3px; }
+  .tracker-chip .slot-tag { display: none; }
+  .tracker-chip { padding-left: 8px; }
   .tracker-chip .tc-n { flex: none; padding: 2px 7px; border-radius: var(--r-pill); font: 800 .8125rem/1.2 var(--font-ui); color: #fff; background: var(--wood-700); }
   .tracker-chip .chev { flex: none; font: 800 .875rem/1 var(--font-ui); color: var(--ink-700); transition: transform var(--t-micro) var(--ease-out); }
   .tracker-chip[aria-expanded="true"] .chev { transform: rotate(180deg); }
@@ -224,6 +205,11 @@
   .edge-btn .glyph { width: 26px; height: 26px; }
   .edge-gap { height: 2px; }
 
+  /* the seed on the armed Hand's picture sits inside the picture, clear of the slot's word under it (QA r3 S3-18, fbp#15:
+     at 360 it covered the tops of "Wheat" and "Пшеница" by 3 px) */
+  .tool .crop-on { bottom: 3px; width: 24px; height: 24px; }
+  .tool .crop-on .ic { width: 20px; height: 20px; }
+
   /* ---- above the bar ---- */
   .coach { padding: 5px; }
   .coach-paper { gap: 8px; padding: 7px 9px; }
@@ -242,7 +228,9 @@
 
   /* ---- toasts and banners under the tracker chip ---- */
   .conn, .toasts, .notice { top: calc(108px + var(--sat)); }
-  .conn { max-width: calc(100vw - 16px); }
+  /* the connection line keeps out of the edge lane too: the column stands at its height since owner 2026-10-19 */
+  .conn { left: calc(8px + var(--sal)); right: var(--edge-lane); width: fit-content; margin-inline: auto; transform: none;
+    max-width: calc(100vw - 8px - var(--sal) - var(--edge-lane)); }
   .conn:not(:empty) ~ .toasts, .conn:not(:empty) ~ .notice { top: calc(160px + var(--sat)); }
   /* a running Friendly Duel's score chip sits under the tracker (ui-league): toasts and notices go below it */
   #hud:has(> .lg-duel-chip:not([hidden])) .toasts, #hud:has(> .lg-duel-chip:not([hidden])) .notice { top: calc(156px + var(--sat)); }
@@ -272,8 +260,8 @@
     border-radius: var(--r-pill); background: linear-gradient(180deg, var(--paper-50), var(--paper-100));
     box-shadow: inset 0 0 0 2px var(--paper-edge); color: var(--ink-900); text-align: left; cursor: pointer; }
   .card-chip-bulb { flex: none; font-size: 1.15rem; line-height: 1; }
-  .card-chip-title { flex: 1 1 auto; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
-    font: 800 1rem/1.15 var(--font-display); }
+  /* release 1.0 M12a (integrator): the title takes a second line rather than "Changed you…" at 360 x 640 */
+  .card-chip-title { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; font: 800 1rem/1.15 var(--font-display); }
   .card-chip-more { flex: none; padding: 3px 10px 4px; border-radius: var(--r-pill); font: 700 .8125rem/1.2 var(--font-ui);
     color: #fff; background: var(--sky-700, #2F7FC1); }
   .card-chip:focus-visible { outline: 3px solid var(--sky-900); outline-offset: 2px; }
@@ -282,9 +270,16 @@
   /* the level-up: the same show, phone-sized */
   .lvl { scale: .62; }
 
-  /* the seed picker at a plot: four columns, inside the screen */
-  .seed-pop { max-width: calc(100vw - 12px); }
+  /* the seed picker at a plot: four columns, inside the screen (release 1.0 M12a, ux-phone#2 appendix): 12 px from each
+     edge, no "then tap or drag" line, names on up to two lines in their card, the price and the clock wrapping */
+  .seed-pop { max-width: calc(100vw - 24px - var(--sal) - var(--sar)); }
   .sp-grid { grid-template-columns: repeat(4, minmax(72px, 1fr)); }
+  /* the clock glyph steps aside: "утре 04:00" keeps one line in a 4-column picker (QA r2 S-23) */
+  .sp-clk { display: none; }
+  .sp-head span { display: none; }
+  .sp-nm { white-space: normal; text-align: center; line-height: 1.05; min-height: 2.1em; display: flex; align-items: center; justify-content: center;
+    overflow-wrap: break-word; hyphens: auto; max-width: 100%; font-size: .8125rem; }
+  .sp-seed { min-width: 0; }
 
   /* ---- panels: sheets with a grip; the banner title sits inside the sheet, the close button in its corner ---- */
   .hh-sheet-grip { display: block; position: absolute; z-index: 3; left: 50%; top: 6px; width: 46px; height: 5px; margin-left: -23px; border-radius: 3px;
@@ -297,7 +292,7 @@
   .hh-panel-title .ic { width: 30px; height: 30px; margin: -6px 0 -6px -8px; }
   .hh-panel-close { right: calc(10px + var(--sar)); top: 11px; width: 44px; height: 44px; }
   .hh-panel-close .glyph { width: 22px; height: 22px; }
-  .hh-tabs { padding: 0 2px; }
+  .hh-tabs { padding: 0 2px; --tab-pad: 2px; }
   .hh-tab { min-height: 44px; padding: 8px 12px 9px; }
   .hh-panel-body { padding: 12px 10px 16px; }
   .hh-panel .scroll-fade { left: 10px; right: 10px; }
@@ -314,7 +309,6 @@
     grid-template-columns: minmax(0, 1fr); }
   .pn-cards, .wk-entries { grid-template-columns: repeat(auto-fill, minmax(min(150px, 100%), 1fr)); gap: 10px; }
   .pn-stacks { grid-template-columns: repeat(auto-fill, minmax(88px, 1fr)); gap: 8px; }
-  .pn-board { padding: 14px 10px; gap: 16px; }
   .pn-barnrow { grid-template-columns: 40px minmax(0, 1fr) 56px; }
   .pn-barnrow .pn-keep, .pn-barnrow .pn-keep-open, .pn-barnrow-acts { grid-column: 2 / -1; }
   .pn-upgrade { max-width: none; }
@@ -327,7 +321,6 @@
   .pc-stickers { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .pc-next-list { grid-template-columns: minmax(0, 1fr); }
   .pc-project { min-width: 0; }
-  .wk-banner { flex-direction: column; align-items: flex-start; height: auto; min-height: 124px; }
   /* the village across the river keeps readable names: it scrolls sideways instead of shrinking to 5 px text (M-11) */
   .wk-village-wrap { overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none; }
   .wk-village-wrap::-webkit-scrollbar { display: none; }
@@ -360,10 +353,16 @@
   .slot-card { width: min(500px, 100%); margin: 78px auto 0; }
   .slot-title { width: min(340px, 86vw); }
   .slot-paper { padding: 12px 12px 10px; }
-  .slot .swatches { padding-left: 0; flex-wrap: wrap; gap: 6px; }
+  /* the colours in one row, their name under it, Play last and full width (S9a, ux-phone#18) */
+  .slot .swatches { padding-left: 0; flex-wrap: wrap; gap: 4px; justify-content: space-between; width: 100%; }
   .swatch { width: 44px; height: 44px; }
+  /* all the colours share one row: each 44 px where there is room, a little less on a 360 px phone (QA r1 S-19: the
+     sixth wrapped alone onto a second row) */
+  .slot .swatches .swatch { flex: 1 1 0; min-width: 0; max-width: 44px; height: auto; aspect-ratio: 1; }
+  .slot .swatches .sw-name { flex: 1 1 100%; text-align: center; margin: 2px 0 0; }
   .slot .pass { margin-left: 0; max-width: 100%; }
   .slot .btn { margin-left: auto; min-height: 44px; }
+  .slot > .btn { flex: 1 1 100%; width: 100%; margin-left: 0; }
 
   /* ---- dialogs inside the sheets ---- */
   .dlg .art { width: 72px; height: 72px; }
@@ -379,32 +378,97 @@
   #hud:has(> .lg-duel-chip:not([hidden])) .buffs { top: 152px; }
   #hud:has(> .lg-duel-chip:not([hidden])):has(.buffs > *) .toasts,
   #hud:has(> .lg-duel-chip:not([hidden])):has(.buffs > *) .notice { top: calc(196px + var(--sat)); }
-  /* hearts and the barn count live in the farm menu's header */
-  .pill-hearts, .pill-barn { display: none; }
+  /* the Barn is a phone-bar button; Acorns and Hearts live on the Farm book's You page (M12a, ux-phone#1) */
+  .pill-hearts, .pill-barn, body.acorn-price #hud-acorns-pill { display: none; }
 
-  /* the right edge: zoom and turn in a slim column (pinch and twist do the same) */
-  .hud-right { top: 46%; }
+  /* the right edge cluster (owner 2026-10-19: "on Phone move the icons better, nothing at the center of the screen"):
+     Harvey and the turn button stand at the top of the edge lane, under the coins, so the farm keeps its middle and the
+     column never meets Grandma's card, a tray, the tool pop-up or the bar (it used to stand at 46 % and dodge her card
+     with six rules). Harvey's progress shows as a small chip under it (harness.css). The quest chip stops short of the
+     lane, so a long Bulgarian goal never runs under Harvey; a centred duel chip keeps out of it on both sides */
+  .hud-right { top: calc(54px + var(--sat)); }
+  .tracker-chip-wrap { right: calc(var(--edge-lane) + 8px); }
+  #hud > .lg-duel-chip { max-width: calc(100vw - 2 * var(--edge-lane)); }
+  /* the timers row (Golden Hour, Spark, the balloon crates' power-ups) is the left slot under the quest chip: a second
+     timer wraps under the first instead of running into the lane */
+  .buffs { max-width: calc(100vw - 12px - var(--sal) - var(--edge-lane)); flex-wrap: wrap; }
 
-  /* the bottom bar spans the screen: the tools scroll under a soft edge, the menu button holds the right end */
-  .tray-wrap { padding: 0; gap: 8px; align-items: center; }
-  #toolbar { align-self: stretch; max-width: none; gap: 6px; border-radius: 22px 22px 0 0;
-    padding: 12px 8px calc(8px + var(--sab)) calc(8px + var(--sal)); box-shadow: inset 0 2px 0 rgba(255, 255, 255, .45), 0 0 0 2.5px var(--wood-900), 0 -4px 12px rgba(62, 38, 18, .25); }
-  /* the "›" chevron has its own solid slot left of the menu: the fade ends before it, so a tool is never cut in half
-     under it (final release V-03), and the last tool scrolls clear of the fade */
-  #toolbar::after { content: ''; flex: 0 0 calc(var(--menu-w) + 74px + var(--sar)); }
-  .tool { width: 58px; height: 62px; padding-top: 2px; }
-  .tool .ico { height: 40px; }
-  .tool .ic, .tool .glyph { width: 40px; height: 40px; }
-  .tool .name { font-size: .8125rem; }
-  .tool .name.long { display: inline-block; transform: scaleX(.86); letter-spacing: -.02em; }
-  .tray-wrap::after { content: ''; position: absolute; right: 0; bottom: 0; width: calc(var(--menu-w) + 66px + var(--sar)); height: calc(82px + var(--sab));
-    border-radius: 0 22px 0 0; pointer-events: none;
-    background: linear-gradient(to right, rgba(217, 154, 74, 0), var(--wood-300) 26px, var(--wood-300)); }
-  .m-menu-btn { right: calc(6px + var(--sar)); bottom: calc(5px + var(--sab)); height: 70px; }
-  .coach-slot, .seed-tray, .build-tray, .stroke-chip, .seed-strip, .tray-tip, .hammer-hint { margin: 0 6px; }
+  /* the phone bar (release 1.0 S3, ux-phone#3): five slots across the screen, [tool in hand] [Market] [Orders] [Barn]
+     [Farm book]; the other tools pop up from the tool slot (with Build); the bar's wood is the toolbar itself */
+  :root { --slot: calc((100vw - 12px - var(--sal) - var(--sar)) / 5); }
+  /* before Orders opens (L2) the bar has four slots: they share its width, no empty cell (QA r1 S-25; hud.js data-bar) */
+  body[data-bar="4"] { --slot: calc((100vw - 12px - var(--sal) - var(--sar)) / 4); }
+  .tray-wrap { left: 0; right: 0; padding: 0; gap: 8px; align-items: center; max-width: none; }
+  #toolbar { align-self: stretch; max-width: none; gap: 0; height: calc(80px + var(--sab)); border-radius: 22px 22px 0 0; overflow: visible;
+    padding: 8px 6px calc(6px + var(--sab)) calc(6px + var(--sal)); box-shadow: inset 0 2px 0 rgba(255, 255, 255, .45), 0 0 0 2.5px var(--wood-900), 0 -4px 12px rgba(62, 38, 18, .25); }
+  #toolbar::after { content: none; }
+  .tray-wrap::after { content: none; }
+  .tool, .tool-cur { width: calc(var(--slot) - 6px); height: 66px; padding-top: 2px; }
+  .tool .ico { height: 38px; }
+  .tool .ic, .tool .glyph { width: 38px; height: 38px; }
+  /* a name too long for its slot shrinks to fit (toolbar.js fitLabel, measured): a scaleX(.86) left "Царевиц(а)" cut
+     at 360 BG (QA r1 S-07); only the sides clip: the 1.0 line box is 13 px and the outlined letters reach 17 px, so a
+     clip on both axes cut their feet (i18n-shots clipY, integrator QA r1) */
+  .tool .name { display: block; font-size: .8125rem; max-width: 100%; overflow: hidden; overflow-x: clip; overflow-y: visible; text-overflow: clip; }
+  .tool .name.long { letter-spacing: -.02em; }
+  .tool-cur[aria-pressed="true"] { transform: none; }
+  /* one label style for the five slots of the bar (QA r1 S-34): the tool slot's word is white and outlined like the
+     doors' (the slot in hand already shows by its yellow tile) */
+  #toolbar .tool-cur .name { font: 800 .8125rem/1 var(--font-display); letter-spacing: -.01em; color: #fff; --o: var(--wood-900);
+    text-shadow: -1.5px -1.5px 0 var(--o), 1.5px -1.5px 0 var(--o), -1.5px 1.5px 0 var(--o), 1.5px 1.5px 0 var(--o), 0 2.5px 0 var(--o); }
+  #hud > .dock { display: flex; right: calc(6px + var(--sar)); bottom: calc(6px + var(--sab)); gap: 6px; padding: 0; border-radius: 0;
+    background: none; box-shadow: none; z-index: 3; }
+  #hud > .dock::after { content: none; }
+  #hud > .dock .dock-btn[data-dock="build"] { display: none; }
+  #hud > .dock .dock-btn, #hud > .dock .m-menu-btn { width: calc(var(--slot) - 6px); height: 66px; padding: 2px 1px 0; border-radius: 14px; }
+  #hud > .dock .dock-btn .ic, #hud > .dock .dock-btn .glyph, #hud > .dock .m-menu-ico .glyph { width: 38px; height: 38px; }
+  #hud > .dock .m-menu-ico { height: 38px; }
+  #hud > .dock .dock-btn .lbl, #hud > .dock .m-menu-btn .lbl { max-width: 100%; font-size: .8125rem; line-height: .95; white-space: normal; text-align: center;
+    overflow-wrap: anywhere; }
+  /* badges inside the circle (astra#8: a badge sat on the neighbour's label) */
+  #hud > .dock .badge { top: 2px; right: 2px; transform: scale(.86); transform-origin: 100% 0; }
+  /* the tool pop-up: every tool and Build in a grid over the bar, its caret at the slot */
+  .tool-flyout.tool-pop { align-self: flex-start; margin: 0 6px; display: grid; grid-template-columns: repeat(auto-fill, minmax(64px, 1fr));
+    width: min(calc(100vw - 12px - var(--sal) - var(--sar)), 360px); gap: 10px 6px; padding: 12px 10px 10px; }
+  .tool-flyout.tool-pop .tool { width: auto; min-width: 0; height: 66px; }
+  /* the coach's arrow into the pop-up (Build) comes from above onto Строй, which leads the pop-up while a build step
+     waits; the room for the arrow opens above the pop-up (tutorial.js grows --tut-room until her card clears it), the
+     grid stays compact (QA r3 S3-07, fbp#8: a 96 px band of empty cream opened between the rows and pushed her card to
+     mid-screen; QA r2 S-09: the arrow lay on Семена and Лейка, the tiles above Строй) */
+  body.tut-fly .tool-flyout.tool-pop { margin-top: var(--tut-room, 0px); }
+  body.tut-fly .tool-flyout.tool-pop [data-act="build"] { order: -1; }
+  .coach-slot, .seed-tray, .build-tray, .stroke-chip, .seed-strip, .tray-tip, .hammer-hint, .tool-flyout { margin: 0 6px; }
   .coach { width: calc(100vw - 12px - var(--sal) - var(--sar)); }
   body.tray-open .coach { width: calc(100vw - 12px - var(--sal) - var(--sar)); }
-  body.tray-open .coach .line { -webkit-line-clamp: 2; }
+  /* Grandma's whole line on an upright phone: four lines, three with a tray or the pop-up open (QA r3 S3-02, fbp#2:
+     "…в…" and "(става и пшеницата…" were cut at 360 BG, clamped at three and two) */
+  .coach .line { -webkit-line-clamp: 4; }
+  body.tray-open .coach .line { -webkit-line-clamp: 3; }
+  /* Grandma's words take the card's whole width; "⋯" (and the naming chip) ride in the progress row under them: in its
+     own column "⋯" left the Bulgarian lines four and five lines long at 360, cut at three (QA r1 S-04) */
+  .coach--line .coach-paper { display: grid; grid-template-columns: 40px minmax(0, 1fr) auto; column-gap: 8px; row-gap: 4px; align-items: center; }
+  .coach--line .grandma-art, .coach--line .gran { grid-column: 1; grid-row: 1 / span 2; align-self: start; }
+  .coach--line .say { display: contents; }
+  .coach--line .line { grid-column: 2 / 4; grid-row: 1; }
+  .coach--line .prog { grid-column: 2; grid-row: 2; margin-top: 0; }
+  .coach--line .acts { grid-column: 3; grid-row: 2; margin-left: 0; justify-self: end; }
+  .coach--line .say:not(:has(.prog)) ~ .acts { grid-column: 2 / 4; }
+  .coach--line .coach-paper:has(.coach-name) .acts { grid-column: 2 / 4; grid-row: 3; }
+  /* the "⋯" in its 44 px circle sat above the middle (Astra's look at the 360 card): no lift on a phone */
+  .coach--line .coach-more { padding: 0; }
+  /* her count-down never runs under the "⋯" beside it: it takes a line of its own when the row has no room (QA r3 S3-03,
+     fbp#3: "0/3 готово след 1:39, после го вз" with "вземи" under the ⋯ once the farm was named) */
+  .coach--line .prog { min-width: 0; flex-wrap: wrap; row-gap: 2px; }
+  .coach--line .prog .eta { white-space: normal; min-width: 0; }
+  /* the bar keeps 56 px beside a count-down; the count-down takes the next line (QA r4 S4-10, fbp#7: a 7 px dot) */
+  .coach--line .prog .bar { min-width: 56px; }
+  /* the Undo chip (and the bench chip) stand above Grandma's card, never on it: at 360 the Undo chip covered her "Name
+     your farm" chip for its ten minutes (QA r1 S-14; tutorial.js sets --coach-h) */
+  body.coach-on .hud-bl { bottom: calc(var(--bar-h) + var(--sab) + 20px + var(--coach-h, 0px)); }
+  /* a three-line step with the pop-up open lifts her card high (QA r4 S4-03, fbp#1): while a tray or the pop-up is open
+     her naming chip waits (a row less). The right column no longer follows her card: it stands at the top (above) */
+  body.tray-open .coach--line .coach-name { display: none; }
+  body.tray-open .coach--line .coach-paper:has(.coach-name) .acts { grid-column: 3; grid-row: 2; }
 
   /* every panel is a bottom sheet; the big ones take the whole screen under the status bar */
   .hh-panel, .hh-panel.size-side, .hh-panel.size-wide, .hh-panel.size-full, .hh-panel.size-card {
@@ -420,7 +484,7 @@
      chalkboard another 125, so only two rows of goods showed. The chalkboard keeps only its wanted goods; the slip
      packs the quick chips and the total on one row, and an empty note takes no room */
   .pn-chalk { margin: 0 0 8px; padding: 6px 10px 8px; }
-  .pn-chalk-title, .pn-chalk-lead { display: none; }
+  .pn-chalk-title { display: none; }
   .pn-chalk-body { margin-top: 0; }
   .pn-slip { flex-flow: row wrap; align-items: center; gap: 6px 8px; padding: 8px 12px 10px; }
   .pn-slip > * { flex: 1 1 100%; min-width: 0; }
@@ -429,31 +493,35 @@
   .pn-slip-title { font-size: 1.0625rem; }
   .pn-slip-qty { grid-template-columns: minmax(0, 1fr) 64px; }
   .pn-slip > .pn-quick { flex: 0 1 auto; }
-  .pn-slip > .pn-slip-sum { flex: 1 1 120px; flex-direction: column; align-items: flex-end; gap: 2px; padding: 0; border: 0; }
   .pn-slip-total { font-size: 1.5rem; }
-  .pn-slip-note:empty { display: none; }
   /* Grandma's card already says what the tray tip says: on an upright phone the tip goes while she talks, so the
      card, the tip and the tray no longer cover half the farm (final release PT-07) */
   body.tray-open.coach-on .tray-tip { display: none; }
+  /* the Undo chip sits where an open tray's cards are (the 360 e2e: it covered the build tray's Move card) */
+  body.tray-open .hud-chips { visibility: hidden; }
+  /* the bottom-left column (the Undo chip, the feed lines) lies where a stroke's "Planting Wheat × 4" chip is: it steps
+     aside for the chip's 2.5 s; the chip says the same thing (the integrator's QA r1 e2e-mobile: "Undo: Flower Bed" on
+     "Planting Wheat × 1" at 360, "You harvested 2 Wheat" on "… × 4" on the iPhone) */
+  #hud:has(.stroke-chip:not(.hammer-hint):not([hidden])) .hud-bl { visibility: hidden; }
 }
 
 /* ======== small phones upright (iPhone SE, Galaxy S8, 360 x 640): the farm keeps its middle (mobile QA P1-3, M-09) === */
 @media (max-width: 600px) and (max-height: 760px) {
-  /* with the seed tray open the tip, the coach's progress line and a third coach line go; the zoom and turn buttons
-     move up out from under Grandma's card */
+  /* "Farm book" wrapped to two lines and ran out of the 360 phone bar's button: one line, set narrower */
+  #hud > .dock .m-menu-btn .lbl { display: inline-block; max-width: none; white-space: nowrap; transform: scaleX(.84); }
+  /* with the seed tray open the tip, the coach's progress line and a third coach line go */
   body.tray-open .tray-tip, body.tray-open .coach .prog { display: none; }
-  body.tray-open .coach .line { -webkit-line-clamp: 2; }
-  body.tray-open .hud-right { top: calc(var(--sat) + 132px); transform: none; }
-  /* a 640 px screen still has Grandma's card over the turn buttons: they step out while the tray is open (a two-finger
-     twist turns the view all the same) */
-  body.tray-open .hud-right .edge-btn[aria-label^="Turn"] { display: none; }
+  body.tray-open .coach .line { -webkit-line-clamp: 3; }
   /* the seed picker: two rows that scroll sideways, so it fits above or below its plot instead of on it */
   .sp-grid { grid-auto-flow: column; grid-template-rows: repeat(2, auto); grid-template-columns: none; grid-auto-columns: 80px;
     max-width: calc(100vw - 42px); overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none; padding-bottom: 3px; }
   .sp-grid::-webkit-scrollbar { display: none; }
+  /* three seeds or fewer (level 1: Wheat and two locked) keep one row: short enough to sit under the plot with Grandma's
+     card clear below it (first-time FT-2: two rows went over her line, or beside the plot over Harvey) */
+  .sp-grid:not(:has(> :nth-child(4))) { grid-template-rows: auto; }
   /* the Market: Mabel's chalkboard and the sell slip shrink so the goods keep three to six stacks in view */
   .pn-chalk { margin: 0 0 8px; padding: 6px 10px 8px; }
-  .pn-chalk-title, .pn-chalk-lead { display: none; }
+  .pn-chalk-title { display: none; }
   .pn-chalk-body { margin-top: 0; }
   .pn-slip { gap: 6px; padding: 8px 12px 10px; }
   .pn-slip-head { gap: 8px; }
@@ -466,36 +534,47 @@
   :root { --side-l: 84px; --side-r: 64px; }
   .hud-tr { right: calc(6px + var(--sar)); }
   .pill-barn .cap { font-size: .875rem; }
-  #hud-beauty { top: calc(52px + var(--sat)); right: calc(60px + var(--sar)); transform: scale(.72); }
 
   /* the tracker chip and its drop-down start right of the tool column */
   .tracker-chip-wrap { top: calc(56px + var(--sat)); left: calc(var(--side-l) + var(--sal)); right: auto; max-width: min(440px, calc(100vw - var(--side-l) - var(--side-r) - 90px)); }
   .tracker { top: calc(104px + var(--sat)); left: calc(var(--side-l) + var(--sal)); width: min(380px, calc(100vw - var(--side-l) - var(--side-r) - 16px));
     max-height: calc(100% - 112px - var(--sat) - var(--sab)); }
 
-  /* the right column: zoom and turn under the pills, the farm menu in the corner */
-  .hud-right { top: calc(54px + var(--sat)); transform: none; gap: 5px; }
-  .edge-btn { width: 44px; height: 42px; }
+  /* the right column: Harvey and the turn button under the pills */
+  .hud-right { top: calc(54px + var(--sat)); transform: none; gap: 6px; }
+  .edge-btn { width: 44px; height: 44px; }
   .edge-gap { height: 0; }
-  .m-menu-btn { right: calc(6px + var(--sar)); bottom: calc(6px + var(--sab)); width: 56px; height: 62px; }
 
-  /* the tool column on the left; the coach, the trays and the chips stay at the bottom between the columns */
-  .tray-wrap { top: 0; justify-content: flex-end; align-items: center; gap: 6px;
+  /* the phone bar on its side (release 1.0 S3: "landscape keeps its layout with these items"): one column at the left,
+     [tool in hand] [Market] [Orders] [Barn] [Farm book]; the coach, the trays and the chips stay at the bottom */
+  .tray-wrap { top: 0; justify-content: flex-end; align-items: center; gap: 6px; max-width: none;
     padding: 0 calc(var(--side-r) + 8px + var(--sar)) calc(6px + var(--sab)) calc(var(--side-l) + 4px + var(--sal)); }
-  #toolbar { position: absolute; left: calc(6px + var(--sal)); top: calc(56px + var(--sat)); bottom: calc(6px + var(--sab)); flex-direction: column;
-    max-width: none; width: 72px; padding: 8px 6px; gap: 6px; overflow-x: hidden; overflow-y: auto; overscroll-behavior-y: contain; border-radius: 18px; }
-  #toolbar .tool-sep { width: auto; height: 3px; margin: 2px 6px; }
-  .tool-more:not([hidden]) { left: calc(20px + var(--sal)); right: auto; bottom: calc(8px + var(--sab)); width: 44px; height: 32px; }
-  .tool-more span { transform: rotate(90deg); margin: 0; }
-  .tool-more[data-dir="back"] { bottom: auto; top: calc(60px + var(--sat)); left: calc(20px + var(--sal)); }
-  .tool-more[data-dir="back"] span { transform: rotate(-90deg); }
-  .tool { width: 60px; height: 56px; padding-top: 1px; }
-  .tool .ico { height: 34px; }
-  .tool .ic, .tool .glyph { width: 34px; height: 34px; }
-  .tool .name { font-size: .8125rem; }
-  .tool .name.long { display: inline-block; transform: scaleX(.86); letter-spacing: -.02em; }
-  .tool[aria-pressed="true"] { transform: translateX(3px); }
+  #toolbar { position: absolute; left: calc(6px + var(--sal)); top: calc(54px + var(--sat)); flex-direction: column;
+    max-width: none; width: 72px; padding: 6px; gap: 6px; overflow: visible; border-radius: 18px 18px 0 0; }
+  .tool, .tool-cur { width: 60px; height: 52px; padding-top: 1px; }
+  .tool .ico { height: 32px; }
+  .tool .ic, .tool .glyph { width: 32px; height: 32px; }
+  .tool .name { display: block; font-size: .8125rem; max-width: 100%; overflow: hidden; overflow-x: clip; overflow-y: visible; text-overflow: clip; }
+  .tool .name.long { letter-spacing: -.02em; }
+  .tool[aria-pressed="true"], .tool-cur[aria-pressed="true"] { transform: none; }
+  #toolbar .tool-cur .name { font: 800 .8125rem/1 var(--font-display); color: #fff; --o: var(--wood-900);
+    text-shadow: -1.5px -1.5px 0 var(--o), 1.5px -1.5px 0 var(--o), -1.5px 1.5px 0 var(--o), 1.5px 1.5px 0 var(--o), 0 2.5px 0 var(--o); }
   .tool .badge { top: -6px; right: -6px; }
+  #hud > .dock { display: flex; flex-direction: column; left: calc(6px + var(--sal)); right: auto; top: calc(54px + 64px + var(--sat)); bottom: auto;
+    width: 72px; gap: 6px; padding: 0 6px 6px; border-radius: 0 0 18px 18px; }
+  #hud > .dock .dock-btn[data-dock="build"] { display: none; }
+  #hud > .dock .dock-btn, #hud > .dock .m-menu-btn { width: 60px; height: 52px; padding: 1px 0 0; border-radius: 13px; }
+  #hud > .dock .dock-btn .ic, #hud > .dock .dock-btn .glyph, #hud > .dock .m-menu-ico .glyph { width: 32px; height: 32px; }
+  #hud > .dock .m-menu-ico { height: 32px; }
+  #hud > .dock .dock-btn .lbl, #hud > .dock .m-menu-btn .lbl { max-width: 100%; font-size: .8125rem; line-height: .95; white-space: normal; text-align: center; overflow-wrap: anywhere; }
+  /* "Farm book" on two lines ran out of the 52 px button (the iPhone 13 landscape shots): one line, set narrower */
+  #hud > .dock .m-menu-btn .lbl { display: inline-block; max-width: none; white-space: nowrap; transform: scaleX(.84); }
+  #hud > .dock .badge { top: 1px; right: 1px; transform: scale(.8); transform-origin: 100% 0; }
+  /* the tool pop-up opens to the right of the column */
+  .tool-flyout.tool-pop { position: absolute; left: calc(84px + var(--sal)); top: calc(54px + var(--sat)); display: grid; grid-template-columns: repeat(3, 64px);
+    gap: 8px 6px; padding: 10px; }
+  .tool-flyout.tool-pop .tool { width: 64px; height: 56px; }
+  .tool-flyout.tool-pop .fly-caret { left: -9px; top: 22px; bottom: auto; box-shadow: -3px 3px 0 0 var(--wood-700); }
   .coach, body.tray-open .coach { width: min(560px, 100%); }
   .coach .line, body.tray-open .coach .line { -webkit-line-clamp: 2; }
   /* Grandma's buttons side by side: the card stays two lines tall and the farm keeps its middle */
@@ -531,6 +610,10 @@
   .pn-slip-title { font-size: 1.125rem; }
   .pn-slip-qty { grid-template-columns: minmax(0, 1fr) 56px; }
   .pn-slip-sum { flex-wrap: wrap; }
+  /* renaming the farm with the keyboard up (181 px left): the suggestion chips fold while the name field has the focus,
+     so the field and Carve both fit above the keyboard (QA r3 S3-16, oib#4: three rows of chips between them scrolled
+     the field out of sight); a chip's tap fills the field as before */
+  #panel-naming:has(input.field:focus) .chips { display: none; }
   /* dialogs: the buttons stay in view on a 340 px screen */
   .dlg { gap: 8px; }
   .dlg .art { width: 52px; height: 52px; }
@@ -544,6 +627,10 @@
   .hh-panel.size-side .hh-sheet-grip, .hh-panel.size-wide .hh-sheet-grip, .hh-panel.size-full .hh-sheet-grip, #panel-menu .hh-sheet-grip {
     left: 5px; top: 50%; width: 5px; height: 46px; margin: -23px 0 0; }
   .hh-panel.size-card:not(#panel-menu) .hh-sheet-grip { display: none; }
+  /* its hit area stays in the sheet's 12 px left gutter (QA r4 S4-08, oib#2: the upright one, 105 x 60 px, swallowed taps
+     on the Farm book's first column) */
+  .hh-panel.size-side .hh-sheet-grip::before, .hh-panel.size-wide .hh-sheet-grip::before, .hh-panel.size-full .hh-sheet-grip::before,
+  #panel-menu .hh-sheet-grip::before { inset: -8px -2px -8px -5px; }
   .hh-panel.size-side .hh-panel-title, .hh-panel.size-wide .hh-panel-title, .hh-panel.size-full .hh-panel-title, #panel-menu .hh-panel-title { top: 10px; }
   .hh-panel-title { top: 10px; }
   .hh-panel-close { top: 8px; }
@@ -560,6 +647,14 @@
   .tracker { top: calc(104px + var(--sat)); left: calc(var(--safe) + var(--sal)); }
   .farm-name { max-width: 150px; }
   #hud-xp-bar { width: 170px; }
+  /* the dock beside the toolbar of 3 (owner 2026-10-19): in a window under ~665 px its five buttons (430 px) ran under
+     the Tools slot. They share the room right of the toolbar instead, each as wide as before when it is there; the
+     Farm book's name may wrap and every name shrinks to what fits (13 px at least) */
+  #hud > .dock { max-width: calc(100vw - 240px - var(--sal) - var(--sar)); }
+  #hud > .dock > :is(.dock-btn, .m-menu-btn) { flex: 0 1 auto; min-width: 0; }
+  #hud > .dock :is(.dock-btn, .m-menu-btn) .lbl { max-width: 100%; white-space: normal; text-align: center; overflow-wrap: anywhere; }
+  #hud > .dock .dock-btn .lbl { font-size: clamp(.8125rem, calc((100vw - 240px) / 26), 1rem); }
+  #hud > .dock .m-menu-btn .lbl { font-size: clamp(.8125rem, calc((100vw - 240px) / 28), .9375rem); }
 }
 
 /* ======== touch screens: a hover that sticks after a tap never lifts or tilts a button ============================= */
@@ -588,7 +683,12 @@
 
 /* a finger needs room on the Settings switches (Quality, Day and night, Motion, Right-drag) */
 @media (hover: none) {
-  .seg button { min-height: 44px; padding: 6px 14px; }
+  .seg button { min-height: 44px; min-width: 44px; padding: 6px 14px; }
+}
+/* four or five choices keep one row on an upright phone ("Еко" and „Неподвижно“ sat alone on a second row at 360: QA r4
+   S4-14, va#3) */
+@media (max-width: 600px) {
+  .seg:has(> button:nth-child(4)) > button { padding-inline: 7px; font-size: .8125rem; }
 }
 
 /* wave 5: the ❤ card of a home on a phone: the chips scroll sideways, the "Pair them" button takes the full width;

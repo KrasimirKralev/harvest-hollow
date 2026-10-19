@@ -9,7 +9,7 @@
 // Problem = { stage: 'schema', code, file, path, message, hint? }
 import {
   FORMAT, ID_RE, ID_PREFIX, LIMITS, LADDERS, VALUE_BP, FILE_KINDS, SINGLE_FILES, SEASONS, CROP_CLASSES, YIELDS,
-  UNLOCK_RANGE, SKIES, LETTER_FROM, PALETTE_VARS, TUNING_BP, TUNING_KEYS, parseContentPath,
+  UNLOCK_RANGE, SKIES, LETTER_FROM, TUNING_BP, TUNING_KEYS, REMOVED, parseContentPath,
 } from './format.js';
 
 const HEX_RE = /^#[0-9A-Fa-f]{6}$/;
@@ -31,8 +31,9 @@ export function utf8Len(s) {
 // Allowed characters (contract §1.3). Letters: Latin for English (accents allowed), Cyrillic for Bulgarian (Latin only
 // inside a brand, so it is allowed but never alone); digits, space, - ' ’ , . ! ? : ; ( ) and the spaced en dash;
 // Bulgarian quotes „…“ in Bulgarian, curly quotes “…” in English. Bodies may hold line breaks.
-const EN_CHARS = /^[A-Za-zÀ-ÖØ-öø-ÿ0-9 \-'’,.!?:;()–“”\n]*$/u;
-const BG_CHARS = /^[Ѐ-ӿA-Za-z0-9 \-'’,.!?:;()–„“\n]*$/u;
+// release 1.0: U+2011 (the no-break hyphen Bulgarian writes in "по‑бързо", copy#18) is allowed too
+const EN_CHARS = /^[A-Za-zÀ-ÖØ-öø-ÿ0-9 \-\u2011'’,.!?:;()–“”\n]*$/u;
+const BG_CHARS = /^[Ѐ-ӿA-Za-z0-9 \-\u2011'’,.!?:;()–„“\n]*$/u;
 const SMALL_WORDS = new Set(['a', 'an', 'and', 'as', 'at', 'by', 'for', 'from', 'in', 'of', 'on', 'or', 'the', 'to', 'with']);
 
 /**
@@ -270,9 +271,8 @@ function checkTuning(c, d) {
 
 function checkLook(c, d) {
   if (!c.fields(d, '', [], ['palette', 'sky', 'music'])) return;
-  if (d.palette !== undefined && c.fields(d.palette, 'palette', [], Object.keys(PALETTE_VARS))) {
-    for (const [k, v] of Object.entries(d.palette)) c.hex(v, `palette.${k}`);
-  }
+  // release 1.0 (H2): the palette changed nothing on screen; a stored version keeps compiling without it (removed.js)
+  if (d.palette !== undefined) c.add('UNSUPPORTED', 'palette', 'colours of the farm cannot be changed in this format', REMOVED.palette.hint);
   c.enumOf(d.sky, 'sky', SKIES);
   if (d.music !== undefined && c.fields(d.music, 'music', ['prefer'])) {
     const p = d.music.prefer;
@@ -295,18 +295,6 @@ function checkLetters(c, d) {
       c.text(lang, 'title', l[lang].title, `${p}.${lang}.title`);
       c.text(lang, 'body', l[lang].body, `${p}.${lang}.body`);
     }
-  });
-}
-
-function checkTips(c, d) {
-  if (!Array.isArray(d)) { c.add('BAD_TYPE', '', 'must be an array of tips'); return; }
-  if (d.length > LIMITS.tips) c.add('TOO_MANY', '', `at most ${LIMITS.tips} tips`);
-  d.forEach((tp, i) => {
-    const p = String(i);
-    if (!c.fields(tp, p, ['id', 'en', 'bg'])) return;
-    if (typeof tp.id !== 'string' || !ID_RE.test(tp.id)) c.add('BAD_ID', `${p}.id`, `ids start with ${ID_PREFIX}`);
-    c.text('en', 'tip', tp.en, `${p}.en`);
-    c.text('bg', 'tip', tp.bg, `${p}.bg`);
   });
 }
 
@@ -353,6 +341,11 @@ export function checkFiles(files, { graveyard = {} } = {}) {
       }
       continue;
     }
+    if (p === REMOVED.tips.file) {
+      // release 1.0 (H2): tips were never shown; a stored version keeps compiling without them (removed.js)
+      c.add('UNSUPPORTED', '', 'tips cannot be added in this format', REMOVED.tips.hint);
+      continue;
+    }
     if (!SINGLE_FILES.includes(p)) {
       c.add('UNKNOWN_FILE', '', `"${p}" is not a mod file`, `files: ${SINGLE_FILES.join(', ')}, ${Object.values(FILE_KINDS).map((k) => `${k}/<id>.json`).join(', ')}`);
       continue;
@@ -361,7 +354,6 @@ export function checkFiles(files, { graveyard = {} } = {}) {
     else if (p === 'tuning.json') checkTuning(c, d);
     else if (p === 'look.json') checkLook(c, d);
     else if (p === 'text/letters.json') checkLetters(c, d);
-    else if (p === 'text/tips.json') checkTips(c, d);
   }
   const fresh = [...seen.keys()].filter((id) => !graveyard[id]).length;
   if (fresh > LIMITS.liveDefs) problems.push(P('TOO_MANY', '', '', `${fresh} things; a farm may have ${LIMITS.liveDefs}`));

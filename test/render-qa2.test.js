@@ -259,7 +259,7 @@ test('RD-08: the ground detail texture is painted without a canvas (fast), tiles
   assert.ok(edge < inner * 1.6, `no seam (${edge} vs ${inner})`);
 });
 
-test('RD-13: statics draw in full but cast through far-band twins; small decor casts nothing', () => {
+test('RD-13: statics cast through twins drawn in a pass of their own (QA r1 R-03: the drawn key); small decor casts nothing', () => {
   // mirrorBatch keeps one twin per handle, under the mapped key, through add / setKey / setMatrix / remove
   const log = [];
   const fake = (name) => { let n = 0; const keys = new Map(); return {

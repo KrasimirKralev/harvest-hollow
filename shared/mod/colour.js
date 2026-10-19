@@ -73,25 +73,37 @@ const hueDist = (a, b) => {
 /**
  * A shifter for colours near `from`'s hue toward `to` (both hex; `from` null = the dominant hue the caller found).
  * Returns fn(r, g, b in 0..1) -> [r, g, b]: saturated colours within `width` degrees of `from` are rotated to `to`'s hue,
- * their saturation and lightness moved by the same ratio as from -> to (clamped); greys and other hues stay.
+ * and their saturation and lightness move `toward` (release 1.0, harvey#12: 65 %) of the way to `to`'s, so a pale, a
+ * dark or a white thing comes out pale, dark or white while keeping some of its shading; greys and other hues stay.
  */
-export function makeShifter(from, to, { width = 40, minSat = 0.18 } = {}) {
+export function makeShifter(from, to, { width = 40, minSat = 0.18, toward = 0.65 } = {}) {
   const f = hueOf(from);
   const t = hueOf(to);
   if (!f || !t) return (r, g, b) => [r, g, b];
   const sK = f.s > 0.05 ? t.s / f.s : 1;
   const lD = t.l - f.l;
+  const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
   return (r, g, b) => {
     const [h, s, l] = rgbHsl(r, g, b);
     if (s < minSat || hueDist(h, f.h) > width) return [r, g, b];
     // soft edge: full shift near the centre, fading out to the band's edge
     const w = Math.min(1, Math.max(0, (width - hueDist(h, f.h)) / (width * 0.35)));
     const nh = t.h + (h - f.h);
-    const ns = Math.min(1, Math.max(0, s * sK));
-    const nl = Math.min(0.95, Math.max(0.05, l + lD));
+    // the anchor's colour moved onto the target's (the shading kept), then `toward` of the rest of the way to it
+    const s1 = clamp(s * sK, 0, 1);
+    const l1 = clamp(l + lD, 0.04, 0.97);
+    const ns = clamp(s1 + (t.s - s1) * toward, 0, 1);
+    const nl = clamp(l1 + (t.l - l1) * toward, 0.04, 0.97);
     const [nr, ng, nb] = hslRgb(nh, ns, nl);
     return [r + (nr - r) * w, g + (ng - g) * w, b + (nb - b) * w];
   };
+}
+
+/** Degrees between the hues of two hex colours (180 when either has no hue). */
+export function hueGap(a, b) {
+  const x = hueOf(a);
+  const y = hueOf(b);
+  return x && y ? hueDist(x.h, y.h) : 180;
 }
 
 /** The most common saturated hue among rgb triples (0..1) as a hex colour, or null. */
@@ -117,17 +129,22 @@ export function dominantHue(triples, minSat = 0.25) {
  * dominant colour, within 30 degrees) and pale greys take `to`'s hue and saturation, keeping their own light and shade;
  * very dark details and other accents (a red comb, a beak) stay. fn(r, g, b in 0..1) -> [r, g, b].
  */
-export function makeTinter(to, body = null, { width = 30, amount = 0.85 } = {}) {
+export function makeTinter(to, body = null, { width = 30, amount = 0.85, toward = 0.65 } = {}) {
   const t = hueOf(to);
   const b0 = body ? hueOf(body) : null;
   if (!t) return (r, g, b) => [r, g, b];
+  // release 1.0 (harvey#12): the light moves `toward` of the way to the coat asked for (a white cow is white, a black
+  // sheep black), and the coat keeps the colour's own chroma at every shade (a pale lilac stays pale; a grey stays grey)
+  const chroma = t.s * (1 - Math.abs(2 * t.l - 1));
   return (r, g, b) => {
     const [h, s, l] = rgbHsl(r, g, b);
     if (l < 0.1) return [r, g, b];
     const near = b0 && b0.s > 0.08 && hueDist(h, b0.h) <= width;
     if (!near && s > 0.18) return [r, g, b];
-    const nl = Math.min(0.97, Math.max(0.06, l * 0.55 + t.l * 0.45));
-    const [nr, ng, nb] = hslRgb(t.h, Math.min(0.65, Math.max(0.2, t.s * 0.9)), nl);
+    const nl = Math.min(0.97, Math.max(0.06, l + (t.l - l) * toward));
+    const room = 1 - Math.abs(2 * nl - 1);
+    const ns = room > 0.01 ? Math.min(1, chroma / room) : 0;
+    const [nr, ng, nb] = hslRgb(t.h, ns, nl);
     return [r + (nr - r) * amount, g + (ng - g) * amount, b + (nb - b) * amount];
   };
 }

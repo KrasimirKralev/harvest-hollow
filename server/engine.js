@@ -23,7 +23,9 @@ import { runAction, makeCtx, SERVER_GRACE_MS } from '../shared/rules/index.js';
 import { dueSystemActions, nextSystemDueAt } from '../shared/rules/system.js';
 import { validateState } from '../shared/rules/state.js';
 import { CONTENT_HASH } from '../shared/content/index.js';
-import { MSG, ERR } from '../shared/net/protocol.js';
+import { MSG, ERR, SOFT, LIMITS } from '../shared/net/protocol.js';
+import { actionTargets } from '../shared/net/targets.js';
+import { spotKeys } from './spots.js';
 
 /** Dedupe records of cids with no live socket are kept this long (review-m0 #4: about 50 bytes each). */
 export const CID_TTL_MS = 7 * 24 * 60 * 60 * 1000;
@@ -35,23 +37,17 @@ export const MAX_DUE_PASSES = 8;
 const REJECTS_KEPT = 32;
 /** A rejection names the partner who acted on one of its targets this recently ("Mia got there first"). */
 export const TOUCH_MS = 10_000;
-/** Above this many remembered targets, expired ones are dropped. */
-const TOUCHED_MAX = 4096;
+/**
+ * A late act (its frame held by a lost link, or re-sent after a welcome) looks back TOUCH_MS more than it is late, by
+ * the client's `at`, up to this (QA r3 I3-01): the partner's move it lost to came while it was offline.
+ */
+export const LATE_TOUCH_MS = LIMITS.MAX_OFFLINE_MS;
+/** Above this many remembered targets, the expired ones go, then the oldest of the rest. */
+export const TOUCHED_MAX = 4096;
+/** Refusals that mean "this spot is taken": the spot an action wanted is a target too (QA r2 I2-01, server/spots.js). */
+const SPOT_CODES = new Set([ERR.BLOCKED, ERR.OCCUPIED]);
 /** Dev (HH_DEV=1): the whole-state check runs this long after the first unchecked commit (checkSoon). */
 export const DEV_CHECK_MS = 50;
-/** Targets read from one action (a drag stroke's `ids` is schema-capped far below this). */
-const TOUCH_IDS_MAX = 256;
-
-/** The object ids an action names: `args.id` and `args.ids[]` (strings only; never throws on garbage). */
-function targetIds(args) {
-  const out = [];
-  if (!args || typeof args !== 'object') return out;
-  if (typeof args.id === 'string') out.push(args.id);
-  if (Array.isArray(args.ids)) {
-    for (const id of args.ids.slice(0, TOUCH_IDS_MAX)) if (typeof id === 'string') out.push(id);
-  }
-  return out;
-}
 
 const NO_FACTS = Object.freeze({
   player: () => ({ ext: {} }),
@@ -84,8 +80,8 @@ export class Engine {
     this.dirty = false;
     /** true after a journal append failed: surfaced in /api/status (review-m0 M6) */
     this.degraded = false;
-    /** objectId -> { pid, at } of the newest accepted player action on it (args.id and args.ids): in memory only,
-     *  makes rejection toasts friendly ("Mia got there first") */
+    /** target -> { pid, at } of the newest accepted player action on it (actionTargets: object ids and board rows such
+     *  as `order:2`): in memory only, makes rejection toasts friendly ("Mia got there first") */
     this.touched = new Map();
     /** cid -> [{ seq, code, by? }]: the newest rejections, in memory only (welcome.rejected) */
     this.rejects = new Map();
@@ -138,7 +134,7 @@ export class Engine {
    * @param {{ pid: string, cid: string }} who
    * @param {{ seq: number, type: string, args: object }} act
    */
-  act(who, { seq, type, args }) {
+  act(who, { seq, type, args, at }) {
     if (!Number.isSafeInteger(seq) || seq < 1) return null;
     const c = Object.hasOwn(this.server.clients, who.cid) ? this.server.clients[who.cid] : null;
     if (!c || c.pid !== who.pid) return { t: MSG.REJ, seq, code: ERR.NOT_JOINED };
@@ -159,7 +155,13 @@ export class Engine {
       this.log.error('rule threw', { type, pid: who.pid, cid: who.cid, seq, args: JSON.stringify(args) }, r.err);
     }
     const rej = { t: MSG.REJ, seq, code };
-    const by = this.lastToucher(args, now, who.pid);
+    // a board row counts for hard refusals only: with `by` the client words a soft code (a partner's pin: PINNED) as a
+    // toast instead of asking "are you sure?" (QA r1 I-01; object ids keep their rule from before)
+    // a spot (a farm tile, a room cell) counts only when the refusal is about the spot being taken (QA r2 I2-01)
+    const spots = SPOT_CODES.has(code) ? spotKeys(this.state, type, args) : undefined;
+    const late = Number.isFinite(at) ? Math.max(0, now - at) : 0;
+    const within = Math.min(LATE_TOUCH_MS, TOUCH_MS + late);
+    const by = this.lastToucher(args, now, who.pid, SOFT.has(code) ? undefined : type, spots, within);
     if (by) rej.by = by;
     this.remember(who.cid, rej);
     return rej;
@@ -299,7 +301,7 @@ export class Engine {
     this.state.meta.version = v;
     if (srv && srv.auth) Object.assign(this.server.auth, srv.auth);
     if (this.dev) this.checkSoon(type, v);
-    if (pid !== 'sys') this.touch(args, pid, now);
+    if (pid !== 'sys') this.touch(args, pid, now, type);
     this.dirty = true;
     this.onDelta({ t: MSG.DELTA, v, by: pid, cid, seq, now, ops: tx.ops, ev: tx.events });
     this.onCommit();
@@ -331,24 +333,37 @@ export class Engine {
     return problems;
   }
 
-  /** Remember who acted on each target of an accepted action: `args.id` and every id of a stroke's `args.ids`. */
-  touch(args, pid, now) {
-    for (const id of targetIds(args)) this.touched.set(id, { pid, at: now });
-    // Bounded: entries only matter for TOUCH_MS; sold and removed objects must not pile up for the process lifetime.
+  /**
+   * Remember who acted on each target of an accepted action of `type` (objects and board rows: actionTargets) and on
+   * each spot it took (server/spots.js; read from the state after the commit).
+   */
+  touch(args, pid, now, type) {
+    // deleted first, so a target touched again moves to the end: the map stays in time order, oldest first
+    const mark = (id) => { this.touched.delete(id); this.touched.set(id, { pid, at: now }); };
+    for (const id of actionTargets(type, args)) mark(id);
+    for (const key of spotKeys(this.state, type, args, { after: true })) mark(key);
+    // Bounded: entries matter for LATE_TOUCH_MS at most; sold and removed objects must not pile up for the process
+    // lifetime. Oldest first: every expired entry, then (more targets than the cap within that window) the oldest.
     if (this.touched.size > TOUCHED_MAX) {
-      for (const [id, t] of this.touched) if (now - t.at >= TOUCH_MS) this.touched.delete(id);
+      for (const [id, t] of this.touched) {
+        if (this.touched.size <= TOUCHED_MAX && now - t.at < LATE_TOUCH_MS) break;
+        this.touched.delete(id);
+      }
     }
   }
 
   /**
-   * The other player who most recently acted on any target of `args` within TOUCH_MS, or undefined. A rejected
-   * click or stroke then says "Mia got there first" instead of an error (GDD §6.3).
+   * The other player who most recently acted on any target of `args` (or on one of the `spots` keys) within `within`
+   * (TOUCH_MS, more for a late act), or undefined. A rejected click or stroke then says
+   * "Mia got there first" instead of an error (GDD §6.3).
    */
-  lastToucher(args, now, self) {
+  lastToucher(args, now, self, type, spots = [], within = TOUCH_MS) {
     let best;
-    for (const id of targetIds(args)) {
-      const t = this.touched.get(id);
-      if (t && t.pid !== self && now - t.at < TOUCH_MS && (!best || t.at > best.at)) best = t;
+    for (const list of [actionTargets(type, args), spots]) {
+      for (const id of list) {
+        const t = this.touched.get(id);
+        if (t && t.pid !== self && now - t.at < within && (!best || t.at > best.at)) best = t;
+      }
     }
     return best ? best.pid : undefined;
   }

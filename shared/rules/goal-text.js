@@ -12,7 +12,7 @@
 //   pts(p10)          Fair points in tenths ("25.8")                     ctextRef(...)   a content text field
 //   join(items, sep)  'and' | 'or' | 'plus' | 'comma' lists              sub(msg)        a message inside a message
 // English-only grammar params start with '_' ({_a}: "a" / "an"); Bulgarian leaves them out.
-import { CONTENT, QUEST_VERBS, itemOf, recipeOf, pluralOf } from '../content/index.js';
+import { CONTENT, COOP, QUEST_VERBS, itemOf, recipeOf, pluralOf } from '../content/index.js';
 
 /** The English templates ('goals.r.*'): the catalog of the rules' sentences. */
 export const GOALS_RULES_EN = Object.freeze({
@@ -30,9 +30,9 @@ export const GOALS_RULES_EN = Object.freeze({
   'goals.r.chapter.M2': 'Every corner of the valley is open',
   // NOW
   'goals.r.barnFull': 'The Barn is full: sell or use some goods',
-  'goals.r.collect': { one: 'Collect {n} ready thing', other: 'Collect {n} ready things' },
+  'goals.r.collect': { one: 'Collect {n} good', other: 'Collect {n} goods' },
   'goals.r.giant': { one: 'Fell the Giant {crop}: {n} chop, quicker together', other: 'Fell the Giant {crop}: {n} chops, quicker together' },
-  'goals.r.plant': { one: 'Plant {n} empty plot', other: 'Plant {n} empty plots' },
+  'goals.r.plant': { one: 'Plant {n} plot', other: 'Plant {n} plots' },
   'goals.r.order.golden': 'Fill a golden order',
   'goals.r.order.fill': 'Fill an order from the Barn',
   'goals.r.order.help': 'Your partner flagged an order: "Need help"',
@@ -118,15 +118,16 @@ export const GOALS_RULES_EN = Object.freeze({
   'goals.r.prize.list': '{list}',
   'goals.r.duel.friendly': 'Friendly Duel',
   // the Almanac's micro-tasks (the rules' own words; the Journal has its own)
-  'goals.r.alm.harvest.item': 'Harvest {n} {item}{q:omit}',
-  'goals.r.alm.plant.item': 'Plant {n} {item}',
-  'goals.r.alm.water.all': 'Water {n} crops',
-  'goals.r.alm.collect.item': 'Collect {n} {item}{q:omit}',
-  'goals.r.alm.pet.animal': 'Pet {n} animals',
-  'goals.r.alm.make.item': 'Make {n} {item}{q:omit}',
-  'goals.r.alm.fill.order': 'Fill {n} order',
-  'goals.r.alm.clear.debris': 'Clear {n} debris',
-  'goals.r.alm.enter.fair': 'Enter {n} fair',
+  // release 1.0 (copy#1): the count says the noun's number ("Harvest 20 Carrots", "Fill 3 orders", "Water 1 crop")
+  'goals.r.alm.harvest.item': 'Harvest {q}{n:omit}{item:omit}',
+  'goals.r.alm.plant.item': { one: 'Plant {n} {item} plot', other: 'Plant {n} {item} plots' },
+  'goals.r.alm.water.all': { one: 'Water {n} crop', other: 'Water {n} crops' },
+  'goals.r.alm.collect.item': 'Collect {q}{n:omit}{item:omit}',
+  'goals.r.alm.pet.animal': { one: 'Pet {n} animal', other: 'Pet {n} animals' },
+  'goals.r.alm.make.item': 'Make {q}{n:omit}{item:omit}',
+  'goals.r.alm.fill.order': { one: 'Fill {n} order', other: 'Fill {n} orders' },
+  'goals.r.alm.clear.debris': { one: 'Clear a weed, rock or stump{n:omit}', other: 'Clear {n} weeds, rocks or stumps' },
+  'goals.r.alm.enter.fair': { one: 'Enter {n} good at the Fair', other: 'Enter {n} goods at the Fair' },
   'goals.r.alm.any': '{verb} {n} {what}',
   // quest tasks: "Harvest 6 Wheat" (task), "Harvest Wheat" (label, before "3/6"), "Harvest 12 more Wheat" (more)
   'goals.r.task.plant': 'Plant {q}{crop:omit}{n:omit}',
@@ -228,6 +229,82 @@ export const GOALS_RULES_EN = Object.freeze({
   'goals.r.block.proof': 'first {task:lc}',
 });
 
+/**
+ * The release-1.0 templates ('feat.r.*', features lane): the collect card by group (M6), the Plant for later card (D3),
+ * the brush card, the Golden Hour card (D2), the calm card, the Together chain's async task lines (M22). Same shape as
+ * GOALS_RULES_EN; the client's English re-exports them (public/js/i18n/en/feat.js), Bulgarian is i18n/bg/feat.js.
+ */
+export const FEAT_RULES_EN = Object.freeze({
+  // M6: the collect card names its biggest group with the verb the Hand does there
+  'feat.r.collect.fields': { one: 'Harvest {n} crop', other: 'Harvest {n} crops' },
+  'feat.r.collect.barnyard': { one: 'Tend {n} animal', other: 'Tend {n} animals' },
+  'feat.r.collect.orchard': { one: 'Pick fruit from {n} tree', other: 'Pick fruit from {n} trees' },
+  'feat.r.collect.workshop': { one: 'Collect {n} good', other: 'Collect {n} goods' },
+  'feat.r.plant': { one: 'Plant {n} plot', other: 'Plant {n} plots' },
+  // D3: Plant for later ("Before bed" from 19:00 farm time); the sub line says when and what it costs
+  // {crops}: the crop's plural in English ("Pumpkins"); Bulgarian asks {crop:pl} of the name ref
+  'feat.r.later': { one: 'Plant {n} plot with {crops}{crop:omit}', other: 'Plant {n} plots with {crops}{crop:omit}' },
+  'feat.r.later.bed': { one: 'Before bed: plant {n} plot with {crops}{crop:omit}', other: 'Before bed: plant {n} plots with {crops}{crop:omit}' },
+  'feat.r.later.sub': 'Ready {when} · {c} coins',
+  // QA r2 F2-07: after 19:00 on a farm whose long crops are out of reach, the plain plant card names the crop that does
+  // fill the field (landing nearest the morning) with its clock, never "Wheat · ready in 1 min"
+  'feat.r.plant.sub': '{crop} · ready {when} · {c} coins',
+  'feat.r.when.today': 'at {t}',
+  'feat.r.when.tomorrow': 'tomorrow at {t}',
+  'feat.r.when.later': { one: 'in {n} day at {t}', other: 'in {n} days at {t}' },
+  // D3: a bigger brush the farm can easily afford (SOON)
+  'feat.r.brush': '{tool}: {n} plots a touch, {c}',
+  // D2: Golden Hour with both farmers online and the session gap passed
+  'feat.r.golden': 'Golden Hour is ready: sit on the bench together',
+  'feat.r.golden.wait': 'On the bench: ping {name} to come and sit',
+  'feat.r.golden.join': '{name} is on the bench: sit with them',
+  // only long timers left: a calm card instead of an invented chore
+  'feat.r.calm': 'All done for now',
+  'feat.r.calm.sub': 'Next ready in {t}',
+  // M22 / D2: the Together chain counts what the two of you do on the same farm day, not only at the same moment
+  'feat.r.task.bench': 'Sit on a bench, each of you, on the same day',
+  'feat.r.label.bench': 'Sit on a bench, each of you, the same day',
+  'feat.r.task.duet': { one: 'Cook a duet, together or slow-cooked alone', other: 'Cook {n} duets, together or slow-cooked alone' },
+  'feat.r.label.duet': 'Cook a duet, together or alone',
+  // QA r1 F-04: what counts is the other half (a surprise opened, a flagged order filled), never the leaving or flagging
+  'feat.r.task.help': { one: 'Help each other once: open a surprise or fill a flagged order ⚑', other: 'Help each other {n} times: open a surprise or fill a flagged order ⚑' },
+  'feat.r.label.help': 'Open a surprise or fill a flagged order ⚑',
+  'feat.r.task.giant': { one: 'Fell a giant crop, both of you chopping', other: 'Fell {n} giant crops, both of you chopping' },
+  'feat.r.label.giant': 'Fell a giant crop, both of you chopping',
+  'feat.r.task.dock': 'Cast a line, each of you, on the same day',
+  'feat.r.label.dock': 'Cast a line, each of you, the same day',
+  'feat.r.giant.later': 'Chop it, {name} can finish it later',
+  'feat.r.giant.laterPartner': 'Chop it, your partner can finish it later',
+  // QA r3 F3-05 (coop#3): half of a same-day Together task is done (one of you sat on a bench / cast a line today)
+  'feat.r.half.bench': '{name} ✓ · you: sit on any bench before midnight',
+  'feat.r.half.dock': '{name} ✓ · you: cast a line before midnight',
+  'feat.r.half.benchMine': 'Your half is done ✓ · {name} sits on a bench today',
+  'feat.r.half.dockMine': 'Your half is done ✓ · {name} casts a line today',
+  'feat.r.half.now.bench': 'Sit on any bench before midnight — {name} ✓ · {title}',
+  'feat.r.half.now.dock': 'Cast a line before midnight — {name} ✓ · {title}',
+  // QA r3 F3-10 (fbp#12): Grandma's flour step once the Windmill stands, and on a farm of one (actions/tutorial.js
+  // stepWords)
+  'feat.r.coach.flourSolo': 'Grandma\'s Windmill is back: place it from Build (free), then make Flour.',
+  'feat.r.coach.flourMill': { one: 'Make Flour at the Windmill, together.', other: 'Make Flour {n} times at the Windmill, together.' },
+  'feat.r.coach.flourMillSolo': { one: 'Make Flour at the Windmill.', other: 'Make Flour {n} times at the Windmill.' },
+  // verify-1 D-2: the Feed step on a farm of one (the content line offers the partner's Wheat)
+  'feat.r.coach.feedSolo': 'Make Chicken Feed from 3 Wheat.',
+});
+
+/**
+ * QA r2 F2-02 (coop#5, fe#2, ap#4): a gift sheet's one-tap note travels as a token, "#thanks" (COOP.keepsake.chips),
+ * never as the giver's words, so each screen says it in its OWN language (a desktop in English wrapped "Thank you ♥" and
+ * the Bulgarian phone read it in English). The catalog key ('feat.gift.note.<id>') of a token note, else null: a typed
+ * note is the giver's own words and shows as typed. Pure.
+ */
+export function giftNoteKey(note) {
+  const m = typeof note === 'string' ? /^#([a-z]{1,20})$/.exec(note.trim()) : null;
+  return m && (COOP.keepsake?.chips ?? []).includes(m[1]) ? `feat.gift.note.${m[1]}` : null;
+}
+
+/** The Together chain's task refs that read as the async sentences above (feat.r.task.<x> / feat.r.label.<x>). */
+const TOGETHER_FEAT = Object.freeze({ bench: 'bench', duet: 'duet', help_flag: 'help', giant: 'giant', dock: 'dock' });
+
 // ---- messages and their params ----------------------------------------------------------------------------------
 
 /** A message: the catalog key and its params. */
@@ -301,7 +378,7 @@ function enParam(v, form) {
 /** A message in English: the sentence the rules always wrote. */
 export function enText(m) {
   if (!m) return '';
-  let v = GOALS_RULES_EN[m.key];
+  let v = Object.hasOwn(GOALS_RULES_EN, m.key) ? GOALS_RULES_EN[m.key] : FEAT_RULES_EN[m.key];
   if (v === undefined) return String(m.key);
   const p = m.params || {};
   if (v && typeof v === 'object') v = (numOf(p.n) === 1 ? v.one : v.other) ?? v.other;
@@ -337,12 +414,13 @@ export const SPECIAL_NAMES = Object.freeze({
 /** The specials that read better as their own sentence (count 1 / count n). */
 const OWN_TEXT = new Set(['reach:fair_silver', 'reach:league', 'together:bench', 'together:duet', 'together:help_flag',
   'together:giant', 'together:dock']);
-const has = (k) => Object.hasOwn(GOALS_RULES_EN, k);
+const has = (k) => Object.hasOwn(GOALS_RULES_EN, k) || Object.hasOwn(FEAT_RULES_EN, k);
 const verbEn = (v) => QUEST_VERBS[v]?.text ?? v;
 
 /** "Fill 3 orders", "Make 2 Bread", "Buy the land: Creekside Meadow". */
 export function taskMsg(t) {
   const n = int(t.qty);
+  if (t.verb === 'together' && Object.hasOwn(TOGETHER_FEAT, t.ref)) return msg(`feat.r.task.${TOGETHER_FEAT[t.ref]}`, { n });
   if (OWN_TEXT.has(`${t.verb}:${t.ref}`)) return msg(`goals.r.task.${t.verb}.${t.ref}`, { n });
   if (t.verb === 'expand') return msg('goals.r.task.expand', { land: name(t.ref, nameOf(t.ref), 'expansions') });
   const special = SPECIAL_NAMES[t.ref];
@@ -360,6 +438,7 @@ export function taskMsg(t) {
 
 /** The task without its count, for a "have/need" line: "Fill orders", "Collect Egg", "Buy the land: Creekside". */
 export function taskLabelMsg(t) {
+  if (t.verb === 'together' && Object.hasOwn(TOGETHER_FEAT, t.ref)) return msg(`feat.r.label.${TOGETHER_FEAT[t.ref]}`, { n: int(t.qty) });
   if (OWN_TEXT.has(`${t.verb}:${t.ref}`) || t.verb === 'expand') return taskMsg(t);
   const special = SPECIAL_NAMES[t.ref];
   if (special) {
@@ -385,7 +464,10 @@ export function almanacMsg(t) {
   const key = `goals.r.alm.${t.verb}.${kind}`;
   const n = int(t.qty);
   if (has(key)) return msg(key, kind === 'item' ? { n, item: name(t.ref, nameOf(t.ref)), q: qtyRef(t.ref, t.qty, nameOf(t.ref)) } : { n });
-  const what = t.ref === '*' ? 'crops' : t.ref === 'animal' ? 'animals' : t.ref === 'order' ? 'order' : nameOf(t.ref);
+  // the fallback's noun follows the count too (copy#1: "Water 1 crops", "Fill 3 order")
+  const one = t.qty === 1;
+  const what = t.ref === '*' ? (one ? 'crop' : 'crops') : t.ref === 'animal' ? (one ? 'animal' : 'animals')
+    : t.ref === 'order' ? (one ? 'order' : 'orders') : pluralOf(nameOf(t.ref), t.qty);
   return msg('goals.r.alm.any', { verb: `${t.verb[0].toUpperCase()}${t.verb.slice(1)}`, n, what });
 }
 

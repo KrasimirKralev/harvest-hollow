@@ -55,6 +55,18 @@ const errors = [];
 const files = [];
 let server = null;
 let serverLog = '';
+const notes = [];
+let shotFailed = false;
+/** What each open page showed when the run stopped (once). */
+async function failShots() {
+  if (shotFailed) return;
+  shotFailed = true;
+  for (const p of livePages) {
+    if (p.isClosed()) continue;
+    const f = path.join(SHOTS, `FAILED-${p.tag}.png`);
+    await p.screenshot({ path: f }).then(() => files.push(f), () => {});
+  }
+}
 let browser = null;
 let dataDir = null;
 
@@ -76,6 +88,9 @@ async function startServer(extraEnv = {}) {
   });
   server.stdout.on('data', (d) => { serverLog += d; });
   server.stderr.on('data', (d) => { serverLog += d; });
+  // a server that stops by itself mid-run is told with its last words (the run's own stop is not)
+  const me = server;
+  me.once('exit', (code, signal) => { if (server === me) notes.push(`server exited by itself (code ${code}, signal ${signal}): ${serverLog.slice(-1500)}`); });
   for (let i = 0; i < 100 && !serverLog.includes('running at') && server.exitCode === null; i++) await sleep(100);
   if (!serverLog.includes('running at')) throw new Error(`server did not start: ${serverLog.slice(-1200)}`);
 }
@@ -104,11 +119,50 @@ async function openPage(tag, { slot, name, device, lang, path: at = '/', hash = 
   const dev = DEVICES[device];
   if (dev.userAgent) await page.emulate(dev); else await page.setViewport(dev.viewport);
   await page.evaluateOnNewDocument((l) => { try { localStorage.setItem('hh.lang', l); } catch { /* blocked */ } }, lang);
+  // ui-shell's S2-13 patch (QA r2): on a hosted farm the "Keep your farm safe" card (multi mode, after the first guide
+  // step) once took the screen from Harvey's side panel while a wish was typed, a timing-dependent red in `--multi`. This
+  // run is about Harvey, not the key card: the device has saved its key, as the other tools seed it (never overwritten)
+  await page.evaluateOnNewDocument(() => {
+    try {
+      const m = /^\/f\/([a-z2-7]{12})(?:\/|$)/.exec(location.pathname);
+      const k = m ? `hh.f.${m[1]}.keySave` : null;
+      if (k && localStorage.getItem(k) === null) localStorage.setItem(k, JSON.stringify({ saved: true }));
+    } catch { /* blocked */ }
+  });
   page.on('pageerror', (e) => errors.push(`${tag} pageerror: ${e.message}`));
+  // a page that reloads by itself (the content gate, a lost WebGL context) is told, with what the socket said last:
+  // the wire's welcomes, denials and closes are kept in sessionStorage, which outlives the reload
+  await page.evaluateOnNewDocument(() => {
+    const keep = (x) => { try { const a = JSON.parse(sessionStorage.getItem('e2e.wire') || '[]'); a.push(`${new Date().toISOString().slice(11, 23)} ${x}`); sessionStorage.setItem('e2e.wire', JSON.stringify(a.slice(-16))); } catch { /* storage blocked */ } };
+    const WS = window.WebSocket;
+    window.WebSocket = class extends WS {
+      constructor(...a) {
+        super(...a);
+        this.addEventListener('message', (e) => {
+          const d = typeof e.data === 'string' ? e.data : '';
+          const m = /^\{"t":"(welcome|deny|slots)"/.exec(d);
+          if (m) keep(`in ${m[1]} ${(d.match(/"(contentHash|buildHash|code)":"?[^",]*/g) || []).join(' ')}`);
+        });
+        this.addEventListener('close', (e) => keep(`close ${e.code} ${e.reason || ''}`));
+      }
+    };
+    addEventListener('pagehide', () => keep('pagehide'));
+  });
+  let loads = 0;
+  page.on('load', async () => {
+    if (++loads < 2) return;
+    const wire = await page.evaluate(() => sessionStorage.getItem('e2e.wire')).catch(() => null);
+    notes.push(`${tag} loaded again by itself (${stage}); the wire before: ${wire ?? '?'}`);
+  });
   page.on('console', (m) => {
+    if (m.type() === 'warn' && /reloading|\breload\b|context/i.test(m.text())) notes.push(`${tag} warn: ${m.text()}`);
     if (m.type() !== 'error') return;
-    // a refusal the run asks for on purpose (409 BUSY / STALE, 428 SIGN_IN) is logged by Chrome as a failed load
-    if (/status of 4\d\d/.test(m.text()) && /\/harness\//.test(m.location()?.url ?? '')) return;
+    // a refusal the run asks for on purpose (409 BUSY / STALE, 428 SIGN_IN) is logged by Chrome as a failed load: only
+    // those two codes pass, and each is named in the notes (QA r1 H-17: the verifier sees them; any other 4xx fails)
+    if (/status of (409|428)\b/.test(m.text()) && /\/harness\//.test(m.location()?.url ?? '')) {
+      notes.push(`${tag} expected refusal: ${m.text().slice(0, 80)} ${String(m.location()?.url ?? '').replace(/^https?:\/\/[^/]+/, '')}`);
+      return;
+    }
     errors.push(`${tag} console: ${m.text()}`);
   });
   page.tag = tag;
@@ -232,7 +286,7 @@ function createFake(pages, { hosted = false } = {}) {
         consent: { telemetry: S.consent[pid] ?? null, sending: true }, limits: { jobsPerHour: 10, jobsPerDay: 30 } });
     }
     if (method === 'POST' && rel === '/jobs') {
-      if (S.job && !['applied', 'discarded', 'expired', 'failed', 'cancelled'].includes(S.job.state)) return answer(409, { error: 'BUSY', job: S.job });
+      if (S.job && !['applied', 'discarded', 'expired', 'failed', 'cancelled', 'answered'].includes(S.job.state)) return answer(409, { error: 'BUSY', job: S.job });
       if (!S.signed[pid][body.provider]) return answer(428, { error: 'SIGN_IN' });
       id += 1;
       S.job = { id: `job${id}`, by: pid, provider: body.provider, model: body.model ?? null, state: 'starting', step: 'reading', round: 1, startedAt: Date.now(),
@@ -259,7 +313,7 @@ function createFake(pages, { hosted = false } = {}) {
         S.job = { ...job, state: 'applied', updatedAt: Date.now() };
         await push({ t: 'hx', e: 'job', job: S.job });
         await push({ t: 'hx', e: 'applied', by: pid, n, title: S.active.title, summary: SUMMARY,
-          names: CHANGES.filter((c) => c.op === 'add').map((c) => ({ id: c.id, ...c.name })) });
+          names: CHANGES.filter((c) => c.op === 'add').map((c) => ({ id: c.id, ...c.name, family: c.family })) });
         return answer(200, { active: S.active });
       }
       if (seg[2] === 'discard' || seg[2] === 'cancel') {
@@ -326,7 +380,14 @@ function createFake(pages, { hosted = false } = {}) {
     S, install, push,
     step: (state, step, code) => touch({ state, step, progress: [...(S.job.progress ?? []), ...(code ? [{ at: Date.now(), step, code, note: code }] : [])].slice(-20) }),
     ready: () => touch({ state: 'ready', step: 'ready', result: { candidate: S.active.n + 1, parent: S.active.n, summary: SUMMARY, changes: CHANGES, validation: VALID } }),
-    fail: () => touch({ state: 'failed', step: 'testing', error: { code: 'INVALID' }, result: { changes: [], validation: FAILED_VALIDATION } }),
+    fail: () => touch({ state: 'failed', step: 'testing', error: { code: 'INVALID' }, result: { changes: [], validation: FAILED_VALIDATION,
+      summary: { en: 'Dragons are not possible here: a new animal copies one the game has. I tried a Gold Pie, and it earned too much.',
+        bg: 'Дракони тук не стават: новото животно копира някое от играта. Опитах златен пай, но носеше твърде много.', possible: false } } }),
+    // release 1.0 (H1): Harvey's answer to a wish that cannot be built
+    answered: () => touch({ state: 'answered', step: 'ready', result: { candidate: null, parent: S.active.n, changes: [], validation: null,
+      summary: { en: 'I cannot give you coins: prices and rewards are the game\'s own. I can make your crops grow a little faster instead.',
+        bg: 'Не мога да ти дам монети: цените и наградите са на играта. Мога вместо това да направя посевите ти малко по‑бързи.',
+        possible: false, try: [{ en: 'Crops grow 20% faster', bg: 'Посевите да растат с 20 % по‑бързо' }] } } }),
   };
 }
 
@@ -340,7 +401,12 @@ const click = async (page, sel) => {
     try { await page.click(sel); return; } catch (err) { if (i >= 4 || !/detached|not clickable/i.test(err.message)) throw err; await sleep(250); }
   }
 };
-const typeInto = async (page, sel, text) => { await page.click(sel, { clickCount: 3 }); await page.keyboard.type(text, { delay: 2 }); };
+// a triple click selects one line only: a box with the old wish back in it ("Change my wish") is emptied by select()
+const typeInto = async (page, sel, text) => {
+  await page.click(sel);
+  await page.evaluate((s) => document.querySelector(s)?.select?.(), sel);
+  await page.keyboard.type(text, { delay: 2 });
+};
 const textOf = (page, sel) => page.evaluate((s) => document.querySelector(s)?.textContent?.replace(/\s+/g, ' ').trim() ?? '', sel);
 const openPanel = (page, name, a = {}) => page.evaluate(([n, x]) => window.__hh.ui.panels.open(n, x), [name, a]);
 // the dock exists only after the server said the helper is on: an absent dock is not a shown one
@@ -370,12 +436,26 @@ async function pressHarvey(page) {
 /** The land card a real farm shows once after the land update (ui/panels/w5.js): on a phone it spans the top of the
  *  screen, where the right edge column with Harvey's button is. Up while a press proves the button stays on top. */
 const landCard = {
-  up: (page) => page.evaluate((bg) => {
+  // release 1.0 (M19, harvey#15): up() resolves when the card's entrance animation has ENDED (animationend, or every
+  // animation of the card finished), never after a fixed 500 ms: during its scale-in the card can lie over the button
+  up: (page) => page.evaluate(async (bg) => {
     window.__e2eLand = window.__hh.ui.banner({ id: 'e2e-land', kind: 'quest', ttl: 600_000, things: [],
       ribbon: bg ? 'По‑голяма земя!' : 'Bigger land!',
       message: bg ? 'Земята на фермата вече е в 7 големи парцела вместо в много малки. Всичко ваше си остава ваше: Хълмът при потока и Овощната алея.'
         : 'The farm\'s land is now 7 big parcels instead of many small ones. Everything of yours stays yours: Brook Hill and the Orchard Lane.',
       actions: [{ label: bg ? 'Отвори картата' : 'Open the map', kind: 'sky', fn: () => {} }] });
+    const el = await new Promise((r) => { const t0 = performance.now(); const look = () => { const x = document.querySelector('.unlock-banner[data-id="e2e-land"]'); if (x || performance.now() - t0 > 3000) r(x); else requestAnimationFrame(look); }; look(); });
+    if (!el) return { entrance: 'no card' };
+    const t0 = performance.now();
+    const running = () => [el, ...el.querySelectorAll('*')].flatMap((x) => x.getAnimations?.() ?? []).filter((a) => a.playState === 'running' && !(a.effect?.getComputedTiming?.().iterations === Infinity));
+    await new Promise((r) => {
+      let done = false;
+      const end = () => { if (!done) { done = true; r(); } };
+      el.addEventListener('animationend', () => { if (!running().length) end(); });
+      Promise.all(running().map((a) => a.finished.catch(() => {}))).then(end);
+      setTimeout(end, 4000);
+    });
+    return { entrance: Math.round(performance.now() - t0) };
   }, page.lang === 'bg'),
   away: (page) => page.evaluate(() => { window.__e2eLand?.close?.(); window.__e2eLand = null; }),
 };
@@ -406,7 +486,8 @@ async function fakePassDesktop(lang) {
     B = await openPage('B', { slot: 'p2', name: 'Mia', device: 'desktop', lang, setup: fake.install });
     await Promise.all([H(A), H(B)]);
     await waitFor(A, dockShown);
-    check(`${tag}: the helper button is on the right edge column`, await A.evaluate(() => document.getElementById('hud-right')?.firstElementChild?.id === 'hx-dock'));
+    // M19 / ui-shell's selector map: Harvey's control is IN the right column (under the gear), not necessarily first
+    check(`${tag}: the helper button is in the right edge column`, await A.evaluate(() => Boolean(document.getElementById('hud-right')?.contains(document.getElementById('hx-dock')))));
     await shot(A, `${tag}-01-button`);
     // the keyboard: Enter on the button opens the helper with the focus in the request box; Escape gives it back
     await A.focus('#hx-btn');
@@ -419,7 +500,18 @@ async function fakePassDesktop(lang) {
     check(`${tag}: Escape closes it and the focus is back on the button`, await focusIn(A, '#hx-btn'));
     await pressHarvey(A);
     check(`${tag}: the button opens the helper panel`, await topPanel(A) === 'helper');
+    check(`${tag}: the button says "Harvey" (a visible label, H4)`, /^(Harvey|Харви)$/.test(await textOf(A, '#hx-btn .hx-btn-cap')));
     await shot(A, `${tag}-02-ask-signed-out`);
+    // H4 (harvey#4): the partner asks before signing in, with more than one plan offered: no sign-in starts (no Claude
+    // Code login is spawned for a choice nobody made); Sign-in asks to choose
+    await openPanel(B, 'helper', { tab: 'ask' });
+    await typeInto(B, '#hx-prompt', lang === 'bg' ? 'Розова ограда' : 'A pink fence');
+    await click(B, '[data-act="ask"]');
+    await waitFor(B, () => document.querySelector('.hx-choose'));
+    check(`${tag}: Ask unsigned with several plans starts no sign-in ("Choose who runs Harvey")`,
+      Object.keys(fake.S.signin.p2).length === 0 && /Choose who runs Harvey|Избери с какво да работи Харви/.test(await textOf(B, '#panel-helper')));
+    await shot(B, `${tag}-02b-choose`);
+    await B.evaluate(() => window.__hh.ui.panels.closeAll());
     await openPanel(A, 'helper', { tab: 'accounts' });
     await shot(A, `${tag}-03-accounts`);
     if (lang === 'en') {
@@ -460,8 +552,13 @@ async function fakePassDesktop(lang) {
     await waitFor(A, () => document.querySelector('.hx-consent'));
     check(`${tag}: Ctrl+Enter sends; the focus moves to the consent question, not to the page`, await focusIn(A, '.hx-consent'));
     await shot(A, `${tag}-10-consent`);
+    // harvey#16 (opt-in, default off): "Keep them to myself" comes first, and both answers are the same size
+    const rects = await A.evaluate(() => [...document.querySelectorAll('.hx-consent-acts .btn')].map((b) => { const r = b.getBoundingClientRect(); return [b.dataset.consent, Math.round(r.width), Math.round(r.height)]; }));
+    check(`${tag}: both consent answers are the same size (rect)`, rects.length === 2 && rects[0][1] === rects[1][1] && rects[0][2] === rects[1][2], JSON.stringify(rects));
     await A.keyboard.press('Tab');
-    check(`${tag}: Tab from the question reaches Share first`, await focusIn(A, '[data-consent="yes"]'));
+    check(`${tag}: Tab from the question reaches "Keep them to myself" first`, await focusIn(A, '[data-consent="no"]'));
+    await A.keyboard.press('Tab');
+    check(`${tag}: then Share`, await focusIn(A, '[data-consent="yes"]'));
     await A.keyboard.press('Enter');
     await waitFor(A, () => document.querySelector('.hx-job'));
     check(`${tag}: then the focus moves to the job card`, await focusIn(A, '.hx-job'));
@@ -495,15 +592,26 @@ async function fakePassDesktop(lang) {
     await shot(A, `${tag}-16-pill-hidden`);
     await fake.ready();
     await waitFor(A, () => window.__hh.ui.panels.top() === 'helper-ready');
+    // QA r4 H4-01: a pop-up that opened by itself keeps the focus on its frame, never on Apply (a Space meant for the
+    // chat line applied the change unseen); one the farmer opens from the pill puts it on Apply
+    await sleep(300);
+    check(`${tag}: the ready pop-up that opened by itself has no focus on Apply`, !(await focusIn(A, '[data-act="apply"]')) && await focusIn(A, '#panel-helper-ready'));
+    await A.keyboard.press('Escape');
+    await waitFor(A, () => window.__hh.ui.panels.top() === null);
+    await A.evaluate(() => document.querySelector('.hx-pill-main')?.click());
+    await waitFor(A, () => window.__hh.ui.panels.top() === 'helper-ready');
     await waitFor(A, () => document.activeElement?.dataset?.act === 'apply', null, 3000).catch(() => {});
-    check(`${tag}: the ready pop-up puts the focus on Apply`, await focusIn(A, '[data-act="apply"]'));
+    check(`${tag}: opened from the pill, the ready pop-up puts the focus on Apply`, await focusIn(A, '[data-act="apply"]'));
     await shot(A, `${tag}-17-ready`);
     await shot(A, `${tag}-18-ready-bottom`, { scrollPanel: 'helper-ready' });
     await shot(B, `${tag}-18-partner-ready-pill`);
     check(`${tag}: no pop-up on the partner's screen`, await topPanel(B) === null);
     await click(A, '[data-act="revise"]');
     await shot(A, `${tag}-19-revise-box`, { scrollPanel: 'helper-ready' });
-    await click(A, '[data-act="revise"]');
+    // QA r1 H-05: while the box is open its own Send and Cancel are the actions; the sticky bar steps aside
+    check(`${tag}: the action bar steps aside while "Ask for changes" is open`, await A.evaluate(() => document.querySelector('#panel-helper-ready .hx-sticky-acts')?.hidden === true));
+    await click(A, '[data-act="reviseCancel"]');
+    await waitFor(A, () => document.querySelector('#panel-helper-ready .hx-revise')?.hidden && !document.querySelector('#panel-helper-ready .hx-sticky-acts')?.hidden);
     if (lang === 'en') {
       await A.evaluate(() => document.querySelector('.hx-read')?.click());
       await sleep(200);
@@ -516,10 +624,12 @@ async function fakePassDesktop(lang) {
     await shot(A, `${tag}-21-stale`, { scrollPanel: 'helper-ready' });
     const staleApply = await A.evaluate(() => {
       const b = document.querySelector('#panel-helper-ready [data-act="apply"]');
-      return { disabled: Boolean(b?.disabled), bg: b ? getComputedStyle(b).backgroundColor : null, filter: b ? getComputedStyle(b).filter : null };
+      const bar = document.querySelector('#panel-helper-ready .hx-sticky-acts');
+      return { disabled: Boolean(b?.disabled), barHidden: Boolean(bar?.hidden), rebuild: Boolean(document.querySelector('.hx-stale [data-act="rebuild"]')?.getClientRects().length),
+        discard: Boolean(document.querySelector('.hx-stale [data-act="staleDiscard"]')?.getClientRects().length) };
     });
-    // flat paper (harness.css), whatever a sticky hover does to the bevel
-    check(`${tag}: Apply waits (and looks it) while the farm moved on`, staleApply.disabled && staleApply.bg === 'rgb(221, 211, 190)' && staleApply.filter === 'none', JSON.stringify(staleApply));
+    // QA r1 H-05: Apply cannot be pressed while the farm moved on; the notice's own Rebuild and Discard are the actions
+    check(`${tag}: Apply waits while the farm moved on; the notice carries Rebuild and Discard`, staleApply.disabled && staleApply.barHidden && staleApply.rebuild && staleApply.discard, JSON.stringify(staleApply));
     await click(A, '[data-act="rebuild"]');
     await waitFor(A, () => window.__hh.ui.panels.top() === null);
     check(`${tag}: a rebuild is a new round`, fake.S.job.round === 2 && fake.S.job.state === 'revising');
@@ -558,7 +668,29 @@ async function fakePassDesktop(lang) {
     await A.click('.hx-pill-main');
     await waitFor(A, () => document.querySelector('.hx-job.state-failed'));
     await shot(A, `${tag}-27-failed`);
-    await click(A, '[data-act="dismiss"]');
+    check(`${tag}: the failure leads with Harvey's words, the codes folded`, await A.evaluate(() => {
+      const card = document.querySelector('.hx-job.state-failed');
+      return Boolean(card.querySelector('.hx-answer-text')) && card.querySelector('details.hx-what') && !card.querySelector('details.hx-what').open;
+    }));
+    await click(A, '[data-act="change"]');
+    check(`${tag}: "Change my wish" puts the old words back in the box`, await A.evaluate(() => /Дракон|dragon/i.test(document.querySelector('#hx-prompt')?.value ?? '')));
+
+    // H1: Harvey's answer to a wish that cannot be built: his reply opens by itself, with the chip row and OK
+    await typeInto(A, '#hx-prompt', lang === 'bg' ? 'Дай ми 10 000 монети' : 'Give me 10,000 coins');
+    await click(A, '[data-act="ask"]');
+    await waitFor(A, () => document.querySelector('.hx-job'));
+    await A.evaluate(() => window.__hh.ui.panels.closeAll());
+    await fake.answered();
+    await waitFor(A, () => window.__hh.ui.panels.top() === 'helper-ready');
+    check(`${tag}: the answer is Harvey's reply, with his suggestion as a chip`, await A.evaluate(() => {
+      const p = document.querySelector('#panel-helper-ready');
+      return Boolean(p.querySelector('.hx-answer')) && p.querySelectorAll('.hx-chip').length >= 1 && p.querySelectorAll('.hx-chip').length <= 3 && !p.querySelector('[data-act="apply"]');
+    }));
+    check(`${tag}: the answer quotes the wish asked, nothing else`, (await textOf(A, '#panel-helper-ready .hx-quote')) === (lang === 'bg' ? 'Дай ми 10 000 монети' : 'Give me 10,000 coins'),
+      await textOf(A, '#panel-helper-ready .hx-quote'));
+    await shot(A, `${tag}-27b-answered`);
+    await click(A, '[data-act="ok"]');
+    check(`${tag}: OK puts the answer away`, await topPanel(A) === null && await A.evaluate(() => document.querySelector('.hx-pill').hidden));
 
     // Settings › Helper
     await openPanel(A, 'settings', { tab: 'helper' });
@@ -579,10 +711,26 @@ async function fakePassPhone(device, lang) {
   await waitFor(A, dockShown);
   await shot(A, `${tag}-01-button`);
   await landCard.up(A);
-  await sleep(500);
-  await pressHarvey(A);
-  await waitFor(A, () => document.querySelector('#hx-prompt'));
+  // pressHelper: proven on top before every tap; a loaded headless phone may read a tap as a long press (the tip)
+  await pressHelper(A, () => Boolean(document.querySelector('#hx-prompt')));
   await landCard.away(A);
+  await sleep(200);
+  // M13b (ux-phone#6): on a touch screen the keyboard comes with the player's tap, never with the sheet
+  check(`${tag}: no keyboard by itself (the box takes no focus on a touch screen)`, await A.evaluate(() => document.activeElement?.id !== 'hx-prompt'));
+  // M13b (ux-phone#10): the tab row stays at one height on Ask, History and Sign-in
+  const tabY = [];
+  // measured once the sheet has stopped moving (its slide-in is an animation; a loaded machine runs it late)
+  const still = () => { const f = document.querySelector('#panel-helper'); return Boolean(f)
+    && [f, ...f.querySelectorAll('.hh-tabs')].every((x) => x.getAnimations().every((an) => an.playState !== 'running'
+      || an.effect?.getComputedTiming?.().iterations === Infinity)); };
+  for (const tab of ['ask', 'history', 'accounts', 'ask']) {
+    await openPanel(A, 'helper', { tab });
+    await sleep(150);
+    await waitFor(A, still, null, 8000);
+    tabY.push(await A.evaluate(() => Math.round(document.querySelector('#panel-helper .hh-tabs')?.getBoundingClientRect().top ?? -1)));
+  }
+  check(`${tag}: the helper's tab row sits at one height on all three tabs`, tabY.every((y) => Math.abs(y - tabY[0]) <= 1 && y >= 0), JSON.stringify(tabY));
+  await waitFor(A, () => document.querySelector('#hx-prompt'));
   await shot(A, `${tag}-02-ask`);
   await typeInto(A, '#hx-prompt', lang === 'bg' ? 'Сливов пай за пещта за пайове' : 'A plum pie for the pie oven');
   await A.tap('[data-act="ask"]');
@@ -596,11 +744,65 @@ async function fakePassPhone(device, lang) {
   await shot(A, `${tag}-04-pill`);
   await fake.ready();
   await waitFor(A, () => window.__hh.ui.panels.top() === 'helper-ready');
+  await waitFor(A, () => { const f = document.querySelector('#panel-helper-ready'); return Boolean(f)
+    && f.getAnimations().every((an) => an.playState !== 'running' || an.effect?.getComputedTiming?.().iterations === Infinity); }, null, 8000);
+  await sleep(150);
+  // M13b (harvey#8, astra#5): Apply inside the screen without scrolling (the action bar sticks to the sheet's bottom)
+  const applyAt = await A.evaluate(() => {
+    const b = document.querySelector('#panel-helper-ready [data-act="apply"]');
+    const sc = document.querySelector('#panel-helper-ready .hh-panel-scroll');
+    const r = b?.getBoundingClientRect();
+    const vh = window.visualViewport?.height ?? innerHeight;
+    const top = r ? document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2) : null;
+    return { top: r && Math.round(r.top), bottom: r && Math.round(r.bottom), vh: Math.round(vh), scrolled: sc ? sc.scrollTop : null, onTop: Boolean(top && (top === b || b.contains(top))) };
+  });
+  check(`${tag}: Apply is in view on the ready sheet without scrolling`, applyAt.bottom !== null && applyAt.bottom <= applyAt.vh && applyAt.scrolled === 0 && applyAt.onTop, JSON.stringify(applyAt));
   await shot(A, `${tag}-05-ready`);
   await shot(A, `${tag}-06-ready-bottom`, { scrollPanel: 'helper-ready' });
+  // QA r1 H-05: the field's own button is what a finger at its centre touches once it is scrolled into view the way the
+  // shell does it for the keyboard (keepInView: the button to the bottom edge, then the field): "Send" after "Ask for
+  // changes", "Rebuild on top" after a stale Apply. At 360 x 640 the sticky bar used to lie over both
+  const pressable = (sel, field = null) => A.evaluate(([s, f]) => {
+    const b = document.querySelector(`#panel-helper-ready ${s}`);
+    const el = f ? document.querySelector(`#panel-helper-ready ${f}`) : null;
+    b?.scrollIntoView({ block: 'end', inline: 'nearest' });
+    el?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    const at = (x) => { if (!x) return null; const r = x.getBoundingClientRect(); const top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+      return { y: [Math.round(r.top), Math.round(r.bottom)], onTop: Boolean(top && (top === x || x.contains(top))), top: top ? `${top.tagName.toLowerCase()}.${String(top.className).split(' ')[0]} ${top.dataset?.act ?? ''}` : null }; };
+    const bar = document.querySelector('#panel-helper-ready .hx-sticky-acts');
+    return { btn: at(b), field: at(el), bar: bar ? !bar.hidden : null, vh: Math.round(window.visualViewport?.height ?? innerHeight) };
+  }, [sel, field]);
+  await A.tap('[data-act="revise"]');
+  await waitFor(A, () => !document.querySelector('#panel-helper-ready .hx-revise')?.hidden);
+  await sleep(150);
+  const sendAt = await pressable('[data-act="reviseSend"]', '#hx-revise');
+  await shot(A, `${tag}-05b-revise`);
+  check(`${tag}: "Send" and the box of "Ask for changes" are not under the action bar`, sendAt.btn?.onTop && sendAt.field?.onTop && sendAt.btn.y[1] <= sendAt.vh, JSON.stringify(sendAt));
+  await A.tap('[data-act="reviseCancel"]');
+  await waitFor(A, () => document.querySelector('#panel-helper-ready .hx-revise')?.hidden && !document.querySelector('#panel-helper-ready .hx-sticky-acts')?.hidden);
+  fake.S.staleOnce = true;
+  await A.evaluate(() => document.querySelector('#panel-helper-ready .hh-panel-scroll')?.scrollTo(0, 0));
+  await A.tap('[data-act="apply"]');
+  await waitFor(A, () => document.querySelector('.hx-stale:not([hidden])'));
+  await sleep(150);
+  const rebuildAt = await pressable('[data-act="rebuild"]');
+  await shot(A, `${tag}-05c-stale`);
+  check(`${tag}: "Rebuild on top" is not under the greyed Apply`, rebuildAt.btn?.onTop && rebuildAt.btn.y[1] <= rebuildAt.vh, JSON.stringify(rebuildAt));
+  await A.tap('[data-act="rebuild"]');
+  await waitFor(A, () => window.__hh.ui.panels.top() === null);
+  check(`${tag}: a rebuild is a new round`, fake.S.job.round === 2 && fake.S.job.state === 'revising');
+  await fake.step('working', 'building', 'write');
+  await fake.ready();
+  await waitFor(A, () => window.__hh.ui.panels.top() === 'helper-ready');
+  await waitFor(A, () => { const f = document.querySelector('#panel-helper-ready'); return Boolean(f)
+    && f.getAnimations().every((an) => an.playState !== 'running' || an.effect?.getComputedTiming?.().iterations === Infinity); }, null, 8000);
+  await sleep(150);
   await A.tap('[data-act="apply"]');
   await waitFor(A, () => [...document.querySelectorAll('.toast')].some((x) => /Moon Melon|лунен пъпеш/i.test(x.textContent)));
+  check(`${tag}: the applied toast offers "Show me"`, await A.evaluate(() => [...document.querySelectorAll('.toast .toast-act')].some((b) => /Show me|Покажи/.test(b.textContent))));
   await shot(A, `${tag}-07-applied`);
+  // a toast with a button sits at the bottom, over open sheets, for 9 s: the next presses wait for it to go
+  await waitFor(A, () => !document.querySelector('.toast .toast-act'), null, 15_000).catch(() => {});
   await openPanel(A, 'helper', { tab: 'history' });
   await waitFor(A, () => document.querySelector('.hx-versions'));
   await shot(A, `${tag}-08-history`);
@@ -655,6 +857,10 @@ const listenSteps = (page) => page.evaluate(async () => {
   const bus = await import('/js/harness/bus.js');
   window.__hxSteps = [];
   bus.onHarness((m) => { if (m.e === 'job' && m.job) window.__hxSteps.push(`${m.job.state}:${m.job.step}`); });
+  // which sheets opened and closed, for a step that finds the wrong one on top
+  window.__panelLog = [];
+  const t0 = performance.now();
+  for (const ev of ['open', 'close']) window.__hh.ui.panels.on(ev, (n) => window.__panelLog.push(`${Math.round(performance.now() - t0)} ${ev} ${n}`));
 });
 async function signInMock(page) {
   await openPanel(page, 'helper', { tab: 'accounts' });
@@ -728,11 +934,14 @@ async function realRun() {
   check('Rowan\'s yes is stored on the farm\'s server', (await api(A, 'GET', '/consent')).body?.telemetry === true);
   await shot(A, `${tag}-04-job-A`);
 
-  // 3. the working pill while Rowan keeps playing: plant, ripen, harvest, plant again
-  await A.evaluate(() => window.__hh.ui.panels.closeAll());
+  // 3. the working pill while farmer A keeps playing: plant, ripen, harvest, plant again. On a loaded machine the mock
+  // can be done before this step (multi-f2: the pop-up opened by itself and this closeAll shut it, as a player's own
+  // close does: then the pill keeps it): the job card goes away, a ready pop-up stays
+  await A.evaluate(() => { if (window.__hh.ui.panels.top() !== 'helper-ready') window.__hh.ui.panels.closeAll(); });
   const plots = await A.evaluate(() => Object.entries(window.__hh.state.farm.objects).filter(([, o]) => o.def === 'plot' && !o.crop).slice(0, 3).map(([id]) => id));
   for (const id of plots) check(`Rowan plants Wheat while the helper works (${id})`, (await actOn(A, 'plant', { id, crop: 'wheat' })).ok);
-  check('the pill shows while the farmer plays', await A.evaluate(() => !document.querySelector('.hx-pill').hidden));
+  // (the pill steps aside while the helper's own pop-up is up)
+  check('the pill shows while the farmer plays', await A.evaluate(() => !document.querySelector('.hx-pill').hidden || window.__hh.ui.panels.top() === 'helper-ready'));
   await shot(A, `${tag}-05-pill-playing-A`);
   await A.evaluate(() => window.__hh.dev.warp(3 * 60_000));
   await sleep(600);
@@ -743,7 +952,6 @@ async function realRun() {
   check('the partner sees "Rowan\'s helper is working"', await waitFor(B, () => /Rowan/.test(document.querySelector('.hx-pill-line')?.textContent ?? ''), null, 15_000).then(() => true, () => false));
   await shot(B, `${tag}-06-partner-pill-B`);
   await landCard.up(B);
-  await sleep(500);
   await pressHelper(B, () => window.__hh.ui.panels.top() === 'helper');
   await landCard.away(B);
   await openPanel(B, 'helper', { tab: 'ask' });
@@ -753,8 +961,20 @@ async function realRun() {
   await shot(B, `${tag}-07-busy-B`);
   await B.evaluate(() => window.__hh.ui.panels.closeAll());
 
-  // 5. the changes-ready pop-up: the change list and the test results
-  await waitFor(A, () => window.__hh.ui.panels.top() === 'helper-ready', null, 90_000);
+  // 5. the changes-ready pop-up: the change list and the test results. It opens by itself over an empty screen; over a
+  // card or sheet (a reconnect's welcome-back card on a loaded machine) it waits, and the pill's "See them" opens it
+  await waitFor(A, () => window.__hh.ui.panels.top() === 'helper-ready' || document.querySelector('.hx-pill')?.dataset.tone === 'ready', null, 90_000);
+  if (await topPanel(A) !== 'helper-ready') {
+    const over = await topPanel(A);
+    // over an empty screen it must have opened by itself: that is a defect, not a wait
+    // it may be on its way (the shell waits 400 ms after the last sheet closed)
+    const late = over === null && await waitFor(A, () => window.__hh.ui.panels.top() === 'helper-ready', null, 2000).then(() => true, () => false);
+    check(`the ready pop-up waited only because "${over}" was open (the pill's "See them" opens it)`, over !== null || late,
+      `nothing was open; sheets: ${(await A.evaluate(() => window.__panelLog.slice(-12).join(', ')))}; job: ${(await A.evaluate(() => window.__hxSteps.slice(-4).join(' ')))}`);
+    await A.evaluate(() => window.__hh.ui.panels.closeAll());
+    if (await topPanel(A) !== 'helper-ready') await click(A, '.hx-pill-go');
+    await waitFor(A, () => window.__hh.ui.panels.top() === 'helper-ready', null, 15_000);
+  }
   const readyText = await textOf(A, '#panel-helper-ready');
   check('the ready pop-up lists the Moon Melon and the Melon Pie', /Moon Melon/.test(readyText) && /Melon Pie/.test(readyText), readyText.slice(0, 200));
   check('the ready pop-up shows the test results, all passed', await A.evaluate(() => { const r = [...document.querySelectorAll('#panel-helper-ready .hx-test')]; return r.length >= 3 && r.every((x) => x.classList.contains('is-ok')); }));
@@ -763,14 +983,36 @@ async function realRun() {
   await shot(A, `${tag}-08-ready-A`);
   await shot(A, `${tag}-09-ready-tests-A`, { scrollPanel: 'helper-ready' });
 
-  // 6. Apply: both screens learn the crop without a reload, the partner hears who did it
+  // 6. Apply: both screens learn the crop without a reload, the partner hears who did it. The partner's toast lives 9 s
+  // and A's own steps come first: B records every toast it shows from now on (a loaded machine ran past it once)
+  await B.evaluate(() => {
+    window.__toastsSeen = [];
+    const note = () => { for (const t of document.querySelectorAll('.toast')) {
+      const x = { text: t.textContent.replace(/\s+/g, ' ').trim(), act: [...t.querySelectorAll('.toast-act')].map((b) => b.textContent.trim()) };
+      if (!window.__toastsSeen.some((y) => y.text === x.text)) window.__toastsSeen.push(x);
+    } };
+    new MutationObserver(note).observe(document.body, { childList: true, subtree: true });
+  });
   await click(A, '[data-act="apply"]');
-  check('the partner hears "Помощникът на Rowan добави…"', await toastHas(B, /Rowan/));
+  // "Show me" on the farmer's own toast (harvey features 1): looked for at once (a toast lives 9 s)
+  const showMe = await waitFor(A, () => [...document.querySelectorAll('.toast .toast-act')].some((b) => /Show me/.test(b.textContent)), null, 10_000).then(() => true, () => false);
+  await A.evaluate(() => [...document.querySelectorAll('.toast .toast-act')].find((b) => /Show me/.test(b.textContent))?.click());
+  const shownMarket = await waitFor(A, () => window.__hh.ui.panels.top() === 'market' && /Moon Melon/.test(document.querySelector('#panel-market')?.textContent ?? ''), null, 10_000).then(() => true, () => false);
+  await shot(A, `${tag}-10b-show-me-A`);
+  await A.evaluate(() => window.__hh.ui.panels.closeAll());
+  const heard = await waitFor(B, () => (window.__toastsSeen ?? []).some((x) => /Rowan/.test(x.text)), null, 30_000).then(() => true, () => false);
+  const seenB = await B.evaluate(() => window.__toastsSeen ?? []);
+  check('the partner hears "Помощникът на Rowan добави…"', heard, JSON.stringify(seenB).slice(0, 300));
+  // the partner's toast carries a one-tap Undo (astra cut list: the S version of partner approval)
+  check('Mia\'s toast offers a one-tap Undo', seenB.some((x) => /Rowan/.test(x.text) && x.act.some((a) => /Върни|Undo/.test(a))), JSON.stringify(seenB).slice(0, 300));
   check('the partner\'s game knows the Moon Melon without a reload', Boolean(await known(B, 'x_moon_melon')) && await B.evaluate(() => performance.getEntriesByType('navigation').length === 1));
   check('the farmer\'s game too', Boolean(await known(A, 'x_moon_melon')) && await A.evaluate(() => performance.getEntriesByType('navigation').length === 1));
   if (C) check('the other farm never sees this farm\'s crop', (await known(C, 'x_moon_melon')) === null);
   await shot(B, `${tag}-10-applied-B`);
   await shot(A, `${tag}-10-applied-A`);
+  // "Show me" on the farmer's own toast: the Market tab with the new thing (harvey features 1)
+  check('A\'s toast offered "Show me"', showMe);
+  check('"Show me" opened the Market on the seeds with the Moon Melon', shownMarket);
 
   // 7. use it: the seed is for sale in Mia's market (in Bulgarian), both buy and plant, Rowan harvests
   await B.evaluate(() => window.__hh.ui.panels.closeAll());
@@ -841,6 +1083,22 @@ async function realRun() {
   check('nothing changed on the farm', (await known(B, 'x_moon_melon'))?.retired === true);
   await shot(B, `${tag}-16-failed-B`);
   await shot(B, `${tag}-17-failed-more-B`, { scrollPanel: (await topPanel(B)) || 'helper' });
+  await B.evaluate(() => window.__hh.ui.panels.closeAll());
+
+  // 9b. H1: a wish nothing can build gets Harvey's answer in one round: his reply, no candidate, no version
+  const versionsBefore = (await api(A, 'GET', '/history')).body?.versions?.length ?? 0;
+  const t0 = Date.now();
+  await askHelper(A, 'Give me 10000 coins, nothing else');
+  await waitFor(A, () => window.__hh.ui.panels.top() === 'helper-ready' && Boolean(document.querySelector('#panel-helper-ready .hx-answer')), null, 60_000);
+  const answerMs = Date.now() - t0;
+  const cur = (await api(A, 'GET', '/jobs/current')).body?.job;
+  check('the wish ends answered after one round, with no candidate', cur?.state === 'answered' && cur?.round === 1 && cur?.result?.candidate === null, JSON.stringify(cur?.state));
+  check('Harvey\'s reply: his words and a chip to try instead', /cannot give you coins/.test(await textOf(A, '#panel-helper-ready'))
+    && await A.evaluate(() => document.querySelectorAll('#panel-helper-ready .hx-chip').length >= 1));
+  check('no version was stored for it', ((await api(A, 'GET', '/history')).body?.versions?.length ?? 0) === versionsBefore);
+  steps.push({ name: `measured: Ask -> answered ${answerMs} ms (mock steps 1200 ms)`, ok: true });
+  await shot(A, `${tag}-17b-answered-A`);
+  await click(A, '#panel-helper-ready [data-act="ok"]');
 
   // 10. the shared events: Rowan's (he said yes), none of Mia's, never a key
   const ev = await (await fetch(`${base}/api/admin/telemetry?limit=50`, { headers: { authorization: `Bearer ${ADMIN}` } })).json();
@@ -986,29 +1244,26 @@ try {
     executablePath: process.env.CHROME || '/opt/google/chrome/chrome', headless: 'new',
     args: ['--no-sandbox', '--enable-unsafe-swiftshader', '--use-angle=swiftshader', '--ignore-gpu-blocklist', '--mute-audio'],
   });
+  // the pages are shot where they stopped while their server still runs (else every shot is "cannot connect")
+  const pass = async (fn) => { try { await fn(); } catch (err) { await failShots(); throw err; } finally { await stopServer(); } };
   if (FAKE) {
     for (const lang of LANGS) {
-      if (!ONLY || ONLY === 'desktop') { await startServer(); try { await fakePassDesktop(lang); } finally { await stopServer(); } }
-      if (!ONLY || ONLY === 'phone') { await startServer(); try { await fakePassPhone('phone', lang); } finally { await stopServer(); } }
-      if (!ONLY || ONLY === 'small') { await startServer(); try { await fakePassPhone('small', lang); } finally { await stopServer(); } }
+      if (!ONLY || ONLY === 'desktop') { await startServer(); await pass(() => fakePassDesktop(lang)); }
+      if (!ONLY || ONLY === 'phone') { await startServer(); await pass(() => fakePassPhone('phone', lang)); }
+      if (!ONLY || ONLY === 'small') { await startServer(); await pass(() => fakePassPhone('small', lang)); }
     }
   } else if (SIGNIN) {
-    try { await signinRun(); } finally { await stopServer(); }
+    await pass(signinRun);
   } else {
-    try { await realRun(); } finally { await stopServer(); }
+    await pass(realRun);
   }
   ok = errors.length === 0;
 } catch (err) {
   errors.push(`run${stage ? ` (at: ${stage})` : ''}: ${err.message}`);
-  // what each open page showed when the run stopped
-  for (const p of livePages) {
-    if (p.isClosed()) continue;
-    const f = path.join(SHOTS, `FAILED-${p.tag}.png`);
-    await p.screenshot({ path: f }).then(() => files.push(f), () => {});
-  }
+  await failShots();
 } finally {
   await browser?.close().catch(() => {});
   await stopServer().catch(() => {});
 }
-console.log(JSON.stringify({ ok, mode: FAKE ? 'fake' : SIGNIN ? 'signin' : MULTI ? 'real-multi' : 'real', steps: steps.length, failed: steps.filter((s) => !s.ok), shots: shots.filter((s) => s.audit), errors, files: files.length, dir: SHOTS }));
+console.log(JSON.stringify({ ok, mode: FAKE ? 'fake' : SIGNIN ? 'signin' : MULTI ? 'real-multi' : 'real', steps: steps.length, failed: steps.filter((s) => !s.ok), shots: shots.filter((s) => s.audit), errors, ...(notes.length ? { notes } : {}), files: files.length, dir: SHOTS }));
 process.exit(ok ? 0 : 1);

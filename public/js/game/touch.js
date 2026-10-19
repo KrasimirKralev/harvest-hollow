@@ -18,6 +18,8 @@
 //   isDoubleTap(prev, tap) -> bool                 two taps close in time and place
 //   groundAt(cam, ndc, aspect, fovDeg) -> { x, z } | null   where a screen point meets the ground (metres)
 //   flingStep(v, dt, rate) -> v'                   pan inertia: exponential decay of a velocity
+//   dropKeyHints(text) -> text                     a key hint in brackets removed for a finger: " (G)", " (8)", " (Esc)"
+//   createQuiet() -> { press, closed, blocks }      the farm deaf a moment after a press closed a sheet
 
 export const TOUCH = Object.freeze({
   longMs: 450,          // a press held this long without moving shows the tooltip and does not act
@@ -30,6 +32,8 @@ export const TOUCH = Object.freeze({
   flingMin: 0.6,        // tiles/s: a slower release just stops
   flingRate: 4.2,       // 1/s: how fast the glide after a pan dies out (~0.5 s to a near stop)
   flingMax: 60,         // tiles/s: a wild flick is capped
+  quietMs: 400,         // createQuiet: deaf this long ...
+  quietLinkMs: 300,     // ... after a sheet closed this soon after a press
 });
 
 /**
@@ -106,4 +110,23 @@ export function groundAt(cam, ndc, aspect, fovDeg = 30) {
 export function flingStep(v, dt, rate = TOUCH.flingRate) {
   const k = Math.exp(-rate * Math.max(0, dt));
   return { x: v.x * k, z: v.z * k };
+}
+
+/**
+ * A line for a finger: the key hints in brackets go, in every language (a phone has no G or 8 key; QA r1 S-16):
+ * "Посочи място на другия фермер (G)" -> "Посочи място на другия фермер", "Канара: с брадвата (8)." -> "… брадвата.".
+ */
+export const KEY_HINT = / \((?:[A-Z0-9]|(?:Ctrl|Shift|Alt)\+\w+|wheel|Space|Esc|Del)\)(?=[\s.,:;!?)]|$)/g;
+export const dropKeyHints = (text) => (typeof text === 'string' ? text.replace(KEY_HINT, '') : text);
+
+/** The second tap of a double tap whose first tap closed a sheet lands on the farm: `press` (off the farm) and `closed`
+ *  (a sheet) on one clock; `blocks(t)` while the farm stays deaf (2026-10-19). Pure. */
+export function createQuiet({ ms = TOUCH.quietMs, link = TOUCH.quietLinkMs } = {}) {
+  let pressAt = -Infinity;
+  let until = -Infinity;
+  return {
+    press(t) { pressAt = t; },
+    closed(t) { if (t >= pressAt && t - pressAt <= link) until = Math.max(until, t + ms); },
+    blocks: (t) => t < until,
+  };
 }

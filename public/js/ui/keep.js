@@ -201,7 +201,9 @@ export function createKeepUi(S, opts = {}) {
   // ---- when it shows by itself --------------------------------------------------------------------------------------
   const due = () => { const r = record(); return !r.saved && r.day !== dayKey(now()); };
   function busy() {
-    const big = ui.panels.list?.().some((p) => p.open && p.size !== 'side' && p.name !== 'keep');
+    // any open panel, a side panel too: the card used to take the screen from Harvey's side panel while the farmer typed
+    // a wish (QA r2 S-13, hv#7; the e2e-harness --multi gate red 1 run in 2). It waits for an empty screen
+    const big = ui.panels.list?.().some((p) => p.open && p.name !== 'keep');
     const st = store.state;
     const me = store.pid;
     const golden = st && (goldenHourBp(st, gameNow()) > 0 || Boolean(me && st.farm?.coop?.bench && Object.hasOwn(st.farm.coop.bench, me)));

@@ -37,8 +37,24 @@ export const COOP = {
   highFive: { windowMs: 1500, radius: 2, sparkMs: min(10), xpBonusBp: 1000, cooldownMs: min(30), heartsFirst: 3,
     m: 'M1a' },
   /** #11 keepsake gift: once a day per giver, a bouquet from a flower crop or a farm-produced good; leaves the Barn,
-   * goes to the partner's keepsake shelf, +1 Heart each. No coins. */
-  keepsake: { perDay: 1, hearts: 1, m: 'M1a' },
+   * goes to the partner's keepsake shelf. No coins.
+   * Release 1.0 (D1 Surprise gifts, features#F1; M30; critique#29): the gift waits WRAPPED in front of the farmhouse
+   * porch (an object of GIFT_DEF) until the partner opens it (`openGift`); a box nobody opens goes to the shelf by
+   * itself after `shelfMs` (system `_gift`, nothing lost). One waiting box per giver; a note of at most `noteMax`
+   * characters; no Hearts any more (`hearts` 0: Hearts have nothing to spend on until the shop, M30). The sheet
+   * offers `flowers` first. */
+  keepsake: { perDay: 1, hearts: 0, shelfMs: h(48), noteMax: 80, def: 'gift_box',
+    flowers: ['rose', 'lavender', 'sunflower'],
+    // QA r2 F2-02: the sheet's one-tap notes travel as a token ('#thanks', shared/rules/goal-text.js giftNoteKey), never
+    // as the giver's words, so each screen says them in its own language (the owners play EN on the desktop, BG on the
+    // phone); a typed note stays the giver's own words
+    chips: ['thanks', 'thinking', 'because'],
+    // the tile in front of the farmhouse's porch steps at rot 0 (the box waits beside them: QA r1 F-05), counted from
+    // the footprint's north-west corner in tiles (the model's front faces +z; tools/build-assets.mjs farmhouseW4: the
+    // wing's door and steps at x -2.5 m, and from upgrade tier 2, when the wing's porch is glazed into a sunroom, the
+    // main porch's steps at x +0.95 m; 1 tile = 2 m, origin at the footprint's centre)
+    porch: [{ x: 0, z: 4 }, { up: 2, x: 2, z: 4 }],
+    m: 'M1a' },
   /** #12 partner bottle (M2): anyone's bottle -30 % of the remaining baby time; the OTHER player's -20 % more,
    * once per baby per hour. */
   partnerBottle: { bp: 2000, everyMs: h(1), m: 'M2' },
@@ -79,4 +95,15 @@ export const FEED = {
   historyMax: 60,
   bigPurchase: 1000,
   coalesceMs: sec(2),
+};
+
+/**
+ * The wrapped gift on the porch (release 1.0, D1): a 1 x 1 object the rules place (keepsake) and remove (openGift,
+ * `_gift`); never bought, moved, stored or sold. life-feel's render/gift-view.js draws it (a crate body with a ribbon
+ * and bow in the giver's colour); render-look's objects-view skips kind 'gift' like kind 'crate'.
+ */
+export const GIFT_DEF = {
+  id: 'gift_box', name: 'Surprise', m: 'M1a', kind: 'gift', layer: 'object', size: [1, 1], shop: false,
+  movable: false, panel: null, model: 'props/gift_box',
+  text: 'A surprise wrapped by your partner. Open it with a click or a tap.',
 };

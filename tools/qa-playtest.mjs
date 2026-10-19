@@ -160,7 +160,7 @@ async function openPage(pid, name, tag) {
   page.on('pageerror', (e) => R.errors.push({ at: where(), pid, kind: 'pageerror', text: e.message }));
   page.on('console', (m) => {
     if (m.type() === 'error') R.errors.push({ at: where(), pid, kind: 'console', text: m.text().slice(0, 300) });
-    if (m.type() === 'warning' && /three|webgl|deprecat|failed|error/i.test(m.text())) R.errors.push({ at: where(), pid, kind: 'warning', text: m.text().slice(0, 300) });
+    if ((m.type() === 'warn' || m.type() === 'warning') && /three|webgl|deprecat|failed|error/i.test(m.text())) R.errors.push({ at: where(), pid, kind: 'warning', text: m.text().slice(0, 300) });
   });
   page.on('requestfailed', (r) => { if (!/favicon/.test(r.url())) R.errors.push({ at: where(), pid, kind: 'requestfailed', text: `${r.url()} ${r.failure()?.errorText}` }); });
   page.on('response', (r) => { if (r.status() >= 400) R.errors.push({ at: where(), pid, kind: `http${r.status()}`, text: r.url() }); });
@@ -697,7 +697,7 @@ async function runProbes({ evening, minute, minutes, who, solo }) {
         // a locked button answers with a 3 s toast: read it before waiting for a panel that will not open
         await sleep(300);
         const early = lvl < minLevel
-          ? await A.evaluate(() => [...document.querySelectorAll('#toasts > *')].map((x) => x.textContent.trim()).join(' | ')).catch(() => '') : '';
+          ? await A.evaluate(() => [...document.querySelectorAll('#toasts > *, #over-panels .toast')].map((x) => x.textContent.trim()).join(' | ')).catch(() => '') : '';
         const ok = await waitPanel(A, name, lvl < minLevel ? 1000 : 4000);
         await sleep(500);
         if (!ok && lvl < minLevel) {

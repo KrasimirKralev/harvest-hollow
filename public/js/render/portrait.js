@@ -29,7 +29,7 @@
 // render/index.js exposes it as `view.portrait(spec)` (the ui never sees the renderer).
 
 export const PORTRAIT = Object.freeze({
-  v: 2,                 // bump when the drawing changes: every cached portrait is drawn again (a new farmer model is in the key)
+  v: 3,                 // bump when the drawing changes (3: the release-1.0 colour grade): every cached portrait is drawn again (a new farmer model is in the key)
                         // (2: hats fitted over the head and hair; the frame grows to hold a tall hat)
   out: 160,             // px of the finished picture (a 48 px chip at DPR 2 x the 130 % UI scale ~ 125 px)
   ss: 1,                // supersampling of the render on top of 4x MSAA (the HUD shows it smaller still: 1 is plenty)
@@ -257,6 +257,7 @@ function compose(px, img, S) {
       const k = 1 / (LIGHT_K * a);         // un-premultiply, and undo the half-strength lights (see LIGHT_K)
       c[0] = px[i] * k; c[1] = px[i + 1] * k; c[2] = px[i + 2] * k;
       neutral(c);
+      if (grade) grade(c);                 // G5: the farm's colour grade (renderer.js gradeRgb), in day light
       const o = dst + x * 4;
       const al = a / 255;
       for (let ch = 0; ch < 3; ch++) {
@@ -269,15 +270,20 @@ function compose(px, img, S) {
 // The target holds 8 bits of LINEAR light and no tone mapping: the lights (and the look's rim) draw at half strength so
 // highlights up to 2.0 survive for the tone curve, and compose() doubles them back.
 const LIGHT_K = 0.5;
+// G5 (release 1.0): the farm's grade in JS (renderer.js gradeRgb, the day's values), reached lazily like the rest
+let grade = null;
 
 async function renderBatch(renderer, specs) {
   const gl = renderer && renderer.getContext && renderer.getContext();
   if (!gl || (gl.isContextLost && gl.isContextLost()) || typeof document === 'undefined') return specs.map(() => null);
-  const [THREE, M, L, A] = await Promise.all([import('three'), import('./models.js'), import('./avatar-looks.js'), import('./avatars-view.js')]);
+  const [THREE, M, L, A, RN] = await Promise.all([import('three'), import('./models.js'), import('./avatar-looks.js'), import('./avatars-view.js'), import('./renderer.js')]);
   const { models, LOOK, wrapLighting } = M;
-  await models.init();
+  grade = (c) => RN.gradeRgb(c, RN.GRADE_DAY);
+  // R3-01: a lost manifest or file is waited out (the HUD shows the letter meanwhile)
+  await models.whenLoaded();
   const keys = [...new Set(specs.map((s) => `avatar:${s.body}`))].filter((k) => models.has(k));
-  await models.ready(keys);
+  await models.ensure(keys);
+  if (gl.isContextLost && gl.isContextLost()) return specs.map(() => null);
   const S = PORTRAIT.out * PORTRAIT.ss;
   const rt = new THREE.WebGLRenderTarget(S, S, { samples: 4 });
   const trash = [rt];

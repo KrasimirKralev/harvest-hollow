@@ -60,7 +60,7 @@ export default {
   'toolbar.build.placeN': 'Сложи {thing:defObj}, чакат {n}. Безплатно',
   'toolbar.build.tip': '{thing}: безплатно, чака в менюто за строеж. Натисни го, после избери място във фермата',
   'toolbar.build.free': 'Безплатно · Сложи',
-  'toolbar.build.freeN': 'Безплатно · ×{n}',
+  'toolbar.build.freeN': 'Безплатно · ×{n}',
   'toolbar.build.sellLabel': 'Продай скътаната украса',
   'toolbar.build.sellTip': 'Продай украсата, която чака тук, за част от цената ѝ (можеш да размислиш до 10 минути)',
   'toolbar.build.sell': 'Продай',

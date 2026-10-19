@@ -16,16 +16,50 @@ import { ERR } from '../../net/protocol.js';
 import { V } from '../schema.js';
 import { TUTORIAL, levelFromXp } from '../../content/index.js';
 import { hasPlayer, othersOf, playerIds } from '../coop.js';
+import { msg, int } from '../goal-text.js';
 
 const TRACKS = TUTORIAL.tracks;
 const CLIENT_VERBS = new Set(['ping']);
 const other = (track) => (track === 'fields' ? 'barnyard' : 'fields');
 
 export const initialTut = () => ({ track: null, i: 0, n: 0, skip: false });
+
+/**
+ * True once Grandma's coach has retired for `pid` (release 1.0, M1a; ux-first#1): the farm reached
+ * TUTORIAL.retire.level or the player has played TUTORIAL.retire.playMin minutes (players[pid].play.n), or they skipped
+ * it. Pure: ui-shell's coach and the rules drip ("Meet Harvey" waits for it) read the same rule.
+ */
+export function coachRetired(state, pid) {
+  const p = state.players[pid];
+  if (!p) return true;
+  const R = TUTORIAL.retire ?? { level: 6, playMin: 45 };
+  if (levelFromXp(state.farm.xp) >= R.level) return true;
+  if ((p.play?.n ?? 0) >= R.playMin) return true;
+  // a farmer who FINISHED both tracks also has { track: null, skip: true }, yet the coach still walks them through the
+  // together steps (M8): only a real skip ("I know farming") retires it early (ui-shell P-03)
+  const done = Object.values(state.farm.tut?.fin ?? {}).includes(pid);
+  return Boolean(p.tut && p.tut.skip && !p.tut.track && !done);
+}
 export const initialFarmTut = () => ({ s: 0, t: 0, n: 0, fin: {} });
 
 const stepMatches = (step, d) => step && step.task && step.task.verb === d.verb && step.task.ref === d.ref;
 const gateOpen = (state, step) => !step.level || levelFromXp(state.farm.xp) >= step.level;
+
+/**
+ * QA r3 F3-10 (fbp#12): the words of a step that depend on the farm now, as a message (area 'feat'; the English in
+ * shared/rules/goal-text.js FEAT_RULES_EN), or null for the step's own content words. The flour step kept saying
+ * "place the Windmill (free, in Build) … make Flour together" for the whole flour job, the Windmill long placed, and
+ * "together" to a farmer alone on the farm. Grandma's card (ui/tutorial.js) and the tracker's mirror of it both ask
+ * here. Verify-1 D-2: the Feed step's "your partner's Wheat works too" is only true with two farmers. Pure.
+ */
+export function stepWords(state, step) {
+  if (!step || !state?.farm || (step.id !== 'flour_together' && step.id !== 'make_feed')) return null;
+  const solo = playerIds(state).length < 2;
+  if (step.id === 'make_feed') return solo ? msg('feat.r.coach.feedSolo') : null;
+  const mill = Object.values(state.farm.objects).some((o) => o.def === 'mill' && Number.isFinite(o.x));
+  if (!mill) return solo ? msg('feat.r.coach.flourSolo') : null;
+  return msg(solo ? 'feat.r.coach.flourMillSolo' : 'feat.r.coach.flourMill', { n: int(step.task?.qty ?? 1) });
+}
 
 /** The step a player is on (or null when their tutorial is finished / skipped). */
 export function currentStep(state, pid) {
@@ -79,6 +113,8 @@ function trackDeed(tx, d) {
   if (!hasPlayer(state, pid)) return;
   let t = state.players[pid].tut;
   if (!t || t.skip) return;
+  // a pulled wild tuft (QA r3 F3-07) counts on the clear-the-yard step, but never hands a farmer the Barnyard
+  if (!t.track && d.wild) return;
   if (!t.track) {
     const pick = TRACKS.find((tr) => !state.farm.tut.fin[tr] && stepMatches(TUTORIAL[tr][0], d)
       && !othersOf(state, pid).some((p) => state.players[p].tut?.track === tr));

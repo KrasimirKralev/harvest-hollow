@@ -45,6 +45,18 @@ export const CRATES = {
     { k: 'collection', w: 1600 },
     { k: 'decor', w: 400, pool: ['lucky_horseshoe', 'garden_gnome', 'bird_feeder', 'bunting'] },
   ],
+  // rare power-ups (release 1.0, owner request 2026-10-19): a crate a farmer opens holds one with chance bp (1 in 12.5);
+  // timed kinds last ms (capMs when stacked), counted ones give n uses (maxN); shared/rules/powerups.js
+  powerups: {
+    bp: 800,
+    kinds: [
+      { id: 'rainbow', w: 30, ms: min(30), capMs: min(60), cropBp: 1000 },
+      { id: 'ladybugs', w: 25, ms: min(30), capMs: min(60), bonusBp: 2500 },
+      { id: 'swarm', w: 20, ms: min(30), capMs: min(60), timeBp: 2500 },
+      { id: 'ticket', w: 15, ms: h(24), n: 1, maxN: 2, coinsBp: 5000, capEBp: 1500 },
+      { id: 'star', w: 10, ms: h(3), n: 2, maxN: 4 },
+    ],
+  },
 };
 
 /** The crate on the ground: a 1 x 1 object the rules place and remove (never bought, moved, stored or sold). */

@@ -18,6 +18,10 @@
 //   animals.setFx(fx) / setMotion(mode) / setNight(0..1) / stats() -> { animals, skinned, rigid }
 //   animals.needs() -> number                  hungry + product-ready animals (the calm board, RD-40)
 //   animals.setSkinnedMax(n)                   mobile wave: the skinned budget (phones keep fewer; default SKINNED_MAX)
+// Release 1.0 (life-feel): D4 (features#F4) the name tags over named animals (render/name-tags.js), driven from here
+// (setState / sync read farm.names, update() places them; animals.nameTags() -> the module, stats() adds `tags`);
+// G4 (graphics#3) every animal material takes the 2-tap shadow lookup (ground.js cheapShadows) like the other
+// receivers, now that phones draw a 1024 shadow map on High.
 // State language (visual-08): hungry = an amber thought cloud with a trough, ready = a white bubble with the
 // product and a green check, working = a small progress ring; all three keep their size on screen (32 / 40 /
 // 20 px). Hens are chunkier and come in chestnut, buff and cream (by id); sheep walk instead of hopping.
@@ -41,6 +45,9 @@ import { defOf, cropOf, BREEDING, featureOf, isLive } from '../../../shared/cont
 import { models, wrapLighting, addShaderPatch } from './models.js';
 import { iconUrl } from './icons.js';
 import { homeTier } from './objects-view.js';
+import { cheapShadows, shadowKernelKey } from './ground.js';
+import { createNameTags } from './name-tags.js';
+import { WANT } from './renderer.js';
 
 export const SKINNED_MAX = 8;
 export const WANDER_MS = 6000;
@@ -195,6 +202,18 @@ export const BUBBLE_PX = Object.freeze({ hungry: 26, ready: 32, working: 17 });
 export const WIDE_DIST = 55;
 /** World size (metres) for `px` pixels at camera distance `dist` (the badges' screen-stable rule). */
 export const bubbleSize = (px, dist) => Math.min(3.2, Math.max(0.55, dist * 0.045)) * (px / 75);
+/** The ready bubble's bob (m): it rises this far above its anchor (drawNeeds). */
+export const BUBBLE_BOB = 0.1;
+/**
+ * QA r2 L2-08 (va#3): the height (m) of a name tag's foot so it stands clear above its animal's need bubble on screen
+ * (the tags sat on the ducks' egg bubbles at near zoom). `y` is the tag's own height, `h` the bubble's anchor and `sz`
+ * its world size; `up` = screen px per metre up and `k` = screen px per metre across the view, both measured at the
+ * animal (a sprite faces the camera: its screen height is k * sz, while a world-y lift shows as up px). Pure.
+ */
+export function tagFoot(y, h, sz, up, k, gapPx = 4) {
+  if (!(up > 0.5) || !(k > 0)) return Math.max(y, h + BUBBLE_BOB + sz * 2.5);
+  return Math.max(y, h + BUBBLE_BOB + (k * sz + gapPx) / up);
+}
 
 // ---------------------------------------------------------------------------------------------------
 // Pure helpers (exported for tests)
@@ -542,6 +561,7 @@ function bubbleTexture(icon, kind) {
   draw(null);
   if (kind !== 'hungry') {
     const img = new Image();
+    img.crossOrigin = 'anonymous';
     img.onload = () => draw(img);
     img.src = iconUrl(icon, 128);
   }
@@ -568,7 +588,10 @@ function ringTexture(step) {
 }
 
 export function createAnimalsView(layers, overlay, toScreenM, { now: nowFn } = {}) {
-  void overlay; void toScreenM;
+  void overlay;
+  // D4: the name tags (a DOM layer of their own, #name-tags under the HUD), placed from update()
+  const tags = createNameTags({ toScreenM: typeof toScreenM === 'function' ? toScreenM : () => ({ x: 0, y: 0, visible: false }) });
+  const tagList = [];
   let now = nowFn || (() => Date.now());
   let state = null;
   let fx = null;
@@ -607,12 +630,21 @@ export function createAnimalsView(layers, overlay, toScreenM, { now: nowFn } = {
   const penShown = new Set();
 
   // models load lazily per species; asked once per key, retried after a failure or before the manifest is in
+  // (QA r3 R3-01: after 1, 2, 4 … 30 s or `online`; request() runs every frame and re-fetched on each while offline)
   const requested = new Set();
+  const failed = new Map();        // key -> { n, at }: tries so far, the next try's earliest time
   function request(key) {
     if (!key || requested.has(key) || models.isReady(key) || !models.has(key)) return;
+    const f = failed.get(key);
+    if (f && performance.now() < f.at) return;
     requested.add(key);
-    models.ready([key]).catch(() => requested.delete(key));
+    models.ready([key]).then(() => { failed.delete(key); }, () => {
+      requested.delete(key);
+      const n = (f?.n ?? 0) + 1;
+      failed.set(key, { n, at: performance.now() + Math.min(30_000, 1000 * 2 ** (n - 1)) });
+    });
   }
+  globalThis.addEventListener?.('online', () => failed.clear());
 
   function keyFor(defId, baby, id = null) {
     const k = `animal:${defId}`;
@@ -703,6 +735,7 @@ export function createAnimalsView(layers, overlay, toScreenM, { now: nowFn } = {
 
   function setState(s) {
     state = s;
+    tags.setNames(s);
     homes.clear();
     rebuildForage();
     const homeIds = new Set();
@@ -715,6 +748,8 @@ export function createAnimalsView(layers, overlay, toScreenM, { now: nowFn } = {
   function sync(ids, topics, s) {
     state = s;
     if (topics && topics.has && topics.has('*')) { setState(s); return; }
+    // D4: a name given (farm.names), a farmer's colour changed, an animal sold or moved
+    if (topics && topics.has && (topics.has('names') || topics.has('players') || topics.has('objects') || topics.has('social'))) tags.setNames(s);
     const touchedHomes = new Set();
     for (const id of ids || []) {
       const o = Object.hasOwn(s.farm.objects, id) ? s.farm.objects[id] : null;
@@ -774,6 +809,11 @@ export function createAnimalsView(layers, overlay, toScreenM, { now: nowFn } = {
         o.material = Array.isArray(o.material) ? o.material.map(tintMat) : tintMat(o.material);
       });
     }
+    // G4: the 2-tap shadow lookup on every material of the clone (idempotent per material; the shared ones included)
+    c.object.traverse((o) => {
+      if (!o.isMesh) return;
+      for (const mt of Array.isArray(o.material) ? o.material : [o.material]) if (mt) addShaderPatch(mt, 'hh-shadow2', cheapShadows, shadowKernelKey);
+    });
     // a baby's own proportions (RD-15): its bones (BABY_BONES, set again every frame after the clip pose) and the feet
     // put back on the ground (shorter legs lift them)
     const babyBones = [];
@@ -840,6 +880,7 @@ export function createAnimalsView(layers, overlay, toScreenM, { now: nowFn } = {
   // the rigid animals' material: the shared look plus the per-instance coat (wave 3); one program for every species
   const rigidMat = coatPatchInstanced(models.createMaterial());
   rigidMat.name = 'hh-animal-rigid';
+  addShaderPatch(rigidMat, 'hh-shadow2', cheapShadows, shadowKernelKey);     // G4: the 2-tap lookup like every other receiver
   /** A geometry for an instanced set: the model's attributes (shared buffers) plus this set's instanced coat. */
   function instancedGeo(src, cap) {
     const g = new THREE.BufferGeometry();
@@ -1137,7 +1178,10 @@ export function createAnimalsView(layers, overlay, toScreenM, { now: nowFn } = {
       const hopK = pers ? PERSONALITY[pers].hop : a.def === 'alpaca' ? 0.12 : 0;
       const pronkT = idle && !lie && !bathe && hopK > 0 && unit(hash32(a.id, p.seg, 'pronk')) < hopK ? p.since - 0.2 : -1;
       const pronk = pronkT > 0 && pronkT < 0.55 ? Math.sin((pronkT / 0.55) * Math.PI) * 0.32 * scale : 0;
-      if (pronk) frame = 2;
+      // QA r1 L-03 (ap#4, F6a): an idle hop is ambient motion that travels, never the interactive frame: a 2 here started
+      // the loop's 2 s 60 fps tail on every hop and kept an untouched farm at 24-43 renders/s (a pet or a jig below is
+      // the player's doing and stays interactive)
+      if (pronk) frame = Math.max(frame, WANT.MOVING);
       if (bathe) {
         lift -= 0.02;
         if (fx && motion === 'full' && clock >= (dirtAt.get(`${a.id}#dust`) ?? 0)) {
@@ -1321,6 +1365,34 @@ export function createAnimalsView(layers, overlay, toScreenM, { now: nowFn } = {
     for (const a of animals.values()) if (!a.drawn && a.bubble && a.bubble.visible) { a.bubble.visible = false; a.bubbleKey = null; }
     shadows.count = si;
     shadows.instanceMatrix.needsUpdate = true;
+    // D4: the name tags over the named animals that are drawn (their head height: the model's top x its scale). Nothing
+    // is gathered while no tag can show; the records are reused (no allocation per frame), and the gathering counts
+    // in the tags' own per-frame cost (`since`).
+    if (tags.has && state.farm.names && !tags.idle(focus.dist)) {
+      const since = performance.now();
+      let n = 0;
+      for (const id in state.farm.names) {
+        const a = animals.get(id);
+        if (!a || a.drawn === false || a.hidden || !Number.isFinite(a.x)) continue;
+        const inf = a.info || models.info(keyFor(a.def, Boolean(a.status && a.status.baby)) || `animal:${a.def}`);
+        const top = inf?.max?.[1] ?? 1;
+        const rec = tagList[n] ?? (tagList[n] = { id: '', home: null, x: 0, z: 0, y: 0 });
+        rec.id = id;
+        rec.home = a.o?.home ?? null;
+        rec.x = a.x;
+        rec.z = a.z;
+        rec.y = top * (a.scale || 1) + 0.3 + (a.ioLift || 0);
+        // L2-08: above its own need bubble (measured here: screen px per metre up and across, at the animal)
+        if (a.bubble && a.bubble.visible && a.bubbleSz > 0) {
+          const s0 = toScreenM(a.x, a.z, a.bubbleH);
+          const up = s0.y - toScreenM(a.x, a.z, a.bubbleH + 1).y;
+          const k = Math.hypot(toScreenM(a.x + 1, a.z, a.bubbleH).x - s0.x, toScreenM(a.x, a.z + 1, a.bubbleH).x - s0.x);
+          rec.y = tagFoot(rec.y, a.bubbleH, a.bubbleSz, up, k);
+        }
+        n++;
+      }
+      tags.frame(tagList, { dist: focus.dist, n, since });
+    }
     return frame;
   }
 
@@ -1344,10 +1416,12 @@ export function createAnimalsView(layers, overlay, toScreenM, { now: nowFn } = {
     bubbleFor(a, kind, kind === 'ready' ? product : kind === 'working' ? `ring${ring}` : feed, ring);
     if (a.bubble && a.bubble.visible) {
       const bob = kind === 'ready' && motion === 'full';
-      const bobY = bob ? Math.abs(Math.sin(clock * Math.PI * 2)) * 0.1 : 0;
+      const bobY = bob ? Math.abs(Math.sin(clock * Math.PI * 2)) * BUBBLE_BOB : 0;
       a.bubble.position.set(a.x, h + bobY, a.z);
       const sz = bubbleSize(BUBBLE_PX[kind], focus.dist);
       a.bubble.scale.set(sz, sz, sz);
+      a.bubbleH = h;                                 // (the name tag stands above it: L2-08)
+      a.bubbleSz = sz;
       if (bob) wantFrame();
     }
   }
@@ -1357,6 +1431,8 @@ export function createAnimalsView(layers, overlay, toScreenM, { now: nowFn } = {
     setState,
     sync,
     update,
+    /** D4: the name tags module (hover / open / stats). */
+    nameTags() { return tags; },
     setFocus(x, z, dist = focus.dist) { focus.x = x; focus.z = z; focus.dist = dist; },
     positionOf(id) { const a = animals.get(id); return a ? new THREE.Vector3(a.x, 0, a.z) : null; },
     pickables() {
@@ -1399,7 +1475,7 @@ export function createAnimalsView(layers, overlay, toScreenM, { now: nowFn } = {
     stats() {
       let sk = 0;
       for (const a of animals.values()) if (a.skin) sk++;
-      return { animals: animals.size, skinned: sk, rigid: animals.size - sk };
+      return { animals: animals.size, skinned: sk, rigid: animals.size - sk, tags: tags.stats() };
     },
     /** Dev / lab: what each animal is doing ({ id, def, x, z, clip, skinned, status, behaviour }). */
     debug() {

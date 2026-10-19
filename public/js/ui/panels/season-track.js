@@ -109,7 +109,7 @@ export const seasonTrackPanel = {
     function statusCard(v) {
       const p = v.done ? 1 : v.inTier / Math.max(1, v.need);
       const claimable = v.tiers.filter((x) => x.claimable);
-      const all = claimable.length > 1 && canAct('trackClaim') ? kit.button({ label: t('league.track.claimAll', { n: claimable.length }), cls: 'btn--small btn--sun', key: 'track:all',
+      const all = claimable.length > 1 && canAct('trackClaim') ? kit.button({ from: true, label: t('league.track.claimAll', { n: claimable.length }), cls: 'btn--small btn--sun', key: 'track:all',
         type: actFor('trackClaim'), args: ARGS.trackClaim(claimable[0].n),
         onClick: () => { for (const x of claimable) ctx.act(actFor('trackClaim'), ARGS.trackClaim(x.n)); } }) : null;
       return h('section.lg-track-status',
@@ -159,7 +159,7 @@ export const seasonTrackPanel = {
       const claimType = actFor('trackClaim');
       const cards = v.tiers.map((x) => {
         const cls = x.got ? '.got' : x.claimable ? '.claim' : x.n === v.tier + 1 ? '.now' : '.ahead';
-        const claim = x.claimable ? kit.button({ label: t('league.track.claim'), cls: 'btn--small btn--sun', key: `track:${x.n}`,
+        const claim = x.claimable ? kit.button({ from: true, label: t('league.track.claim'), cls: 'btn--small btn--sun', key: `track:${x.n}`,
           type: claimType, args: ARGS.trackClaim(x.n) }) : null;
         const who = x.got && x.got.by && st.players?.[x.got.by] ? st.players[x.got.by].name : x.got ? t('league.track.auto') : null;
         const words = rewardText(x.reward, opts(v));

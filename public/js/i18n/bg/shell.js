@@ -19,7 +19,7 @@ export default {
   'shell.slot.continue': 'Продължи',
   'shell.slot.newDevice': 'На ново устройство ли си? Отвори личния си линк към фермата.',
   'shell.slot.pass': 'Парола на фермата',
-  'shell.slot.reclaim': 'Това съм аз, на нов компютър',
+  'shell.slot.reclaim': 'Това съм аз, на ново устройство',
   'shell.slot.name': 'Твоето име',
   'shell.slot.nameFor': 'Име за фермер {n}',
   'shell.slot.play': 'Играй',
@@ -39,6 +39,8 @@ export default {
   'shell.swatch.this': 'този цвят',
 
   'shell.panel.broken': 'Тази страница не успя да се покаже. Фермата е наред, опитай пак след малко.',
+  'shell.scroll.left': 'Превърти наляво',
+  'shell.scroll.right': 'Превърти надясно',
 
   'shell.peer.arrivedFeed': 'дойде във фермата 🌻',
   'shell.peer.leftFeed': 'излезе за малко',

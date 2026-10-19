@@ -2,7 +2,7 @@
 // Keep N (farm-wide "keep at least N", with who set it), "not for feed" and the 10-minute trash. Opened by the
 // barn pill and I. Selling happens at the Market (the Sell button opens it on that stack).
 import { itemOf, defOf, usesOf, live, classMembers, MARKET, SAFETY } from '../../../../shared/content/index.js';
-import { h, icon, svgIcon, fmt, createKit, bar, chip, empty, pill, who, fill, tParts, phoneTitle } from './kit.js';
+import { h, icon, svgIcon, fmt, createKit, bar, chip, empty, pill, who, fill, tParts, phoneTitle, listRole } from './kit.js';
 import { barnView, surplusPreview, keepOf, noFeedText } from './model.js';
 import { has } from './core.js';
 import { I, actUndoable } from './intents.js';
@@ -71,8 +71,11 @@ export const barnPanel = {
       }));
       list.replaceChildren();
       const rows = v.stacks.filter((s) => filter === 'all' || s.group === filter);
-      if (!rows.length) list.append(empty(filter === 'all' ? t('market.barn.empty') : t('market.barn.emptyKind'), 'barn'));
+      // a crate, not the barn: the barn glyph wears a red ✕ and read as an error (feel#15)
+      if (!rows.length) list.append(empty(filter === 'all' ? t('market.barn.empty') : t('market.barn.emptyKind'), 'crate'));
       for (const s of rows) list.append(row(st, s));
+      // a list only with rows in it (QA r1 P-19: an empty Barn was an axe-critical list with no item)
+      listRole(list);
       renderTrash(st);
       kit.refresh();
     }
@@ -86,13 +89,13 @@ export const barnPanel = {
           h('div.pn-cap-main',
             h('div.pn-cap-line', h('b.pn-cap-n', `${fmt(v.used)} / ${fmt(v.cap)}`), h('span', t('market.barn.stored')),
               v.over > 0 ? pill(t('market.barn.inOverflow', { n: v.over }), 'pn-warn') : null),
-            bar(Math.min(1, pct), null, v.status === 'ok' ? 'pn-go' : v.status === 'near' ? '' : 'pn-over'),
+            bar(Math.min(1, pct), null, v.status === 'ok' ? 'pn-go' : v.status === 'near' ? '' : 'pn-over', t('market.barn.spaceAria', { used: v.used, cap: v.cap })),
             h(`p.pn-cap-status.${v.status}`, STATUS_TEXT[v.status]))),
         up ? h('div.pn-upgrade',
           h('div.pn-upgrade-text', h('b', t('market.barn.upgrade', { n: up.n, add: up.add })),
             h('span', up.locked ? t('market.barn.ollieFrom', { n: up.unlock }) : t('market.barn.roomFor', { n: up.capacity })),
             // the whole ladder (ui-home's barnUpgrades: upgrades 4-10 and the materials the rest need)
-            ctx.ui?.panels?.has('barnUpgrades') ? h('button.pn-chipbtn', { type: 'button',
+            ctx.ui?.panels?.has('barnUpgrades') ? h('button.pn-chipbtn', { type: 'button', 'data-sfx': 'own',
               on: { click: () => ctx.open('barnUpgrades') } }, t('market.barn.every')) : null),
           h('div.pn-upgrade-cost', h('span.pn-cost', svgIcon('coin', 20), h('b', fmt(up.coins))),
             ...up.need.map((n) => chip(n.item, { have: n.have, need: n.n, size: 28 }))),
@@ -115,10 +118,13 @@ export const barnPanel = {
       if (!p.rows.length) return null;
       const show = p.rows.slice(0, 6);
       // the preview names every stack and its count before the click (GDD §3.6); the sale can be undone (RC-25)
+      const listText = p.rows.map((r) => t('market.barn.surplusRow', { q: Q(r.id, r.qty) })).join(' · ');
       return h('div.pn-surplus',
         h('div.pn-surplus-text', h('b', t('market.barn.surplus')), h('span', t('market.barn.surplusText', { n: p.units, rows: p.rows.length, keep: MARKET.barn.surplusKeep })),
-          h('small.pn-surplus-list', p.rows.map((r) => t('market.barn.surplusRow', { q: Q(r.id, r.qty) })).join(' · '))),
-        h('div.pn-surplus-items', ...show.map((r) => chip(r.id, { n: r.qty, size: 32 })), p.rows.length > show.length ? h('span.pn-more', `+${p.rows.length - show.length}`) : null),
+          h('small.pn-surplus-list', listText)),
+        // a phone shows the goods as icons only (ux-phone#15: seven lines of words pushed the goods off the screen);
+        // the words stay in the row's name and tooltip
+        h('div.pn-surplus-items', { title: listText, role: 'img', 'aria-label': listText }, ...show.map((r) => chip(r.id, { n: r.qty, size: 32 })), p.rows.length > show.length ? h('span.pn-more', `+${p.rows.length - show.length}`) : null),
         h('span.pn-cost', svgIcon('coin', 20), h('b', `${p.exact ? '' : '~'}${fmt(p.coins)}`)),
         has(I.sellSurplus().type)
           ? kit.button({ label: t('market.barn.surplus'), cls: 'btn--sun', ...lazyI(() => I.sellSurplus()), after: (r) => { if (r && r.ok) offerUndo(p); } })
@@ -180,7 +186,7 @@ export const barnPanel = {
         keepBox,
         h('div.pn-barnrow-acts',
           feedable.has(s.id) && has(I.noFeed(s.id, true).type) ? feedSwitch(s, it) : null,
-          s.sellable ? h('button.pn-chipbtn', { type: 'button', on: { click: () => ctx.open('market', { tab: 'sell', item: s.id }) } }, t('market.barn.sell')) : null));
+          s.sellable ? h('button.pn-chipbtn', { type: 'button', 'data-sfx': 'own', on: { click: () => ctx.open('market', { tab: 'sell', item: s.id }) } }, t('market.barn.sell')) : null));
     }
 
     /**

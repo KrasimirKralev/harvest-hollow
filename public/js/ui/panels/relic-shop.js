@@ -11,6 +11,7 @@ import { buyIntent, useIntent, relicIcon, canAct, saveForIntent } from './w4b-ru
 import { localSaving, setLocalSaving, relicRows } from './w4b.js';
 import { startPlacement } from './placement.js';
 import { t } from '../../i18n/index.js';
+import { touchText, touchPlayer } from '../dom.js';
 
 export function relicArt(r, size = 72) {
   const art = relicIcon(r.id, hasIcon);
@@ -28,7 +29,7 @@ export function relicSection(ctx, kit) {
     if (!rows.length) { box.replaceChildren(); box.hidden = true; return; }
     box.hidden = false;
     box.replaceChildren(
-      h('header.pn-relics-head',
+      h('div.pn-relics-head',
         h('h3#pn-relics-title', svgIcon('star', 22), t('market.relic.title')),
         h('p', t('market.relic.intro'))),
       h('div.pn-relic-grid', { role: 'list' }, ...rows.map((r) => card(r))));
@@ -76,9 +77,9 @@ export function relicSection(ctx, kit) {
       ? h('div.pn-relic-progress', bar(r.have / Math.max(1, r.acorns), null, 'pn-thin pn-sun'),
         h('small', r.have >= r.acorns ? t('market.relic.enough') : t('market.relic.progress', { have: r.have, n: r.acorns, left: r.acorns - r.have })))
       : null;
-    return h(`article.pn-relic${r.owned ? '.owned' : ''}${r.code === 'LOCKED' ? '.locked' : ''}${r.saving ? '.saving' : ''}`,
+    return h(`div.pn-relic${r.owned ? '.owned' : ''}${r.code === 'LOCKED' ? '.locked' : ''}${r.saving ? '.saving' : ''}`,
       { role: 'listitem', dataset: { relic: r.id, def: r.id } },
-      art, h('div.pn-relic-main', h('h4.pn-card-name', r.name), h('p.pn-card-text', r.text), progress), foot);
+      art, h('div.pn-relic-main', h('h4.pn-card-name', r.name), h('p.pn-card-text', touchText(r.text, touchPlayer(ctx.controller))), progress), foot);
   }
 
   render();

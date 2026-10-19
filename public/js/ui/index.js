@@ -69,7 +69,7 @@
 //   ui.panels.badge(name, value | null, tone?)  a count / '!' / 'New' badge on the panel's dock button and HUD pill;
 //                                           tone 'calm' = something to do there, nothing urgent (cream, not red: QA2 UI-03)
 //   ui.panels.retitle(name)                 re-run spec.title for an open panel
-//   ui.panels.on('register' | 'open' | 'close' | 'badge', fn) -> unsubscribe
+//   ui.panels.on('register' | 'open' | 'close' | 'badge' | 'tab', fn) -> unsubscribe   ('tab': (name, tabId))
 // Names the shell links when they are registered (ui-panels picks the rest): 'market' (coins pill, M key; args
 // { tab: 'sell' | 'seeds' | ... | 'acorn' }), 'barn' (barn pill, I key), 'orders' (O), 'journal' (J; args { tab }),
 // 'notes' (the notes button), 'wardrobe' (hearts pill), 'building' { id }, 'animals' { id }, 'tree' { id },
@@ -83,8 +83,8 @@
 // Store topics used: wallet, xp, inventory, players, objects, '*'.
 import { defOf } from '../../../shared/content/index.js';
 import { SLOT_COLORS } from '../../../shared/content/config.js';
-import { ERR, SOFT } from '../../../shared/net/protocol.js';
-import { h, icon, svgIcon, focusables, fmt as fmtNum, fmtDuration, playerVars, ensureStylesheet, touchText, touchPlayer } from './dom.js';
+import { ERR, SOFT, cleanName } from '../../../shared/net/protocol.js';
+import { h, icon, svgIcon, focusables, fmt as fmtNum, fmtDuration, playerVars, ensureStylesheet, touchText, touchPlayer, tabCue } from './dom.js';
 import { createHud, createTips, portraitFace, showPortrait, initialOf } from './hud.js';
 import { portraitSpec, lastPortrait } from '../render/portrait.js';
 import { createToolbar } from './toolbar.js';
@@ -110,7 +110,8 @@ import { createKeepUi } from './keep.js';
 import { createPrivacyUi } from './privacy.js';
 import { bootHarness } from './harness/boot.js';
 import { farm } from '../net/farm.js';
-import { t, tn, live, onLang, fmtDuration as fmtDur, name as nameOf, N } from '../i18n/index.js';
+import { lazyImport, importFailed } from '../net/lazy.js';
+import { t, tn, live, onLang, lang, fmtDuration as fmtDur, name as nameOf, N } from '../i18n/index.js';
 
 export { h, icon, svgIcon, focusables, fmt, fmtShort, fmtDuration, plural, kv, playerVars, playerMark } from './dom.js';
 export { langToggle } from './lang-toggle.js';
@@ -141,7 +142,7 @@ export function errText(code) {
 // ---- panel registry (ui-shell owns the frame; ui-panels registers the content) ------------------------------
 const panelEntries = new Map();      // name -> entry
 const openStack = [];                // open panel names, bottom .. top
-const panelEvents = { register: new Set(), open: new Set(), close: new Set(), badge: new Set() };
+const panelEvents = { register: new Set(), open: new Set(), close: new Set(), badge: new Set(), tab: new Set() };
 let S = null;                        // { store, view, controller } after ui.init
 /** The panel close button's hover title: its key for a mouse, the word alone for a finger. */
 const closeTitle = () => touchText(t('common.closeEsc'), touchPlayer(S?.controller));
@@ -158,9 +159,13 @@ function panelLayer() {
   if (layerEl) return layerEl;
   layerEl = $('panels') || document.body.appendChild(h('div#panels'));
   scrimEl = $('scrim') || layerEl.appendChild(h('div#scrim.scrim', { hidden: true, 'aria-hidden': 'true' }));
-  scrimEl.addEventListener('click', () => {
+  scrimEl.addEventListener('click', (ev) => {
     const top = openStack.at(-1);
-    if (top && panelEntries.get(top)?.modal) registry.close(top);
+    const e = top ? panelEntries.get(top) : null;
+    // the second click of a double click on a dock door lands here, on the scrim of the panel the first one opened:
+    // it is not a "close" (QA r1 S-29: Market, Barn and the Farm book closed ~150 ms after opening)
+    if (ev.detail >= 2 || (e && performance.now() - (e.openedAt ?? 0) < 400)) return;
+    if (e?.modal) registry.close(top);
   });
   return layerEl;
 }
@@ -180,12 +185,19 @@ function tabsOf(e, args) {
 function buildFrame(e) {
   const { name, spec } = e;
   const titleId = `panel-${name}-title`;
-  e.titleText = h('span.hh-panel-title-text', { id: titleId });
+  // the panel's name is its heading (an h2: the dialog is labelled by it, and a screen reader's heading list finds it)
+  e.titleText = h('h2.hh-panel-title-text', { id: titleId });
   e.titleIcon = spec.icon ? icon(spec.icon, { size: 40, cls: 'hh-panel-title-icon' }) : null;
   e.closeBtn = h('button.btn.btn--stop.btn--round.hh-panel-close', {
     type: 'button', 'aria-label': t('common.close'), title: closeTitle(), on: { click: () => registry.close(name) },
   }, svgIcon('close', 26));
-  e.tabsEl = h('div.hh-tabs', { role: 'tablist', hidden: true });
+  // a strip that runs off the sheet shows a "‹" / "›" cue on that side; a tap on the cue scrolls (QA r4 S4-07)
+  e.tabsEl = h('div.hh-tabs', { role: 'tablist', hidden: true, on: { scroll: () => tabCue(e.tabsEl), click: (ev) => {
+    const s = e.tabsEl;
+    const r = s.getBoundingClientRect();
+    const dir = ev.clientX > r.right - 34 && s.classList.contains('more-r') ? 1 : ev.clientX < r.left + 34 && s.classList.contains('more-l') ? -1 : 0;
+    if (ev.target === s && dir) s.scrollBy({ left: dir * s.clientWidth * 0.7, behavior: 'smooth' });
+  } } });
   e.body = h('div.hh-panel-body.paper');
   // the scroll box is a tab stop of its own (Chrome makes a scroll container focusable anyway): it is named, part of
   // the focus trap, and keyboard users can scroll a panel that has no button in its body (QA wave 1 UI-19)
@@ -197,7 +209,9 @@ function buildFrame(e) {
   },
   // the grip of a bottom sheet (phones, css/mobile.css); hidden on desktop. Swiping it (or the title) down closes
   h('div.hh-sheet-grip', { 'aria-hidden': 'true' }),
-  h('header.hh-panel-title.wood', e.titleIcon, e.titleText), e.closeBtn, e.tabsEl, e.scroll, e.fade);
+  // a div, not a <header>: every panel's header counted as a second banner landmark (release 1.0, perf-a11y#13); the
+  // h2-style title keeps its id for aria-labelledby
+  h('div.hh-panel-title.wood', e.titleIcon, e.titleText), e.closeBtn, e.tabsEl, e.scroll, e.fade);
   sheetSwipe(e);
   // "more below": a soft fade at the bottom edge while the body scrolls on (UI-17)
   const fade = () => {
@@ -211,6 +225,25 @@ function buildFrame(e) {
     ro.observe(e.body);
   }
   e.syncFade = fade;
+  // a text field that takes the focus stays above a phone's keyboard, with the button after it (release 1.0 M13a,
+  // ux-phone#6: Harvey's wish and Ask sat under the keyboard); the farmer picker did this alone before
+  e.frame.addEventListener('focusin', (ev) => {
+    if (!isField(ev.target)) return;
+    // a touch layout never opens a keyboard by itself: a field focused by code (not by the player's own tap) lets go
+    if (touchLayout() && performance.now() - e.openedAt < 700 && !recentlyTapped(ev.target)) {
+      queueMicrotask(() => { if (document.activeElement === ev.target) { ev.target.blur(); e.frame.focus({ preventScroll: true }); } });
+      return;
+    }
+    // the scroller gets room under its last button while a field has the focus, so the button can clear the bottom
+    // fade (QA r1 S-13: Notes' "Pin it here" sat under it); the room goes with the focus
+    e.frame.classList.add('field-on');
+    setTimeout(() => { if (document.activeElement === ev.target) keepInView(ev.target, e.frame); }, 350);
+  });
+  // the room stays while the focus moves to a control of the same panel (its own button): dropping it on the press's
+  // mousedown shrank the scroller under the pointer and the mouseup missed the button (harvey's QA r1 cross-lane note)
+  e.frame.addEventListener('focusout', (ev) => {
+    if (isField(ev.target) && !isField(ev.relatedTarget) && !(ev.relatedTarget && e.frame.contains(ev.relatedTarget))) e.frame.classList.remove('field-on');
+  });
   // a focus that leaves a modal panel (a click on nothing, a programmatic blur) comes back to its first control
   e.frame.addEventListener('focusout', (ev) => {
     if (!e.open || !e.modal || openStack.at(-1) !== e.name) return;
@@ -220,6 +253,135 @@ function buildFrame(e) {
     }
   });
   panelLayer().append(e.frame);
+}
+
+// ---- fields above the keyboard (release 1.0 M13a) -----------------------------------------------------------------
+const isField = (el) => Boolean(el && (el.tagName === 'TEXTAREA' || (el.tagName === 'INPUT' && !/^(button|checkbox|radio|range|submit|reset|file|color)$/i.test(el.type || ''))));
+const touchLayout = () => mqMatch(LAYOUT_Q.touch) || mqMatch('(pointer: coarse)');
+// at: when the page handled it; ts: when the finger went down (the event's own time: a busy page handles a tap late)
+let lastTap = { el: null, at: -Infinity, ts: -Infinity, x: NaN, y: NaN };
+if (typeof document !== 'undefined') {
+  document.addEventListener('pointerdown', (ev) => {
+    lastTap = { el: ev.target, at: performance.now(), ts: Number.isFinite(ev.timeStamp) ? ev.timeStamp : performance.now(), x: ev.clientX, y: ev.clientY };
+  }, { capture: true, passive: true });
+}
+
+// ---- a double tap is one tap (QA r2 S-05, br#1) -----------------------------------------------------------------
+// On a phone the second tap of a double tap on the bar's Market door landed on the sheet the first one had just opened:
+// "Sell 39", a whole stack gone, and a sale has no undo. The second tap on a sheet button that closes the sheet (the
+// gift's "Wrap it") landed on the bar under it and opened the Barn. A click inside a panel whose finger went down within
+// TAP_GUARD.ms of the tap that opened it, or outside every panel within TAP_GUARD.ms of the tap that opened or closed one
+// (the door that opened a sheet that does not cover it would close it again), is dropped when it is the second click of a
+// double click or lands within TAP_GUARD.px of that tap. The times are the taps' own (event time): a busy phone handled
+// the twin a second after the sheet opened though the finger came down 160 ms after the first. A press elsewhere, a
+// keyboard press, or one after the sheet has settled goes through (the e2e tools' quick presses on other controls too).
+export const TAP_GUARD = Object.freeze({ ms: 400, px: 48 });
+/**
+ * Is `click` ({ x, y, detail }) the second half of a double tap? `since`: ms from the tap that opened the panel under it
+ * (a click inside it), or opened or closed a panel (a click outside), to this click's own tap, both in event time; below
+ * 0 when this finger went down before the panel opened (it aimed at something else); `first`: where the tap that opened
+ * or closed it went down ({ x, y } or null when code opened it). Pure.
+ */
+export function tapThrough(click, since, first) {
+  if (!click || !(click.detail >= 1) || !(since < TAP_GUARD.ms)) return false;
+  if (click.detail >= 2) return true;
+  return Boolean(first && Number.isFinite(first.x) && Math.hypot(click.x - first.x, click.y - first.y) <= TAP_GUARD.px);
+}
+/** Where and when (event time) the pointer last went down, when that is the press being handled (null otherwise). */
+const recentTap = () => (performance.now() - lastTap.at < 2000 && Number.isFinite(lastTap.x) ? { x: lastTap.x, y: lastTap.y, ts: lastTap.ts } : null);
+let lastShift = { ts: -Infinity, tap: null };      // the last panel that opened or closed, and the tap that did it
+if (typeof document !== 'undefined') {
+  document.addEventListener('click', (ev) => {
+    const target = ev.target;
+    const e = [...openStack].reverse().map((n) => panelEntries.get(n)).find((x) => x?.frame?.contains?.(target));
+    const click = { x: ev.clientX, y: ev.clientY, detail: ev.detail };
+    // this click's own tap: its pointerdown (event time), else the click's own time
+    const ts = recentTap()?.ts ?? ev.timeStamp;
+    const drop = e ? tapThrough(click, ts - (e.openTs ?? -Infinity), e.openTap) : tapThrough(click, ts - lastShift.ts, lastShift.tap);
+    if (!drop) return;
+    ev.stopPropagation();
+    ev.preventDefault();
+  }, true);
+}
+const recentlyTapped = (el) => performance.now() - lastTap.at < 1200 && Boolean(lastTap.el && (lastTap.el === el || el.contains?.(lastTap.el) || lastTap.el.contains?.(el)));
+/**
+ * The button the player presses once `field` is filled: the one the field names (`data-keep-in-view="<data-act>"`:
+ * Harvey's box names `ask`), else the first button after it that has words. An icon-only button beside the field
+ * (Harvey's 🎙, a ✕) is not it: QA r1 S-13 (hv#5) kept the mic in view and left "Ask Harvey" under the keyboard.
+ */
+export function buttonAfter(field, root) {
+  const shown = (b) => b && !b.hidden && !b.closest('[hidden]');
+  const act = field?.dataset?.keepInView;
+  // a field that is its own deed (an animal's name, saved as typed): only the field is kept in view (QA r3 S3-16, oib#4:
+  // keep-in-view kept the animal's "Collect" after the field in view and left the field half under the sheet's edge)
+  if (act === 'none') return null;
+  const named = act ? root.querySelector(`[data-act="${String(act).replace(/["\\]/g, '')}"]`) : null;
+  if (shown(named)) return named;
+  const all = [...root.querySelectorAll('input, textarea, select, button')];
+  const i = all.indexOf(field);
+  if (i < 0) return null;
+  const words = (b) => /\p{L}/u.test(b.textContent || '');
+  // a suggestion chip after the field is not its button (QA r2 S-04, oib#2: renaming the farm kept "Малка ливада" in
+  // view and "Carve it!" under the keyboard); the first worded button that is no chip, else the first chip
+  const worded = all.slice(i + 1).filter((b) => b.tagName === 'BUTTON' && shown(b) && words(b));
+  return worded.find((b) => !b.classList?.contains('chip')) ?? worded[0] ?? null;
+}
+/** The nearest ancestor that scrolls (a sheet's body, or the whole sheet on a landscape phone), or null. */
+function scrollerOf(el) {
+  if (typeof getComputedStyle !== 'function') return null;
+  for (let p = el?.parentElement; p && p !== document.body; p = p.parentElement) {
+    if (/(auto|scroll)/.test(getComputedStyle(p).overflowY) && p.scrollHeight > p.clientHeight + 1) return p;
+  }
+  return null;
+}
+/** The room at the bottom of a panel a button must clear: the denser half of the "more below" fade (34 px). */
+const FADE_ROOM = 22;
+/**
+ * Scroll a focused field and its button into the part of its panel the keyboard leaves (the frame's scroller): the
+ * button above the bottom fade and above the visual viewport's bottom (a keyboard over the page) first, then as much of
+ * the field as still fits above it (QA r1 S-13: in an iPhone's landscape with the keyboard up there is room for the
+ * button and part of the field, and scrolling the whole field back in pushed the button under the keyboard again).
+ */
+export function keepInView(field, root) {
+  if (!field?.isConnected) return;
+  const btn = root ? buttonAfter(field, root) : null;
+  const target = btn ?? field;
+  target.scrollIntoView?.({ block: 'end', inline: 'nearest' });
+  const sc = scrollerOf(target) ?? target.closest?.('.hh-panel-scroll');
+  if (!btn || !sc || typeof target.getBoundingClientRect !== 'function') {
+    field.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
+    return;
+  }
+  const box = sc.getBoundingClientRect();
+  const vv = globalThis.visualViewport;
+  const fade = root?.querySelector?.('.scroll-fade');
+  const fading = Boolean(fade && (typeof getComputedStyle !== 'function' || getComputedStyle(fade).display !== 'none'));
+  // a sticky foot over the scroller's bottom (not the button's own) covers what scrolls under it: the floor is its top
+  // (QA r2 F2-01, features' patch: any sheet with a sticky action bar has the gift sheet's old trap)
+  const foot = typeof getComputedStyle === 'function'
+    ? [...(sc.querySelectorAll?.('*') ?? [])].find((el) => !el.contains(btn) && getComputedStyle(el).position === 'sticky'
+      && el.getBoundingClientRect().bottom >= box.bottom - 1)
+    : null;
+  const floor = Math.min(box.bottom - (fading ? FADE_ROOM : 0), vv ? vv.offsetTop + vv.height - 8 : Infinity,
+    foot ? foot.getBoundingClientRect().top : Infinity);
+  const under = btn.getBoundingClientRect().bottom - floor;
+  if (under > 0) sc.scrollTop += Math.ceil(under);
+  // the field's top back in view (under the sheet's title, which can sit over a scrolling sheet), as far as the button
+  // allows
+  const over = (el) => { const r = el?.getClientRects?.().length ? el.getBoundingClientRect() : null; return r && r.bottom > box.top && r.top < box.bottom ? r.bottom : -Infinity; };
+  const roof = Math.max(box.top, over(root?.querySelector?.('.hh-panel-title')), over(root?.querySelector?.('.hh-tabs')));
+  const hidden = roof - field.getBoundingClientRect().top;
+  const slack = floor - btn.getBoundingClientRect().bottom;
+  if (hidden > 0 && slack > 0) sc.scrollTop -= Math.floor(Math.min(hidden, slack));
+}
+// the keyboard coming up (Android resizes the visual viewport) or a rotation: the focused field of a panel goes back
+// into view
+if (typeof globalThis.visualViewport?.addEventListener === 'function') {
+  globalThis.visualViewport.addEventListener('resize', () => {
+    const a = document.activeElement;
+    const frame = a?.closest?.('.hh-panel');
+    if (isField(a) && frame) keepInView(a, frame);
+  });
 }
 
 // ---- bottom sheets on phones: swipe the grip or the title down (sideways to the right in landscape) to close ----
@@ -293,9 +455,10 @@ function renderTabs(e) {
   if (typeof requestAnimationFrame === 'function') requestAnimationFrame(() => {
     const s = e.tabsEl;
     const b = s.querySelector('[aria-selected="true"]');
-    if (!b || s.scrollWidth <= s.clientWidth) return;
-    if (b.offsetLeft + b.offsetWidth > s.scrollLeft + s.clientWidth) s.scrollLeft = b.offsetLeft + b.offsetWidth - s.clientWidth + 12;
-    else if (b.offsetLeft < s.scrollLeft) s.scrollLeft = Math.max(0, b.offsetLeft - 12);
+    // 34 px clear of the cue's edge
+    if (b && b.offsetLeft + b.offsetWidth > s.scrollLeft + s.clientWidth - 34) s.scrollLeft = b.offsetLeft + b.offsetWidth - s.clientWidth + 34;
+    else if (b && b.offsetLeft < s.scrollLeft + 34) s.scrollLeft = Math.max(0, b.offsetLeft - 34);
+    tabCue(s);
   });
 }
 
@@ -309,6 +472,7 @@ function setPanelTab(e, id) {
     mountPanel(e);
   }
   e.tabsEl.querySelector('[aria-selected="true"]')?.focus({ preventScroll: true });
+  emitPanel('tab', e.name, id);
 }
 
 function unmountPanel(e) {
@@ -395,6 +559,24 @@ function syncStacking() {
   document.body.classList.toggle('panel-open', openStack.length > 0);
 }
 
+/**
+ * Where the focus goes back when a panel closes (QA r2 S-14, ap#1): its opener, or when the opener sits in a container
+ * that has closed since (the Together menu's "Leave a surprise", the phone's Farm book), the visible control that opens
+ * that container (`[aria-controls="<its id>"]`: the Together button, the Farm book button). The focus fell to <body>.
+ */
+export function focusBackTo(opener, root = globalThis.document) {
+  if (!opener || !opener.isConnected) return null;
+  const shown = (el) => Boolean(el && !el.closest('[hidden]') && (typeof el.getClientRects !== 'function' || el.getClientRects().length));
+  if (shown(opener)) return opener;
+  for (let box = opener.closest('[hidden]') ?? opener.parentElement; box && box !== root?.body; box = box.parentElement?.closest?.('[hidden]') ?? box.parentElement) {
+    if (!box.id) continue;
+    const door = root?.querySelector?.(`[aria-controls="${box.id}"]`);
+    if (shown(door)) return door;
+  }
+  const book = root?.getElementById?.('m-menu-btn');
+  return shown(book) ? book : opener;
+}
+
 function sameArgs(a, b) {
   try { return JSON.stringify(a ?? {}) === JSON.stringify(b ?? {}); } catch { return false; }
 }
@@ -458,17 +640,37 @@ const registry = {
       e.frame.hidden = false;
       try { e.spec.onOpen?.(e.args); } catch (err) { console.error(`panel '${name}' onOpen failed`, err); }
     } else {
-      if (e.args.tab) e.tab = e.args.tab;
+      // a door opens a panel on its first tab; only a deep link ({ tab }) picks another (QA r3 S3-15, oib#1: after one
+      // visit to the Acorn shop every Market door opened there, with Sell scrolled off the phone's tab strip)
+      e.tab = e.args.tab ?? null;
       renderTabs(e);
       mountPanel(e);
       e.frame.classList.remove('is-closing');
       e.frame.hidden = false;
+      // a door opens a sheet at its top: the frame (one per panel name) kept the last visit's scroll, so the Bakery opened
+      // scrolled by the Packing Table's offset (QA r4, ui-panels' note); set once shown (a hidden box has no scroll to
+      // set); a focus or deep link scrolls after this (rAF)
+      e.scroll.scrollTop = 0;
       e.frame.classList.remove('is-opening');
       void e.frame.offsetWidth;          // restart the open animation
       e.frame.classList.add('is-opening');
+      // the entrance plays once: a rotation swaps the sheet's animation (up / from the side) and replayed it with the
+      // class still on (QA r1 S-37); off when it ends, or after 600 ms (reduced motion has no animation to end)
+      const gen = (e.openGen = (e.openGen ?? 0) + 1);
+      const settle = (ev) => {
+        if (ev && ev.target !== e.frame) return;
+        e.frame.removeEventListener('animationend', settle);
+        if (e.openGen === gen) e.frame.classList.remove('is-opening');
+      };
+      e.frame.addEventListener('animationend', settle);
+      setTimeout(settle, 600);
     }
     openStack.push(name);
     syncStacking();
+    e.openedAt = performance.now();
+    e.openTap = recentTap();              // the tap that opened it: its twin a moment later is not a press (S-05)
+    e.openTs = e.openTap?.ts ?? e.openedAt;
+    lastShift = { ts: e.openTs, tap: e.openTap };
     e.frame.focus({ preventScroll: true });
     emitPanel('open', name, e.args);
     return true;
@@ -478,6 +680,8 @@ const registry = {
     const e = panelEntries.get(name);
     if (!e || !e.open) return false;
     e.open = false;
+    const closer = recentTap();            // the bar under it does not take the twin of the tap that closed it (S-05)
+    lastShift = { ts: closer?.ts ?? performance.now(), tap: closer };
     const i = openStack.indexOf(name);
     if (i >= 0) openStack.splice(i, 1);
     const hadFocus = e.frame.contains(document.activeElement);
@@ -497,7 +701,7 @@ const registry = {
     syncStacking();
     if (!keepFocus && hadFocus) {
       const below = openStack.at(-1);
-      const target = below ? panelEntries.get(below).frame : e.opener;
+      const target = below ? panelEntries.get(below).frame : focusBackTo(e.opener);
       if (target && target.isConnected && !target.closest('[hidden]')) target.focus({ preventScroll: true });
       else document.activeElement?.blur?.();
     }
@@ -589,13 +793,68 @@ function onPanelKeys(e) {
   for (const p of panelEntries.values()) {
     const hk = p.spec.hotkey ? p.spec.hotkey.toLowerCase() : null;
     const hit = action ? action === p.name : hk && (e.code === hotkeyCode(hk) || (!e.code && e.key.toLowerCase() === hk));
-    if (hit && !(p.spec.locked && S && S.store.state && p.spec.locked(S.store.state))) {
+    if (hit) {
+      const why = p.spec.locked && S && S.store.state ? p.spec.locked(S.store.state) : null;
       e.preventDefault();
       e.stopPropagation();
+      // a locked panel's key says when it opens ("Mabel opens her board at level 2"), never nothing (QA r1 P-08)
+      if (why) { ui.toast(why, { kind: 'info' }); return; }
       registry.toggle(p.name);
       return;
     }
   }
+}
+
+// ---- the partner came, the partner left (QA r2 S-02, jde#1, coop#8) --------------------------------------------------
+// Every welcome said the partner "arrived on the farm 🌻" to the one who had just arrived (the welcome's first look at
+// the presence counted as a change), and a server restart said "left for now" then "arrived" though nobody left. Now
+// the first sight of a farmer is silent, "left" waits PEER_NEWS.leftMs offline (a reload, a restart, a phone waking
+// up come back sooner and say nothing), and "arrived" follows only a "left" that was said or a farmer first seen away.
+export const PEER_NEWS = Object.freeze({ leftMs: 10_000 });
+/**
+ * The presence news of one page: (pid, online, { live }) for every presence it learns (a welcome's list, or a MSG.PEER:
+ * `live`); it calls say(pid, true | false) for an arrival or a departure worth telling. Timers are injectable (tests).
+ * QA r3 S3-10 (jde#2): a brand-new partner is in no welcome, so their first MSG.PEER is the page's first sight of them;
+ * S2-02 made every first sight silent, and the partner's first join was told to nobody. A first sight from a live
+ * message, online, is an arrival; the welcome's list stays silent.
+ */
+export function peerNews(say, { leftMs = PEER_NEWS.leftMs, setTimer = setTimeout, clearTimer = clearTimeout } = {}) {
+  const seen = new Map();          // pid -> { shown: the presence the player was told (or first saw), t: the "left" timer }
+  return (pid, online, { live = false } = {}) => {
+    const s = seen.get(pid);
+    if (!s) {
+      seen.set(pid, { shown: Boolean(online), t: 0 });
+      if (online && live) say(pid, true);
+      return;
+    }
+    if (online) {
+      if (s.t) { clearTimer(s.t); s.t = 0; return; }       // back inside the grace: nothing happened
+      if (!s.shown) { s.shown = true; say(pid, true); }
+      return;
+    }
+    if (!s.shown || s.t) return;
+    s.t = setTimer(() => { s.t = 0; s.shown = false; say(pid, false); }, leftMs);
+  };
+}
+let peerUpdate = null;
+// a welcome's presence list reaches ui.setPeer in the same task as the welcome (main.js: store.reset, then one setPeer
+// per peer): those calls are the welcome's, everything later is a live MSG.PEER (S3-10). main.js can also say so
+// itself (setPeer(pid, on, { welcome: true })).
+let inWelcome = false;
+function markWelcome() {
+  inWelcome = true;
+  queueMicrotask(() => { inWelcome = false; });
+}
+function peerNewsOf() {
+  peerUpdate ??= peerNews((pid, on) => {
+    const p = S?.store.state?.players?.[pid];
+    if (!p || !mods) return;
+    mods.feed.push({ by: pid, actor: p.name, text: on ? t('shell.peer.arrivedFeed') : t('shell.peer.leftFeed'), glyph: on ? 'heart' : null });
+    if (on) mods.toasts.toast(t('shell.peer.arrived', { name: p.name }), { kind: 'love', ms: 3500 });
+    // the news as an event (window 'hh:peer' { pid, online }): life-feel's arrival chime follows the same word
+    try { globalThis.dispatchEvent?.(new CustomEvent('hh:peer', { detail: { pid, online: on } })); } catch { /* no window */ }
+  });
+  return peerUpdate;
 }
 
 // ---- the facade ------------------------------------------------------------------------------------------------
@@ -607,22 +866,25 @@ async function installPanels() {
   // ui-panels' module registers every content panel through ui.panels.register (see the header). Loaded
   // dynamically so the shell works before (and without) it; its stylesheet comes with it.
   try {
-    const mod = await import('./panels/index.js');
+    const mod = await lazyImport('panels', () => import('./panels/index.js'));
     ensureStylesheet('/css/panels.css');
     const install = mod.default || mod.install;
     if (typeof install === 'function') await install(ui, { store: S && S.store });
   } catch (err) {
-    if (!/Failed to fetch|Importing a module script failed|error loading dynamically imported module|404/i.test(String(err && err.message))) {
-      console.error('ui panels failed to install', err);
-    }
+    // a failed fetch is reported by lazyImport (main.js reloads or offers Reload); anything else is a bug
+    if (!importFailed(err)) console.error('ui panels failed to install', err);
   }
 }
 
 export const ui = {
   init(store, view, controller) {
     S = { store, view, controller, ui };
+    // the first welcome's presence list follows in this same task (main.js: init, then setPeer per peer): silent (S3-10)
+    markWelcome();
+    store.on('welcome', markWelcome);
     $('hud').hidden = false;
-    hideBoot();
+    // the painted boot screen stays as a curtain over the HUD until the first view is drawn (release 1.0 S8)
+    liftCurtain(view);
     const ctx = S;
     ctx.panelSpec = (name) => panelEntries.get(name)?.spec ?? null;
     ctx.settings = createSettings(ctx);
@@ -713,7 +975,15 @@ export const ui = {
   panels: registry,
 
   showSlots(slots, onPick, opts = {}) { hideBoot(); showSlots(slots, onPick, opts); },
-  hideSlots() { $('slot-picker').hidden = true; },
+  hideSlots() {
+    const sp = $('slot-picker');
+    const wasShown = Boolean(sp && !sp.hidden);
+    if (sp) sp.hidden = true;
+    // a new farmer's Play (the join path): the painting comes back over the farm until its first view is drawn, and the
+    // curtain lifts the way every boot's does (QA r3 S3-14, jde#8: 300 ms after Play the farmhouse, barn and market were
+    // tan boxes, on a quiet machine too). Only before the shell is up: ui.init lifts the curtain on the first welcome
+    if (wasShown && !mods) curtainForJoin();
+  },
   slotError(code) {
     // on the slot picker a RATE refusal means the passphrase lockout (server: 5 wrong ones, one minute)
     $('slot-error').textContent = code === ERR.RATE ? t('shell.slot.lockout') : errText(code);
@@ -725,17 +995,11 @@ export const ui = {
     pendingConn = status;
     bootLine(status);
   },
-  setPeer(pid, isOnline) {
-    const was = mods ? mods.hud.isOnline(pid) : pendingPeers.get(pid);
+  setPeer(pid, isOnline, { welcome = inWelcome } = {}) {
     if (!mods) { pendingPeers.set(pid, isOnline); return; }
     mods.hud.setPeer(pid, isOnline);
-    if (S.store.state && pid !== S.store.pid && was !== isOnline && was !== undefined) {
-      const p = S.store.state.players[pid];
-      if (p) {
-        mods.feed.push({ by: pid, actor: p.name, text: isOnline ? t('shell.peer.arrivedFeed') : t('shell.peer.leftFeed'), glyph: isOnline ? 'heart' : null });
-        if (isOnline) mods.toasts.toast(t('shell.peer.arrived', { name: p.name }), { kind: 'love', ms: 3500 });
-      }
-    }
+    mods.social?.peer?.();
+    if (S.store.state && pid !== S.store.pid) peerNewsOf()(pid, isOnline, { live: !welcome });
   },
   tooltip(pick) { if (mods) mods.tips.tooltip(pick); },
   /** A first-use tip by its content id (TUTORIAL.firstUse), once per player (additive, wave 3: world moments). */
@@ -756,6 +1020,31 @@ export const ui = {
   chatHistory(list) { if (mods) mods.social.chatHistory(list); },
   /** Open the seed tray (the Smart Hand on an empty plot without a chosen seed, GDD §7.1). */
   openSeeds(open = true) { if (mods) mods.toolbar.openSeeds(open); },
+  /** (additive, release 1.0 S1) The Farm book: ui.farmBook.open(section?) ('week' | 'animals' | 'village' | 'you' |
+   *  'together' | 'settings'), the drip's "Show me" ('farmbook'). */
+  farmBook: {
+    open(section) { return registry.open('menu', section ? { section } : {}); },
+    close() { return registry.close('menu'); },
+  },
+  /** (additive, release 1.0 S2) B: the build tray, like the Build button (the Hammer in hand: back to the Hand). */
+  openBuild() {
+    if (!mods) return;
+    if (ui.panels.has('build')) { ui.panels.toggle('build'); return; }
+    if (S.controller.tool.id === 'hammer' && !mods.toolbar.buildOpen) { S.controller.setTool('hand'); return; }
+    mods.toolbar.openBuild();
+  },
+  /**
+   * (additive, QA r2 S2-01) The build tray open at a free piece's card: a level card's "Show me" for Grandma's Windmill
+   * (it waits there as "Free · Place", the way the Coop does). False when the tray has no such card.
+   */
+  showInTray(def) {
+    if (!mods) return false;
+    mods.toolbar.openBuild(true);
+    const card = document.querySelector(`#build-tray .build-card[data-def="${String(def).replace(/["\\]/g, '')}"]`);
+    card?.scrollIntoView?.({ block: 'nearest', inline: 'center' });
+    card?.focus?.({ preventScroll: true });
+    return Boolean(card);
+  },
   /** Photo mode (P): hide every HUD element; P or Esc brings it back. */
   photoMode(on) {
     ui.hideHud(on);
@@ -856,26 +1145,31 @@ function onFx(ev, by) {
     case 'wishWithdrawn': case 'wishDenied':
       mods.toasts.closeBanner(`wish-ask-${ev.id}`);
       return;
-    case 'hearts':
-      if (ev.pid === S.store.pid && ev.n > 0) {
-        // with two of you, "someone" is always the partner: say who (QA wave 1 CL-04)
-        const them = other ? other.name : partnerName();
-        const why = ['thanks', 'team', 'tend', 'highFive', 'keepsake'].includes(ev.why) ? t(`shell.hearts.${ev.why}`, { name: them }) : '';
-        mods.toasts.toast(`+${ev.n} ♥${why ? `  ${why}` : ''}`, { kind: 'love', ms: 2200 });
-      }
+    case 'hearts': {
+      const line = heartsLine(st, S.store.pid, ev);
+      if (line) mods.toasts.toast(line, { kind: 'love', ms: 2200 });
       return;
+    }
     case 'highFiveWait':
-      if (other) mods.toasts.toast(t('shell.highFiveWait', { name: other.name }), { kind: 'love', ms: 3000 });
+      // a phone has no T key: the hint in brackets goes for a finger (QA r1 S-16)
+      if (other) mods.toasts.toast(touchText(t('shell.highFiveWait', { name: other.name }), touchPlayer(S.controller)), { kind: 'love', ms: 3000 });
       return;
     default:
   }
 }
 
-/** The other farmer's name (two players), or "Your partner". */
-function partnerName() {
-  const st = S && S.store.state;
-  const pid = st ? Object.keys(st.players).find((p) => p !== S.store.pid) : null;
-  return pid ? st.players[pid].name : t('common.partner');
+/**
+ * The "+2 ♥" toast of my own hearts, or null. Hearts stay quiet for a farmer with nobody to share them (M30; QA r2
+ * S-20, fbp#11: a solo farmer finished the daily together task alone and was told "+2 ♥"). With two of you, "someone"
+ * is always the partner: say who (QA wave 1 CL-04). Pure.
+ */
+export function heartsLine(state, me, ev) {
+  if (!ev || ev.pid !== me || !(ev.n > 0)) return null;
+  const partner = Object.keys(state?.players ?? {}).find((p) => p !== me);
+  if (!partner) return null;
+  const them = state.players[partner]?.name ?? t('common.partner');
+  const why = ['thanks', 'team', 'tend', 'highFive', 'keepsake'].includes(ev.why) ? t(`shell.hearts.${ev.why}`, { name: them }) : '';
+  return `+${ev.n} ♥${why ? `  ${why}` : ''}`;
 }
 
 /** "Join" on the partner's Duet invitation: press "Cook together" now and show the recipe in its building. */
@@ -906,7 +1200,154 @@ function paintWhenLoaded(layer) {
 if (typeof document !== 'undefined' && typeof getComputedStyle === 'function') paintWhenLoaded(document.getElementById('boot'));
 let bootTimer = 0;
 let bootStatus = 'connecting';
-function hideBoot() { clearTimeout(bootTimer); const b = $('boot'); if (b) b.hidden = true; }
+function hideBoot() { clearTimeout(bootTimer); const b = $('boot'); if (b) { b.hidden = true; b.classList.remove('lifting', 'no-fade'); } }
+/** The painting back over the farm after the slot card's Play, saying the farm is opening (S3-14). */
+function curtainForJoin() {
+  const b = $('boot');
+  if (!b || !b.hidden) return;
+  b.classList.remove('lifting');
+  delete b.dataset.lift;
+  // at full opacity at once: the layer's fade-in from 0 showed a flat frame (QA r4 S4-01)
+  b.classList.add('no-fade');
+  b.hidden = false;
+  const text = $('boot-text');
+  if (text) text.textContent = t('shell.boot.open');
+  $('boot-line')?.classList.remove('no-pct');
+  lineAt(0.6);
+}
+
+// ---- the boot curtain (release 1.0 S8; feel#3, #4, astra#1, critique#6) --------------------------------------------
+// The painting stays over the HUD (z 85) after the welcome until render-look's view.ready() (the first view's models
+// loaded and drawn), capped at 6 s counted from the welcome, or at 25 s while the link brings less than 200 KB/s (the
+// owners' Funnel: grey boxes for tens of seconds otherwise). Then a 500 ms cross-fade, and the HUD comes in once its
+// icons and portraits are there. window.__hh.playableAt (performance.now()) marks the lift for infra's boot-perf.
+export const CURTAIN = Object.freeze({ capMs: 6000, slowCapMs: 25_000, slowBps: 200_000, windowMs: 2000, fadeMs: 500 });
+const bootBytes = [];                 // [responseEnd, bytes] of every resource the page loaded
+if (typeof PerformanceObserver === 'function') {
+  try {
+    new PerformanceObserver((list) => { for (const e of list.getEntries()) bootBytes.push([e.responseEnd, e.transferSize || e.encodedBodySize || 0]); })
+      .observe({ type: 'resource', buffered: true });
+  } catch { /* an old browser: the cap is always the short one */ }
+}
+/**
+ * Bytes a second the link brings now (entries: [responseEnd, bytes]): the better of the last `windowMs` and the whole
+ * time since navigation. A resource counts only when it ends, so while big model packs stream (option 2's host path
+ * at 550 KB/s, infra's e2e-assets run) no response ends inside 2 s and the window alone read a dead link: the 25 s cap
+ * kept the curtain up to 19-21 s. The Funnel at 85 KB/s still reads slow both ways. Pure.
+ */
+export function throughput(entries, now, windowMs = CURTAIN.windowMs) {
+  let recent = 0;
+  let all = 0;
+  for (const [t, b] of entries) {
+    if (t > now) continue;
+    all += b;
+    if (t > now - windowMs) recent += b;
+  }
+  return Math.max(recent / (windowMs / 1000), now > 0 ? all / (now / 1000) : 0);
+}
+/** How long the curtain may wait (ms from the welcome) at this throughput. Pure. */
+export const curtainCap = (bps) => (bps < CURTAIN.slowBps ? CURTAIN.slowCapMs : CURTAIN.capMs);
+
+/**
+ * Should the curtain lift now (QA r1 S-24, va#3)? `el` ms since the welcome, `bps` the link, `p` / `p0` the first
+ * view's placeholders now and at the welcome (null: the view cannot tell), `dock` the HUD's doors are wired.
+ * 'cap': past 25 s, whatever is on screen; on a quick link past 6 s only with no placeholder in view (the 6 s cap
+ * used to lift onto 14-24 tan boxes at 700 KB/s). 'home': a slow link past 6 s once the doors answer and most of the
+ * first view is drawn (the placeholder settle hides the rest; at 85 KB/s the 25 s cap kept a playable farm covered
+ * for 9.5 s). null: wait. Pure.
+ */
+export function liftReason({ el, bps, p = null, p0 = null, dock = true, home = null }) {
+  if (el >= CURTAIN.slowCapMs) return 'cap';
+  if (el < CURTAIN.capMs) return null;
+  if (bps >= CURTAIN.slowBps) return p === null || p === 0 ? 'cap' : null;
+  if (!dock) return null;
+  // QA r2 I2-C1: the farmhouse and the barn in view decide (`home`: how many of them are still tan; the owners' save
+  // kept 24 of 82 boxes for 50 s, so the share below never fired and the 25 s cap lifted onto them); with neither in
+  // view, most of the first view drawn
+  if (home !== null) return home === 0 ? 'home' : null;
+  return p !== null && p <= Math.max(2, Math.floor((p0 ?? 0) * 0.25)) ? 'home' : null;
+}
+
+/**
+ * The boot line's share after the welcome (0.6..0.96): the files before it are the first 60 % (index.html), the first
+ * view's models the rest, with a slow creep so the line never stands still for long (it parked at "99 %" for 11 s at
+ * 700 KB/s). Pure.
+ */
+export function bootShare({ el, p = null, p0 = null }) {
+  const models = p !== null && p0 ? Math.max(0, Math.min(1, 1 - p / p0)) : 0;
+  const creep = Math.min(0.9, el / 30_000);
+  return Math.min(0.96, 0.6 + 0.4 * Math.max(models, creep));
+}
+/** The boot line's percentage and bar at `share` (0..1). */
+function lineAt(share) {
+  const pct = $('boot-pct');
+  const bar = $('boot-prog');
+  if (pct) pct.textContent = ` ${Math.round(share * 100)}${lang() === 'bg' ? ' %' : '%'}`;
+  if (bar) bar.style.width = `${(share * 100).toFixed(1)}%`;
+}
+/** The HUD's own pictures (icons, portraits) loaded, or 1.5 s gone: the HUD never comes in as empty circles. */
+function hudPictures() {
+  const imgs = [...document.querySelectorAll('#hud img')].filter((i) => !i.complete);
+  if (!imgs.length) return Promise.resolve();
+  const each = imgs.map((i) => new Promise((r) => { i.addEventListener('load', r, { once: true }); i.addEventListener('error', r, { once: true }); }));
+  return Promise.race([Promise.all(each), new Promise((r) => setTimeout(r, 1500))]);
+}
+function liftCurtain(view) {
+  const b = $('boot');
+  const mark = (t) => { globalThis.__hh = globalThis.__hh || {}; globalThis.__hh.playableAt = t; };
+  if (!b || b.hidden) { mark(performance.now()); return; }
+  globalThis.__hhBootTaken = true;                 // the inline progress line stops; this says the farm is coming
+  clearTimeout(bootTimer);
+  bootStatus = 'open';
+  const text = $('boot-text');
+  if (text) text.textContent = t('shell.boot.open');
+  $('boot-line')?.classList.remove('no-pct');
+  document.body.classList.add('hud-wait');
+  const t0 = performance.now();
+  let done = false;
+  const go = (reason) => {
+    if (done) return;
+    done = true;
+    b.dataset.lift = reason;
+    hudPictures().then(() => {
+      // a frame drawn with the last models in before the fade (S4-01: tan boxes in the first frames after the lift)
+      try { view?.invalidate?.(); } catch { /* no view */ }
+      return new Promise((r) => { globalThis.requestAnimationFrame?.(() => requestAnimationFrame(r)); setTimeout(r, 150); });
+    }).then(() => {
+      document.body.classList.remove('hud-wait');
+      document.body.classList.add('hud-in');
+      // the line runs full while the painting fades (QA r2 S-22: the curtain lifted with "69 %" on it)
+      lineAt(1);
+      b.classList.add('lifting');
+      mark(performance.now());
+      setTimeout(() => { if (b.classList.contains('lifting')) hideBoot(); }, CURTAIN.fadeMs + 20);
+      setTimeout(() => document.body.classList.remove('hud-in'), CURTAIN.fadeMs + 900);
+    });
+  };
+  try {
+    Promise.resolve(view?.ready?.({ timeoutMs: CURTAIN.slowCapMs })).then(() => go('ready'), () => go('ready'));
+  } catch { go('ready'); }
+  // the first view's placeholders (render-look's view.stats().placeholders) drive the last 40 % of the line and the lift;
+  // `home`: the farmhouse and the barn in view still tan (null: neither in view; QA r2 I2-C1)
+  const viewStat = (k) => { try { const n = view?.stats?.()[k]; return Number.isFinite(n) ? n : null; } catch { return null; } };
+  const placeholders = () => viewStat('placeholders');
+  const p0 = placeholders();
+  // the line picks up where the inline one stopped (it creeps while the welcome is on its way), never a step back
+  const pct = $('boot-pct');
+  let shown = Math.max(0, Math.min(0.6, (parseFloat(pct?.textContent ?? '') || 0) / 100));
+  const tick = () => {
+    if (done) return;
+    const el = performance.now() - t0;
+    const p = placeholders();
+    const share = Math.max(shown, bootShare({ el, p, p0 }));
+    if (share > shown) { shown = share; lineAt(share); }
+    const why = liftReason({ el, bps: throughput(bootBytes, performance.now()), p, p0, home: viewStat('home'),
+      dock: registry.has('market') && Boolean($('dock')?.children.length) });
+    if (why) { go(why); return; }
+    setTimeout(tick, 250);
+  };
+  tick();
+}
 // main.js reports a failed boot (no WebGL2) by appending a <p> to <body>: the title card steps aside for it
 if (typeof MutationObserver === 'function' && typeof document !== 'undefined') {
   const mo = new MutationObserver((list) => {
@@ -931,11 +1372,28 @@ function bootLine(status) {
   }
   if (b.hidden) return;
   bootStatus = status;
-  if (status === 'open') { text.textContent = t('shell.boot.open'); return; }
+  if (status === 'open') { text.textContent = t('shell.boot.open'); line.classList.remove('no-pct'); return; }
   text.textContent = status === 'reconnecting' ? t('shell.boot.retry') : t('shell.boot.waking');
-  clearTimeout(bootTimer);
-  bootTimer = setTimeout(() => { if (!b.hidden) { bootStatus = 'asleep'; text.textContent = t('shell.boot.asleep'); } }, 15_000);
+  armAsleep();
 }
+/**
+ * 15 s without a welcome: the line says the farm is not answering, and the percentage goes (it read "99 %" beside
+ * "the server seems to be asleep" for 45 s; QA r1 S-38). Armed when the page starts too: a socket whose upgrade hangs
+ * reports no status at all.
+ */
+function armAsleep() {
+  clearTimeout(bootTimer);
+  bootTimer = setTimeout(() => {
+    const b = $('boot');
+    if (!b || b.hidden || bootStatus === 'open' || bootStatus === 'mismatch') return;
+    bootStatus = 'asleep';
+    globalThis.__hhBootTaken = true;              // the inline progress line stops
+    const text = $('boot-text');
+    if (text) text.textContent = t('shell.boot.asleep');
+    $('boot-line')?.classList.add('no-pct');
+  }, 15_000);
+}
+if (typeof document !== 'undefined' && document.getElementById?.('boot') && !document.getElementById('boot').hidden) armAsleep();
 
 // the loading screen's line follows a language switch made on the loading screen itself (index.html's toggle)
 if (typeof document !== 'undefined') {
@@ -1042,7 +1500,8 @@ function showSlots(slots, onPick, opts = {}) {
       const input = h('input.field', { type: 'text', maxlength: '16', value: typed.has(s.pid) ? typed.get(s.pid) : (s.name || ''),
         'aria-label': t('keep.rejoin.name'), autocomplete: 'nickname' });
       const go = () => {
-        const name = input.value.trim() || s.name;
+        // the name as the server keeps it (QA r2 I2-02): zero-width spaces alone are no name
+        const name = cleanName(input.value) || s.name;
         if (!name) { $('slot-error').textContent = t('shell.slot.needName'); input.focus(); return; }
         $('slot-error').textContent = '';
         onPick(s.pid, name, { color: s.color });
@@ -1073,8 +1532,9 @@ function showSlots(slots, onPick, opts = {}) {
       const pass = needPass ? h('input.field.pass', { type: 'password', placeholder: t('shell.slot.pass'), 'aria-label': t('shell.slot.pass'), autocomplete: 'current-password' }) : null;
       const play = h('button.btn', { type: 'button' }, t('shell.slot.play'));
       const go = () => {
-        const name = input.value.trim();
-        // say it: an Enter on an empty name used to do nothing at all (UI-34)
+        const name = cleanName(input.value);
+        // say it: an Enter on an empty name used to do nothing at all (UI-34); one of zero-width spaces is empty too
+        // (QA r2 I2-02: the server refuses it)
         if (!name) { $('slot-error').textContent = t('shell.slot.needName'); input.focus(); return; }
         if (pass && !pass.value) { $('slot-error').textContent = t('shell.slot.needPass'); pass.focus(); return; }
         const clash = swatches.find((w) => w.color === String(color).toUpperCase() && w.takenBy);
@@ -1105,7 +1565,8 @@ function showSlots(slots, onPick, opts = {}) {
         sw.append(b);
       }
       sw.append(label);
-      row.append(input, play, sw);
+      // the colours before Play (S9a, ux-phone#18: a stranger pressed Play before seeing them): name, colours, Play
+      row.append(input, sw, play);
       if (pass) row.append(pass);
     }
     list.append(row);

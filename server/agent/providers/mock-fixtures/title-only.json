@@ -1,0 +1,5 @@
+{
+  "about": "harvey#1 (fixture wempty): a mod that only renames itself; the validator answers NO_CHANGE and the job ends answered, never an empty Changes ready",
+  "files": { "mod.json": { "format": 1, "title": { "en": "No Change", "bg": "Без промяна" } } },
+  "summary": { "en": "There was nothing to change for this one.", "bg": "Тук нямаше какво да променя.", "possible": false }
+}

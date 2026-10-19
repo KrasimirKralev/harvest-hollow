@@ -154,7 +154,7 @@ try {
   await shot('1-A-bakery-panel', 'p1');
   const btnInfo = await P.p1.evaluate(() => { const b = document.querySelector('[data-duet="sweetheart_cake"]'); return b ? { text: b.textContent.trim(), disabled: b.disabled, title: b.title } : null; });
   step('the Bakery panel shows "Cook together" for the Sweetheart Cake', Boolean(btnInfo), JSON.stringify(btnInfo));
-  const beforeB = await P.p2.evaluate(() => ({ toasts: [...document.querySelectorAll('#toasts > *, #banners > *')].map((x) => x.textContent.trim()), feed: document.getElementById('feed')?.innerText ?? '' }));
+  const beforeB = await P.p2.evaluate(() => ({ toasts: [...document.querySelectorAll('#toasts > *, #banners > *, #over-panels .toast, #over-panels .unlock-banner')].map((x) => x.textContent.trim()), feed: document.getElementById('feed')?.innerText ?? '' }));
   const t0 = Date.now();
   await P.p1.evaluate(() => document.querySelector('[data-duet="sweetheart_cake"]').click());
   await settle('p1');
@@ -162,7 +162,7 @@ try {
   const seen = [];
   for (let i = 0; i < 7; i++) {
     await sleep(500);
-    seen.push(await P.p2.evaluate(() => ({ toasts: [...document.querySelectorAll('#toasts > *, #banners > *')].map((x) => x.textContent.trim()), panels: [...document.querySelectorAll('#panels > section, #panels > div')].filter((e) => e.offsetParent !== null).map((e) => e.id), feed: (document.getElementById('feed')?.innerText ?? '').slice(-160) })));
+    seen.push(await P.p2.evaluate(() => ({ toasts: [...document.querySelectorAll('#toasts > *, #banners > *, #over-panels .toast, #over-panels .unlock-banner')].map((x) => x.textContent.trim()), panels: [...document.querySelectorAll('#panels > section, #panels > div')].filter((e) => e.offsetParent !== null).map((e) => e.id), feed: (document.getElementById('feed')?.innerText ?? '').slice(-160) })));
   }
   await shot('2-B-partner-sees', 'p2');
   const clue = seen.some((x) => /cook|duet|together/i.test(x.toasts.join(' ')) || x.panels.length > 0);

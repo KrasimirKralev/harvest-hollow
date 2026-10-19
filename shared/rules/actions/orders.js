@@ -3,7 +3,8 @@
 //
 //   orderFill    { slot, n }  hand in every item at once (no partial delivery); pays 1.5 x V as coins + XP (+1 % coins
 //                              per Farm Beauty star, max +5 %), a golden order +1 Acorn; filling the OTHER player's
-//                              help flag: +10 % XP and +1 Heart each
+//                              help flag: +10 % XP and +1 Heart each; a crate's Golden Ticket (1.0) grants +50 % of
+//                              the order's coins on top (at most 15 % of an E-hour) and is used up
 //   orderDiscard { slot, n }  the slot refills in ORDERS.refillMs (the quick slot: ORDERS.quick.refillMs when set); a
 //                             partner's "I'm on it" pin asks a soft confirm
 //   orderPin     { slot, n }  toggle "I'm on it" (display only, never blocks the partner)
@@ -16,7 +17,8 @@
 import { ERR } from '../../net/protocol.js';
 import { V, confirmed } from '../schema.js';
 import { ORDERS, COOP, itemOf } from '../../content/index.js';
-import { available, consume, earn, proofDeed } from '../economy.js';
+import { available, consume, earn, grant, proofDeed } from '../economy.js';
+import { ticketBonus, usePowerup } from '../powerups.js';
 import { sortedKeys } from '../order.js';
 import { dayOf } from '../coop.js';
 import { fillable, refillMsOf } from '../orders-board.js';
@@ -56,6 +58,12 @@ export const orderFill = {
     // Farm Beauty: +1 % order coins per star the farm holds now, at most +5 % (GDD §5.9; rules-economy's beauty.js)
     const coins = o.coins + Math.floor((o.coins * beautyOrderBp(tx.state, ctx.now)) / 10_000);
     earn(tx, ctx, coins, 'order');
+    // a crate's Golden Ticket (1.0): granted on top (coins.earned stays the order's), one use
+    const ticket = ticketBonus(tx.state, o.coins, ctx.now);
+    if (ticket > 0) {
+      grant(tx, ctx, ticket, 'crate');
+      usePowerup(tx, 'ticket');
+    }
     const acorns = o.golden ? o.golden.acorns : 0;
     if (acorns > 0) tx.inc(['farm', 'wallet', 'acorns'], acorns);
     tx.set(['farm', 'orders', 'slots', key], { availableAt: ctx.now + refillMsOf(a.slot), order: null, pin: null,
@@ -66,7 +74,7 @@ export const orderFill = {
     // XP, Hearts, stats, Mabel's meter, the feed and every goal are credited from this event (progress.js)
     tx.emit({ e: 'orderFilled', slot: a.slot, n: o.n, coins, xp, acorns, golden: Boolean(o.golden),
       giver: o.golden ? o.golden.giver : null, simple: o.simple, helped: helped ? s.flag : null, value,
-      items: { ...o.items }, by: ctx.pid });
+      items: { ...o.items }, by: ctx.pid, ...(ticket > 0 ? { ticket } : {}) });
   },
 };
 

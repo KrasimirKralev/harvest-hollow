@@ -93,6 +93,8 @@ export const VERBS = Object.freeze({
     ['pullWeed', (t) => ({ x: t.x, z: t.z })], ['weed', (t) => ({ x: t.x, z: t.z })], ['clearTuft', (t) => ({ x: t.x, z: t.z })]] },
   // wave 4b (wish 1): a balloon crate on the farm, opened by either farmer (rules `openCrate {id}`); one per press
   openCrate: { one: [one('openCrate'), one('crateOpen'), one('openLoot'), one('lootCrate'), one('collectCrate')] },
+  // release 1.0 D1: a surprise on the porch (rules `openGift { id }`, recipient only); one per press
+  openGift: { one: [one('openGift')] },
 });
 
 /** The event names one verb's action emits per target (to count what a batch really did). */
@@ -100,13 +102,13 @@ export const VERB_EVENTS = Object.freeze({
   plant: ['planted'], goldenPlant: ['planted'], harvest: ['harvested'], water: ['watered'], compost: ['composted', 'fertilized'], fertilize: ['fertilized'],
   uproot: ['uprooted'], pick: ['picked'], chop: ['chopped', 'cleared'], clear: ['cleared', 'chopped'],
   tend: ['collected', 'fed'], feed: ['fed'], collect: ['collected'], pet: ['petted'], collectTray: ['crafted'],
-  fell: ['chopHit', 'giantFelled'], nurse: ['nursed'], openCrate: ['crateOpened'],
+  fell: ['chopHit', 'giantFelled'], nurse: ['nursed'], openCrate: ['crateOpened'], openGift: ['giftOpened'],
 });
 
 /** Verbs with no rules action: the client does them itself (riding a horse is cosmetic, GDD §3.4 Horse). */
 export const CLIENT_VERBS = Object.freeze(new Set(['ride', 'fish', 'nursePick']));
 /** Verbs a drag stroke does once, on the pressed target only. */
-export const ONCE_VERBS = Object.freeze(new Set(['sit', 'stand', 'fell', 'ride', 'fish', 'nursePick', 'openCrate']));
+export const ONCE_VERBS = Object.freeze(new Set(['sit', 'stand', 'fell', 'ride', 'fish', 'nursePick', 'openCrate', 'openGift']));
 
 /** A balloon loot crate's def (content CRATE_DEF: kind 'crate'; wave 4b, wish 1). */
 export const isCrate = (def) => Boolean(def && (def.kind === 'crate' || def.crate === true));
@@ -228,6 +230,15 @@ export function describe(state, id, now, pid) {
     case 'crate':
       t.crate = true;
       break;
+    // a wrapped surprise on the porch (release 1.0 D1, features#F1): only the farmer it is for opens it
+    case 'gift': {
+      const g = state.farm.gifts && Object.hasOwn(state.farm.gifts, id) ? state.farm.gifts[id] : null;
+      t.gift = true;
+      t.forMe = Boolean(g && pid && g.to === pid);
+      t.giftTo = g ? g.to : null;
+      t.giftBy = g ? g.by : null;
+      break;
+    }
     default:
       break;
   }
@@ -244,6 +255,8 @@ export function verbsFor(tool, t, { shift = false, spread = 'compost' } = {}) {
   const k = t.kind;
   // a balloon crate opens with whatever is in hand but the Hammer (it is never moved: content movable false)
   if (t.crate || isCrate(t.def)) return tool === 'hammer' ? [] : ['openCrate'];
+  // a surprise opens for the farmer it is for, with any tool but the Hammer (D1); for anyone else: nothing to do
+  if (t.gift) return tool === 'hammer' || !t.forMe ? [] : ['openGift'];
   switch (tool) {
     case 'hand':
       if (k === 'plot') {
@@ -268,7 +281,8 @@ export function verbsFor(tool, t, { shift = false, spread = 'compost' } = {}) {
       // a Fishing Dock (M2): sit down at its end and cast (game/fishing.js)
       if (k === 'decor') return t.dock ? ['fish'] : t.seats ? [t.mySeat ? 'stand' : 'sit'] : [];
       return [];
-    case 'seed_bag': return k === 'plot' && !t.giant ? ['plant'] : [];
+    // a ripe plot under the Seed Bag harvests (release 1.0 M2, ux-first#2): never "Something is already growing there"
+    case 'seed_bag': return k === 'plot' && !t.giant ? (t.ready ? ['harvest'] : ['plant']) : [];
     // the Sickle on a ripe Giant fells it too (rules-economy: a Giant answers `harvest` with LOCKED, `chop` fells it)
     case 'sickle': return k !== 'plot' ? [] : t.giant ? (t.ready ? ['fell'] : []) : ['harvest'];
     case 'watering_can':

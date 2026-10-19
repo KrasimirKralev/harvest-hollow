@@ -11,6 +11,7 @@
 //   farmIdOf(pathname)           '/f/abc123def4' -> 'abc123def4', else null
 //   readLaunch(loc)              { key, join, rejoin } from '#k=<secret>', '?join=<token>' and '?rejoin=<token>'
 //   cleanUrl(loc, { join, rejoin })  the address without '#k=' (and without the used one-time token)
+//   inviteNotice({ join, sentJoin, saved })  'own' when this device made the invite it opened, else null (QA r1 I-03)
 //   personalLink / inviteLink / rejoinLink   the links the Settings, the invite card and a new key show
 //   parseFarmLink(text, { origin, farmId })  { id, key, join, rejoin } from a pasted or scanned farm link, else null
 //   farmLabel(state)             the list's name for a farm (its own, else "Rowan & Mia's farm")
@@ -25,6 +26,7 @@
 //   ttlDays(status)              the retention in days (GET /api/f/:id/status `ttlDays`, default 7)
 import { t } from '../i18n/multi.js';
 import { BRAND, ownFarmName } from '../../../shared/brand.js';
+import { cleanText } from '../../../shared/net/text.js';
 
 /** A farm id in a page path: the server's ids are >= 10 base32 characters; accept the URL-safe alphabet. */
 export const FARM_PATH = /^\/f\/([A-Za-z0-9_-]{6,64})\/?$/;
@@ -93,6 +95,17 @@ export function cleanUrl(loc, { join = false, rejoin = false } = {}) {
   return `${loc.pathname}${q ? `?${q}` : ''}${hh ? `#${hh}` : ''}`;
 }
 
+/**
+ * Once a page opened from an invite is in (QA r1 I-03): 'own' when this device made that invite (the invite card keeps
+ * it as 'hh.invite') and the page did not join with it, so the link still waits for the friend; null otherwise. A friend
+ * who taps the link they joined with again (the usual way back from a messenger) just comes in. Pure.
+ * @param {{ join: string | null, sentJoin: boolean, saved: unknown }} o
+ */
+export function inviteNotice({ join, sentJoin, saved }) {
+  if (!join || sentJoin || !saved || typeof saved !== 'object') return null;
+  return saved.token === join ? 'own' : null;
+}
+
 export const personalLink = (origin, id, secret) => `${origin}/f/${encodeURIComponent(id)}#k=${encodeURIComponent(secret)}`;
 export const inviteLink = (origin, id, token) => `${origin}/f/${encodeURIComponent(id)}?join=${encodeURIComponent(token)}`;
 export const rejoinLink = (origin, id, token) => `${origin}/f/${encodeURIComponent(id)}?rejoin=${encodeURIComponent(token)}`;
@@ -133,10 +146,18 @@ export function isStandalone(win = globalThis) {
 export const isAndroid = (nav = globalThis.navigator) => /Android/i.test(String(nav?.userAgent ?? ''));
 
 // ---- the farms this device has opened (the landing page's list) ---------------------------------------------------
+/**
+ * A row's name as the list shows it: no bidi control (one RLO mirrored the row on a stranger's device; QA r1 I-02), no
+ * lone surrogate or stack of combining marks, and a name with nothing visible reads as no name yet (QA r2 I2-02).
+ */
+function listName(name) {
+  return cleanText(name, 40) || null;
+}
 const readList = (st) => {
   try {
     const v = JSON.parse(st?.getItem(LIST_KEY) ?? 'null');
-    return Array.isArray(v) ? v.filter((f) => f && typeof f.id === 'string' && /^[A-Za-z0-9_-]{6,64}$/.test(f.id)) : [];
+    return Array.isArray(v) ? v.filter((f) => f && typeof f.id === 'string' && /^[A-Za-z0-9_-]{6,64}$/.test(f.id))
+      .map((f) => ({ ...f, name: listName(f.name) })) : [];
   } catch { return []; }
 };
 const writeList = (st, list) => { try { st?.setItem(LIST_KEY, JSON.stringify(list)); } catch { /* storage blocked: the list lasts this page */ } };
@@ -148,7 +169,7 @@ export function rememberFarm(st, { id, name = null, at = Date.now() }) {
   if (!createFarmScope(id).multi) return;
   const list = readList(st).filter((f) => f.id !== id);
   const old = readList(st).find((f) => f.id === id);
-  const nm = typeof name === 'string' && name.trim() ? name.trim().slice(0, 40) : old?.name ?? null;
+  const nm = listName(name) ?? old?.name ?? null;
   list.unshift({ id, name: nm, lastOpen: at });
   writeList(st, list.sort((a, b) => (b.lastOpen || 0) - (a.lastOpen || 0)).slice(0, LIST_MAX));
 }

@@ -6,6 +6,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { recolorPng, decodePng } from './png.js';
+import { hueOf, hueGap } from '../../shared/mod/colour.js';
 import { LIMITS } from '../../shared/mod/format.js';
 import { contentPath } from '../../shared/mod/format.js';
 
@@ -29,8 +30,22 @@ export function neededKeys(family, keyRoot) {
 
 const HEX = /^#[0-9A-Fa-f]{6}$/;
 
+/**
+ * Did a recoloured icon miss the colour asked for? Its recoloured pixels' mean has another hue (> 40 degrees, for a
+ * colour that has one), lost the colour (greyish for a vivid colour), or another lightness (> 0.35: shading keeps a
+ * white cow's mean near 0.7, a teal melon for "pale blue" is 0.4 darker).
+ */
+export function colourMissed(mean, to) {
+  const a = hueOf(mean ?? '');
+  const b = hueOf(to);
+  if (!a || !b) return false;
+  if (b.s > 0.25 && b.l > 0.08 && b.l < 0.92 && (a.s < 0.08 || hueGap(mean, to) > 40)) return true;
+  return Math.abs(a.l - b.l) > 0.35;
+}
+
 export function renderCheck(overlay, { root }) {
   const errors = [];
+  const warnings = [];
   const icons = {};
   const m = manifestOf(root);
   let models = 0;
@@ -55,14 +70,22 @@ export function renderCheck(overlay, { root }) {
     for (const [size, dir] of [['128', ''], ['64', '64']]) {
       const src = path.join(root, 'public', 'assets', 'icons', dir, `${ic.like}.png`);
       try {
-        const { png, alpha } = recolorPng(fs.readFileSync(src), ic.from, ic.to, ic.kind ?? 'recolor');
+        const { png, alpha, changed, mean } = recolorPng(fs.readFileSync(src), ic.from, ic.to, ic.kind ?? 'recolor');
         const back = decodePng(png);
         if (!alpha || back.width < 8) throw new Error('empty icon');
         icons[`${size}/${id}.png`] = png;
+        // harvey#12: what the player sees is the icon; a colour the anchor cannot carry (it barely took the colour, or
+        // came out far from it) is said to the agent, never left silently teal
+        const far = colourMissed(mean, ic.to);
+        if (size === '128' && live.has(id) && (changed < alpha * 0.05 || far)) {
+          warnings.push({ stage: 'render', code: 'COLOUR_FAR', file: '', path: id,
+            message: far ? `the icon of ${id} comes out ${mean}, far from ${ic.to}` : `the icon of ${id} barely takes ${ic.to} (its anchor has little of a colour to move)`,
+            hint: 'a colour far from the anchor\'s own (very pale or very dark) shows less: pick one closer to it, or an anchor nearer that colour' });
+        }
       } catch (e) {
         if (live.has(id)) err('ICON_FAILED', '', '', `the icon of ${id} could not be made (${e.message})`, 'pick another anchor');
       }
     }
   }
-  return { ok: errors.length === 0, errors, icons, checks: { ok: errors.length === 0, models, icons: Object.keys(icons).length } };
+  return { ok: errors.length === 0, errors, warnings, icons, checks: { ok: errors.length === 0, models, icons: Object.keys(icons).length } };
 }

@@ -5,11 +5,11 @@
 // Reads the store by topic only: wallet, xp, inventory (+overflow), players, name, barn, '*'. Panel links go through
 // the registry by name, so a panel that ui-panels has not registered yet leaves its button inert, never broken.
 import {
-  CONTENT, levelFromXp, xpForLevel, unlocksAt, personalLevelFromXp, titleFor, GROWTH, COOP, pluralOf,
+  CONTENT, levelFromXp, xpForLevel, unlocksAt, personalLevelFromXp, titleFor, GROWTH, COOP, pluralOf, defOf,
 } from '../../../shared/content/index.js';
-import { seatText, giantText, rideText, dockText } from '../game/targets.js';
+import { seatText, giantText, rideText, dockText, describe, verbsFor, OPENS } from '../game/targets.js';
 import { barnCap, stockOf, overflowOf } from '../../../shared/rules/economy.js';
-import { h, icon, svgIcon, fmt, fmtShort, rollNumber, playerVars, playerMark, GLYPH_NAMES, touchText, touchPlayer, kv } from './dom.js';
+import { h, icon, svgIcon, fmt, fmtShort, rollNumber, playerVars, playerMark, GLYPH_NAMES, touchText, touchPlayer, kv, menuCloseHooks } from './dom.js';
 import { hasIcon } from '../render/icons.js';
 import { portraitSpec, portraitKey, peekPortrait } from '../render/portrait.js';
 import { plotHurry, treeHurry, fieldHurry, hurryReason, finishField, fieldLabel } from './crop-hurry.js';
@@ -19,14 +19,19 @@ import { farmName } from '../../../shared/brand.js';
 import * as FARMING from '../../../shared/rules/actions/farming.js';
 import * as UPG from '../../../shared/rules/upgrades.js';
 import * as WEEDS from '../../../shared/rules/actions/weeds.js';
+import * as BEAUTY from '../../../shared/rules/actions/beauty.js';
 import { isCrateDef, crateOf, treeAgeOf, treeStageOf, ageLine } from './panels/w4b-rules.js';
 import { stayOf, stayIntent, can5, petOf, stayLine, stayForOthers } from './panels/w5-rules.js';
 import { pairTipLine } from './panels/pen-pair.js';
 import { breedOf, breedName } from './panels/w4-rules.js';
 import { petFace } from './panels/pet-art.js';
-import { t, t as tt, tn, onLang, name as cname, N, Q, ctext, fmtDuration } from '../i18n/index.js';
+import { t, t as tt, tn, onLang, name as cname, N, Q, ctext, fmtDuration, fmtPct } from '../i18n/index.js';
+import { lazyImport, importFailed } from '../net/lazy.js';
 
 const $ = (id) => document.getElementById(id);
+
+/** A second press of the Undo chip inside this many ms is the same press (QA r3 S3-17: a double tap 160 ms apart). */
+export const UNDO_GAP_MS = 600;
 
 /** Display name of an unlock row from content.unlocksAt(). */
 export function unlockName({ family, id }) {
@@ -125,13 +130,15 @@ export function showPortrait(face, spec, view) {
 
 // labels are read at render time (getters): a language switch re-draws the dock (renderDock after a reset, below)
 const dockItem = (o, key) => Object.defineProperty(o, 'label', { get: () => t(key), enumerable: true });
+// release 1.0 (S1, ux-first#5): four big buttons for the common verbs (Orders hidden until it opens at L2) and ONE Farm
+// book button (ui/layout.js) whose sheet holds every other place; the small buttons ("minis") live in the Farm book
 const DOCK_BUILTIN = [
   dockItem({ name: 'build', icon: 'hammer', order: 10, hotkey: 'B' }, 'hud.dock.build'),
   dockItem({ name: 'market', icon: 'market_stand', order: 20, hotkey: 'M' }, 'hud.dock.market'),
   dockItem({ name: 'barn', icon: 'barn', order: 30, hotkey: 'I' }, 'hud.dock.barn'),
+  dockItem({ name: 'orders', icon: 'order_board', glyph: 'orders', order: 40, hotkey: 'O' }, 'hud.dock.orders'),
 ];
 const MINI_BUILTIN = [
-  dockItem({ name: 'orders', icon: 'order_board', glyph: 'orders', order: 40, hotkey: 'O' }, 'hud.dock.orders'),
   dockItem({ name: 'journal', glyph: 'journal', order: 50, hotkey: 'J' }, 'hud.dock.journal'),
 ];
 
@@ -142,6 +149,34 @@ function pictogram(iconId, glyph, size) {
   return iconId ? icon(iconId, { size }) : svgIcon('star', size);
 }
 
+/**
+ * F2 (feel#6): my own gain shows when its flight lands, not when the prediction changes the state. offer() holds a
+ * pill's old number for a gain of `kind` until land(kind) (the first window 'hh:fly-arrive' of that kind, from
+ * life-feel's fx) or `delay` ms, then roll(el, to, format) once and bump(pill, up) once; a change meanwhile (the
+ * server's confirmation, another gain) only moves the number it will roll to. offer() -> true when it took the value.
+ * DOM-free apart from `el.dataset.v` (the number on show), so a test hands in its own roll, bump and timers.
+ */
+export function arrivalGate({ roll, bump, delay = 1200, timers = globalThis }) {
+  const pending = new Map();          // kind -> { el, pill, to, format, timer }
+  function land(kind) {
+    const p = pending.get(kind);
+    if (!p) return false;
+    pending.delete(kind);
+    timers.clearTimeout(p.timer);
+    const prev = Number(p.el.dataset.v ?? p.to);
+    if (prev !== p.to) { roll(p.el, p.to, p.format); bump(p.pill, p.to > prev); }
+    return true;
+  }
+  function offer(kind, el, pill, v, format, { gain = false, animate = false } = {}) {
+    const wait = kind ? pending.get(kind) : null;
+    if (wait) { wait.to = v; wait.format = format; return true; }
+    if (!kind || !gain || !animate || !(v > Number(el.dataset.v ?? v))) return false;
+    pending.set(kind, { el, pill, to: v, format, timer: timers.setTimeout(() => land(kind), delay) });
+    return true;
+  }
+  return { offer, land, waiting: (kind) => pending.has(kind) };
+}
+
 export function createHud(S) {
   const { store, view, controller, ui } = S;
   const online = new Map();
@@ -150,6 +185,10 @@ export function createHud(S) {
 
   // ---- level star + XP -------------------------------------------------------------------------------------
   const star = $('hud-level-star');
+  // every phone layout (portrait and on its side: the bar is 88-130 px there) shows the percentage
+  const xpMq = globalThis.matchMedia?.(PHONE_Q) ?? null;
+  let xpNow = null;
+  xpMq?.addEventListener?.('change', () => { if (store.state) renderLevel(); });
   const levelCard = $('hud-level-card');
   function renderLevel() {
     const xp = store.state.farm.xp;
@@ -190,14 +229,34 @@ export function createHud(S) {
     bar.setAttribute('aria-valuemax', String(span));
     bar.setAttribute('aria-valuetext', t('hud.xp.valuetext', { a: xp - from, b: span, level: level + 1 }));
     // " XP" is its own span: a phone's narrow bar drops it (css/mobile.css), the numbers stay. ONE child span: the
-    // label is a grid, and a bare text node beside the unit would become a second grid row
-    $('hud-xp-text').replaceChildren(h('span', `${fmtShort(xp - from)} / ${fmtShort(span)}`, h('span.xp-unit', t('hud.xp.unit'))));
+    // label is a grid, and a bare text node beside the unit would become a second grid row. A phone (<= 420 px) shows the
+    // percentage (release 1.0 M12a, copy#3: "20 381 / 70 000" wrapped and was cut in Bulgarian); the full numbers are in
+    // aria-valuetext and in the star's card (a long press)
+    xpNow = { a: xp - from, b: span, level };
+    $('hud-xp-text').replaceChildren(xpMq?.matches
+      ? h('span', t('dock.xp.pct', { pct: fmtPct(Math.floor(k * 100)) }))
+      : h('span', `${fmtShort(xp - from)} / ${fmtShort(span)}`, h('span.xp-unit', t('hud.xp.unit'))));
     const next = nextUnlocks(level);
-    star.dataset.tip = next.length
+    const tipLevel = next.length
       ? t('hud.level.tipNext', { level, next: next.map((u) => t('hud.level.unlockAt', { name: u.name, level: u.level })).join(', ') })
       : t('hud.level.tip', { level });
+    star.dataset.tipBase = tipLevel;
+    star.dataset.tip = tipLevel;
     star.setAttribute('aria-label', t('hud.level.label', { level, a: xp - from, b: span }));
   }
+
+  // Acorns, Hearts and Beauty left the top bar (S1, M30): the level card's hover says them (read when the tip is about
+  // to show: Beauty walks the decor, never on every XP change)
+  const statsTip = () => {
+    if (!store.state) return;
+    const stats = statsLine(store.state, store.pid, store.now());
+    const nums = xpNow ? `${fmt(xpNow.a)} / ${fmt(xpNow.b)}${t('hud.xp.unit')}` : '';
+    star.dataset.tip = [star.dataset.tipBase || '', nums, stats].filter(Boolean).join('\n');
+  };
+  // a finger's long press on the star shows the same card (hud tips: pointerdown starts the press)
+  star.addEventListener('pointerdown', statsTip);
+  star.addEventListener('pointerenter', statsTip);
+  star.addEventListener('focus', statsTip);
 
   function renderFarmName() {
     $('hud-farm-name').textContent = farmName(store.state);
@@ -214,7 +273,11 @@ export function createHud(S) {
     el._bump?.cancel();
     el._bump = el.animate(up ? BUMP_UP : BUMP_DOWN, { duration: 250, easing: up ? 'cubic-bezier(.34, 1.56, .64, 1)' : 'cubic-bezier(.22, 1, .36, 1)' });
   }
-  function setNum(el, pill, v, animate, format = fmt) {
+  // F2 (feel#6): my own gain shows when its flight lands (arrivalGate below)
+  const gate = arrivalGate({ roll: (el, to, format) => rollNumber(el, to, { format, ms: 400 }), bump });
+  window.addEventListener('hh:fly-arrive', (e) => { const k = e.detail?.kind; if (k) gate.land(k); });
+  function setNum(el, pill, v, animate, format = fmt, kind = null, gain = false) {
+    if (gate.offer(kind, el, pill, v, format, { gain, animate })) return;
     const prev = Number(el.dataset.v ?? v);
     if (animate && prev !== v) { rollNumber(el, v, { format }); bump(pill, v > prev); }
     else {
@@ -227,10 +290,10 @@ export function createHud(S) {
   // a phone's top row has room for "735k", not "735,457" (the exact sum stays in the pill's name)
   const phoneMq = globalThis.matchMedia?.(PHONE_Q) ?? null;
   const coinFmt = (v) => (phoneMq?.matches ? phoneCoins(v) : fmt(v));
-  function renderWallet(animate) {
+  function renderWallet(animate, gain = false) {
     const w = store.state.farm.wallet;
-    setNum($('hud-coins'), pills.coins, w.coins, animate, coinFmt);
-    setNum($('hud-acorns'), pills.acorns, w.acorns, animate, coinFmt);
+    setNum($('hud-coins'), pills.coins, w.coins, animate, coinFmt, 'coins', gain);
+    setNum($('hud-acorns'), pills.acorns, w.acorns, animate, coinFmt, 'acorns', gain);
     if (phoneMq?.matches) pills.coins.setAttribute('aria-label', tn('hud.coins.label', w.coins));
     else pills.coins.removeAttribute('aria-label');
   }
@@ -239,9 +302,9 @@ export function createHud(S) {
     const me = store.state.players[store.pid];
     setNum($('hud-hearts'), pills.hearts, me ? me.hearts || 0 : 0, animate);
   }
-  function renderBarn(animate) {
+  function renderBarn(animate, gain = false) {
     const b = barnStatus(store.state);
-    setNum($('hud-barn'), pills.barn, b.total, animate);
+    setNum($('hud-barn'), pills.barn, b.total, animate, fmt, 'barn', gain);
     $('hud-barn-cap').textContent = ` / ${fmtShort(b.cap)}`;
     pills.barn.classList.toggle('overflow', b.mode === 'overflow' || b.mode === 'full');
     pills.barn.classList.toggle('near', b.mode === 'near');
@@ -296,11 +359,7 @@ export function createHud(S) {
             portraitFace(), h('span.tag', { 'aria-hidden': 'true' },
               h('span.who', h('span.nm'), pid === store.pid ? h('span.you', t('hud.you')) : null), h('span.title')));
           const li = h('li', { dataset: { pid, slot: slotOf(pid) } }, btn);
-          // my own chip carries a little ✎: "Your look" (wave 4, wish 9); a phone has it in the Menu and Settings
-          if (pid === store.pid) {
-            li.append(h('button.look-btn', { type: 'button', 'aria-label': t('settings.farm.look'), 'data-tip': t('hud.lookTip'),
-              on: { click: (e) => { e.stopPropagation(); if (ui.panels.has('avatar')) ui.panels.open('avatar'); } } }, svgIcon('smile', 18)));
-          }
+          // "Your look" lives in the gear's menu and the Farm book's You page (release 1.0 S1: the ✎ on the chip went)
           chips.set(pid, li);
         }
         return chips.get(pid);
@@ -375,11 +434,13 @@ export function createHud(S) {
     labelEdge(b);
     return b;
   };
+  // the items are no Tab stops (QA r3 S3-11, ap#4: five Tabs walked the open menu and the sixth left it open): the arrows,
+  // Home and End move between them, a Tab leaves the menu and closes it
   const menuBtn = (glyph, lk, key, fn, extra = {}) => h('button.edge-item', {
-    type: 'button', role: 'menuitem', dataset: { mk: lk }, on: { click: (e) => { fn(e); if (!extra.keepOpen) closeMenu(); } }, ...(extra.id ? { id: extra.id } : {}),
+    type: 'button', role: 'menuitem', tabindex: '-1', dataset: { mk: lk }, on: { click: (e) => { fn(e); if (!extra.keepOpen) closeMenu(); } }, ...(extra.id ? { id: extra.id } : {}),
   }, svgIcon(glyph, 26), h('span.lbl', t(lk)), key ? h('kbd', key) : null);
   const soundBtn = menuBtn('sound', 'hud.edge.soundOn', null, () => { S.settings.set({ muted: !S.settings.get().muted }); }, { id: 'hud-sound', keepOpen: true });
-  const menu = h('div.edge-menu.paper', { role: 'menu', 'aria-label': t('hud.edge.menu'), hidden: true },
+  const menu = h('div.edge-menu.paper#hud-gear-menu', { role: 'menu', 'aria-label': t('hud.edge.menu'), hidden: true },
     menuBtn('photo', 'game.key.photo', 'P', () => (typeof controller.photo === 'function' ? controller.photo() : ui.photoMode(true))),
     menuBtn('gear', 'game.key.settings', ',', () => ui.panels.toggle('settings'), { id: 'hud-settings' }),
     menuBtn('smile', 'hud.edge.look', null, () => { if (ui.panels.has('avatar')) ui.panels.open('avatar'); }, { id: 'hud-look' }),
@@ -387,7 +448,7 @@ export function createHud(S) {
     S.invite ? menuBtn('letter', 'multi.invite.title', null, () => S.invite.open(), { id: 'hud-invite' }) : null,
     soundBtn);
   const moreBtn = edgeBtn('gear', 'hud.edge.more', null, () => (menu.hidden ? openMenu() : closeMenu()),
-    { id: 'hud-more', 'aria-haspopup': 'menu', 'aria-expanded': 'false' });
+    { id: 'hud-more', 'aria-haspopup': 'menu', 'aria-expanded': 'false', 'aria-controls': 'hud-gear-menu' });
   function relabelEdge() {
     for (const b of edge.querySelectorAll('.edge-btn')) labelEdge(b);
     for (const b of menu.querySelectorAll('[data-mk]')) b.querySelector('.lbl').textContent = t(b.dataset.mk);
@@ -395,36 +456,39 @@ export function createHud(S) {
     renderSound();
   }
   const moreWrap = h('div.edge-more', moreBtn, menu);
+  // Settings (the gear and its menu) is the top of the right edge, in a slot of its own above the column (release 1.0
+  // M3, ux-first#3): nothing can cover it, and the column's first child stays the helper's button (ui/harness)
+  const gear = h('div.hud-gear#hud-gear', moreWrap);
+  edge.before(gear);
   if (S.ideas) menu.insertBefore(S.ideas.menuItem(closeMenu), soundBtn);
   function openMenu() {
     menu.hidden = false;
     moreBtn.setAttribute('aria-expanded', 'true');
     menu.querySelector('button')?.focus({ preventScroll: true });
   }
-  function closeMenu() {
+  function closeMenu({ focus = null } = {}) {
     if (menu.hidden) return;
     const had = menu.contains(document.activeElement);
     menu.hidden = true;
     moreBtn.setAttribute('aria-expanded', 'false');
-    if (had) moreBtn.focus({ preventScroll: true });
+    if (focus ?? had) moreBtn.focus({ preventScroll: true });
   }
   menu.addEventListener('keydown', (e) => {
-    const items = [...menu.querySelectorAll('button')];
+    const items = [...menu.querySelectorAll('button')].filter((b) => !b.hidden);
     const i = items.indexOf(document.activeElement);
     if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeMenu(); }
     else if (e.key === 'ArrowDown') { e.preventDefault(); items[(i + 1) % items.length].focus(); }
     else if (e.key === 'ArrowUp') { e.preventDefault(); items[(i - 1 + items.length) % items.length].focus(); }
+    else if (e.key === 'Home') { e.preventDefault(); items[0]?.focus(); }
+    else if (e.key === 'End') { e.preventDefault(); items.at(-1)?.focus(); }
   });
-  document.addEventListener('pointerdown', (e) => { if (!moreWrap.contains(e.target)) closeMenu(); }, true);
-  edge.append(
-    edgeBtn('plus', 'game.key.zoomIn', 'wheel', () => view.camera.zoom(1 / 1.25)),
-    edgeBtn('minus', 'game.key.zoomOut', 'wheel', () => view.camera.zoom(1.25)),
-    h('div.edge-gap'),
-    edgeBtn('rotl', 'hud.edge.turnLeft', 'Q', () => view.camera.rotate(-1)),
-    edgeBtn('rotr', 'hud.edge.turnRight', 'E', () => view.camera.rotate(1)),
-    h('div.edge-gap'),
-    moreWrap,
-  );
+  // the same close hooks as the Together menu and the toolbar's flyouts (QA r3 S3-11, jde#4, ap#4): a press outside, a
+  // panel that opens by itself (Harvey's ready sheet: the menu stayed drawn over the scrim, and its "Settings" closed the
+  // sheet and opened nothing), the focus leaving it, Escape wherever the focus is
+  menuCloseHooks({ wrap: moreWrap, isOpen: () => !menu.hidden, close: closeMenu, panels: ui.panels });
+  // one quarter-turn button (S3, ux-phone#13): the wheel, a pinch, + / - zoom; Q turns back (release 1.0 S1: zoom +/- and
+  // the second turn button went, every way to do it stays)
+  edge.append(edgeBtn('rotr', 'dock.edge.turn', 'E', () => view.camera.rotate(1), { id: 'hud-turn' }));
   function renderSound() {
     const muted = S.settings.get().muted;
     soundBtn.firstChild.replaceWith(svgIcon(muted ? 'mute' : 'sound', 26));
@@ -435,6 +499,17 @@ export function createHud(S) {
   }
   S.settings.on(renderSound);
   renderSound();
+
+  // ---- a double click is one press (QA r1 S-29, br#1): many casual players double-click everything, and the second
+  // click of a dock door, the Farm book, Harvey or a tool slot closed what the first had opened ~150 ms before. The
+  // second click of a double click (detail 2+) never reaches those toggles; a keyboard press (detail 0) and every
+  // single click or tap still do.
+  const TOGGLE_DOORS = '.dock-btn, .m-menu-btn, .dock-mini, #hx-dock button, .tool-slot, .tool[data-tool="seed_bag"], #together-btn, #hud-more';
+  $('hud')?.addEventListener('click', (e) => {
+    if (!(e.detail >= 2) || !e.target?.closest?.(TOGGLE_DOORS)) return;
+    e.stopPropagation();
+    e.preventDefault();
+  }, true);
 
   // ---- dock --------------------------------------------------------------------------------------------------
   const dock = $('dock');
@@ -460,7 +535,8 @@ export function createHud(S) {
   const dockBtns = new Map();     // name -> button (kept across renders: focus and the opener survive)
   let dockIds = '';
   function patchDock(btn, d, locked, pressed, mini) {
-    const label = `${d.label}${d.hotkey ? ` (${d.hotkey})` : ''}`;
+    // a finger has no keys: no "(M)" in what a screen reader says on a phone (S9a, ux-phone#19)
+    const label = `${d.label}${d.hotkey && !touchPlayer(controller) ? ` (${d.hotkey})` : ''}`;
     btn.setAttribute('aria-pressed', String(pressed));
     if (locked) btn.setAttribute('aria-disabled', 'true'); else btn.removeAttribute('aria-disabled');
     btn.setAttribute('aria-label', `${label}${locked ? `. ${locked}` : ''}`);
@@ -483,7 +559,8 @@ export function createHud(S) {
   }
   function renderDock() {
     const { big, small } = dockEntries();
-    const shownBig = big.filter((d) => d.name === 'build' || d.panel);
+    // Orders shows from the level it opens (release 1.0 S1, ux-first#17): a greyed button at L1 was a question, not a door
+    const shownBig = big.filter((d) => d.name === 'build' || (d.panel && !(d.name === 'orders' && lockReason('orders'))));
     const shownSmall = small.filter((d) => d.panel);
     const ids = `${shownBig.map((d) => d.name).join(',')}|${shownSmall.map((d) => d.name).join(',')}`;
     const make = (d, mini) => {
@@ -500,10 +577,11 @@ export function createHud(S) {
     };
     if (ids !== dockIds) {
       dockIds = ids;
-      dock.replaceChildren(...shownBig.map((d) => make(d, false)));
+      // the Farm book's button (ui/layout.js) stays the dock's last button
+      const book = document.getElementById('m-menu-btn');
+      dock.replaceChildren(...shownBig.map((d) => make(d, false)), ...(book ? [book] : []));
       minis.replaceChildren(...shownSmall.map((d) => make(d, true)));
-      // the coach card keeps clear of the minis' row (QA2 UI-02, shell.css .coach)
-      $('hud').style.setProperty('--minis-n', String(Math.min(5, shownSmall.length)));   // five a row (shell.css)
+      S.layout?.bookChanged?.();
     }
     for (const d of shownBig) {
       const locked = d.name === 'build' ? null : lockReason(d.name);
@@ -512,6 +590,9 @@ export function createHud(S) {
     }
     for (const d of shownSmall) patchDock(make(d, true), d, lockReason(d.name), ui.panels.isOpen(d.name), true);
     dock.hidden = dock.children.length === 0;
+    // the phone bar's slots: the tool in hand, the doors shown (Build lives in the tool slot's pop-up), the Farm book.
+    // Before Orders opens (L2) four slots share the bar: no hole where Orders will come (QA r1 S-25, mobile.css)
+    document.body.dataset.bar = String(2 + shownBig.filter((d) => d.name !== 'build').length);
   }
   function onDock(name, locked) {
     if (locked) { ui.toast(locked, { kind: 'info' }); return; }
@@ -525,11 +606,51 @@ export function createHud(S) {
   }
   ui.panels.on('register', renderDock);
   store.subscribe('xp', renderDock);                     // a level-up opens Orders / Journal: the lock goes
+
+  // ---- Acorns appear when a price needs them (S1): while the Market (its Acorn shop) or a crop's Finish card shows --
+  const acornPrice = () => document.body.classList.toggle('acorn-price', ui.panels.isOpen('market') || ui.panels.isOpen('relicShop')
+    || Boolean(document.querySelector('#tip:not([hidden]) .tip-finish-one')));
+  ui.panels.on('open', acornPrice);
+  ui.panels.on('close', acornPrice);
+  if (typeof MutationObserver === 'function') new MutationObserver(acornPrice).observe(document.getElementById('tip') ?? document.body, { childList: true, attributes: true, attributeFilter: ['hidden'] });
+
+  // ---- Undo as a chip during its ten minutes (S3; ux-phone#3: it was the farm menu's last, half-cut row) ---------------
+  // the chip undoes exactly what it names (QA r3 S3-17, br#2: a double click refunded the named Picket Fence and then the
+  // Scarecrow nobody named); the second click of a double click, and a press within UNDO_GAP_MS of the last, are dropped
+  let undoNamed = null;
+  let undoPressAt = -Infinity;
+  const undoBtn = h('button.chip.undo-btn', { type: 'button', on: { click: (e) => {
+    const t0 = performance.now();
+    if (e.detail >= 2 || t0 - undoPressAt < UNDO_GAP_MS) return;
+    undoPressAt = t0;
+    if (undoNamed) controller.undo?.({ id: undoNamed.id, verb: undoNamed.verb });
+    renderUndo();
+  } } }, svgIcon('undo', 20), h('span.lbl'));
+  const undoChip = h('div.undo-chip', { hidden: true }, undoBtn);
+  const chipRow = h('div.hud-chips', undoChip);
+  document.querySelector('.hud-bl')?.prepend(chipRow);
+  let undoTimer = 0;
+  function renderUndo() {
+    clearTimeout(undoTimer);
+    const u = typeof controller.canUndo === 'function' ? controller.canUndo() : null;
+    undoNamed = u;
+    undoChip.hidden = !u;
+    if (!u) return;
+    const what = u.def ? N(u.def) : '';
+    undoBtn.querySelector('.lbl').textContent = what ? t('dock.undo.thing', { thing: what }) : t('social.menu.undo');
+    undoBtn.setAttribute('aria-label', what ? t('dock.undo.label', { thing: what }) : t('social.menu.undoLabel'));
+    undoTimer = setTimeout(renderUndo, Math.max(1000, Math.min(30_000, u.until - store.now() + 50)));
+  }
+  store.subscribe('objects', () => { clearTimeout(undoTimer); undoTimer = setTimeout(renderUndo, 120); });
+  store.on('welcome', () => renderUndo());
+  onLang(() => renderUndo());
+  if (store.state) setTimeout(renderUndo, 0);
   store.on('welcome', renderDock);
   ui.panels.on('badge', renderDock);
   ui.panels.on('open', renderDock);
   ui.panels.on('close', renderDock);
   controller.on('tool', renderDock);
+  controller.on('input', renderDock);
 
   // ---- connection chip -------------------------------------------------------------------------------------
   const conn = $('conn');
@@ -564,12 +685,22 @@ export function createHud(S) {
     }
     conn.append(h('span.spin', { 'aria-hidden': 'true' }), status === 'reconnecting' ? t('hud.conn.reconnecting') : t('err.NOT_JOINED'));
     if (status === 'reconnecting') {
-      // GDD §6.3: after 30 s offline the client stops predicting; say plainly that the server is away
-      sleepTimer = setTimeout(() => {
+      // GDD §6.3: the client stops taking moves once the oldest unanswered one is 30 s old (store.health().stale);
+      // from that moment the chip says so, never "your moves are kept" over a refused move (QA r1 S-30). At the
+      // latest 30 s after the drop it says it anyway
+      const t0 = Date.now();
+      const check = () => {
         if (connState !== 'reconnecting') return;
-        connState = 'asleep';
-        conn.replaceChildren(h('span.spin', { 'aria-hidden': 'true' }), t('hud.conn.asleep'));
-      }, 30_000);
+        let stale = false;
+        try { stale = Boolean(store.health?.().stale); } catch { stale = false; }
+        if (connKey({ stale, ms: Date.now() - t0 }) === 'hud.conn.asleep') {
+          connState = 'asleep';
+          conn.replaceChildren(h('span.spin', { 'aria-hidden': 'true' }), t('hud.conn.asleep'));
+          return;
+        }
+        sleepTimer = setTimeout(check, 1000);
+      };
+      sleepTimer = setTimeout(check, 1000);
     }
   }
 
@@ -581,14 +712,16 @@ export function createHud(S) {
   document.querySelector('.hud-tl').append(buffs, buffSay);
   let buffTimer = 0;
   let buffKeys = null;
+  let buffNames = new Map();
   function renderBuffs() {
     const st = store.state;
     if (!st) return;
     const now = store.now();
     const items = buffItems(st, store.pid, now);
     const key = items.map((i) => i.cls).join(',');
-    const said = buffAnnouncements(buffKeys, items);
+    const said = buffAnnouncements(buffKeys, items, buffNames);
     buffKeys = items.map((i) => i.cls);
+    buffNames = new Map(items.map((i) => [i.cls, i.name]));
     if (said.length) buffSay.textContent = said.join(' ');
     if (buffs.dataset.key !== key) {
       buffs.dataset.key = key;
@@ -599,17 +732,21 @@ export function createHud(S) {
     clearTimeout(buffTimer);
     if (items.length) buffTimer = setTimeout(renderBuffs, 1000);
   }
+  // a later source's running chips are not news
+  BUFF_DRAW.add(() => { buffKeys = null; renderBuffs(); });
 
   // ---- wiring ------------------------------------------------------------------------------------------------
-  store.subscribe('wallet', (ch) => renderWallet(ch.source !== 'welcome'));
+  // a change I made myself (predicted: 'local') is a gain whose flight is coming
+  store.subscribe('wallet', (ch) => renderWallet(ch.source !== 'welcome', ch.source === 'local'));
   store.subscribe('xp', () => renderLevel());
-  store.subscribe('inventory', (ch) => renderBarn(ch.source !== 'welcome'));
+  store.subscribe('inventory', (ch) => renderBarn(ch.source !== 'welcome', ch.source === 'local'));
   store.subscribe('barn', () => renderBarn(false));
   store.subscribe('name', renderFarmName);
   store.subscribe('players', (ch) => { renderPlayers(); renderHearts(ch.source !== 'welcome'); });
   store.subscribe('xp', () => renderDock());
   store.subscribe('coop', renderBuffs);
   store.subscribe('players', renderBuffs);
+  store.subscribe('powerups', renderBuffs);
 
   // a language switch: the edge buttons and the dock re-label (the shell then calls refresh(), ui/index.js relocalize)
   onLang(() => {
@@ -631,6 +768,11 @@ export function createHud(S) {
     if (connState === 'asleep') conn.replaceChildren(h('span.spin', { 'aria-hidden': 'true' }), t('hud.conn.asleep'));
     else if (connState !== 'open') setConnection(connState);
   });
+
+  // the sideways rows' wheel, drag and ‹ › (owner 2026-10-19), off the boot
+  setTimeout(() => lazyImport('hscroll', () => import('./hscroll.js')).then((m) => m.default(), (err) => {
+    if (!importFailed(err)) console.error('the sideways rows did not start', err);
+  }), 1500);
 
   function refresh() {
     if (!store.state) return;
@@ -674,6 +816,14 @@ const fmtClock = (ms) => {
   return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`;
 };
 
+// more buffs: fn(st, pid, now) -> items (1.0: ui/powerups.js adds the crates' power-ups when it loads)
+const BUFF_SOURCES = new Set();
+const BUFF_DRAW = new Set();
+export function addBuffSource(fn) {
+  BUFF_SOURCES.add(fn);
+  for (const draw of BUFF_DRAW) draw();
+}
+
 /** The running buffs for a player: [{ cls, glyph, text, tip, name }] (Golden Hour, the high-five Spark). Pure. */
 export function buffItems(st, pid, now) {
   const items = [];
@@ -685,37 +835,119 @@ export function buffItems(st, pid, now) {
   if (me && Number.isSafeInteger(me.spark) && me.spark > now) {
     items.push({ cls: 'spark', glyph: 'star', name: t('hud.buff.spark'), text: t('hud.buff.sparkClock', { clock: fmtClock(me.spark - now) }), tip: t('hud.buff.sparkTip') });
   }
+  for (const f of BUFF_SOURCES) items.push(...f(st, pid, now));
   return items;
 }
 
 /** What the screen reader hears when the buffs change: one line per buff that starts or ends, never the ticks. Pure. */
-export function buffAnnouncements(prevKeys, items) {
+export function buffAnnouncements(prevKeys, items, names = null) {
   if (prevKeys === null) return [];                      // the first render after a load is not news
   const now = new Set(items.map((i) => i.cls));
   const out = [];
   for (const i of items) if (!prevKeys.includes(i.cls)) out.push(t('hud.buff.started', { name: i.name, tip: i.tip }));
-  for (const k of prevKeys) if (!now.has(k)) out.push(t('hud.buff.over', { name: k === 'golden' ? t('hud.buff.golden') : t('hud.buff.spark') }));
+  for (const k of prevKeys) if (!now.has(k)) out.push(t('hud.buff.over', { name: names?.get(k) ?? (k === 'golden' ? t('hud.buff.golden') : t('hud.buff.spark')) }));
   return out;
 }
+
+/**
+ * The farm's folded numbers (release 1.0 S1, M30): "Acorns 222 · Hearts 155 · Beauty 432 ★ 3/5" for the level card's
+ * hover and the Farm book's You page (Hearts are this farmer's own; Beauty once the farm has it). Pure.
+ */
+export function statsLine(state, pid, now) {
+  const me = state.players?.[pid];
+  const parts = [t('dock.stat.acorns', { n: fmt(state.farm.wallet.acorns ?? 0) }), t('dock.stat.hearts', { n: fmt(me?.hearts ?? 0) })];
+  try {
+    if (BEAUTY.beautyLive(state)) {
+      const b = BEAUTY.beautyOf(state, now);
+      parts.push(t('dock.stat.beauty', { n: fmt(b.score), stars: b.stars, max: BEAUTY.starsFor(Infinity) }));
+    }
+  } catch { /* the beauty rules are not there in this build */ }
+  return parts.join(' · ');
+}
+
+// verb -> catalog key ('dock.verb.*') of the hover card's "what a click does" line (release 1.0 S7, ux-first#16)
+const VERB_LINE = Object.freeze({ harvest: 'harvest', water: 'water', tend: 'tend', feed: 'tend', collect: 'collect', collectTray: 'collect',
+  pet: 'pet', pick: 'pick', chop: 'chop', fell: 'chop', sit: 'sit', stand: 'stand', fish: 'fish', ride: 'ride', openCrate: 'open',
+  uproot: 'uproot', fertilize: 'spread', compost: 'spread', bottle: 'bottle', nurse: 'nurse', nursePick: 'nurse', openGift: 'open' });
+
+// verb -> the target's state that makes it happen now (a tool's verb that does not check it itself)
+const NEEDS_STATE = Object.freeze({
+  harvest: (tg) => Boolean(tg.ready),
+  pick: (tg) => Boolean(tg.ready),
+  fell: (tg) => Boolean(tg.ready),
+  collectTray: (tg) => Boolean(tg.trayReady),
+  collect: (tg) => Boolean(tg.ready || tg.anyReady),
+  tend: (tg) => Boolean(tg.ready || tg.hungry || tg.anyReady || tg.anyHungry),
+  water: (tg) => tg.kind !== 'plot' || Boolean(tg.waterable),
+});
+
+/**
+ * One state-and-verb line for a hover card (S7, ux-first#16): what a click with the tool in hand does there ("Click to
+ * harvest", "Click to pull it up"), or that the Hand does it, or what opens. `seeding`: the Hand holds a seed (M2).
+ * Pure.
+ */
+export function verbLine(state, pick, toolId, pid, now, { seeding = false, crop = null } = {}) {
+  if (!pick) return null;
+  if (pick.kind === 'tile' && pick.weed) return toolId === 'hand' ? t('dock.verb.weed') : t('dock.verb.useHand');
+  if (pick.kind !== 'object' || !Object.hasOwn(state.farm.objects, pick.id)) return null;
+  const tg = describe(state, pick.id, now, pid);
+  if (!tg) return null;
+  const v = verbsFor(toolId, tg)[0];
+  // a surprise's card says its own call to action ("For you! Click to open it"): one "open" line, not two (QA r1 S-26)
+  if (v === 'openGift') return null;
+  // the Sickle, the Basket, the Can and the Scoop answer every plot / tree / pen with their verb: the line promises
+  // the deed only when it happens now (QA r1 S-20: "Click to harvest" on an empty or a growing plot); the card's own
+  // state line ("Ready in 42s", "Empty plot") already says the rest
+  if (v && NEEDS_STATE[v] && !NEEDS_STATE[v](tg)) return null;
+  if (v === 'plant') {
+    if (toolId === 'hand' && !seeding) return t('dock.verb.pickSeed');
+    return crop ? t('dock.verb.plant', { crop: N(crop) }) : t('dock.verb.pickSeed');
+  }
+  if (v === 'clear') return t(tg.def?.id === 'weed' ? 'dock.verb.weed' : 'dock.verb.clear');
+  if (v && VERB_LINE[v]) return t(`dock.verb.${VERB_LINE[v]}`);
+  // nothing for this tool: a panel the Hand opens, or the Hand's own deed
+  const panel = OPENS[tg.def?.id] ?? OPENS[tg.kind];
+  if (['hand', 'basket', 'feed_scoop', 'seed_bag'].includes(toolId) && panel && tg.kind !== 'plot') return t('dock.verb.open');
+  const hv = toolId !== 'hand' ? verbsFor('hand', tg)[0] : null;
+  return hv && hv !== 'plant' ? t('dock.verb.useHand') : null;
+}
+
+/**
+ * The reconnecting chip's words (QA r1 S-30): "Reconnecting… your moves are kept" only while moves are still taken;
+ * once the store stops taking them (`stale`: the oldest unanswered move is 30 s old) or 30 s after the drop, "Can't
+ * reach the farm…". Pure.
+ */
+export const connKey = ({ stale = false, ms = 0 } = {}) => (stale || ms >= 30_000 ? 'hud.conn.asleep' : 'hud.conn.reconnecting');
 
 /** Player slot -> the shape of their mark: farmer 1 a circle, farmer 2 a rounded square (never colour alone). */
 export const slotOf = (pid) => (/^p[0-9]+$/.test(String(pid)) ? String(pid) : 'p1');
 
 // ---- tooltips: [data-tip] on HUD controls (hover 400 ms / keyboard focus) and the world hover (250 ms) -----------
 /** The world tooltip's lines for a pick (pure; tests): { title, icon, lines: [text], bar?: 0..1, by?: pid, ready? } */
-export function worldTip(state, pick, now, me = null, { riding = null } = {}) {
+export function worldTip(state, pick, now, me = null, { riding = null, seeding = null } = {}) {
   if (pick && pick.kind === 'tile' && pick.weed) return weedTip(state, now);
   if (pick && (pick.kind === 'pet' || typeof pick.pet === 'string')) return petTip(state, pick, now, me);
   if (!pick || pick.kind !== 'object' || !pick.id || !Object.hasOwn(state.farm.objects, pick.id)) return null;
   const o = state.farm.objects[pick.id];
+  // a wrapped surprise on the porch (release 1.0 D1): for me, open it; for the partner, it waits for them
+  const gdef = defOf(o.def);
+  if (gdef && gdef.kind === 'gift') {
+    const g = state.farm.gifts?.[pick.id] ?? null;
+    const to = g ? state.players[g.to]?.name ?? t('common.partner') : t('common.partner');
+    return { title: cname(o.def), icon: o.def, kind: 'gift', ready: Boolean(g && g.to === me),
+      lines: [g && g.to === me ? t('dock.gift.forYou') : t('dock.gift.waiting', { name: to })] };
+  }
   const def = defOfSafe(o.def);
   if (!def) return null;
-  const tip = { title: o.name ? t('hud.tip.named', { name: o.name, def: N(o.def) }) : cname(o.def), icon: o.def, lines: [] };
+  // a named animal (features#F4, release 1.0 M20): names live in farm.names (the name tag records who named it)
+  const nm = state.farm.names?.[pick.id]?.name ?? o.name;
+  const tip = { title: nm ? t('hud.tip.named', { name: nm, def: N(o.def) }) : cname(o.def), icon: o.def, lines: [] };
   // a balloon crate (wave 4b, wish 1): open it; nobody's: it goes to the Barn on its own after a while
   if (isCrateDef(def)) return crateTip(state, pick.id, now);
   if (def.kind === 'plot') {
     if (!o.crop) {
-      tip.title = t('hud.tip.emptyPlot'); tip.icon = 'plot'; tip.lines.push(t('hud.tip.plantHere'));
+      // "(drag to plant a row)" only for a hand that holds a seed: the bare Hand's drag asks which seed first (QA r2 S-07)
+      tip.title = t('hud.tip.emptyPlot'); tip.icon = 'plot'; tip.lines.push(seeding === false ? t('dock.tip.plantHere') : t('hud.tip.plantHere'));
       const sp = spreadLine(state, o, me, false, true);
       if (sp) tip.lines.push(sp);
       return tip;
@@ -759,6 +991,16 @@ export function worldTip(state, pick, now, me = null, { riding = null } = {}) {
     }
     if (def.kind === 'tree' && left > 0) tip.lines.push(waterLine(state, o, me, GROWTH.water.treeBp));
     if (def.kind === 'tree') { const sp = spreadLine(state, o, me, true, false); if (sp) tip.lines.push(sp); }
+  }
+  // a hungry animal says so, and whether its feed is in the Barn (QA r3 S3-13, jde#7: a hungry cow read only "Cow · Click
+  // to feed and collect" while the farm had no Livestock Feed; S7: a state-and-verb line)
+  if (def.kind === 'animal') {
+    const tg = describe(state, pick.id, now, me);
+    if (tg?.hungry) {
+      const feed = def.feed;
+      const have = !feed || (state.farm.inventory?.[feed] ?? 0) + (state.farm.overflow?.[feed] ?? 0) >= (def.feedQty ?? 1);
+      tip.lines.push(have ? t('dock.tip.hungry') : t('dock.tip.hungryNoFeed', { feed: N(feed) }));
+    }
   }
   // benches: who sits and what a click does, for THIS viewer (CL-01); it replaces the decor text
   const seat = me ? seatText(state, pick.id, me) : null;
@@ -927,13 +1169,31 @@ export function createTips(S) {
     tip.style.transform = `translate3d(${left}px, ${Math.round(top)}px, 0)`;
   }
   function hide() { tip.hidden = true; tip.replaceChildren(); tip.className = 'tip'; pull = null; fin = null; fert = null; pin = null; }
+  // the level-up celebration (life-feel's body.celebrating) puts the world card away: it covered the star's number and
+  // "Level up!" for the whole celebration when a stroke ended on the field (QA r1 S-22); the next hover brings it back
+  let partyPick = null;      // the card the celebration put away: it comes back on the next pointer move after it
+  if (typeof MutationObserver === 'function' && document.body) {
+    let was = false;
+    new MutationObserver(() => {
+      const now = document.body.classList.contains('celebrating');
+      if (now && !was && worldPick && !hudEl && !pin) { partyPick = worldPick; worldPick = null; clearTimeout(worldT); clearInterval(worldTimer); hide(); }
+      was = now;
+    }).observe(document.body, { attributes: true, attributeFilter: ['class'] });
+  }
+  window.addEventListener('pointermove', () => {
+    if (!partyPick || document.body.classList.contains('celebrating')) return;
+    const p = partyPick;
+    partyPick = null;
+    if (!worldPick) tooltip(p);
+  }, { passive: true });
 
   /** A phone has no Shift: a growing crop's long-press card offers to pull it up (the same node on every refresh). */
   function pullButton(pick) {
     if (S.controller?.input !== 'touch' || !S.controller?.canUproot?.(pick.id)) return null;
     if (pull && pull.id === pick.id) return pull.el;
     const id = pick.id;
-    const el = h('button.btn.btn--small.btn--stop.tip-act', { type: 'button', on: { click: (e) => {
+    // a text button at the bottom: it is the card's rare choice, never the big red thing under the thumb (S9a)
+    const el = h('button.tip-act.tip-pull', { type: 'button', on: { click: (e) => {
       e.stopPropagation();
       S.controller.uproot(id);
       worldPick = null;
@@ -1050,7 +1310,14 @@ export function createTips(S) {
       h('small.tip-finish-sub', allSub, svgIcon('acorn', 16)));
     const oneWhy = h('div.tip-why', { hidden: true });
     const allWhy = h('div.tip-why', { hidden: true });
-    const f = { id, one, all, oneWhy, allWhy, oneLabel, allLabel, allSub, crop: null, el: h('div.tip-finish', one, oneWhy, all, allWhy) };
+    // a phone asks first (S9a, ux-phone#14): one "Finish ▸" that unfolds the two Acorn buttons on a tap
+    const fold = h('button.btn.btn--paper.btn--small.tip-finish-fold', { type: 'button', on: { click: (e) => {
+      e.stopPropagation();
+      f.el.classList.add('open');
+      one.focus?.({ preventScroll: true });
+    } } }, h('span', t('dock.finish.fold')), svgIcon('acorn', 18), h('span', { 'aria-hidden': 'true' }, ' ▸'));
+    const f = { id, one, all, oneWhy, allWhy, oneLabel, allLabel, allSub, crop: null,
+      el: h(`div.tip-finish${S.controller?.input === 'touch' ? '.folds' : ''}`, fold, one, oneWhy, all, allWhy) };
     // the rules decide: a BIG_SPEND opens the "are you sure?" card (it re-sends on yes), a refusal shakes the plot
     one.addEventListener('click', press(one, () => { tooltip(null, { force: true }); S.controller.do('hurry', { id }); }));
     all.addEventListener('click', press(all, () => {
@@ -1077,15 +1344,18 @@ export function createTips(S) {
     placeAt(r.left + r.width / 2, below ? r.bottom : r.top, below);
   };
   let quietUntil = 0;
+  let armed = null;              // the button whose 400 ms timer runs: leaving it cancels the tip (QA r4 S4-02)
   document.addEventListener('pointerover', (e) => {
     const el = e.target.closest && e.target.closest('[data-tip]');
-    if (el === hudEl || performance.now() < quietUntil) return;
+    if (el && el === armed) return;
     clearTimeout(hudT);
+    armed = null;
+    if (el === hudEl || performance.now() < quietUntil) return;
     if (hudEl) { hudEl = null; hide(); }
-    if (el) hudT = setTimeout(() => show(el), 400);
+    if (el) { armed = el; hudT = setTimeout(() => { armed = null; if (el.matches(':hover')) show(el); }, 400); }
   });
   // a click is an answer: no tooltip pops up over what was just pressed (the toolbar re-renders under the cursor)
-  document.addEventListener('pointerdown', () => { clearTimeout(hudT); quietUntil = performance.now() + 1200; if (hudEl) { hudEl = null; hide(); } }, true);
+  document.addEventListener('pointerdown', () => { clearTimeout(hudT); armed = null; quietUntil = performance.now() + 1200; if (hudEl) { hudEl = null; hide(); } }, true);
   // a finger has no hover: a press held on a pill, the level star or a farmer shows its tip (mobile QA P3)
   let press = null;
   let downAt = -Infinity;           // the finger's own time of the last touch press (event timeStamp)
@@ -1124,22 +1394,27 @@ export function createTips(S) {
   // world hover (ui.tooltip): 250 ms after the pick settles, refreshed every second while shown
   function renderWorld() {
     if (!worldPick || hudEl || !S.store.state) return;
-    const t = worldTip(S.store.state, worldPick, S.store.now(), S.store.pid, { riding: S.controller?.riding ?? null });
+    const ct0 = S.controller?.tool ?? {};
+    const t = worldTip(S.store.state, worldPick, S.store.now(), S.store.pid, { riding: S.controller?.riding ?? null,
+      seeding: Boolean(ct0.seeding) || ct0.id === 'seed_bag' });
     if (!t) { hide(); return; }
     if (t.kind === 'pet') { renderPet(t); return; }
     const p = t.by && S.store.state.players[t.by];
-    const act = pullButton(worldPick);
+    const act = infoOnly ? null : pullButton(worldPick);
     if (!act) pull = null;
     const touch = S.controller?.input === 'touch';
-    const finish = finishRow(worldPick, t, touch || Boolean(pin && pin.id === worldPick.id));
+    const finish = infoOnly ? null : finishRow(worldPick, t, touch || Boolean(pin && pin.id === worldPick.id));
     if (!finish || finish.classList.contains('tip-finish-hint')) fin = null;
-    const fertEl = fertRow(worldPick, t, touch || Boolean(pin && pin.id === worldPick.id));
+    const fertEl = infoOnly ? null : fertRow(worldPick, t, touch || Boolean(pin && pin.id === worldPick.id));
     if (!fertEl) fert = null;
     const acts = Boolean(act) || Boolean(fertEl) || Boolean(finish && finish.classList.contains('tip-finish'));
+    const ct = S.controller?.tool ?? {};
+    const verb = verbLine(S.store.state, worldPick, ct.id ?? 'hand', S.store.pid, S.store.now(), { seeding: Boolean(ct.seeding) || ct.id === 'seed_bag', crop: ct.crop });
     tip.className = 'tip wtip';
     tip.replaceChildren(...[
       h('div.t', t.icon ? icon(t.icon, { size: 32 }) : null, t.title),
       ...t.lines.map((l) => h(`div.s${t.ready ? '.ready' : ''}`, l)),
+      verb ? h('div.s.verb', touchText(verb, touch)) : null,
       Number.isFinite(t.bar) && !t.ready ? h('div.mini', h('i', { style: { width: `${Math.round(t.bar * 100)}%` } })) : null,
       p ? h('div.by', playerMark(t.by, p), tt(t.kind === 'plot' ? 'hud.tip.plantedBy' : 'hud.tip.placedBy', { who: t.by === S.store.pid ? tt('hud.tip.byYou') : p.name })) : null,
       finish,
@@ -1214,10 +1489,17 @@ export function createTips(S) {
   const isPet = (p) => Boolean(p) && (p.kind === 'pet' || typeof p.pet === 'string');
   const pickKey = (p) => (p.kind === 'object' ? p.id : isPet(p) ? `pet:${p.owner ?? p.pet}` : `t${p.x},${p.z}`);
 
+  // a tap on a growing crop on a phone shows the information half of its card for 2 s (S9a, ux-phone#14); the long
+  // press shows the whole card with its buttons
+  let infoOnly = false;
+  let infoT = 0;
   function tooltip(pick, { force = false } = {}) {
     if (pin && !force) return;
     clearTimeout(worldT);
     clearInterval(worldTimer);
+    clearTimeout(infoT);
+    infoOnly = Boolean(pick && pick.card && S.controller?.input === 'touch' && pick.kind === 'object');
+    if (infoOnly) infoT = setTimeout(() => { if (infoOnly) tooltip(null, { force: true }); }, 2000);
     if (force && pin) { pin = null; worldPick = null; hide(); }
     const same = pick && worldPick && pickKey(pick) === pickKey(worldPick);
     worldPick = pick && (pick.kind === 'object' || isPet(pick) || weedHint(pick)) ? pick : null;

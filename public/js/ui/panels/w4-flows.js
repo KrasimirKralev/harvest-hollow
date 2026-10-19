@@ -87,7 +87,7 @@ export async function sellPlaced(S, id) {
  * one there says `short` and the lead names the piece.
  */
 function fitTitle(long, short) {
-  const narrow = typeof globalThis.matchMedia === 'function' && globalThis.matchMedia('(max-width: 520px)').matches;
+  const narrow = typeof globalThis.matchMedia === 'function' && globalThis.matchMedia('(max-width: 520px), (max-height: 500px)').matches;
   return narrow && long.length > 16 ? short : long;
 }
 

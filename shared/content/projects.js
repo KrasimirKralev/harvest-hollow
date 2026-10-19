@@ -158,8 +158,10 @@ export const MASTERWORK = { unlock: 18, m: 'M1b', priceMul: [4, 16], beautyBp: [
  * "E x 0.05 h"), never more than the tiers left. The GDD's outfit pieces wait for the wardrobe (Hearts shop, not in
  * the M2 build): their tiers pay Hearts instead, which that shop will spend.
  */
+// release 1.0 (D5, features#F5): the track opens at L16 (was 24): the L16-25 stretch had almost no evening milestone
+// (real-sim's L20-25 WARN), and a tier is about an hour of play there
 export const SEASONAL_TRACK = {
-  unlock: 24, m: 'M2', tiers: 30, tierHours: 1, acornTiers: [10, 20, 30], acorns: 5, leftoverCoinsHoursBp: 500,
+  unlock: 16, m: 'M2', tiers: 30, tierHours: 1, acornTiers: [10, 20, 30], acorns: 5, leftoverCoinsHoursBp: 500,
   rewards: [
     { hearts: 3 }, { items: { compost: 3 } }, { seedPacket: 1 }, { coinsHoursBp: 1000 },
     { decor: 'season' },

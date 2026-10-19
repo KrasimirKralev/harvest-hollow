@@ -4,9 +4,10 @@
 // no shake and no bonk; anything else stays an ordinary refusal.
 import { test, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { cropOf } from '../shared/content/index.js';
+import { cropOf, xpForLevel } from '../shared/content/index.js';
 import { ERR } from '../shared/net/protocol.js';
 import { coopHarness, eventTarget, fakeController } from './helpers/client.js';
+import { give } from './helpers/rules-goals.js';
 
 const WHEAT = cropOf('wheat');
 beforeEach(() => { globalThis.window = eventTarget(); });
@@ -45,9 +46,12 @@ test('the same refusal with no partner action on that object stays an ordinary r
   const o = h.state.farm.objects[p1];
   b.click(o.x, o.z);
   h.flush();
+  const commands = [];
+  b.ctl.on('command', (c) => commands.push(c));
   b.click(o.x, o.z);
-  assert.deepEqual(b.toasts.map(([code, opts]) => [code, opts.by]), [[ERR.EMPTY, undefined]]);
-  assert.equal(b.calls.fx.filter((e) => e.e === 'invalid').length, 1, 'the usual shake');
+  // nobody raced her: no "got there first"; the Sickle on her own empty plot asks which seed (ui-shell QA r1 S-17)
+  assert.deepEqual(b.toasts.filter(([, opts]) => opts?.by), [], 'no race toast');
+  assert.equal(commands.filter((c) => c.cmd === 'seedPicker' && c.id === p1).length, 1, 'the seed picker at her plot');
 });
 
 test('a panel action (controller.do with ids) refused after the partner\'s harvest is a lost race too', async () => {
@@ -59,4 +63,44 @@ test('a panel action (controller.do with ids) refused after the partner\'s harve
   const r = b.ctl.do('harvest', { ids: plots.slice(0, 2) });
   assert.equal(r.ok, false);
   assert.deepEqual(b.toasts.map(([code, opts]) => [code, opts.by]), [[r.code, 'p1']]);
+});
+
+test('a Deliver refused at once because the partner just filled that order is a lost race too (QA r1 I-01)', async () => {
+  const h = coopHarness();
+  h.state.farm.xp = xpForLevel(20);
+  h.engine.runDue();
+  const slot = Object.keys(h.state.farm.orders.slots).find((k) => h.state.farm.orders.slots[k].order);
+  assert.ok(slot !== undefined, 'the board has an order');
+  const { order } = h.state.farm.orders.slots[slot];
+  for (const [item, q] of Object.entries(order.items)) give(h.state, item, 2 * q);
+  for (const c of [h.a, h.b]) c.store.reset(h.welcome(c));
+  const b = await fakeController(h.b);
+  const invalids = [];
+  b.ctl.on('invalid', (e) => invalids.push(e));
+  h.a.store.act('orderFill', { slot: Number(slot), n: order.n });
+  h.flush();                                              // the partner's Deliver lands on this screen first
+  const r = b.ctl.do('orderFill', { slot: Number(slot), n: order.n });
+  assert.equal(r.ok, false);
+  assert.deepEqual(b.toasts.map(([code, opts]) => [code, opts.by]), [[r.code, 'p1']], 'the race toast names the partner');
+  assert.deepEqual(invalids.map((e) => [e.race, e.by]), [[true, 'p1']], 'no shake, no bonk');
+});
+
+test('a Hammer place on a tile the partner just built on is a lost race too (QA r2 I2-01)', async () => {
+  const { defOf } = await import('../shared/content/index.js');
+  const { freeSpot } = await import('./helpers/rules-goals.js');
+  const h = coopHarness();
+  h.state.farm.xp = xpForLevel(6);
+  h.state.farm.wallet.coins = 100_000;
+  for (const c of [h.a, h.b]) c.store.reset(h.welcome(c));
+  const [x, z] = freeSpot(h.state, defOf('hay_bales'));
+  const b = await fakeController(h.b);
+  const invalids = [];
+  b.ctl.on('invalid', (e) => invalids.push(e));
+  h.a.store.act('place', { def: 'hay_bales', x, z, rot: 0 });
+  h.flush();                                              // the partner's stack lands on this screen first
+  b.ctl.setTool('hammer', { def: 'hay_bales' });
+  b.move(x, z);
+  b.click(x, z);
+  assert.deepEqual(b.toasts.map(([code, opts]) => [code, opts.by]), [[ERR.BLOCKED, 'p1']], 'the race toast names the partner');
+  assert.deepEqual(invalids.map((e) => [e.race, e.by]), [[true, 'p1']], 'no shake, no bonk');
 });

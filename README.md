@@ -38,8 +38,10 @@ other harvests; one runs the bakery while the other feeds the cows; you both see
   horse show, the River Barge, 24 Town Projects that grow a village across the river, six restoration projects
   ending with Grandma's farmhouse and its room to furnish (40 pieces), fishing and four perk trees.
 - **Surprises and treasures**: the hot-air balloon drops loot crates on a parachute (coins and XP, sometimes Acorns,
-  Golden Seeds, Fertilizer, an album find or a decor piece), and eight one-of-a-kind Acorn treasures are worth saving
-  up for: the Golden Watering Can that waters everything at once, a Rainbow Tree, a Time Turner, a Farmhand and more.
+  Golden Seeds, Fertilizer, an album find or a decor piece). About one crate in twelve also holds a rare power-up for
+  the whole farm: a Rainbow Watering Can, Lucky Ladybugs, a Busy-Bee Swarm, Mabel's Golden Ticket or a Shooting Star.
+  Eight one-of-a-kind Acorn treasures are worth saving up for: the Golden Watering Can that waters everything at once,
+  a Rainbow Tree, a Time Turner, a Farmhand and more.
 - **Make it yours**: 115 decor pieces (ten of them Grand showpieces), three upgrade tiers each for the farmhouse, the
   Well, the Market Stand and the benches, turn anything where it stands, sell decor you are done with, pull the wild
   weeds. Every farmer picks a build, hair, hair colour, skin tone, outfit colours and a hat, and wears that look in a
@@ -48,12 +50,13 @@ other harvests; one runs the bakery while the other feeds the cows; you both see
   pings and emotes, sitting on the bench together for Golden Hour, a Friendly Duel, duet recipes you cook together.
 - **Feels good to play**: drag a finger or the mouse across fields to plant and harvest, click anywhere to walk there,
   every action is instant (the shared rules engine predicts it, the server confirms it), "where to get it" hint
-  bubbles on every item, finish crops early with Acorns, and a level-up finishes everything that is growing.
+  bubbles on every item, finish crops early with Acorns, and a level-up finishes everything that is growing. ‹ › on a
+  workshop's title steps through every workshop on the farm; long rows scroll with the wheel, a drag or their arrows.
 - **Looks and sounds cozy**: a low-poly 3D world with day and night, seasons, drizzle and downpours with puddles and
   the odd rainbow, glowing windows and lamps after dark, a camera you can turn and tilt, painted characters and
   storybook letters, and an acoustic folk soundtrack that follows the time of day.
-- **Phones and tablets**: touch controls, a phone layout with bottom sheets, a lighter graphics mode, and
-  "Add to Home Screen".
+- **Phones and tablets**: touch controls, a phone layout with bottom sheets that keeps the middle of the screen for
+  the farm, a lighter graphics mode, and "Add to Home Screen".
 - **Self-hosted and private**: your farm lives in one JSON save on your own machine, crash-safe with an action journal
   and rotating backups.
 
@@ -81,13 +84,15 @@ melon that glows at dusk, and a pie from it"); Harvey builds it while you play, 
 shows a "changes ready" pop-up with the list of changes and the test results. **Apply** puts it on the farm for both of
 you without a reload; **History** undoes any change in one tap (what you already have keeps working, nothing new of it
 is sold). One change at a time per farm. Harvey writes a mod of data files, never game code; prices and XP come from
-the game's economy model. The rules for mods: [docs/mod-guide.md](docs/mod-guide.md).
+the game's economy model, and he keeps the game's rules (levels, grow-time ladders, no new thing that beats the game's
+own), saying kindly when a wish can't be built and why. The rules for mods: [docs/mod-guide.md](docs/mod-guide.md).
+Don't want him? Settings › Harvey › Show Harvey hides his button on that device.
 
 Each farmer signs in with their **own plan**, no API keys: **Claude** (the server runs the unmodified Claude Code
 binary and you sign in to it through Anthropic's own sign-in; install it yourself, e.g. `npm i -g
 @anthropic-ai/claude-code`, it is never a dependency of this project) or **ChatGPT** (Sign in with ChatGPT). On a
 phone or a second computer you paste back the code or the final address the sign-in page shows. Sharing your requests
-with the team is off until you say yes (Settings › Helper); the privacy page says exactly what is sent.
+with the team is off until you say yes (Settings › Harvey); the privacy page says exactly what is sent.
 
 | Variable | Default | What it does |
 |---|---|---|

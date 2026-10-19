@@ -128,7 +128,8 @@
   .ds-row .btn { min-height: 44px; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .up-tier.pop, .av-preview .av-doll { animation: none; }
-  .av-opt, .av-opt:hover { transition: none; transform: none; }
+  body:not(.motion-set) .up-tier.pop, body:not(.motion-set) .av-preview .av-doll { animation: none; }
+  body:not(.motion-set) .av-opt, body:not(.motion-set) .av-opt:hover { transition: none; transform: none; }
 }
 body.motion-reduced .up-tier.pop, body.motion-reduced .av-preview .av-doll { animation: none; }
+body.motion-reduced .av-opt, body.motion-reduced .av-opt:hover { transition: none; transform: none; }

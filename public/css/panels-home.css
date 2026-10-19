@@ -43,9 +43,11 @@
 .ha-parcel.ha-sale .ha-edge { stroke: #E39A1E; stroke-width: .5; stroke-dasharray: 1.1 .6; animation: ha-march 1.6s linear infinite; }
 .ha-parcel.ha-soon .ha-edge { stroke: rgba(227, 154, 30, .8); stroke-width: .34; stroke-dasharray: .8 .6; }
 .ha-parcel:hover .ha-edge { stroke: var(--sky-700); stroke-width: .45; }
-.ha-parcel:focus-visible .ha-edge { stroke: var(--sky-700); stroke-width: .6; }
 .ha-parcel.sel .ha-edge { stroke: #1C5283; stroke-width: .62; stroke-dasharray: none; animation: none; }
 .ha-parcel.sel .ha-veil { opacity: .3; }
+/* QA r3 P3-01 sibling: the focus ring is ink, wider than the blue selection, and comes after it: a focused selected
+   parcel used to show the selection alone (the same specificity, the later rule won). One ring with Market › Land */
+.ha-parcel:focus-visible .ha-edge { stroke: var(--ink-900); stroke-width: .8; stroke-dasharray: none; animation: none; }
 @keyframes ha-march { to { stroke-dashoffset: -3.4; } }
 .ha-tag rect { fill: rgba(255, 251, 238, .94); stroke: var(--hm-ink); stroke-width: .16; }
 .ha-tag text { font: 800 1.45px var(--font-display); fill: var(--ink-900); }
@@ -86,7 +88,7 @@
 .hm-rung button:focus-visible { outline: 3px solid var(--sky-500); outline-offset: 1px; }
 .hm-rung-k { grid-row: 1 / 3; display: grid; place-items: center; width: 24px; height: 24px; border-radius: 50%;
   font: 800 .8125rem/1 var(--font-ui); background: var(--paper-200); box-shadow: inset 0 0 0 2px var(--wood-500); color: var(--ink-700); }
-.hm-rung-name { font: 800 .8125rem/1.1 var(--font-display); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hm-rung-name { font: 800 .8125rem/1.35 var(--font-display); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } /* copy#21: 1.1 cut 3 px off the descenders */
 .hm-rung small { font: 600 .8125rem/1.1 var(--font-ui); color: var(--ink-500); }
 .hm-rung.hm-ours button { background: #EEF6E0; }
 .hm-rung.hm-ours .hm-rung-k { background: var(--go-300); box-shadow: inset 0 0 0 2px var(--go-700); color: var(--go-900); }
@@ -171,6 +173,9 @@
 .hg-card.locked .hg-plinth .ic { filter: grayscale(.75) brightness(.95) drop-shadow(0 5px 4px rgba(30, 12, 6, .35)); opacity: .8; }
 .hg-plinth .pn-ribbon { z-index: 2; }
 .hg-plinth .pn-ribbon.pn-free-tag { top: auto; bottom: 8px; }
+/* copy#21: the plinth hides overflow, so its ribbons sit inside its edge ("On the farm" lost 6 px) */
+.hg-plinth .pn-ribbon { left: 0; }
+.hg-plinth .pn-ribbon.pn-free-tag { left: auto; right: 0; }
 .hg-plinth .pn-lock { z-index: 2; }
 .hg-plinth .pn-wishbtn { position: absolute; z-index: 2; top: 6px; right: 6px; }
 .hg-name { margin: 2px 0 0; font: 800 1.1rem/1.15 var(--font-display); color: var(--ink-900); }
@@ -196,6 +201,10 @@
   cursor: pointer; font: 800 .95rem/1 var(--font-display); color: var(--ink-700); background: rgba(255, 255, 255, .55);
   box-shadow: inset 0 0 0 2px var(--hm-edge); }
 .br-switch-btn small { font: 600 .8125rem/1 var(--font-ui); color: var(--ink-500); }
+/* QA r3 (P3-04 sibling, the P7 gate at 360 BG): a lock note never splits ("Ниво" / "28"); when the button cannot
+   hold the label and the note on one row, the note goes under the label, whole */
+.br-switch-btn { flex-wrap: wrap; justify-content: center; row-gap: 3px; }
+.br-switch-btn small { white-space: nowrap; }
 .br-switch-btn.on { color: var(--ink-900); background: var(--sun-300); box-shadow: inset 0 0 0 2.5px var(--sun-700), 0 2px 0 var(--sun-900); }
 .br-switch-btn[aria-disabled="true"] { cursor: default; opacity: .8; }
 .br-switch-btn:focus-visible { outline: 3px solid var(--sky-500); outline-offset: 2px; }
@@ -332,7 +341,8 @@
 .fi-best-row > div { display: grid; gap: 2px; }
 .fi-best-row b { font: 800 1.05rem/1.15 var(--font-display); }
 .fi-best-row small, .fi-treasures > small, .fi-board > small { font: 600 .8125rem/1.3 var(--font-ui); color: var(--ink-500); }
-.fi-treasures ul { list-style: none; margin: 8px 0; padding: 0; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
+/* a column fits the longest one-word name ("Охлювена" ran 6 px into its neighbour in five equal columns, P7 04:50) */
+.fi-treasures ul { list-style: none; margin: 8px 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(70px, 1fr)); gap: 6px; }
 .fi-treasures li { display: grid; justify-items: center; gap: 2px; text-align: center; }
 .fi-treasures li:not(.got) svg { filter: grayscale(1) opacity(.45); }
 .fi-treasures li small { font: 600 .8125rem/1.1 var(--font-ui); color: var(--ink-700); }
@@ -341,7 +351,7 @@
     repeating-linear-gradient(180deg, #C98A4B 0 38px, #A9672C 38px 40px, #B87533 40px 78px, #A9672C 78px 80px);
   box-shadow: inset 0 0 0 3px var(--wood-900), var(--pn-shadow); }
 .fi-board h3 { color: #fff; text-shadow: 0 1.5px 0 var(--wood-900); }
-.fi-board > small { color: #FBE7C9; }
+.fi-board > small { display: inline-block; padding: 2px 8px; border-radius: var(--r-pill); background: rgba(62, 38, 18, .62); color: #FFF4E0; }   /* on the bare planks it was 2.8:1 */
 .fi-board ul { list-style: none; margin: 10px 0 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 8px; }
 .fi-trophy { display: grid; justify-items: center; gap: 2px; padding: 8px 6px; border-radius: 6px; text-align: center; background: var(--paper-50);
   box-shadow: 0 2px 0 rgba(62, 38, 18, .35); }
@@ -366,6 +376,9 @@
 .ha-piece:not(.ghost) > g { filter: drop-shadow(0 1.1px 0 rgba(62, 38, 18, .3)); }
 .ha-piece:focus-visible { outline: none; }
 .ha-piece:focus-visible > g, .ha-piece.sel > g { filter: drop-shadow(0 0 1.6px #1C5283) drop-shadow(0 0 1.2px #fff); }
+/* QA r3 P3-01 sibling: the keyboard focus is an ink ring, not the selection's blue glow (a focused selected piece showed
+   no change at all) */
+.ha-piece:focus-visible > g { filter: drop-shadow(0 0 .6px var(--ink-900)) drop-shadow(0 0 .6px var(--ink-900)) drop-shadow(0 0 1.4px #fff); }
 .ha-piece.fixed { cursor: default; }
 .ha-piece.ghost { pointer-events: none; opacity: .78; }
 .ha-piece.ghost.ok > g { filter: drop-shadow(0 0 1.2px #2A6A1C) drop-shadow(0 0 1.6px #9BE06A); }
@@ -505,7 +518,6 @@
   .br-odd { grid-template-columns: 36px 80px minmax(0, 1fr); }
   .br-coat-row { grid-template-columns: 36px minmax(0, 1fr); }
   .br-coat-row .br-coat-swatches, .br-coat-row small { grid-column: 1 / -1; }
-  .fi-treasures ul { grid-template-columns: repeat(5, minmax(0, 1fr)); }
   .fi-board ul { grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); }
   .fh-pieces { grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); }
 }

@@ -85,7 +85,7 @@ const CSS = `
 .fh-card.touch .btn { min-height: 48px; padding-left: 20px; padding-right: 20px; }
 .fh-card.touch .fh-hook { min-height: 56px; min-width: 160px; }
 @media (prefers-reduced-motion: reduce) {
-  .fh-bobber *, .fh-card .fh-hook { animation: none !important; }
+  body:not(.motion-set) .fh-bobber *, body:not(.motion-set) .fh-card .fh-hook { animation: none !important; }
 }
 .motion-reduced .fh-bobber *, .motion-reduced .fh-card .fh-hook { animation: none !important; }
 `;

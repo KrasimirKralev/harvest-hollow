@@ -48,7 +48,8 @@ export default {
   'keep.ago.day': { one: 'yesterday', other: '{n} days ago' },
 
   // ---- making a new key (the confirm, the link card, the refusals)
-  'keep.rekey.confirm.title': 'Make a new key for {name}?',
+  // the title plaque is one line: a name there was cut on a phone ("Make a new key for K…"); the body names them
+  'keep.rekey.confirm.title': 'Make a new key?',
   'keep.rekey.confirm.lead': 'Their old phones will be signed out.',
   'keep.rekey.confirm.body': 'You get a one-time link that opens the farm as {name}, with everything {name} has. Send it to {name}, or to whoever takes their place.',
   'keep.rekey.confirm.ok': 'Make a new key',

@@ -4,17 +4,23 @@
 //
 // Job states: starting -> working -> validating -> ready -> applying -> applied; validating -> fixing -> working;
 // ready -> revising -> working; ready -> discarded | expired (24 h); any active -> cancelled; any -> failed.
+// Release 1.0 (H1): working -> answered when the agent changed no mod file and wrote a summary (a wish that cannot be
+// built, or is already in the game), or when the mod changes nothing on the farm (NO_CHANGE): Harvey's reply, with no
+// candidate, no version and no fix rounds. A follow-up ("ask for changes") answered that way goes back to `ready` with
+// the earlier candidate and the reply as `result.answer`.
 // A restart turns every active job into `failed RESTARTED`; a `ready` job survives (its candidate is on disk).
 // Who may act: apply and "ask for changes" only the farmer who asked; discard and cancel any seated farmer of the farm
 // (a job must never lock a farm because its owner went away).
 import fsp from 'node:fs/promises';
 import path from 'node:path';
 import { ensureDir, readJson, writeJson, randomHex, sameSecret } from './fsutil.js';
-import { buildWorkspace, readSummary } from './workspace.js';
+import { buildWorkspace, readSummary, seedFiles, writeModDir } from './workspace.js';
+import { merge3 } from './rebase.js';
 import { createTools, readModFiles, precheckResult } from './tools.js';
 import { treeHashes, changedOutside } from './sandbox.js';
 import { ACTIVE, OPEN, READY_TTL_MS, JOB_FILES_KEEP_MS, JOB_RECORD_KEEP_MS, publicJob } from './jobs.js';
 import { levelFromXp } from '../../shared/content/index.js';
+import { modHash } from '../../shared/mod/hash.js';
 
 export { ACTIVE, OPEN, READY_TTL_MS, publicJob };
 export const FIX_ROUNDS = 2;
@@ -29,7 +35,14 @@ export const NOTES = Object.freeze({
   read: 'reading a file', write: 'writing the mod', summary: 'writing the summary', validate: 'running the checks',
   preview: 'checking the preview', full: 'testing on a copy of the farm', fix: 'fixing what the checks found',
   stage: 'getting the changes ready', ready: 'ready to look at', applying: 'applying the changes', applied: 'applied',
+  answered: 'answered',
 });
+/** The fix-round error when a round's summary says it built something but no mod file changed. */
+const CLAIMED = Object.freeze({ stage: 'semantic', code: 'NO_CHANGE', file: 'summary.json', path: 'possible', message: 'summary.json says "possible": true but no mod file changed',
+  hint: 'write the mod files for what you said you built; or, if nothing can be built, set "possible": false and say so' });
+/** The fix-round error when a round changed nothing and said nothing (the agent must build, or answer). */
+const SILENT = Object.freeze({ stage: 'semantic', code: 'NO_CHANGE', file: '', path: '', message: 'you changed no mod file and wrote no summary.json',
+  hint: 'build what the request asks; or, if nothing can be built, write summary.json with "possible": false, a kind reason and what you could build instead' });
 
 export class HttpError extends Error {
   constructor(status, error, extra = {}) { super(error); this.status = status; this.body = { error, ...extra }; }
@@ -235,8 +248,11 @@ export class Runtime {
       const t = this.now();
       const mine = f.starts.filter((s) => (lim.usedDay >= this.cfg.jobsPerDay ? t - s.at < 86_400_000 : s.by === pid && t - s.at < 3_600_000));
       const oldest = Math.min(...mine.map((s) => s.at));
-      const windowMs = lim.usedDay >= this.cfg.jobsPerDay ? 86_400_000 : 3_600_000;
-      throw new HttpError(429, 'RATE', { retryAfter: Math.max(1, Math.ceil((oldest + windowMs - t) / 1000)) });
+      const day = lim.usedDay >= this.cfg.jobsPerDay;
+      const windowMs = day ? 86_400_000 : 3_600_000;
+      // which cap (QA r4 H4-03): the farm's shared day of wishes, or this farmer's hour; the client says the time it ends
+      throw new HttpError(429, 'RATE', { retryAfter: Math.max(1, Math.ceil((oldest + windowMs - t) / 1000)), limit: day ? 'day' : 'hour',
+        max: day ? this.cfg.jobsPerDay : this.cfg.jobsPerHour });
     }
     const t = this.now();
     const id = randomHex(8);
@@ -320,14 +336,23 @@ export class Runtime {
         const fixing = job.priv.fixes > 0;
         await this.touch(fk, job, { state: 'working', step: fixing ? 'fixing' : 'reading' });
         this.note(fk, job, fixing ? 'fixing' : 'reading', fixing ? 'fix' : 'request');
+        const level = await this.levelOf(fk);
         let catalog = null;
-        try { catalog = await this.ctx.mods.catalog(fk); } catch (err) { this.log.warn('agent: no catalog', { err: err && err.message }); }
+        try { catalog = await this.ctx.mods.catalog(fk, { level }); } catch (err) { this.log.warn('agent: no catalog', { err: err && err.message }); }
         let modFiles = null;
         if (!job.priv.seeded) {
           try { modFiles = await this.ctx.mods.files(fk); } catch { modFiles = null; }
         }
         await buildWorkspace({ workDir: work, prompts: job.prompts, lang: job.lang, errors: fixing ? job.priv.lastErrors || [] : [],
-          catalog, modFiles, seed: !job.priv.seeded, level: await this.levelOf(fk) });
+          catalog, modFiles, seed: !job.priv.seeded, level });
+        // H1: what mod/ held when the job was seeded, and when the player's latest ask started: a round that leaves mod/
+        // as it was seeded (or a first round or "ask for changes" that leaves it as it found it) built nothing
+        const nowHash = modHash((await readModFiles(work)).files);
+        if (!job.priv.seeded) job.priv.seedHash = nowHash;
+        // a round rebuilt on a moved farm (QA r1 H-03) builds a new candidate even when the agent writes nothing: its
+        // mod/ is the job's changes on the farm's newest version, never compared with what it found
+        if (!fixing) job.priv.askHash = job.priv.rebased ? null : nowHash;
+        job.priv.rebased = false;
         job.priv.seeded = true;
         const before = await treeHashes(work);
         const tools = createTools({ workDir: work,
@@ -349,14 +374,28 @@ export class Runtime {
           if (end.code === 'SIGN_IN') this.pushSignIn(fk, job.by, job.provider, { provider: job.provider, state: 'signed_out' });
           return this.fail(fk, job, end.code || 'PROVIDER', end.detail);
         }
+        const { files, problems } = await readModFiles(work);
+        const said = await readSummary(work);
+        const after = modHash(files);
+        const unchanged = !problems.length && (after === job.priv.seedHash || (!fixing && after === job.priv.askHash));
+        // H1: nothing built and a reply written: Harvey answered (no full check, no fix round, no candidate). A reply
+        // that claims a change ("possible": true) while nothing changed is not an answer: the agent fixes it. A reply
+        // that does not say `possible` stands only as the plain "found nothing to change" (QA r1 H-07: "Moon Melons grow
+        // in summer … Mabel wrote you a letter" next to "Nothing on your farm changed"), the same rule as NO_CHANGE below
+        if (unchanged && said && said.possible !== true) return this.answer(fk, job, said.possible === false ? said : null);
         await this.touch(fk, job, { state: 'validating', step: 'testing' });
         this.note(fk, job, 'testing', 'full');
-        const { files, problems } = await readModFiles(work);
         const v0 = this.now();
-        const v = problems.length ? precheckResult(problems, { full: true })
-          : await this.ctx.mods.validate(fk, files, { full: true, parent: job.priv.parent });
+        const v = unchanged ? { ok: false, stage: 'semantic', full: true, errors: [said ? CLAIMED : SILENT], warnings: [] }
+          : problems.length ? precheckResult(problems, { full: true })
+            : await this.ctx.mods.validate(fk, files, { full: true, parent: job.priv.parent });
         job.priv.validationMs = this.now() - v0;
         if (live.cancelled) return;
+        // H1: a mod that changes nothing on the farm is an answer too, never an empty "Changes ready"
+        if (!unchanged && v && v.ok === false && Array.isArray(v.errors) && v.errors.length && v.errors.every((e) => e && e.code === 'NO_CHANGE')) {
+          // the agent's words stand only when they say nothing was possible; else the plain "nothing to change" line
+          return this.answer(fk, job, said && said.possible === false ? said : null);
+        }
         let verdict = v;
         if (v && v.ok === true && v.full === true) {
           this.note(fk, job, 'testing', 'stage');
@@ -392,7 +431,8 @@ export class Runtime {
           this.note(fk, job, 'fixing', 'fix');
           continue;
         }
-        job.result = { candidate: null, parent: job.priv.parent, summary: null, changes: [], validation: verdict };
+        // the agent's own words stay with the failure (H1): what it built and what it could not
+        job.result = { candidate: null, parent: job.priv.parent, summary: await readSummary(work), changes: [], validation: verdict };
         await this.fail(fk, job, 'INVALID', null, files);
         return;
       }
@@ -440,6 +480,27 @@ export class Runtime {
   }
 
   fkOf(job) { return job.priv.farmKey; }
+
+  /**
+   * H1: Harvey's reply instead of a change: `answered` (no candidate, no version), or, on a follow-up of a ready job,
+   * back to `ready` with the earlier candidate and the reply as `result.answer`.
+   */
+  async answer(fk, job, summary) {
+    const prev = job.priv.lastReady;
+    if (job.round > 1 && prev && prev.candidate) {
+      job.result = { ...prev, answer: summary || null };
+      job.error = null;
+      this.note(fk, job, 'ready', 'answered');
+      await this.touch(fk, job, { state: 'ready', step: 'ready' });
+      this.record(fk, job, 'job.answered');
+      return;
+    }
+    job.result = { candidate: null, parent: job.priv.parent, summary: summary || null, changes: [], validation: null };
+    job.error = null;
+    this.note(fk, job, 'ready', 'answered');
+    await this.touch(fk, job, { state: 'answered', step: 'ready' });
+    this.record(fk, job, 'job.answered');
+  }
 
   /** The farm's level for request.md ("above the farm level means coming later"); null when the farm cannot say. */
   async levelOf(fk) {
@@ -534,16 +595,43 @@ export class Runtime {
     // the server stopped while we waited: the job stays as it was; cancelled meanwhile: that answer stands
     if (this.stopped && job.state === 'revising') job.state = 'ready';
     if (job.state !== 'revising') throw new HttpError(409, 'NOT_READY', { job: publicJob(job) });
+    const moved = parent !== job.priv.parent;
+    if (moved) await this.rebase(fk, job, job.priv.parent, parent);
     job.priv.parent = parent;
     job.prompts = [...job.prompts, { at: this.now(), text: prompt }];
     job.round += 1;
     job.priv.fixes = 0;
     job.priv.lastErrors = [];
+    // a follow-up Harvey answers instead of building keeps this candidate (H1); not when the farm moved under it (it
+    // can no longer be applied: STALE)
+    job.priv.lastReady = !moved && job.result && job.result.candidate ? { ...job.result, answer: null } : null;
     job.result = null;
     job.error = null;
     await this.touch(fk, job, { state: 'revising', step: 'reading' });
     this.drive(fk, job);
     return publicJob(job);
+  }
+
+  /**
+   * QA r1 H-03: the farm moved from version `from` to `to` while this job was ready (a partner's change or undo). mod/
+   * becomes the job's own changes on top of `to` (merge3), so a rebuild never brings back what the partner undid. A
+   * round that leaves mod/ exactly as `to` built nothing (answered).
+   */
+  async rebase(fk, job, from, to) {
+    // never throws: revise() has already claimed the job (state 'revising'); a failure here leaves the files as they were
+    try {
+      const work = path.join(this.jobDir(fk, job.id), 'work');
+      const { files: ours, problems } = await readModFiles(work);
+      if (problems.length) return;                       // the agent's next check names them; nothing to merge safely
+      const was = seedFiles(await this.ctx.mods.files(fk, from)).files;
+      const now = seedFiles(await this.ctx.mods.files(fk, to)).files;
+      await writeModDir(work, merge3(was, ours, now) ?? {});
+      job.priv.seedHash = modHash(now);
+      job.priv.rebased = true;
+      this.log.info('agent: rebuilt on the farm\'s newest version', { job: job.id, from, to });
+    } catch (err) {
+      this.log.warn('agent: the farm moved and the job could not be rebuilt on it; it keeps its files', { job: job.id, err: err && err.message });
+    }
   }
 
   async apply(fk, pid, jobId) {

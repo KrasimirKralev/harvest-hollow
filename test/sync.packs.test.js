@@ -35,11 +35,14 @@ test('fromPack: one fetch per pack, each member sliced into its own buffer; a fa
 
 test('fromPack lets a loaded pack go after a quiet while (members are copies); a later member fetches it again', async (t) => {
   t.mock.timers.enable({ apis: ['setTimeout'] });
-  const { RELEASE_MS } = await import('../public/js/net/packs.js');
+  const { RELEASE_MS, COLLECT_MS } = await import('../public/js/net/packs.js');
   resetPacks(IX);
   const urls = [];
   const fetcher = async (u) => { urls.push(u); return res([1, 1, 1, 2, 2]); };
-  await fromPack('/assets/models/crops/corn.glb', fetcher);
+  // release 1.0 O4: the family's first requests are collected for COLLECT_MS (corn is 60 % of the family: its pack)
+  const first = fromPack('/assets/models/crops/corn.glb', fetcher);
+  t.mock.timers.tick(COLLECT_MS);
+  await first;
   t.mock.timers.tick(RELEASE_MS - 1);
   await fromPack('/assets/models/crops/wheat.glb', fetcher);
   assert.equal(urls.length, 1, 'still held while members are being read');

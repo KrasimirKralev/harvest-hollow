@@ -43,15 +43,16 @@ import { footprint } from '../../../shared/rules/grid.js';
 import * as grid from '../../../shared/rules/grid.js';
 import * as content from '../../../shared/content/index.js';
 import { stage, isReady, nextVisualChangeAt } from '../../../shared/rules/time.js';
-import { models, addShaderPatch } from './models.js';
+import { models, addShaderPatch, LOOK } from './models.js';
 import { bandKeys, createBatch, mirrorBatch } from './instancing.js';
 import { LOD } from './lod.js';
-import { landTiles, cheapShadows } from './ground.js';
+import { landTiles, cheapShadows, terminatorShadows, shadowKernelKey } from './ground.js';
 import { giantBlocks, setsOfDef, decorSetsOf, isHeirloomTree } from './world-state.js';
 import { flag, cyl, merge, modelKey, boundsOfKey, ball, cone, box, geoPart } from './world-kit.js';
 import { greenhouseGeometry } from './restoration-view.js';
 import { isCrateDef } from './crates-view.js';
 import { WORLD, addSway, addFoliageTint } from './world-uniforms.js';
+import { lazyImport, importFailed } from '../net/lazy.js';
 
 const N = WORLD_TILES;
 const HALF_PI = Math.PI / 2;
@@ -236,7 +237,7 @@ export function staticKey(defId, barnLevel = 0, tier = 0) {
 export function visualOf(o, def, now, { barnLevel = 0 } = {}) {
   if (!def || def.layer === 'none') return null;
   // wave 4b: a balloon loot crate is drawn by crates-view (its fall, hop and opening), never as a static model here
-  if (isCrateDef(def)) return null;
+  if (isCrateDef(def) || def.kind === 'gift') return null;     // release 1.0: life-feel's gift-view draws the gift box
   if (def.kind === 'plot') {
     const c = o.crop;
     if (!c) return { kind: 'plot', key: 'plot', crop: null, ready: false, nextAt: null, wet: false, compost: Boolean(o.compost) };
@@ -537,12 +538,12 @@ export function createGlows(layer) {
  * Soft gold rings lying on the ground (decor-set placement glow, GDD §3.8 decor sets): one instanced draw, only
  * while a set piece is being placed. ring(x, z, r, k): centre (metres), radius (metres), strength 0..1.
  */
-export function createRings(layer) {
+export function createRings(layer, { color = '#FFD166', name = 'setRings', breath = 0.2, speed = 1 } = {}) {
   const base = new THREE.PlaneGeometry(2, 2);
   base.rotateX(-Math.PI / 2);
   const mat = new THREE.ShaderMaterial({
     transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -6, polygonOffsetUnits: -6,
-    uniforms: { uTime: WORLD.uTime, uColor: { value: new THREE.Color('#FFD166') } },
+    uniforms: { uTime: WORLD.uTime, uColor: { value: new THREE.Color(color) }, uBreath: { value: breath }, uSpeed: { value: speed } },
     vertexShader: /* glsl */`
       attribute vec4 aRing;
       varying vec2 vUv; varying float vK; varying float vR;
@@ -552,14 +553,14 @@ export function createRings(layer) {
         gl_Position = projectionMatrix * modelViewMatrix * vec4( p, 1.0 );
       }`,
     fragmentShader: /* glsl */`
-      uniform float uTime; uniform vec3 uColor;
+      uniform float uTime; uniform vec3 uColor; uniform float uBreath; uniform float uSpeed;
       varying vec2 vUv; varying float vK; varying float vR;
       void main() {
         float d = length( vUv - 0.5 ) * 2.0;
         float w = clamp( 0.35 / vR, 0.01, 0.2 );                 // ~0.35 m wide whatever the radius
         float ring = smoothstep( 1.0, 1.0 - w * 0.5, d ) * smoothstep( 1.0 - w * 2.0, 1.0 - w, d );
         float fill = ( 1.0 - smoothstep( 0.0, 1.0, d ) ) * 0.12;
-        float pulse = 0.8 + 0.2 * sin( uTime * 6.2832 );
+        float pulse = 1.0 - uBreath + uBreath * sin( uTime * 6.2832 * uSpeed );
         float a = ( ring * 0.9 + fill ) * vK * pulse;
         if ( a < 0.01 ) discard;
         gl_FragColor = vec4( mix( uColor, vec3( 1.0 ), ring * 0.35 ), a );
@@ -579,12 +580,13 @@ export function createRings(layer) {
       mesh = new THREE.Mesh(geo, mat);
       mesh.frustumCulled = false;
       mesh.renderOrder = 4;
-      mesh.name = 'setRings';
+      mesh.name = name;
       layer.add(mesh);
     }
     mesh.geometry.instanceCount = 0;
   };
   build(16);
+  mesh.visible = false;               // nothing to draw until a ring is set (no empty draw call)
   return {
     set(list) {
       if (list.length > cap) build(Math.max(cap * 2, list.length));
@@ -614,18 +616,44 @@ const FERT = new THREE.Color(0.74, 0.8, 0.6);
 const WET_FERT = new THREE.Color(0.52, 0.58, 0.44);
 const WHITE = new THREE.Color(1, 1, 1);
 const READY = new THREE.Color(1.1, 1.1, 1.06);     // crops: the shader reads r - b > 0.02 as "ripe" (the pulse)
+// G11a (feel#12, release 1.0): ripe grain reads as ripe at the default zoom: warmer and richer gold (the grain's own
+// ochre multiplied: about +10 % saturation and 5+ degrees warmer, look-perf's wheat patch)
+const READY_GRAIN = new THREE.Color(1.42, 1.0, 0.45);
+const GRAIN = new Set(['wheat', 'oats', 'rice']);
+/** The instance colour of a ripe crop (pure, tested): grain gold for the cereals, the shared ripe lift otherwise. */
+export function ripeColorOf(cropId) { return GRAIN.has(cropId) ? READY_GRAIN : READY; }
 const READY_SOIL = new THREE.Color(1.1, 1.0, 0.84);  // a warm glow in the soil under a ripe field (visual-05)
 const HOVER = 1.14;
 
 const outBack = (t) => { const c1 = 1.70158; const c3 = c1 + 1; return 1 + c3 * (t - 1) ** 3 + c1 * (t - 1) ** 2; };
+/** G12: a placeholder becoming its model settles in (250 ms: 0.92 -> 1.03 -> 1). */
+export const SETTLE = Object.freeze({ dur: 0.25, from: 0.92, peak: 1.03, at: 0.6 });
+/** The settle's scale at k = 0..1 (pure). */
+export function settleScale(k) {
+  if (!(k > 0)) return SETTLE.from;
+  if (k >= 1) return 1;
+  const sm = (t) => t * t * (3 - 2 * t);
+  return k < SETTLE.at ? SETTLE.from + (SETTLE.peak - SETTLE.from) * sm(k / SETTLE.at) : SETTLE.peak + (1 - SETTLE.peak) * sm((k - SETTLE.at) / (1 - SETTLE.at));
+}
+/** G11a: the ripen pop (600 ms, +8 %). */
+export const RIPEN = Object.freeze({ dur: 0.6, k: 0.08, up: 0.4 });
+/** The ripen pop's scale at k = 0..1 (pure, tested): up to 1 + RIPEN.k with an outBack overshoot, then back to 1. */
+export function ripenScale(k) {
+  if (!(k > 0) || k >= 1) return 1;
+  if (k < RIPEN.up) return 1 + RIPEN.k * outBack(k / RIPEN.up);
+  const t = (k - RIPEN.up) / (1 - RIPEN.up);
+  return 1 + RIPEN.k * (1 - t * t * (3 - 2 * t));
+}
 const outCubic = (t) => 1 - (1 - t) ** 3;
 
 export function createObjectsView(layers, { fx = null, badges = null, now: nowFn = () => Date.now() } = {}) {
   let now = nowFn;
   // Materials: render-life's look (wrap lighting + rim) with our sway and season tint on top.
   const soilMat = models.createMaterial();
-  addShaderPatch(soilMat, 'hh-shadow2', cheapShadows, 'v1');
+  addShaderPatch(soilMat, 'hh-shadow2', cheapShadows, shadowKernelKey);
   const cropMat = models.createMaterial({ side: THREE.DoubleSide });
+  // G4 (graphics#3): every receiver samples the cheap 2-tap shadow lookup (phones draw a shadow map now)
+  addShaderPatch(cropMat, 'hh-shadow2', cheapShadows, shadowKernelKey);
   addSway(cropMat, { stiffness: 1, push: 1 });
   addFoliageTint(cropMat, { autumn: 0, winter: 0.25 });
   // ripe crops breathe: a 1 s, 4 % scale pulse on the GPU (visual-05), keyed on the READY instance colour
@@ -649,7 +677,7 @@ export function createObjectsView(layers, { fx = null, badges = null, now: nowFn
   treeMat.shadowSide = THREE.BackSide;
   // and no per-pixel noise in their shadow lookup: three's PCF rotates its taps by screen-space noise, which on a
   // curved crown's terminator read as a fine orange weave in autumn
-  addShaderPatch(treeMat, 'hh-shadow2', cheapShadows, 'v1');
+  addShaderPatch(treeMat, 'hh-shadow2', cheapShadows, shadowKernelKey);
   addSway(treeMat, { stiffness: 1.6, push: 0.35 });
   addFoliageTint(treeMat, { autumn: 1 });
   // trees around a hovered pen thin to 30 % (visual-28: a pine must never hide the animals and their bubbles)
@@ -676,19 +704,24 @@ export function createObjectsView(layers, { fx = null, badges = null, now: nowFn
         }`);
   }, 'v1');
   const staticMat = models.createMaterial();
+  addShaderPatch(staticMat, 'hh-shadow2', cheapShadows, shadowKernelKey);
+  addShaderPatch(staticMat, 'hh-terminator', terminatorShadows, 'v1');   // QA r1 R-03: no self-shadow stripes on roofs
   addSway(staticMat, { stiffness: 1.2, push: 0.8 });
   addFoliageTint(staticMat, { autumn: 0.35 });
 
   const soil = createBatch({ name: 'soil', material: soilMat, instances: 256, vertices: 1 << 16, receiveShadow: true });
   const crops = createBatch({ name: 'crops', material: cropMat, instances: 256, vertices: 1 << 17, receiveShadow: true });
   const trees = createBatch({ name: 'trees', material: treeMat, instances: 64, vertices: 1 << 16, castShadow: true, receiveShadow: true });
-  // the statics draw in full but cast through their twins: render/index.js draws the static shadow map in a pass of its
-  // own from `shadowTwins` (each building's far-band key when it has one: a quarter of the triangles, RD-13)
+  // the statics cast through their twins: render/index.js draws the static shadow map in a pass of its own from
+  // `shadowTwins` (RD-13). QA r1 R-03 (diagonal stripes on thatch and eaves): each twin is the model its building DRAWS
+  // (it follows the LOD band; a far-band twin's roof never quite matched the full roof), and the statics take the
+  // terminator rule (ground.js terminatorShadows: a face turned from the sun never reads its own depth). Measured: both
+  // together are clean, either alone leaves stripes. Cost: +0.17 ms GPU per static shadow redraw (desktop 0.53 -> 0.70)
   const statics = createBatch({ name: 'statics', material: staticMat, instances: 256, vertices: 1 << 18, castShadow: false, receiveShadow: true });
   const smalls = createBatch({ name: 'smalls', material: staticMat, instances: 256, vertices: 1 << 17, castShadow: false, receiveShadow: true });
   const shadowTwins = createBatch({ name: 'shadowTwins', material: models.createMaterial(), instances: 256, vertices: 1 << 17, castShadow: true, receiveShadow: false });
   const farTwin = (key) => (models.has(`${key}:far`) ? `${key}:far` : key);
-  mirrorBatch(statics, shadowTwins, farTwin);
+  mirrorBatch(statics, shadowTwins, (key) => key);
   // level of detail (wave 3): the far band draws the twins in the main pass too, and in the near and mid bands each
   // building and crop beyond LOD.far metres of the eye does (the busy L40 farm was 306-367k triangles at 65-90 m, its
   // full buildings 155k and its full crops ~100k of it)
@@ -752,7 +785,42 @@ export function createObjectsView(layers, { fx = null, badges = null, now: nowFn
   const Z = new THREE.Vector3(0, 0, 1);
   const col = new THREE.Color();
 
-  const staticChanged = () => { for (const fn of staticFns) fn(); };
+  const ripenFns = new Set();        // G11a: listeners for a plot turning ripe ({ id, x, z, crop }, metres)
+  let halosDirty = true;
+  const staticChanged = () => { halosDirty = true; for (const fn of staticFns) fn(); };
+  // G8 (graphics#10, release 1.0): a screen-stable halo at every lit pane and lamp (render/night-glow.js, loaded at the
+  // first dusk: nothing of it on the boot path), rebuilt only at night and only after the statics changed (a model
+  // swapped in, a building placed or moved)
+  let halos = null;
+  let glassAnchors = null;
+  let halosLoading = false;
+  const loadHalos = () => {
+    halosLoading = true;
+    // QA r4 I4-01: a failed fetch raises hh:assets-failed (main.js offers the reload)
+    lazyImport('night-glow', () => import('./night-glow.js')).then((m) => {
+      halos = m.createNightGlow(layers.fx || layers.objects, { glow: LOOK.uGlow, time: WORLD.uTime });
+      glassAnchors = m.glassAnchors;
+      halosDirty = true;
+    }, (err) => { if (!importFailed(err)) console.error('night glow unavailable', err); });
+  };
+  const paneCache = new WeakMap();
+  function rebuildHalos() {
+    halosDirty = false;
+    for (const [id, rec] of recs) {
+      if (rec.hidden || !rec.key || rec.batch !== statics) { halos.set(id, null); continue; }
+      const geo = models.geometryFor(rec.key);
+      if (!geo) { halos.set(id, null); continue; }
+      let panes = paneCache.get(geo);
+      if (!panes) { panes = glassAnchors(geo); paneCache.set(geo, panes); }
+      if (!panes.length) { halos.set(id, null); continue; }
+      const c = Math.cos(rec.yaw); const sn = Math.sin(rec.yaw); const k = rec.scale || 1;
+      halos.set(id, panes.map(([x, y, z, nx, nz, sz]) => ({ x: rec.x + (x * c + z * sn) * k, y: y * k, z: rec.z + (-x * sn + z * c) * k,
+        nx: nx * c + nz * sn, nz: -nx * sn + nz * c, s: sz })));
+    }
+    const lamps = [];
+    for (const l of lampSrc.values()) for (const p of l) lamps.push({ x: p.x, y: p.y, z: p.z, nx: 0, nz: 0, s: 1.25 });
+    halos.set('lamps', lamps);
+  }
   const barnLevel = () => {
     const f = state && state.farm;
     if (!f) return 0;
@@ -907,16 +975,21 @@ export function createObjectsView(layers, { fx = null, badges = null, now: nowFn
         const cropRec = { ...rec, jitterYaw: flower ? 0 : (rec.h % 4) * HALF_PI, scale: (0.94 + ((rec.h >>> 8) % 100) / 900) * (vis.fert ? 1.06 : 1) };
         rec.cropRec = cropRec;
         if (rec.crop === undefined) {
-          rec.crop = crops.add(vis.crop, composeBase(cropRec), vis.ready ? READY : WHITE);
+          rec.crop = crops.add(vis.crop, composeBase(cropRec), vis.ready ? ripeColorOf(vis.cropId) : WHITE);
           if (!bulk) anims.set(id, { kind: 'pop', t0: clockS, dur: 0.32 });
         } else {
           if (prevKey !== vis.crop) {
             crops.setKey(rec.crop, vis.crop);
-            // a stage that came due by itself is ambient life (30 fps), not feedback (performance-01)
-            if (!bulk && prevKey) anims.set(id, { kind: vis.ready ? 'ripen' : 'pop', t0: clockS + ((rec.h >>> 4) % 100) / 250, dur: 0.32, ambient: timeDriven });
+            // a stage that came due by itself is ambient life (30 fps), not feedback (performance-01); G11a: turning ripe is
+            // a 600 ms +8 % pop (outBack) and a `ripened` moment for the view (life-feel's sparkle and sound)
+            if (!bulk && prevKey) {
+              anims.set(id, vis.ready ? { kind: 'ripen', t0: clockS + ((rec.h >>> 4) % 100) / 250, dur: RIPEN.dur, ambient: timeDriven }
+                : { kind: 'pop', t0: clockS + ((rec.h >>> 4) % 100) / 250, dur: 0.32, ambient: timeDriven });
+              if (vis.ready) for (const fn of ripenFns) { try { fn({ id, x: rec.x, z: rec.z, crop: vis.cropId }); } catch (err) { console.error('ripened listener', err); } }
+            }
           }
           crops.setMatrix(rec.crop, composeBase(cropRec));
-          crops.setColor(rec.crop, vis.ready ? READY : WHITE);
+          crops.setColor(rec.crop, vis.ready ? ripeColorOf(vis.cropId) : WHITE);
         }
         rec.cropKey = vis.crop;
       } else if (rec.crop !== undefined) {
@@ -974,8 +1047,9 @@ export function createObjectsView(layers, { fx = null, badges = null, now: nowFn
       if (vis.kind === 'home') rec.growT = vis.grow || 0;
       // an upgrade tier (wave 4) or a barn level arrives as a new key in a file of its own: the object keeps the look it
       // has until the new model is loaded, then swaps (never a placeholder box in between)
+      // (R3-01: a `missing:` box gives way at once: the batch's placeholder is the same box and is retried)
       const drawn = rec.main !== undefined ? batch.keyOf(rec.main) : null;
-      if (drawn && drawn !== key && vis.key && !models.isReady(key) && models.has(key)) {
+      if (drawn && drawn !== key && !drawn.startsWith('missing:') && vis.key && !models.isReady(key) && models.has(key)) {
         if (!tierWait.has(key)) {
           tierWait.add(key);
           models.ready([key, `${key}:far`].filter((k) => models.has(k))).then(() => { tierWait.delete(key); if (recs.has(id)) syncOne(id); }, () => tierWait.delete(key));
@@ -1130,12 +1204,13 @@ export function createObjectsView(layers, { fx = null, badges = null, now: nowFn
     for (const id of touched) if (recs.has(id) || (state && Object.hasOwn(state.farm.objects, id))) syncOne(id, { force: true });
   }
 
-  // A def without a model (should not happen: render-life covers every def) still gets a soft box.
+  // A def without a model (should not happen: render-life covers every def) still gets a soft box; an error only when
+  // the manifest is in (R3-01: while it is lost every def draws one, and the late manifest re-syncs them)
   const missing = new Set();
   function defineMissing(key, def) {
     if (missing.has(key)) return;
     missing.add(key);
-    console.error(`objects-view: no model for ${def.id}; drawing a placeholder box`);
+    if (models.loaded()) console.error(`objects-view: no model for ${def.id}; drawing a placeholder box`);
     const [w, d] = def.size || [1, 1];
     const g = new THREE.BoxGeometry(w * TILE_M * 0.8, 1, d * TILE_M * 0.8);
     g.translate(0, 0.5, 0);
@@ -1208,7 +1283,7 @@ export function createObjectsView(layers, { fx = null, badges = null, now: nowFn
     if (!out.length && (cos === 'glow' || cos === 'night_lights' || models.info(rec.key || '')?.glow)) out.push({ x: rec.x, y: Math.max(0.6, topOf(rec) * 0.8), z: rec.z });
     const had = lampSrc.has(id);
     if (out.length) lampSrc.set(id, out); else lampSrc.delete(id);
-    if (out.length || had) lampList = null;
+    if (out.length || had) { lampList = null; halosDirty = true; }
   }
 
   /** A model-space anchor [x, y, z] of an object, in world metres. */
@@ -1328,7 +1403,7 @@ export function createObjectsView(layers, { fx = null, badges = null, now: nowFn
     const rec = recs.get(id);
     if (!rec) return;
     if (rec.soil !== undefined) soil.setColor(rec.soil, on ? col.copy(soilColor(rec.vis)).multiplyScalar(HOVER) : soilColor(rec.vis));
-    if (rec.crop !== undefined) crops.setColor(rec.crop, col.copy(rec.vis.ready ? READY : WHITE).multiplyScalar(on ? HOVER : 1));
+    if (rec.crop !== undefined) crops.setColor(rec.crop, col.copy(rec.vis.ready ? ripeColorOf(rec.vis.cropId) : WHITE).multiplyScalar(on ? HOVER : 1));
     if (rec.main !== undefined) rec.batch.setColor(rec.main, col.copy(rec.tint || WHITE).multiplyScalar(on ? HOVER : 1));
     for (const h of rec.extra || []) statics.setColor(h, col.copy(rec.tint || WHITE).multiplyScalar(on ? HOVER : 1));
     for (const d of rec.doors || []) statics.setColor(d.h, col.copy(rec.tint || WHITE).multiplyScalar(on ? HOVER : 1));
@@ -1393,12 +1468,18 @@ export function createObjectsView(layers, { fx = null, badges = null, now: nowFn
     const k = Math.min(1, (clockS - a.t0) / a.dur);
     if (k < 0) return false;
     let y = 0; let sx = 1; let sy = 1; let tilt = 0;
-    if (a.kind === 'pop' || a.kind === 'ripen') {
+    if (a.kind === 'pop') {
       // squash-and-stretch: 0.82 -> 1.06 -> 1 (outBack), volume preserving
       const e = outBack(k);
       sy = 0.82 + 0.18 * e;
       sx = 1 / Math.sqrt(sy);
-      if (a.kind === 'ripen') sy *= 1 + 0.08 * Math.sin(k * Math.PI);
+    } else if (a.kind === 'settle') {
+      const sc = settleScale(k);
+      sx = sc; sy = sc;
+    } else if (a.kind === 'ripen') {
+      // G11a: the whole plant swells +8 % with an outBack overshoot and settles back (600 ms)
+      const sc = ripenScale(k);
+      sx = sc; sy = sc;
     } else if (a.kind === 'drop') {
       // drop from 0.6 m and squash on landing (GDD §7.2 buy/place)
       const fall = Math.min(1, k / 0.55);
@@ -1418,7 +1499,7 @@ export function createObjectsView(layers, { fx = null, badges = null, now: nowFn
       tilt = Math.sin(k * Math.PI * 3) * 0.04 * (1 - k);
     }
     const sz = sx;
-    if (rec.crop !== undefined && (a.kind === 'pop' || a.kind === 'ripen' || a.kind === 'shake')) crops.setMatrix(rec.crop, composeBase(rec.cropRec || rec, y, sx, sy, sz, tilt));
+    if (rec.crop !== undefined && (a.kind === 'pop' || a.kind === 'ripen' || a.kind === 'shake' || a.kind === 'settle')) crops.setMatrix(rec.crop, composeBase(rec.cropRec || rec, y, sx, sy, sz, tilt));
     if (rec.soil !== undefined && a.kind === 'shake') soil.setMatrix(rec.soil, composeBase(rec, 0, 1, 1, 1, tilt));
     if (rec.soil !== undefined && a.kind === 'drop') soil.setMatrix(rec.soil, composeBase(rec, y, sx, sy, sz));
     if (rec.main !== undefined && rec.kind !== 'plot') rec.batch.setMatrix(rec.main, composeBase(rec, y, sx, sy, sz, tilt));
@@ -1650,11 +1731,15 @@ export function createObjectsView(layers, { fx = null, badges = null, now: nowFn
     }
   }
 
-  // Swapped placeholders change bounds: refresh badges/twinkles of that key's owners.
+  // Swapped placeholders change bounds: refresh badges/twinkles of that key's owners. G12 (feel#4): each object whose
+  // placeholder just became its model settles in (0.92 -> 1.03 -> 1 in 250 ms) instead of popping
   for (const b of [soil, crops, trees, statics, smalls]) {
-    b.onSwap(() => {
+    b.onSwap((key) => {
       staticChanged();
-      for (const [id, rec] of recs) if (rec.twinkle || (badges && rec.vis && rec.vis.ready)) syncOne(id, { force: true });
+      for (const [id, rec] of recs) {
+        if (motion !== 'still' && (rec.key === key || rec.cropKey === key) && !anims.has(id)) anims.set(id, { kind: 'settle', t0: clockS, dur: SETTLE.dur });
+        if (rec.twinkle || (badges && rec.vis && rec.vis.ready)) syncOne(id, { force: true });
+      }
     });
   }
 
@@ -1675,6 +1760,37 @@ export function createObjectsView(layers, { fx = null, badges = null, now: nowFn
       summaryDirty = true;
     },
     get glows() { return glows; },
+    /** G12: the model keys of the objects a predicate accepts (vis(x, z) in metres: in the first view); `all`: also
+     *  keys the manifest does not name (R3-01: missing:farmhouse). */
+    keysWhere(vis, { all = false } = {}) {
+      const out = new Set();
+      for (const rec of recs.values()) {
+        if (!vis(rec.x, rec.z)) continue;
+        if (rec.key) out.add(rec.key);
+        if (rec.cropKey) out.add(rec.cropKey);
+      }
+      return all ? [...out] : [...out].filter((k) => models.has(k));
+    },
+    /** G12: objects in view whose model is still a placeholder (dev stats and look-perf's reveal check); `keyOk`
+     *  counts only the keys it accepts (QA r2 I2-C1: the home buildings the boot curtain waits for). R3-01: the batch's
+     *  word (a far twin too) plus `missing:` boxes (no manifest: has() was false for every key and the count read 0) */
+    placeholdersWhere(vis, keyOk = null) {
+      let n = 0;
+      for (const rec of recs.values()) {
+        if (!vis(rec.x, rec.z)) continue;
+        for (const [k, b, h] of [[rec.key, rec.batch, rec.main], [rec.cropKey, crops, rec.crop]]) {
+          if (!k || (keyOk && !keyOk(k))) continue;
+          if (k.startsWith('missing:')) n++;
+          else if (h !== undefined && b && typeof b.placeholderAt === 'function') { if (b.placeholderAt(h)) n++; }
+          else if (!models.isReady(k) && (models.has(k) || (!models.loaded() && !k.startsWith('hh:')))) n++;   // a giant's crop
+        }
+      }
+      return n;
+    },
+    /** G11a: a plot turned ripe while drawn (not on a rebuild): fn({ id, x, z, crop }) in metres. Returns unsubscribe. */
+    onRipened(fn) { ripenFns.add(fn); return () => ripenFns.delete(fn); },
+    /** G8: the night halos (render/night-glow.js; null until the first dusk); index.js updates them per frame. */
+    get halos() { return halos; },
     /**
      * Decor-set placement glow (GDD §3.8): while a set piece is being placed (`defId`, its ghost at tile `at`), every
      * placed piece of its set(s) wears a gold ring (brighter within the set radius of the ghost) and a faint ring
@@ -1874,7 +1990,9 @@ export function createObjectsView(layers, { fx = null, badges = null, now: nowFn
       if (!rec) return null;
       return { kind: rec.kind, key: rec.key ?? null, cropKey: rec.cropKey ?? null, ready: Boolean(rec.vis?.ready),
         working: Boolean(rec.vis?.working), nextAt: rec.nextAt ?? null, twinkle: Boolean(rec.twinkle), extra: (rec.extra || []).length,
-        x: rec.x, z: rec.z, yaw: rec.yaw };
+        x: rec.x, z: rec.z, yaw: rec.yaw,
+        box: Boolean((rec.main !== undefined && rec.batch?.placeholderAt?.(rec.main)) || (rec.crop !== undefined && crops.placeholderAt?.(rec.crop))
+          || (rec.key && rec.key.startsWith('missing:'))) };
     },
     setMotion(m) { motion = m; },
     /**
@@ -1924,6 +2042,7 @@ export function createObjectsView(layers, { fx = null, badges = null, now: nowFn
         want = 2;
       }
       glows.update();
+      if (LOOK.uGlow.value > 0.02) { if (halos) { if (halosDirty) rebuildHalos(); } else if (!halosLoading) loadHalos(); }
       if (doorAnims.size) want = Math.max(want, stepDoors(dt));
       if (propsDirty) rebuildProps();
       if (summaryDirty) rebuildSummary();

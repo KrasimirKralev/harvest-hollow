@@ -285,7 +285,10 @@ export class FarmRegistry {
         throw new Error('farm unavailable');
       }
     }
+    // the host's build hash, not the worker's own: a file saved after the host started gave the worker's welcome another
+    // hash and every page of the farm reloaded (QA r4, harvey's e2e-harness --multi)
     const host = new WorkerFarm({ cfg, dir: rec.dir, harnessDir: this.harnessDir(rec), meta: rec.meta, log: farmLog(this.log, rec.id),
+      build: this.staticFiles?.build ?? null,
       persistOpts: { backupHours: this.mc.backupHours, backupDays: this.mc.backupDays }, pendingHx: rec.pendingHx.splice(0),
       onMeta: (meta) => {
         // the worker's FarmSessions changed the meta (a claim, a new key): the main thread is its only writer

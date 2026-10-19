@@ -27,6 +27,8 @@ import { defOf } from '../../../shared/content/index.js';
 import { boundaryEdges, landTiles } from './ground.js';
 import { models } from './models.js';
 import * as content from '../../../shared/content/index.js';
+import { livePowerups } from '../../../shared/rules/powerups.js';
+import { lazyImport, importFailed } from '../net/lazy.js';
 
 // the rules drop the balloon's loot crates on this schedule (content CRATES, wave 4b: a pass every everyMs, flightMs long;
 // the drop dropAtMs into it): the same numbers here keep the parachute under the balloon if content ever changes them
@@ -265,11 +267,23 @@ export function createAmbientLife(layers, { now: nowFn = () => Date.now(), overl
 
   // --- the hot-air balloon: the decor model, small and high, on its shared schedule
   let balloon = null;
+  const balloonAsk = { busy: false, n: 0, at: 0 };
+  globalThis.addEventListener?.('online', () => { balloonAsk.at = 0; });
   function ensureBalloon() {
     // the flying balloon alone (render-life's `prop:balloon`, basket floor at y 0); the decor is now its mooring
     const BK = models.has('prop:balloon') ? 'prop:balloon' : 'decor:hot_air_balloon';
     if (balloon || !models.has(BK)) return;
-    if (!models.isReady(BK)) { models.ready(BK).catch(() => {}); return; }
+    if (!models.isReady(BK)) {
+      // QA r3 R3-01: asked every frame: one request at a time, a failed one waits 1, 2, 4 … 30 s
+      if (balloonAsk.busy || performance.now() < balloonAsk.at) return;
+      balloonAsk.busy = true;
+      models.ready(BK).then(() => { balloonAsk.busy = false; }, () => {
+        balloonAsk.busy = false;
+        balloonAsk.n++;
+        balloonAsk.at = performance.now() + Math.min(30_000, 1000 * 2 ** (balloonAsk.n - 1));
+      });
+      return;
+    }
     balloon = new THREE.Mesh(models.geometryFor(BK), models.material('standard'));
     balloon.scale.setScalar(1.6);
     balloon.visible = false;
@@ -316,11 +330,20 @@ export function createAmbientLife(layers, { now: nowFn = () => Date.now(), overl
   let farmersFn = null;
   let glintAcc = 0;
   const v3 = new THREE.Vector3();
+  // 1.0: the crates' power-ups (powerups-view.js, lazy: loaded while one is at work)
+  let pu = null;
+  let puLoad = null;
+  const puCheck = () => {
+    if (puLoad || !state?.farm?.powerups || !livePowerups(state, now()).length) return;
+    puLoad = lazyImport('powerups-view', () => import('./powerups-view.js'))
+      .then((m) => { pu = m.createPowerupsView({ now: () => now(), balloonAt }); })
+      .catch((err) => { if (!importFailed(err)) console.error('the power-ups\' life did not start', err); });
+  };
 
   return {
     setNow(fn) { now = fn; },
     setFx(f) { fx = f; },
-    setState(s) { state = s; rebuildLife(); },
+    setState(s) { state = s; rebuildLife(); puCheck(); },
     /** Where the farmers stand (metres): Golden Hour's hearts gather round them. */
     setFarmers(fn) { farmersFn = typeof fn === 'function' ? fn : null; },
     setBeauty(b, complete = []) {
@@ -331,6 +354,7 @@ export function createAmbientLife(layers, { now: nowFn = () => Date.now(), overl
     },
     sync(ids, topics, s) {
       state = s;
+      if (topics.has('powerups') || topics.has('*')) puCheck();
       if (topics.has('*') || topics.has('expansions')) { rebuildLife(); return; }
       for (const id of ids || []) {
         const d = defOf(s.farm.objects[id]?.def);
@@ -412,6 +436,7 @@ export function createAmbientLife(layers, { now: nowFn = () => Date.now(), overl
         want = 1;
       }
       if (!fx || still) return want;
+      if (pu && pu.update(dt, { fx, state, focus, k: lifeQ.k })) want = 1;
       // Golden Hour (visual-after D2): the moment belongs to the two of them: a few heart and leaf motes drift up around
       // each farmer (6-10 in all), with only a light dusting of warm motes over the rest of the view
       if (gold > 0.05 && focus) {

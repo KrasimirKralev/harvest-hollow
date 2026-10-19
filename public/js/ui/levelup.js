@@ -8,14 +8,60 @@
 //   celebrate(ev)            one confirmed event from store 'celebrate' (CELEBRATIONS) or a personal levelUp
 //   unlocksFor(level)        the things and systems that arrive at `level` (pure; tests)
 //   bloomCounts(state, ids)  what a Bloom finished, by kind: { crops, trees, animals } (pure; tests)
-import { CONTENT, unlocksAt, isLive, levelFromXp, defOf } from '../../../shared/content/index.js';
+//
+// Release 1.0 (life-feel lane, rel-life-feel.md):
+//   S6 (ux-first#10, #20, feel#13; critique#16): the unlock card lists CONTENT only (crops, buildings, animals ...); the
+//     systems a level opens keep coming one at a time through the rules' drip (nextSystemCard, DRIP_FEED.minGapMs of
+//     play apart), shown by maybeSystemCard; no client queue. Personal-level cards ("You are now a Weed Puller!") are
+//     hidden below farm level PERSONAL_FROM. `body.celebrating` for the ~2.5 s level-up overlay fades the coach card and
+//     the stroke chip (the level ribbon used to sit on the coach card's border); the rewards are icon chips that fly
+//     into their pills (render/fx.js `levelLoot` from the chips).
+//   M29 (critique#32): maybeSystemCard shows features' 1.0 drip cards (Meet Harvey, the gift intro, the brush tip,
+//     "New in 1.0"): their words from `card.key` (area 'feat'), their Show me from `card.show` ('gift', 'farmbook',
+//     'harvey' or { panel, args }), never while the coach card is visible (coachVisible), with { helper, now }.
+//   cardShowMe(show, S) -> fn | null   the Show me of a drip card (pure-ish; tests)
+import { CONTENT, ALMANAC, unlocksAt, isLive, levelFromXp, defOf } from '../../../shared/content/index.js';
 import { ACTIONS } from '../../../shared/rules/index.js';
 import { nextSystemCard } from '../../../shared/rules/actions/social.js';
 import { legacyRewardAt } from '../../../shared/rules/actions/legacy.js';
 import { BOOSTS } from '../../../shared/content/index.js';
 import { h, icon, svgIcon, fmt, fmtDuration, touchPlayer, touchText } from './dom.js';
 import { unlockName, unlockIcon, titleWord } from './hud.js';
-import { t, tn, N, name as cname, ctext, list, retell } from '../i18n/index.js';
+import { t, tn, N, name as cname, ctext, list, retell, has } from '../i18n/index.js';
+import { coachVisible } from './tutorial.js';
+import { absenceStart } from './recap.js';
+import { freeToPlace } from './toolbar.js';
+
+/** S6 (ux-first#20): personal-level cards ("You are now a Seed Sower!") start at this farm level. */
+export const PERSONAL_FROM = 5;
+/** S6: how long `body.celebrating` holds (the overlay's star, rays and ribbon). */
+export const CELEBRATING_MS = 2500;
+
+/**
+ * M29: what a drip card's Show me does, from features' `card.show`: 'gift' (the gift sheet), 'farmbook' (the Farm book),
+ * 'harvey' (the helper, when this farm offers it), { panel, args } (a registered panel); null when nothing fits. The
+ * older system cards keep FEATURE_PANELS (`legacyId`).
+ */
+export function cardShowMe(show, S, legacyId = null) {
+  const ui = S.ui;
+  if (show === 'gift') return ui?.panels?.has?.('gift') ? () => ui.panels.open('gift') : null;
+  if (show === 'farmbook') return ui?.farmBook?.open ? () => ui.farmBook.open() : ui?.panels?.has?.('menu') ? () => ui.panels.open('menu') : null;
+  if (show === 'harvey') return S.harness?.open ? () => S.harness.open() : null;
+  if (show && typeof show === 'object' && typeof show.panel === 'string') {
+    return ui?.panels?.has?.(show.panel) ? () => ui.panels.open(show.panel, show.args ?? {}) : null;
+  }
+  const legacy = legacyId ? FEATURE_PANELS[legacyId] : null;
+  return legacy && ui?.panels?.has?.(legacy.panel) ? () => ui.panels.open(legacy.panel, legacy.args) : null;
+}
+
+/** QA r4 L4-06: a quest card's line; a done line that says its title is said alone (not the title twice). */
+export function questLine(title, done) {
+  const d = String(done).toLocaleLowerCase();
+  const n = String(title).trim().toLocaleLowerCase();
+  const w = (c) => /[\p{L}\p{N}]/u.test(c);
+  for (let i = n ? d.indexOf(n) : -1; i >= 0; i = d.indexOf(n, i + 1)) if (!w(d.charAt(i - 1)) && !w(d.charAt(i + n.length))) return done;
+  return t('moments.quest.line', { title, done });
+}
 
 /** A word that can be said again after a language switch: its catalog line (i18n retell), else the text as given. */
 const told = (v) => retell(v) ?? (() => v);
@@ -31,6 +77,18 @@ export function unlocksFor(level) {
   }
   const systems = rows.filter((r) => r.family === 'features').map((r) => ({ ...r, name: unlockName(r), card: CONTENT.features.get(r.id)?.card ?? null }));
   return { things, systems };
+}
+
+/**
+ * Does a show hold still? The player's motion pick (body.motion-reduced, set by settings.js, which mirrors the OS for
+ * "Like this device"); the OS setting only before settings applied a pick (QA r2 S2-15: "Full" under an OS that asks
+ * for reduced motion moved the 3D view only).
+ */
+export function motionStill() {
+  const b = globalThis.document?.body;
+  if (b?.classList?.contains('motion-reduced')) return true;
+  if (b?.classList?.contains('motion-set')) return false;
+  return Boolean(globalThis.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches);
 }
 
 /** What a Level-up Bloom finished (its `ids`), by kind, for the card: a Giant counts its nine plots. Pure. */
@@ -65,7 +123,9 @@ export function showMeTarget(row, state = null) {
     case 'crops': return { panel: 'market', args: { tab: 'seeds', focus: row.id } };
     case 'trees': return { panel: 'market', args: { tab: 'trees', focus: row.id } };
     case 'animals': case 'homes': return { panel: 'market', args: { tab: 'animals', focus: row.id } };
-    case 'buildings': return { panel: 'market', args: { tab: 'buildings', focus: row.id } };
+    // a free building the farm has none of waits in the build tray: Grandma's Windmill at level 3 (ui-shell QA r2 S2-01)
+    case 'buildings': return state && freeToPlace(state).includes(row.id) ? { tray: row.id }
+      : { panel: 'market', args: { tab: 'buildings', focus: row.id } };
     case 'decor': return { panel: 'market', args: { tab: 'decor', focus: row.id } };
     case 'tools': return { panel: 'market', args: { tab: 'tools', focus: row.id } };
     case 'expansions': case 'parcels': return { panel: 'expansion', args: { id: row.id } };
@@ -116,8 +176,7 @@ export function createLevelup(S) {
   let queue = [];
   let toursAfter = [];        // lower levels of one level-up batch: toured on the same card as the top level
 
-  const still = () => document.body.classList.contains('motion-reduced')
-    || globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+  const still = motionStill;
 
   function confettiPulse(delay) {
     if (still()) return;
@@ -147,19 +206,40 @@ export function createLevelup(S) {
     return svg;
   }
 
+  // S6: the coach card and the stroke chip fade under the level-up overlay (a ribbon on their border read as clutter)
+  let celebratingT = 0;
+  function celebrating() {
+    document.body.classList.add('celebrating');
+    clearTimeout(celebratingT);
+    celebratingT = setTimeout(() => document.body.classList.remove('celebrating'), CELEBRATING_MS);
+  }
+
   function showLevelUp(ev) {
     const level = ev.level;
+    // S6 (feel#13): the rewards as icon chips under the level ("+360 🪙  +2 🌰"), flying into their pills a moment later
+    const chip = (iconId, text, kind) => h('span.lvl-chip', { dataset: { kind } }, icon(iconId, { size: 26, alt: '' }), h('b', text));
+    const chips = [ev.coins ? chip('coins', `+${fmt(ev.coins)}`, 'coins') : null, ev.acorns ? chip('acorns', `+${fmt(ev.acorns)}`, 'acorns') : null,
+      ev.goldenSeeds ? chip('golden_seeds', `+${fmt(ev.goldenSeeds)}`, 'seeds') : null].filter(Boolean);
+    const sub = h('div.sub', h('span.lvl-farm', t('moments.lvl.farm', { level })), ...chips);
+    // the words a screen reader hears stay the sentence they were
+    sub.setAttribute('aria-label', [t('moments.lvl.farm', { level }), ev.coins ? tn('moments.lvl.coins', ev.coins) : '',
+      ev.acorns ? tn('moments.lvl.acorns', ev.acorns) : '', ev.goldenSeeds ? tn('moments.lvl.seeds', ev.goldenSeeds) : ''].join(''));
     const node = h('div.lvl', { role: 'status', 'aria-label': t('moments.lvl.label', { level }) },
       h('div.rays'), starSvg(), h('div.big-num.outlined', String(level)),
-      h('div.word.wood.outlined', t('moments.lvl.word')),
-      h('div.sub', [
-        t('moments.lvl.farm', { level }),
-        ev.coins ? tn('moments.lvl.coins', ev.coins) : '',
-        ev.acorns ? tn('moments.lvl.acorns', ev.acorns) : '',
-        ev.goldenSeeds ? tn('moments.lvl.seeds', ev.goldenSeeds) : '',
-      ].join('')));
+      h('div.word.wood.outlined', t('moments.lvl.word')), sub);
     layer.append(node);
+    celebrating();
     for (let i = 0; i < 4; i++) confettiPulse(i * 250);
+    if (chips.length) {
+      setTimeout(() => {
+        for (const c of chips) {
+          const kind = c.dataset.kind;
+          const loot = kind === 'coins' ? { coins: ev.coins } : kind === 'acorns' ? { acorns: ev.acorns } : { items: { golden_seeds: ev.goldenSeeds } };
+          try { view.fx.play({ e: 'levelLoot', ...loot }, undefined, { by: store.pid, local: true, from: c }); } catch { /* fx not ready */ }
+          c.classList.add('flown');
+        }
+      }, 1100);
+    }
     setTimeout(() => { node.classList.add('out'); setTimeout(() => node.remove(), 420); }, 2500);
     // the world part (Bloom ripple, sparkles) belongs to the view
     try { view.fx.play(ev); } catch { /* fx lane may not know this event yet */ }
@@ -186,7 +266,8 @@ export function createLevelup(S) {
     if (ls.length <= 1 && !gift.length) { if (ls.length) unlockBanner(ls[0]); return; }
     const all = ls.map((l) => unlocksFor(l));
     const things = [...all.flatMap((u) => u.things), ...gift];
-    const systems = all.flatMap((u) => u.systems);
+    // S6: systems arrive through the rules' drip (maybeSystemCard), one at a time, never on the level's card
+    const systems = [];
     // a level with no new thing (M1a from level 13) pays a Legacy gift instead (RC-14): the banner says so
     const title = ls.length > 1 ? t('moments.tour.since', { level: ls.at(-1) }) : gift.length && things.length === gift.length
       ? t('moments.tour.gift', { level: ls[0] }) : t('moments.tour.newAt', { level: ls[0] });
@@ -208,10 +289,16 @@ export function createLevelup(S) {
   }
 
   function unlockBanner(level, merged = null) {
-    const { things, systems } = merged || unlocksFor(level);
-    if (!things.length && !systems.length) { markLevelSeen(level); return; }
-    const first = [...things, ...systems].map((u) => ({ u, target: showMeTarget(u, store.state) })).find((x) => x.target && ui.panels.has(x.target.panel));
-    const actions = first ? [{ label: t('moments.showMe'), kind: 'sky', fn: () => ui.panels.open(first.target.panel, first.target.args) }] : [];
+    // S6 (ux-first#10): the card lists content only; a level that opens only systems has no card (the drip brings them)
+    const { things } = merged || unlocksFor(level);
+    const systems = [];
+    if (!things.length) { markLevelSeen(level); return; }
+    // a free piece in the build tray first (the level's new building, S2-01), else the first row a panel can show
+    const shown = [...things, ...systems].map((u) => ({ u, target: showMeTarget(u, store.state) }))
+      .filter((x) => x.target && (x.target.tray ? typeof ui.showInTray === 'function' : ui.panels.has(x.target.panel)));
+    const first = shown.find((x) => x.target.tray) ?? shown[0];
+    const actions = first ? [{ label: t('moments.showMe'), kind: 'sky',
+      fn: () => (first.target.tray ? ui.showInTray(first.target.tray) : ui.panels.open(first.target.panel, first.target.args)) }] : [];
     const sysLive = systems.filter((s) => isLive(CONTENT.features.get(s.id)));
     // the words are functions where they are put together here: a language switch while the card is up re-says them
     const named = (u) => (u.family && u.id ? () => unlockName(u) : u.name);
@@ -239,19 +326,30 @@ export function createLevelup(S) {
     const touch = card.touchText ? ctext('features', id, 'card.touchText', card.touchText) : TOUCH_CARD_TEXT[id] ? t(TOUCH_CARD_TEXT[id]) : null;
     return touch ?? touchText(text, true);
   };
+  // M29: features' 1.0 drip cards carry their words under a catalog prefix (card.key in area 'feat')
+  const keyText = (key, touch) => {
+    if (touch) { const tt = t(`${key}.touchText`); if (tt && tt !== `${key}.touchText`) return tt; }
+    return t(`${key}.text`);
+  };
   function maybeSystemCard() {
     const st = store.state;
-    // the first evening has one teaching voice: Grandma's coach; system cards wait until it is done or hidden
-    if (!st || cardShown || performance.now() < quietUntil || ui.panels.top() || S.tutorial?.active()) return;
+    // the first evening has one teaching voice: Grandma's coach; system cards wait until it is done or hidden (M29: and
+    // never while the coach card is on screen)
+    if (!st || cardShown || performance.now() < quietUntil || ui.panels.top() || S.tutorial?.active() || coachVisible()) return;
     let id = null;
-    try { id = nextSystemCard(st, store.pid); } catch { return; }
+    // ui-shell P-09 / features: `now` (the uproot tip only with a fresh crop), `helper` (this farm offers Harvey)
+    try { id = nextSystemCard(st, store.pid, { helper: Boolean(S.harness), now: store.now() }); } catch { return; }
     const f = id && CONTENT.features.get(id);
     if (!f || !f.card) return;
     cardShown = id;
+    const key = typeof f.card.key === 'string' ? f.card.key : null;
+    const show = cardShowMe(f.card.show, S, id);
     ui.banner({
-      id: `card-${id}`, kind: 'card', ribbon: () => ctext('features', id, 'card.title', f.card.title), message: () => cardText(id, f.card), ttl: 25000,
+      id: `card-${id}`, kind: 'card',
+      ribbon: () => (key ? t(`${key}.title`) : ctext('features', id, 'card.title', f.card.title)),
+      message: () => (key ? keyText(key, touchPlayer(S.controller)) : cardText(id, f.card)), ttl: 25000,
       things: [], actions: [{ label: t('moments.gotIt'), kind: 'go', fn: () => {} },
-        ...(FEATURE_PANELS[id] && ui.panels.has(FEATURE_PANELS[id].panel) ? [{ label: t('moments.showMe'), kind: 'sky', fn: () => ui.panels.open(FEATURE_PANELS[id].panel, FEATURE_PANELS[id].args) }] : [])],
+        ...(show ? [{ label: t('moments.showMe'), kind: 'sky', fn: show }] : [])],
       onClose: () => {
         cardShown = null;
         quietUntil = performance.now() + 60_000;
@@ -259,19 +357,27 @@ export function createLevelup(S) {
       },
     });
   }
-  setInterval(maybeSystemCard, 15_000);
-  store.on('welcome', () => {
-    quietUntil = performance.now() + 8000;
+  const cardTimer = setInterval(maybeSystemCard, 15_000);
+  cardTimer?.unref?.();                                   // node tests: never keeps the process alive
+  const toured = new Set();
+  function welcomeTour(quiet) {
+    if (quiet) quietUntil = performance.now() + 8000;
     // levels reached while this player was away and not toured yet: one banner each (a long absence gets the recap)
     const st = store.state;
     const me = st && st.players[store.pid];
     if (!me || !me.seen) return;
-    const away = store.now() - (me.lastSeenAt || store.now());
+    // (QA r2 L2-01: the absence this device saw, not lastSeenAt, which a reload never moves: the same as the recap's)
+    const away = store.now() - (absenceStart(st, store.pid) ?? store.now());
     const top = levelFromXp(st.farm.xp);
     const levels = [];
-    for (let l = me.seen.lvl + 1; l <= top; l++) levels.push(l);
-    if (away < 10 * 60_000 && levels.length) setTimeout(() => unlockTour(levels), 1500);
-  });
+    for (let l = me.seen.lvl + 1; l <= top; l++) if (!toured.has(l)) levels.push(l);
+    if (away >= 10 * 60_000 || !levels.length) return;
+    for (const l of levels) toured.add(l);
+    setTimeout(() => unlockTour(levels), 1500);
+  }
+  store.on('welcome', () => welcomeTour(true));
+  // QA r4 L4-04: the join's welcome came before this module (main.js resets the store, then ui.init)
+  if (store.state) welcomeTour(false);
 
   function medal(tier) {
     const t = Math.max(0, Math.min(2, (tier | 0) - 1));
@@ -338,6 +444,8 @@ export function createLevelup(S) {
     switch (ev.e) {
       case 'levelUp':
         if (ev.scope === 'player') {
+          // S6 (ux-first#20): one level system for a new farm: personal titles keep quiet below farm level PERSONAL_FROM
+          if (levelFromXp(store.state?.farm?.xp ?? 0) < PERSONAL_FROM) return 0;
           if (ev.pid === me && ev.title) {
             const title = titleWord(ev.title);
             rosette(t('moments.rank.now', { title }), t('moments.rank.level', { level: ev.level }), 2, 4500, { kind: 'rank', name: title });
@@ -361,7 +469,7 @@ export function createLevelup(S) {
         ui.banner({
           id: `quest-${ev.id}`, ribbon: t('moments.quest.done'), kind: 'quest',
           // the quest's words are content (story.js: lane C translates them through ctext)
-          message: () => (q ? (q.done ? t('moments.quest.line', { title: ctext('quests', ev.id, 'title', q.title), done: ctext('quests', ev.id, 'done', q.done) })
+          message: () => (q ? (q.done ? questLine(ctext('quests', ev.id, 'title', q.title), ctext('quests', ev.id, 'done', q.done))
             : ctext('quests', ev.id, 'title', q.title)) : t('moments.quest.letter')),
           things: [ev.coins ? { icon: 'coins', name: tn('moments.quest.coins', ev.coins) } : null, ev.xp ? { icon: 'xp', name: t('common.xp', { n: ev.xp }) } : null].filter(Boolean),
           actions: ui.panels.has('journal') ? [{ label: t('moments.quest.read'), kind: 'sky', fn: () => ui.panels.open('journal', { tab: 'story', focus: ev.id }) }] : [],
@@ -385,6 +493,14 @@ export function createLevelup(S) {
         if (ev.kind === 'highFive') {
           ui.toast(t('moments.highFive'), { kind: 'love', ms: 4000 });
           S.hud?.renderBuffs();
+          return 0;
+        }
+        // QA r2 S2-20 (fbp#11): a farmer alone finished the day's together task: the deed, not "together", no hearts
+        if (ev.kind === 'task' && Object.keys(players).length < 2) {
+          const tpl = ALMANAC.together?.templates?.find((x) => x.id === ev.tpl);
+          const n = store.state?.farm?.daily?.together?.qty ?? tpl?.qty ?? 0;
+          const key = tpl ? `cheer.task.solo.${tpl.id}` : null;
+          ui.toast(() => (key && has(key) && n > 0 ? tn(key, n) : t('cheer.task.solo.any')), { kind: 'ok', ms: 3200 });
           return 0;
         }
         const text = () => (ev.kind === 'combo' ? t('moments.together.combo', { n: ev.at ?? '' }).trim()

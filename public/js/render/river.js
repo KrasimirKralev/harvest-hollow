@@ -201,10 +201,12 @@ export function createRiver({ scenery, glows = null } = {}) {
   }
 
   let lastUp = null;
+  let builtEpoch = models.epoch;
   function apply(state) {
     const up = ownedLand(state).has('riverbank');                     // wave 5: the Riverbank's land, whichever row owns it
     liveNow = featureLive(state, 'barge');
-    if (up !== lastUp) { lastUp = up; key = up ? 'up' : 'base'; build(up); return true; }
+    // R3-01: a late manifest (epoch) rebuilds
+    if (up !== lastUp || models.epoch !== builtEpoch) { lastUp = up; builtEpoch = models.epoch; key = up ? 'up' : 'base'; build(up); return true; }
     return false;
   }
 

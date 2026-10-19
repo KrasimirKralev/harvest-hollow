@@ -3,16 +3,17 @@
 // GitHub star card (ui/ideas.js, ui/star-nudge.js). Loaded on its own by i18n/front.js (the landing page loads no game
 // text). The landing page's title and meta description stay in the 'multi' area (multi.ld.*).
 export default {
-  // the one screen: the tagline and the three actions
+  // the one screen: the tagline, Play (the one big button) and how the partner joins (release 1.0 O7); Star us and
+  // GitHub are pills in the link row (front.act.starSub is read out after "Star us"; front.act.github is the GitHub
+  // pill's spoken name)
   'front.hero.tag': 'A cozy 3D farm for two, live in your browser.',
   'front.act.title': 'Play, or help Harness Hollow grow',
   'front.act.play': 'Play',
   'front.act.playSub': 'Start a new farm',
+  'front.act.invite': 'Invite your partner with a link from inside the farm.',
   'front.act.star': 'Star us',
   'front.act.starSub': 'on GitHub',
   'front.act.github': 'Open GitHub',
-  'front.act.githubSub': 'See how it is made',
-  'front.act.why': 'Free and open source: a ⭐ helps other couples find it.',
   'front.act.ttl': 'Farms idle for 7 days are deleted.',
 
   // starting a farm (js/landing.js)
@@ -42,6 +43,7 @@ export default {
   // where to go if you need (the link row) and its sheets
   'front.more.nav': 'If you need more',
   'front.more.back': 'Already have a farm?',
+  'front.more.github': 'GitHub',
   'front.more.ideas': 'Suggest an idea',
   'front.more.shots': 'Screenshots',
   'front.more.privacy': 'Privacy',
