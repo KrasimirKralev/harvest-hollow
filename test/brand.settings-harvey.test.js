@@ -42,7 +42,6 @@ test('A2-01: no served page, catalog string or operator message says "Settings â
     ...walk('public/js/i18n', ['.js']),
     ...walk('public/js', ['.js']).filter((f) => !f.startsWith('public/js/i18n/')),
     ...walk('shared', ['.js']),
-    'tools/ideas.mjs',
   ];
   const bad = [];
   for (const f of files) {

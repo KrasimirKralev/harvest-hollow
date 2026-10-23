@@ -135,7 +135,12 @@ test('every code of the contract has a line in English and Bulgarian (harness.er
     assert.ok(BG[`harness.err.${c}`], `Bulgarian line for ${c}`);
   }
   assert.equal(M.errKey('WHATEVER'), 'harness.err.other');
-  // the contract's own lists, read from the contract itself, are all covered
+});
+
+// The contract is an internal note and the public export leaves docs/agent-notes out, so this half skips there. The
+// skip is keyed on the folder, not the file: here a moved or renamed contract still fails instead of skipping.
+test('the contract\'s own code list, read from the contract itself, is all in the model\'s codes',
+  { skip: !fs.existsSync(path.join(ROOT, 'docs/agent-notes')) && 'docs/agent-notes is not in the public export' }, () => {
   const contract = fs.readFileSync(path.join(ROOT, 'docs/agent-notes/harness-contract.md'), 'utf8');
   const codesLine = /\*\*Codes\*\*[\s\S]*?A mod is \*\*offered/.exec(contract)?.[0] ?? '';
   assert.match(codesLine, /BAD_JSON[\s\S]*NAME_TOO_LONG/, 'the contract\'s code list was found');

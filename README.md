@@ -199,7 +199,7 @@ Settings › Controls lists every key and gesture.
   `docs/research/tech-architecture.md` explains the technical decisions.
 
 ```sh
-npm test                          # 1,843 unit and integration tests (node:test)
+npm test                          # every unit and integration test (node:test)
 npm run test:e2e -- --port 3310   # two players in two headless browsers, end to end (needs Chrome; CHROME=<path>)
 node tools/econ-sim.mjs --checks  # the economy's pacing and balance checks
 ```
@@ -207,7 +207,7 @@ node tools/econ-sim.mjs --checks  # the economy's pacing and balance checks
 ## How it was built
 
 Harness Hollow was built in October 2026 by [@KrasimirKralev](https://github.com/KrasimirKralev), directing AI coding
-agents. The repository shows how:
+agents (mostly Claude Code, with OpenAI Codex for second opinions and screenshot reviews). The repository shows how:
 
 - **Design first.** [`docs/GDD.md`](docs/GDD.md) is the design the build followed: every system and number, two design
   critiques ([`docs/design/`](docs/design)) answered point by point, and each later owner change with its date.
@@ -215,8 +215,8 @@ agents. The repository shows how:
   between four to six agents, each owning its own files.
 - **The economy is simulated.** Prices, timers and rewards come from one model (`tools/economy-model.mjs`), and
   `node tools/econ-sim.mjs --checks` replays the pacing and balance checks after content changes.
-- **Tests at every layer.** 1,843 unit and integration tests, and an end-to-end run that drives two headless browsers
-  through a co-op session (`tools/e2e-coop.mjs`).
+- **Tests at every layer.** Unit and integration tests for the rules, the server and the client (`npm test`), and an
+  end-to-end run that drives two headless browsers through a co-op session (`tools/e2e-coop.mjs`).
 - **Human calls.** What to build next (the hosted mode with invite links, Bulgarian as a second language, the new
   content waves) are owner decisions, dated in the GDD. The illustrations were made with an AI image model and checked
   image by image.

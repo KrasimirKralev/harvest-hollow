@@ -1,7 +1,8 @@
-// The receiving end (server/telemetry/receiver.js, store.js) and the owners' CLI (tools/ideas.mjs telemetry): a strict
-// shape, every string scrubbed again, stored once per event id in a 0600 file, rate limits per address / install /
-// day, 413 above 64 KB, the admin list and deletions behind HH_ADMIN_TOKEN, 365-day retention; and the whole path
-// sender -> HTTP -> receiver -> CLI, plus the official host's local delivery (no HTTP to itself).
+// The receiving end (server/telemetry/receiver.js, store.js): a strict shape, every string scrubbed again, stored once
+// per event id in a 0600 file, rate limits per address / install / day, 413 above 64 KB, the admin list and deletions
+// behind HH_ADMIN_TOKEN, 365-day retention, and the official host's local delivery (no HTTP to itself). The owners'
+// CLI end (sender -> HTTP -> receiver -> tools/ideas.mjs) is in telemetry.cli.test.js: the CLI is private, and an
+// import of it here would fail this whole file in the public export.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -10,7 +11,6 @@ import { appServer, quiet, tmpDataDir, fakeClock, T0, telemetryFor, sampleJob, S
 import { mountTelemetryReceiver } from '../server/telemetry/receiver.js';
 import { buildPayload, checkPayload, scrub, newEventId } from '../server/telemetry/payload.js';
 import { TELEMETRY_KEEP_MS, RECEIVE_LIMITS, MAX_PAYLOAD_BYTES } from '../server/telemetry/config.js';
-import { main, formatEvent, parseArgs } from '../tools/ideas.mjs';
 
 const TOKEN = 'telemetry-admin-token-abcdefghijklmnop';
 const DAY = 86_400_000;
@@ -190,59 +190,6 @@ test('telemetry receiver: the sweep deletes events older than 365 days (through 
   } finally { await r.close(); }
 });
 
-test('telemetry end to end: a player\'s server -> the public receiver -> the owners\' CLI (list, delete, delete-install)', async () => {
-  const hostDir = tmpDataDir('te2e-host');
-  const clock = fakeClock(T0);
-  let host;
-  const s = await appServer(async (app) => {
-    const { createTelemetry } = await import('../server/telemetry/index.js');
-    const { harnessCtx } = await import('./helpers/telemetry.js');
-    host = createTelemetry(harnessCtx(hostDir, { mode: 'multi', clock, extra: { cfg: { ideas: { adminToken: TOKEN } } } }));
-    host.receiverRoutes(app, { reg: { sweepers: [] } });
-  });
-  const player = telemetryFor('te2e-player', { clock, env: { HH_TELEMETRY_URL: `${s.base}/api/telemetry` } });
-  const tokenFile = path.join(hostDir, 'admin-token');
-  fs.writeFileSync(tokenFile, `${TOKEN}\n`, { mode: 0o600 });
-  const env = { HH_ADMIN_TOKEN_FILE: tokenFile, NO_COLOR: '1' };
-  const sink = () => { const o = { text: '', isTTY: false, write(x) { o.text += x; return true; } }; return o; };
-  try {
-    await player.t.setConsent('local', 'p1', true);
-    await player.t.record('local', 'p1', { event: 'job.applied', job: sampleJob({ state: 'applied' }), files: SAMPLE_FILES });
-    await player.t.record('local', 'p1', { event: 'job.failed', job: sampleJob({ state: 'failed', prompts: [{ at: 1, text: 'Make gold \u001b[2J rain' }] }),
-      validation: { ok: false, stage: 'semantic', errors: [{ code: 'ECON_BOUND' }] } });
-    assert.equal(await player.t.flush(), 2);
-    assert.equal(host.receiver.store.rows.size, 2);
-    const install = player.t.installOf('local');
-    const out = sink();
-    const err = sink();
-    assert.equal(await main(['--url', s.base, 'telemetry'], { env, out, err }), 0, err.text);
-    assert.match(out.text, /^Harness Hollow shared helper events · 2 shown · 2 in all: 0 job.ready, 1 job.applied/);
-    assert.match(out.text, /> Add a moon melon that glows at night/);
-    assert.match(out.text, /did not pass \(semantic\) in 2 round\(s\) · ECON_BOUND/);
-    assert.match(out.text, new RegExp(`install ${install.slice(0, 8)}`));
-    assert.ok(!out.text.includes('\u001b'), 'a typed escape never reaches the terminal');
-    const only = sink();
-    await main(['--url', s.base, 'telemetry', '--event', 'job.failed', '--json'], { env, out: only, err: sink() });
-    const failed = JSON.parse(only.text).events;
-    assert.equal(failed.length, 1);
-    const del = sink();
-    assert.equal(await main(['--url', s.base, 'telemetry', 'delete', failed[0].id.slice(0, 6)], { env, out: del, err: sink() }), 0);
-    assert.match(del.text, new RegExp(`Deleted shared event ${failed[0].id} for good`));
-    assert.equal(host.receiver.store.rows.size, 1);
-    const di = sink();
-    assert.equal(await main(['--url', s.base, 'telemetry', 'delete-install', install], { env, out: di, err: sink() }), 0);
-    assert.match(di.text, /Deleted 1 shared event\(s\) of install/);
-    assert.equal(host.receiver.store.rows.size, 0);
-    assert.equal(await main(['--url', s.base, 'telemetry', 'delete-install', 'nope'], { env, out: sink(), err: sink() }), 1);
-    assert.throws(() => parseArgs(['telemetry', '--event', 'job.secret'], {}), /--event/);
-  } finally {
-    await s.close();
-    await host.stop();
-    await player.cleanup();
-    fs.rmSync(hostDir, { recursive: true, force: true });
-  }
-});
-
 test('telemetry: the official multi host stores its own farms\' events directly (no HTTP to itself), still only with a yes', async () => {
   const fetches = [];
   const { t, dir, cleanup } = telemetryFor('te-local', { mode: 'multi', fetcher: async (...a) => { fetches.push(a); throw new Error('no network in this test'); } });
@@ -260,19 +207,4 @@ test('telemetry: the official multi host stores its own farms\' events directly 
     assert.ok(!JSON.stringify(rows[0]).includes(farm));
     assert.ok(fs.existsSync(path.join(dir, 'telemetry', 'events.jsonl')));
   } finally { await s.close(); await cleanup(); }
-});
-
-test('telemetry cli: an event prints as terminal-safe plain text', () => {
-  const e = { id: 'a'.repeat(32), at: T0, install: 'b'.repeat(32), event: 'job.ready', provider: 'claude', model: 'sonnet', lang: 'en',
-    game: { mode: 'single', version: '0.1.0' }, prompts: ['Clear \u001b[2J the \u0007 screen\r\n<script>x</script>‮exe'],
-    mod: { format: 1, files: { 'mod.json': {} } }, diff: { added: ['x_a'], changed: [], retired: [], revived: [] },
-    validation: { ok: true, stage: 'done', codes: [], rounds: 1, ms: 5 }, outcome: { state: 'ready', afterMs: 120_000 } };
-  for (const color of [false, true]) {
-    const s = formatEvent(e, { color });
-    assert.ok(!s.includes('\u001b[2J') && !s.includes('\u0007') && !s.includes('\r') && !s.includes('‮'), JSON.stringify(s));
-    assert.ok(s.includes('<script>x</script>'));
-    if (!color) assert.ok(!s.includes('\u001b'));
-  }
-  assert.match(formatEvent(e), /ready after 2 min · passed \(done\) in 1 round\(s\)/);
-  assert.match(formatEvent(e), /added x_a · 1 mod file\(s\)/);
 });
