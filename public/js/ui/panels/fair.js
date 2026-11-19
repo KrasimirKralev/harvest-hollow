@@ -51,7 +51,7 @@ export function fmtPts(p10) {
   if (v >= 1000) return fmt(Math.round(v / 10));
   const whole = Math.floor(v / 10);
   const tenth = v % 10;
-  return tenth ? `${fmt(whole)}${lang() === 'bg' ? ',' : '.'}${tenth}` : fmt(whole);
+  return tenth ? `${fmt(whole)}${lang() === 'en' ? '.' : ','}${tenth}` : fmt(whole);
 }
 
 /**
@@ -75,7 +75,7 @@ export function payText(m, trophy) {
 /** A NO_ITEMS hint: English keeps its plural label ("Need 3 more Wooden Crates"); Bulgarian counts the item itself. */
 export function need(item, n) {
   const k = Math.max(1, n);
-  return { missing: [{ item, n: k, label: lang() === 'bg' && itemOf(item) ? undefined : pluralOf(itemOf(item)?.name ?? item, k) }] };
+  return { missing: [{ item, n: k, label: lang() !== 'en' && itemOf(item) ? undefined : pluralOf(itemOf(item)?.name ?? item, k) }] };
 }
 
 /**
@@ -519,7 +519,7 @@ export const fairPanel = {
 export function weekLabel(closesAt, state) {
   const tz = state?.meta?.tz || 'UTC';
   try {
-    const f = new Intl.DateTimeFormat(lang() === 'bg' ? 'bg-BG' : 'en-GB', { timeZone: tz, day: 'numeric', month: lang() === 'bg' ? 'long' : 'short' });
+    const f = new Intl.DateTimeFormat(({ en: 'en-GB', bg: 'bg-BG' })[lang()] ?? lang(), { timeZone: tz, day: 'numeric', month: lang() === 'bg' ? 'long' : 'short' });
     const a = f.formatToParts(closesAt - 6 * DAY + 4 * 3_600_000);
     const b = f.formatToParts(closesAt);
     const d = (p) => p.find((x) => x.type === 'day')?.value;

@@ -526,12 +526,12 @@
 }
 
 /* Bulgarian (i18n lane D): a parcel's name may take two lines; the "For sale" sign fits its board */
-:lang(bg) .hm-rung-name { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
-:lang(bg) .ha-sign-text { font-size: 1.05px; }
+:is(:lang(bg), :lang(pt-BR)) .hm-rung-name { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+:is(:lang(bg), :lang(pt-BR)) .ha-sign-text { font-size: 1.05px; }
 /* ... and the Market's Grand decor strip moves its button under the text when the row is too narrow for both */
-:lang(bg) .hg-strip { flex-wrap: wrap; row-gap: 6px; }
-:lang(bg) .hg-strip-text { min-width: 10rem; }
-:lang(bg) .hg-strip > .btn { margin-left: auto; }
+:is(:lang(bg), :lang(pt-BR)) .hg-strip { flex-wrap: wrap; row-gap: 6px; }
+:is(:lang(bg), :lang(pt-BR)) .hg-strip-text { min-width: 10rem; }
+:is(:lang(bg), :lang(pt-BR)) .hg-strip > .btn { margin-left: auto; }
 
 /* wave 5: a parcel made of the old small pieces is one field with one outline (its rects join) */
 .ha-parcel .ha-edge-path { stroke-linecap: square; }

@@ -28,12 +28,14 @@ const TAP_THROUGH = { gzipKB: 0.47, codeKB: 0.30 };
 // the owner's "portraits cover the coins" (2026-10-20, lead; rel-integration.md "Owner request 2026-10-20"): hud.js
 // fit()'s second step, 'stack' on the top-left row (118 B / 45 B)
 const TOP_ROW_STACK = { gzipKB: 0.12, codeKB: 0.05 };
+// Locale registration and formats add less than 1 KB gzip. The catalogs stay lazy.
+const PORTUGUESE = { gzipKB: 1, codeKB: 1 };
 const RECORD = {
   gzipKB: HEAD.gzipKB + 186.67 + POWERUPS.gzipKB + SHOW_HARVEY.gzipKB + TAP_THROUGH.gzipKB
-    + TOP_ROW_STACK.gzipKB,
+    + TOP_ROW_STACK.gzipKB + PORTUGUESE.gzipKB,
   codeKB: HEAD.codeKB + 96.0 + POWERUPS.codeKB + SHOW_HARVEY.codeKB + TAP_THROUGH.codeKB
-    + TOP_ROW_STACK.codeKB,
-  decided: 'owner 2026-10-19 sideways rows + crate power-ups + Show Harvey + tap-through; 2026-10-20 top row stack',
+    + TOP_ROW_STACK.codeKB + PORTUGUESE.codeKB,
+  decided: 'owner 2026-10-19 sideways rows + crate power-ups + Show Harvey + tap-through; 2026-10-20 top row stack; Brazilian Portuguese locale',
 };
 
 const quiet = { info() {}, warn() {}, error() {}, log() {} };
@@ -71,5 +73,5 @@ test('A2-02: the eager module graph stays inside the ceiling the integrator reco
 
 test('A2-02: what the budget line says stays lazy is not in the eager graph (the gift panel, Bulgarian catalogs, the power-ups)', () => {
   const { urls } = eagerGraph();
-  assert.deepEqual(urls.filter((u) => /\/ui\/panels\/gift\.js$|\/i18n\/bg\/|\/ui\/powerups\.js$|\/render\/powerups-view\.js$/.test(u)), []);
+  assert.deepEqual(urls.filter((u) => /\/ui\/panels\/gift\.js$|\/i18n\/(?:bg|pt-BR)\/|\/ui\/powerups\.js$|\/render\/powerups-view\.js$/.test(u)), []);
 });

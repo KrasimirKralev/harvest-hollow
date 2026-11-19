@@ -1,33 +1,10 @@
-// Content names by language (lane A API over lane B's table, docs/agent-notes/i18n-core.md "Content names").
-// English comes from the content tables themselves (shared/content: generated, never edited); Bulgarian from
-// i18n/bg/names.js, keyed by content id, loaded only with the Bulgarian catalogs. A missing Bulgarian entry falls back
-// to the English name (and counts in "Name ×3" form, so a sentence never gets English grammar glued to Bulgarian).
-//
-//   name(id, { form?, family? }) -> string    form: 'label' (default: a title or a button, "Пшеница"), 'short' (tight
-//                                             labels, "Тръстика"), 'lc' (inside a sentence, "пшеница"), 'pl' (plural),
-//                                             'count' (after a number: "моркова"), 'def' ("хамбарът", the subject),
-//                                             'defObj' ("хамбара", object / after a preposition), 'plDef' ("лехите")
-//   qty(id, n, { family?, form? }) -> string  "12 моркова" | "3 снопа пшеница" | "1 яйце"; English "12 Carrots" | "32 Wheat"
-//                                             form 'chip': "пшеница ×5" / "Wheat ×5" (inventory chips, tight lists)
-//   N(id, family?) / Q(id, n, family?)        refs for t() params: t('x', { crop: N('wheat') }) and in the catalog
-//                                             '{crop}' '{crop:def}' '{crop:count}'; '{q}' renders the quantity
-//   gender(id) -> 'm' | 'f' | 'n' | 'pl' | null   the Bulgarian gender (adjective agreement: catalog { m, f, n })
-//   ctext(family, id, field, english) -> any  a content text field (a description, a letter's body) in the language in
-//                                             effect, else the English value given
-//   setNameOverlay({ bg: { [id]: entry } })   (additive, Harness Hollow mods lane; harness contract §2.6) a farm's mod
-//                                             things' Bulgarian entries, merged over bg/names.js; English comes from the
-//                                             installed defs (the English index is rebuilt)
-//
-// Entry shape in i18n/bg/names.js (lane B), keyed by content id ('family:id' overrides an id shared by families):
-//   { name: 'Морков', g: 'm', pl: 'моркови', count: 'моркова', def: 'морковът', defObj: 'моркова', plDef: 'морковите',
-//     short?: 'Морков', lc?: 'морков', proper?: true (keeps its capital in a sentence),
-//     unit?: ['сноп', 'снопа'] (a mass noun: the unit word after 1 and after any other number), desc?: '...' }
+// Nomes e descrições do conteúdo. Os catálogos usam os IDs originais das tabelas de jogo.
 import { lang, data, registerData, setRefRenderer, touchTwin } from './core.js';
 import { fmtNum } from './core.js';
 import { CONTENT, PLACEABLES, itemOf, pluralOf, lookup } from '../../../shared/content/index.js';
 
-registerData('names', () => import('./bg/names.js'));
-registerData('text', () => import('./bg/text.js'));
+registerData('names', { bg: () => import('./bg/names.js'), 'pt-BR': () => import('./pt-BR/names.js') });
+registerData('text', { bg: () => import('./bg/text.js'), 'pt-BR': () => import('./pt-BR/text.js') });
 
 /** The English def for an id: placeables first, then items, then any family that has it. */
 const enIndex = new Map();
@@ -59,15 +36,15 @@ export function setNameOverlay(overlay = {}) {
 
 /** The Bulgarian entry for an id (or null: English is shown). */
 export function entry(id, family) {
-  if (lang() !== 'bg') return null;
-  if (typeof id === 'string' && Object.hasOwn(modNames, id)) return modNames[id];
+  if (lang() === 'en') return null;
+  if (lang() === 'bg' && typeof id === 'string' && Object.hasOwn(modNames, id)) return modNames[id];
   const tbl = data('names');
   if (!tbl) return null;
   const n = tbl.names ?? tbl;
   return (family && n[`${family}:${id}`]) || n[id] || null;
 }
 
-const lowerFirst = (s) => (s ? s[0].toLocaleLowerCase('bg') + s.slice(1) : s);
+const lowerFirst = (s) => (s ? s[0].toLocaleLowerCase(lang()) + s.slice(1) : s);
 
 /** A content name in the asked form (see the header). */
 export function name(id, { form = 'label', family } = {}) {
@@ -106,11 +83,11 @@ export function qty(id, n, { family, form } = {}) {
   const e = entry(id, family);
   if (form === 'chip') return `${e ? name(id, { form: 'lc', family }) : enName(id, family)} ×${fmtNum(v)}`;
   if (!e) {
-    if (lang() === 'bg') return `${enName(id, family)} ×${fmtNum(v)}`;
+    if (lang() !== 'en') return `${enName(id, family)} ×${fmtNum(v)}`;
     return `${fmtNum(v)} ${pluralOf(enName(id, family), v)}`;
   }
   const one = v === 1;
-  if (Array.isArray(e.unit)) return `${fmtNum(v)} ${one ? e.unit[0] : e.unit[1] ?? e.unit[0]} ${name(id, { form: 'lc', family })}`;
+  if (Array.isArray(e.unit)) return `${fmtNum(v)} ${one ? e.unit[0] : e.unit[1] ?? e.unit[0]}${lang() === 'pt-BR' ? ' de ' : ' '}${name(id, { form: 'lc', family })}`;
   if (one) return `1 ${e.one ?? name(id, { form: 'lc', family })}`;
   return `${fmtNum(v)} ${e.g === 'm' ? e.count ?? e.pl : e.pl ?? e.name}`;
 }
@@ -129,7 +106,7 @@ setRefRenderer((ref, form) => {
       // the noun alone as it follows this count ("моркова" / "Carrots"), for a sentence that prints the number itself
       const e = entry(ref.$qty, ref.family);
       if (!e) return pluralOf(enName(ref.$qty, ref.family), ref.n);
-      if (Array.isArray(e.unit)) return `${ref.n === 1 ? e.unit[0] : e.unit[1] ?? e.unit[0]} ${name(ref.$qty, { form: 'lc', family: ref.family })}`;
+      if (Array.isArray(e.unit)) return `${ref.n === 1 ? e.unit[0] : e.unit[1] ?? e.unit[0]}${lang() === 'pt-BR' ? ' de ' : ' '}${name(ref.$qty, { form: 'lc', family: ref.family })}`;
       return ref.n === 1 ? e.one ?? name(ref.$qty, { form: 'lc', family: ref.family }) : e.g === 'm' ? e.count ?? e.pl : e.pl ?? e.name;
     }
     return qty(ref.$qty, ref.n, { family: ref.family });
@@ -142,7 +119,7 @@ setRefRenderer((ref, form) => {
  * lanes B and C) when it has one, else the English value the caller already holds. `field` may be a path ('letter.body').
  */
 export function ctext(family, id, field, english) {
-  if (lang() !== 'bg') return english;
+  if (lang() === 'en') return english;
   if (field === 'desc' || field === 'name') {
     const e = entry(id, family);
     if (e && e[field] !== undefined) {

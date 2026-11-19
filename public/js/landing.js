@@ -12,7 +12,7 @@
 // the English · Български toggle in the top corner (remembered on this device, i18n/core.js); a Bulgarian page waits
 // for its catalog before it shows (landing.html), and a switch re-says everything, the open sheets included.
 import { createFarmScope, farmsOnDevice, forgetFarm, rememberFarm, startFarm, farmLinkPath, isStandalone } from './net/farm.js';
-import { t, ready, loaded, onLang, applyStatic, retell } from './i18n/front.js';
+import { t, ready, loaded, onLang, applyStatic, retell, lang } from './i18n/front.js';
 import { langToggle } from './ui/lang-toggle.js';
 import { assetUrl } from './net/asset-base.js';
 
@@ -277,6 +277,8 @@ function relabel() {
   const again = status.textContent ? retell(status.textContent) : null;
   applyStatic(document);
   document.title = t('multi.ld.title');
+  const manifest = document.querySelector('link[rel=manifest]');
+  if (manifest) manifest.href = lang() === 'en' ? '/manifest.webmanifest' : `/manifest.${lang()}.webmanifest`;
   if (again) status.textContent = again();
   if ($('ld-start').getAttribute('aria-busy') === 'true') $('ld-start-sub').textContent = t('front.start.busy');
   sayStars();

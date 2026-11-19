@@ -17,7 +17,7 @@ const SITES = {
   'public/js/ui/index.js': 1, // installPanels
   'public/js/ui/social.js': 1, // the gift sheet
   'public/js/ui/harness/boot.js': 2, // Harvey and his words
-  'public/js/i18n/core.js': 2, // every Bulgarian area and data table
+  'public/js/i18n/core.js': 1, // shared by localized catalogs and content data
   'public/js/ui/panels/fair.js': 1,
   'public/js/ui/panels/league.js': 1,
   'public/js/ui/panels/w4.js': 1,

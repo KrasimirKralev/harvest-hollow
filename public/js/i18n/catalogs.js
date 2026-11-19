@@ -1,8 +1,4 @@
-// Every catalog area of the game, one English module (the source, loaded with the page) and one Bulgarian module
-// (loaded only when Bulgarian is chosen) per area. One area = one lane's files, so two lanes never edit the same catalog
-// (docs/agent-notes/i18n-core.md "Areas"). Lane A owns this list; every lane's areas are already in it: a lane fills
-// its own en/<area>.js and bg/<area>.js and never needs to touch this file. Literal import() lines on purpose: the
-// server versions every module it can find (server/static.js), and finds only literal specifiers.
+// Catálogos do jogo. Os idiomas adicionais são carregados sob demanda.
 import core from './en/core.js';
 import shell from './en/shell.js';
 import hud from './en/hud.js';
@@ -29,52 +25,52 @@ import cheer from './en/cheer.js';
 import feat from './en/feat.js';
 import boot from './en/boot.js';
 
-/** [area, English catalog, Bulgarian loader] in load order. */
+/** [area, English catalog, Bulgarian loader, Brazilian Portuguese loader] in load order. */
 export const AREAS = [
   // lane A: core and shell
-  ['core', core, () => import('./bg/core.js')],
-  ['shell', shell, () => import('./bg/shell.js')],
-  ['hud', hud, () => import('./bg/hud.js')],
-  ['toolbar', toolbar, () => import('./bg/toolbar.js')],
-  ['toasts', toasts, () => import('./bg/toasts.js')],
-  ['moments', moments, () => import('./bg/moments.js')],
-  ['settings', settings, () => import('./bg/settings.js')],
-  ['social', social, () => import('./bg/social.js')],
-  ['game', game, () => import('./bg/game.js')],
-  ['multi', multi, () => import('./bg/multi.js')],
+  ['core', core, () => import('./bg/core.js'), () => import('./pt-BR/core.js')],
+  ['shell', shell, () => import('./bg/shell.js'), () => import('./pt-BR/shell.js')],
+  ['hud', hud, () => import('./bg/hud.js'), () => import('./pt-BR/hud.js')],
+  ['toolbar', toolbar, () => import('./bg/toolbar.js'), () => import('./pt-BR/toolbar.js')],
+  ['toasts', toasts, () => import('./bg/toasts.js'), () => import('./pt-BR/toasts.js')],
+  ['moments', moments, () => import('./bg/moments.js'), () => import('./pt-BR/moments.js')],
+  ['settings', settings, () => import('./bg/settings.js'), () => import('./pt-BR/settings.js')],
+  ['social', social, () => import('./bg/social.js'), () => import('./pt-BR/social.js')],
+  ['game', game, () => import('./bg/game.js'), () => import('./pt-BR/game.js')],
+  ['multi', multi, () => import('./bg/multi.js'), () => import('./pt-BR/multi.js')],
   // lane B: league and weekly panels (the content names table is i18n/bg/names.js)
-  ['league', league, () => import('./bg/league.js')],
-  ['weekly', weekly, () => import('./bg/weekly.js')],
+  ['league', league, () => import('./bg/league.js'), () => import('./pt-BR/league.js')],
+  ['weekly', weekly, () => import('./bg/weekly.js'), () => import('./pt-BR/weekly.js')],
   // lane C: feed, Journal, goals and quests
-  ['feed', feed, () => import('./bg/feed.js')],
-  ['goals', goals, () => import('./bg/goals.js')],
+  ['feed', feed, () => import('./bg/feed.js'), () => import('./pt-BR/feed.js')],
+  ['goals', goals, () => import('./bg/goals.js'), () => import('./pt-BR/goals.js')],
   // lane D: economy, collect and home panels
-  ['market', market, () => import('./bg/market.js')],
-  ['farm', farm, () => import('./bg/farm.js')],
-  ['collect', collect, () => import('./bg/collect.js')],
-  ['home', home, () => import('./bg/home.js')],
+  ['market', market, () => import('./bg/market.js'), () => import('./pt-BR/market.js')],
+  ['farm', farm, () => import('./bg/farm.js'), () => import('./pt-BR/farm.js')],
+  ['collect', collect, () => import('./bg/collect.js'), () => import('./pt-BR/collect.js')],
+  ['home', home, () => import('./bg/home.js'), () => import('./pt-BR/home.js')],
   // multi-farm hosting: the keys (a lost device's way back), privacy, and the landing page's words (also the game's
   // ideas card and star card). 'keep' and 'front' are also registered on their own (i18n/keep.js, i18n/front.js) by
   // the modules the landing page shares: register() keeps the first.
-  ['keep', keep, () => import('./bg/keep.js')],
-  ['privacy', privacy, () => import('./bg/privacy.js')],
-  ['front', front, () => import('./bg/front.js')],
+  ['keep', keep, () => import('./bg/keep.js'), () => import('./pt-BR/keep.js')],
+  ['privacy', privacy, () => import('./bg/privacy.js'), () => import('./pt-BR/privacy.js')],
+  ['front', front, () => import('./bg/front.js'), () => import('./pt-BR/front.js')],
   // release 1.0 (docs/agent-briefs/release-scope.md §3 step 0): one new area per lane, so no two lanes share a
   // catalog. dock: ui-shell; cheer: life-feel; feat: features; boot: infra (harvey keeps 'harness', infra 'front').
-  ['dock', dock, () => import('./bg/dock.js')],
-  ['cheer', cheer, () => import('./bg/cheer.js')],
-  ['feat', feat, () => import('./bg/feat.js')],
-  ['boot', boot, () => import('./bg/boot.js')],
+  ['dock', dock, () => import('./bg/dock.js'), () => import('./pt-BR/dock.js')],
+  ['cheer', cheer, () => import('./bg/cheer.js'), () => import('./pt-BR/cheer.js')],
+  ['feat', feat, () => import('./bg/feat.js'), () => import('./pt-BR/feat.js')],
+  ['boot', boot, () => import('./bg/boot.js'), () => import('./pt-BR/boot.js')],
 ];
 
 /**
  * Areas registered on demand by their own entry, not with the page (the tests check them like the others):
- * [area, () => import(en), () => import(bg)]. 'harness': the in-game helper (i18n/harness.js, loaded by
+ * [area, () => import(en), () => import(bg), () => import(pt-BR)]. 'harness': the in-game helper (i18n/harness.js, loaded by
  * ui/harness/boot.js only when the farm's server offers the helper).
  */
 export const LAZY_AREAS = [
-  ['harness', () => import('./en/harness.js'), () => import('./bg/harness.js')],
+  ['harness', () => import('./en/harness.js'), () => import('./bg/harness.js'), () => import('./pt-BR/harness.js')],
 ];
 
-/** Every area with its English catalog loaded: [area, en, () => import(bg)] (tests and tools). */
-export const allAreas = async () => [...AREAS, ...await Promise.all(LAZY_AREAS.map(async ([a, en, bg]) => [a, (await en()).default, bg]))];
+/** Every area with its English catalog loaded: [area, en, () => import(bg), () => import(pt-BR)] (tests and tools). */
+export const allAreas = async () => [...AREAS, ...await Promise.all(LAZY_AREAS.map(async ([a, en, bg, pt]) => [a, (await en()).default, bg, pt]))];

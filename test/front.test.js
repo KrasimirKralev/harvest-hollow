@@ -8,8 +8,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { ROOT } from './helpers.js';
-import EN_FRONT from '../public/js/i18n/en/front.js';
-import EN_MULTI from '../public/js/i18n/en/multi.js';
+import PT_FRONT from '../public/js/i18n/pt-BR/front.js';
+import PT_MULTI from '../public/js/i18n/pt-BR/multi.js';
 import { t as tx } from '../public/js/i18n/front.js';
 import '../public/js/i18n/multi.js';
 import { ago } from '../public/js/landing.js';
@@ -19,15 +19,15 @@ import { checkIdea as serverCheck, IDEA_LIMITS as SERVER_LIMITS, CATEGORIES as S
 
 const html = fs.readFileSync(path.join(ROOT, 'public/landing.html'), 'utf8');
 // the landing page's words: the 'front' area, its title and description the 'multi' area
-const FRONT_TEXT = { ...EN_MULTI, ...EN_FRONT };
+const FRONT_TEXT = { ...PT_MULTI, ...PT_FRONT };
 const squash = (s) => s.replace(/<[^>]+>/g, '').replace(/&rsaquo;/g, '›').replace(/\s+/g, ' ').trim();
 
-test('front: every [data-i18n] key of landing.html is in the catalog, with the same English as its fallback text', () => {
+test('front: every [data-i18n] key of landing.html is in the catalog, with the Portuguese fallback text', () => {
   const keys = [...html.matchAll(/<(\w+)\b[^>]*\bdata-i18n="([^"]+)"[^>]*>([\s\S]*?)<\/\1>/g)];
   assert.ok(keys.length >= 18, `${keys.length} [data-i18n] elements`);
   for (const [, , key, inner] of keys) {
     assert.ok(Object.hasOwn(FRONT_TEXT, key), `missing catalog key ${key}`);
-    assert.equal(squash(inner), tx(key), `landing.html fallback for ${key}`);
+    assert.equal(squash(inner), FRONT_TEXT[key], `landing.html fallback for ${key}`);
   }
   for (const [tag] of html.matchAll(/<[^>]*\bdata-i18n-attr="[^"]+"[^>]*>/g)) {
     const spec = /data-i18n-attr="([^"]+)"/.exec(tag)[1];
@@ -36,7 +36,7 @@ test('front: every [data-i18n] key of landing.html is in the catalog, with the s
       assert.ok(Object.hasOwn(FRONT_TEXT, key), `missing catalog key ${key}`);
       const v = new RegExp(`\\b${attr}="([^"]*)"`).exec(tag);
       assert.ok(v, `${attr} fallback on ${tag.slice(0, 60)}`);
-      assert.equal(v[1], tx(key), `${attr} fallback for ${key}`);
+      assert.equal(v[1], FRONT_TEXT[key], `${attr} fallback for ${key}`);
     }
   }
 });
@@ -187,7 +187,7 @@ test('front O7: one big Play, the invite line under it, Star us and GitHub in th
   const order = [...more.matchAll(/id="(ld-[a-z-]+)"/g)].map((m) => m[1]).filter((id) => id !== 'ld-star-n');
   assert.deepEqual(order.slice(0, 3), ['ld-back-open', 'ld-star-btn', 'ld-repo'], 'Star us and GitHub beside "Already have a farm?"');
   assert.match(more, /id="ld-star-btn"[^>]*class|class="ld-link ld-link--star" id="ld-star-btn"/);
-  assert.match(more, /class="ld-link ld-link--gh" id="ld-repo"[^>]*aria-label="Open GitHub" data-i18n-attr="aria-label:front\.act\.github"/);
+  assert.match(more, /class="ld-link ld-link--gh" id="ld-repo"[^>]*aria-label="Abrir o GitHub" data-i18n-attr="aria-label:front\.act\.github"/);
   assert.match(more, /id="ld-star-n"/, 'the live count stays with the star');
   const { default: en } = await import('../public/js/i18n/en/front.js');
   const { default: bg } = await import('../public/js/i18n/bg/front.js');

@@ -537,4 +537,4 @@ body.motion-reduced .lg-duel-chip.invite { animation: none; }
 .lg-refund .pn-act { align-items: flex-end; }
 .lg-refund .btn { font-size: .875rem; }
 /* Bulgarian reward words run longer ("5 жълъда и трофей за цял сезон"): a third line on the Ribbon Track cards */
-html[lang="bg"] .lg-tier-what { -webkit-line-clamp: 3; min-height: 3.6em; }
+html:is([lang="bg"], [lang="pt-BR"]) .lg-tier-what { -webkit-line-clamp: 3; min-height: 3.6em; }

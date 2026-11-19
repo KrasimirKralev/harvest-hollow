@@ -206,7 +206,7 @@ test('privacy page: served at /privacy in multi mode (versioned assets, no third
       assert.equal(r.status, 200, p);
       assert.match(r.headers.get('content-type'), /text\/html/);
       const html = await r.text();
-      assert.match(html, /<title>Privacy · Harness Hollow<\/title>/);
+      assert.match(html, /<title>Privacidade · Harness Hollow<\/title>/);
       assert.match(html, /src="\/js\/privacy\.js\?v=[0-9a-f]+"/, 'the script is versioned like every page\'s');
       assert.match(html, /href="\/css\/privacy\.css\?v=[0-9a-f]+"/);
       assert.equal(r.headers.get('referrer-policy'), 'same-origin');

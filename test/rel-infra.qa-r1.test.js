@@ -208,23 +208,26 @@ async function multiServer() {
   return { ...s, base: `http://127.0.0.1:${s.port}`, close };
 }
 
-test('I-04: on the multi host every manifest describes the game with the landing\'s tagline, EN and BG', async () => {
+test('I-04: on the multi host every manifest describes the game with the landing\'s tagline in each locale', async () => {
   const { default: EN } = await import('../public/js/i18n/en/front.js');
   const { default: BG } = await import('../public/js/i18n/bg/front.js');
+  const { default: PT } = await import('../public/js/i18n/pt-BR/front.js');
+  const catalogs = { en: EN, bg: BG, 'pt-BR': PT };
   const s = await multiServer();
   try {
     const r = await fetch(`${s.base}/api/farms`, { method: 'POST', body: '{}',
       headers: { 'content-type': 'application/json', origin: s.base } });
     const { id } = await r.json();
     const urls = { en: [`/f/${id}/manifest.webmanifest`, '/manifest.webmanifest'],
-      bg: [`/f/${id}/manifest.webmanifest?lang=bg`, '/manifest.bg.webmanifest'] };
+      bg: [`/f/${id}/manifest.webmanifest?lang=bg`, '/manifest.bg.webmanifest'],
+      'pt-BR': [`/f/${id}/manifest.webmanifest?lang=pt-BR`, '/manifest.pt-BR.webmanifest'] };
     for (const [lang, list] of Object.entries(urls)) {
       for (const u of list) {
         const res = await fetch(`${s.base}${u}`);
         assert.equal(res.status, 200, u);
         assert.match(res.headers.get('content-type'), /application\/manifest\+json/, u);
         const m = await res.json();
-        assert.equal(m.description, (lang === 'bg' ? BG : EN)['front.hero.tag'], u);
+        assert.equal(m.description, catalogs[lang]['front.hero.tag'], u);
         assert.doesNotMatch(m.description, /home network|домашната/, u);
         assert.equal(m.lang, lang, u);
         assert.ok(m.name && m.icons.length, u);

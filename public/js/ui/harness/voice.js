@@ -4,12 +4,12 @@
 // read-aloud (speechSynthesis) works everywhere it exists. No dependency, no recording kept: the words go into the
 // request box and nowhere else.
 //
-//   LOCALE                                  { en: 'en-US', bg: 'bg-BG' }
+//   LOCALE                                  { en: 'en-US', bg: 'bg-BG', 'pt-BR': 'pt-BR' }
 //   createDictation({ win }) -> { supported, why, listening, start(lang, { onText(text, final), onEnd(reason), onError(code) }), stop() }
 //     why: null | 'insecure' | 'missing'    onError codes: 'blocked' (no microphone permission) | 'silence' | 'network' | 'other'
 //   createReader({ win }) -> { supported, speaking, speak(text, lang, { onEnd }), stop() }
 
-export const LOCALE = Object.freeze({ en: 'en-US', bg: 'bg-BG' });
+export const LOCALE = Object.freeze({ en: 'en-US', bg: 'bg-BG', 'pt-BR': 'pt-BR' });
 
 const ERRORS = { 'not-allowed': 'blocked', 'service-not-allowed': 'blocked', 'audio-capture': 'blocked', 'no-speech': 'silence', network: 'network' };
 

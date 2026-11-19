@@ -196,7 +196,7 @@ const cap = (s) => String(s).replace(/^./, (c) => c.toUpperCase());
 /** "1 Sept" in the farm's zone. */
 function dateText(ms, state) {
   try {
-    return new Intl.DateTimeFormat(lang() === 'bg' ? 'bg-BG' : 'en-GB', { timeZone: state?.meta?.tz || 'UTC', day: 'numeric', month: lang() === 'bg' ? 'long' : 'short' }).format(ms);
+    return new Intl.DateTimeFormat(({ en: 'en-GB', bg: 'bg-BG' })[lang()] ?? lang(), { timeZone: state?.meta?.tz || 'UTC', day: 'numeric', month: lang() === 'bg' ? 'long' : 'short' }).format(ms);
   } catch { return ''; }
 }
 

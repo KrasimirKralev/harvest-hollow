@@ -1405,7 +1405,7 @@ if (typeof document !== 'undefined') {
     const href = String(mf?.getAttribute('href') ?? '');
     if (!mf || href.startsWith('data:')) return;
     if (href.startsWith('/f/')) mf.setAttribute('href', farmManifestHref(href, l));
-    else mf.setAttribute('href', l === 'bg' ? '/manifest.bg.webmanifest' : '/manifest.webmanifest');
+    else mf.setAttribute('href', l === 'en' ? '/manifest.webmanifest' : `/manifest.${l}.webmanifest`);
   });
   onLang(() => {
     const b = $('boot');

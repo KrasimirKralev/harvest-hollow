@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="pt-BR">
 <head>
   <meta charset="utf-8">
   <!-- The page a sign-in for the in-game helper lands on (server/agent/routes.js: GET /auth/callback for Sign in with
@@ -46,7 +46,19 @@
   <main>
     <img src="/assets/art/logo-wide.png" alt="Harness Hollow" width="1400" height="336">
 
-    <section class="card" lang="en" data-lang="en">
+    <section class="card" lang="pt-BR" data-lang="pt-BR">
+      <div class="mark" aria-hidden="true"><span class="when-ok">✓</span><span class="when-error">!</span></div>
+      <h1><span class="when-ok">Você está conectado</span><span class="when-error">O login não funcionou</span></h1>
+      <p class="when-ok">Harvey pode trabalhar com seu plano agora. Você pode fechar esta aba e voltar para sua fazenda.</p>
+      <p class="why why-DENIED">Você não permitiu o acesso ou esta conta não pode usar seu plano aqui. Tente novamente no jogo.</p>
+      <p class="why why-EXPIRED">O login demorou muito. Inicie novamente a partir do jogo.</p>
+      <p class="why why-BAD_CODE">O código não foi aceito. Inicie o login novamente no jogo.</p>
+      <p class="why why-STATE">Este link de login não é mais válido. Inicie o login novamente no jogo.</p>
+      <p class="why why-UNAVAILABLE">O provedor não pode ser contatado no momento. Tente novamente daqui a pouco.</p>
+      <p class="why why-INTERNAL">Algo deu errado no servidor do farm. Tente novamente no jogo.</p>
+    </section>
+
+    <section class="card" hidden lang="en" data-lang="en">
       <div class="mark" aria-hidden="true"><span class="when-ok">✓</span><span class="when-error">!</span></div>
       <h1><span class="when-ok">You are signed in</span><span class="when-error">The sign-in did not work</span></h1>
       <p class="when-ok">Harvey can work with your plan now. You can close this tab and go back to your farm.</p>
@@ -58,7 +70,7 @@
       <p class="why why-INTERNAL">Something went wrong on the farm's server. Try again from the game.</p>
     </section>
 
-    <section class="card" lang="bg" data-lang="bg">
+    <section class="card" hidden lang="bg" data-lang="bg">
       <div class="mark" aria-hidden="true"><span class="when-ok">✓</span><span class="when-error">!</span></div>
       <h1><span class="when-ok">Готово, влезе!</span><span class="when-error">Влизането не стана</span></h1>
       <p class="when-ok">Харви вече може да работи с плана ти. Можеш да затвориш този раздел и да се върнеш във фермата.</p>
@@ -73,19 +85,16 @@
   <script>
     // one language: ?lang=, then the device's choice, then the browser's (bg* -> Bulgarian), else English
     (function () {
-      var pick = 'en';
+      var pick = 'pt-BR';
       try {
         var asked = new URLSearchParams(location.search).get('lang');
         var stored = null;
         try { stored = localStorage.getItem('hh.lang'); } catch (e) { stored = null; }
-        var langs = navigator.languages || [navigator.language || ''];
-        if (asked === 'en' || asked === 'bg') pick = asked;
-        else if (stored === 'en' || stored === 'bg') pick = stored;
-        else for (var i = 0; i < langs.length; i++) {
-          var b = String(langs[i] || '').toLowerCase().split('-')[0];
-          if (b === 'bg' || b === 'en') { pick = b; break; }
-        }
-      } catch (e) { pick = 'en'; }
+        var choices = ['pt-BR', 'en', 'bg'];
+        if (choices.includes(asked)) pick = asked;
+        else if (choices.includes(stored)) pick = stored;
+        else if (/^bg\b/i.test(navigator.language || '')) pick = 'bg';
+      } catch (e) { /* padrão em português */ }
       document.documentElement.lang = pick;
       document.documentElement.classList.add('one-lang');
       var cards = document.querySelectorAll('.card');

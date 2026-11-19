@@ -1,43 +1,10 @@
-// i18n engine (lane A, docs/agent-notes/i18n-core.md): the active language, the catalogs, t()/tn()/tNodes() and the
-// locale formatters. One leaf dependency (net/lazy.js), no DOM at import (node tests import it), no catalogs of its own: the game's entry
-// (i18n/index.js) registers every area, the landing page registers only its own (i18n/multi.js, i18n/front.js; the way
-// back's i18n/keep.js on demand), so the front door never downloads the game's text.
-//
-//   lang() -> 'en' | 'bg'                     the language in effect (English until a catalog has loaded)
-//   setLang(l) -> Promise                     load l's catalogs (lazy: Bulgarian is fetched only when chosen), switch,
-//                                             remember it on this device, set <html lang>, re-label [data-i18n] nodes and
-//                                             tell every onLang listener (they re-render)
-//   onLang(fn(lang)) -> off                   a language switch happened (after the new catalog is in)
-//   ready() -> Promise                        the first language's catalogs are in (main.js awaits it before the UI)
-//   loaded() -> Promise                       the same for every area registered since (a lazily imported module's)
-//   register(area, en, bgLoader)              an area's English catalog and the loader of its Bulgarian one
-//   registerData(name, bgLoader) / data(name) lazy non-catalog data per language (the content names table)
-//
-//   t(key, params?) -> string                 a whole sentence with named params: 'Sold {n} for {coins} coins'
-//   tn(key, n, params?) -> string             the same with a count: the catalog value { one, other } is picked by
-//                                             Intl.PluralRules(lang) and {n} is the formatted count
-//   tNodes(key, params?) -> DocumentFragment  the same sentence with DOM nodes for Node-valued params (a player's name in
-//                                             its own <span class="actor">), text for the rest
-//   has(key) -> boolean
-//   live(map) / liveRows(rows)                objects / [k, label] rows whose labels are catalog keys read at access time
-//                                             (exported constants that must follow the language)
-//
-// Placeholders: {name} or {name:form}; {name:omit} renders nothing (a translation that drops a param on purpose: the
-// parity test then knows it was not forgotten). A number param is formatted for the locale (47 219, 1,5); a content-name ref
-// (i18n/names.js N(id) / Q(id, n)) renders in the asked form ({crop:def}, {crop:count}); a string takes :cap / :lc.
-// {x:a} / {x:A} put the English article before any param ("an Apple Tree", "An 8% chance"); Bulgarian ignores them.
-// A catalog value may be an object: { one, other } (plural, by params.n) or { m, f, n, pl, other } (gender, by
-// params.$g, else by the gender of the first content-name ref in params), or { touch, other } (a line that names a key:
-// its words for a finger, by params.$touch; see touchOf). The forms nest: { touch: { one, other }, other: { … } }.
-//
-// Formatters: fmtNum(n) (integers, like ui/dom.js fmt), fmtDec(n, digits), fmtShort(n), fmtDuration(ms, opts),
-// fmtDate(ts, style | Intl options, tz?), fmtPct(n), list(items, 'and' | 'or'), ordinal(n, g).
-
+// Catálogos por idioma, formatos locais e tradução dos rótulos da interface.
 import { lazyImport } from '../net/lazy.js';
 
-export const LANGS = Object.freeze(['en', 'bg']);
+export const DEFAULT_LANG = 'pt-BR';
+export const LANGS = Object.freeze(['pt-BR', 'en', 'bg']);
 /** Each language in its own words: the picker's labels, never translated. */
-export const LANG_NAMES = Object.freeze({ en: 'English', bg: 'Български' });
+export const LANG_NAMES = Object.freeze({ en: 'English', bg: 'Български', 'pt-BR': 'Português (Brasil)' });
 /** Number and date locales per language (English keeps exactly the formats the game always had). */
 const NUM_LOCALE = { en: 'en-US', bg: 'bg-BG' };
 const DATE_LOCALE = { en: 'en-GB', bg: 'bg-BG' };
@@ -46,13 +13,15 @@ export const STORAGE_KEY = 'hh.lang';
 const isBrowser = typeof document !== 'undefined' && typeof window !== 'undefined';
 
 /**
- * The language a device starts in: the one it chose before, else the browser's own (`bg*` -> Bulgarian), else English.
+ * The language a device starts in: the one it chose before, else the browser's own (`bg*` -> Bulgarian), else the supplied default.
  * Pure (tests): `stored` is the remembered value, `navLangs` navigator.languages.
  */
-export function detectLang(stored, navLangs = []) {
+export function detectLang(stored, navLangs = [], fallback = 'en') {
   if (LANGS.includes(stored)) return stored;
   const first = (Array.isArray(navLangs) ? navLangs : [navLangs]).find((l) => typeof l === 'string' && l);
-  return first && /^bg\b/i.test(first) ? 'bg' : 'en';
+  if (first && /^bg\b/i.test(first)) return 'bg';
+  if (first && /^pt\b/i.test(first)) return 'pt-BR';
+  return fallback;
 }
 
 function readStored() {
@@ -68,15 +37,13 @@ function navLangs() {
 }
 
 // node tests always run in English (Node has a navigator, and a developer's machine may say bg_BG)
-let want = isBrowser ? detectLang(readStored(), navLangs()) : 'en';
+let want = isBrowser ? detectLang(readStored(), navLangs(), DEFAULT_LANG) : 'en';
 let cur = 'en';
 
-/** area -> { en, bg: null | object, load: () => Promise<module>, loading: Promise | null } */
 const areas = new Map();
-/** name -> { load, value: { [lang]: any }, loading } */
 const datas = new Map();
-const EN = Object.create(null);
-let BG = Object.create(null);
+const catalogs = new Map(LANGS.map((locale) => [locale, Object.create(null)]));
+const EN = catalogs.get('en');
 const listeners = new Set();
 const missing = new Set();
 
@@ -85,70 +52,66 @@ export const lang = () => cur;
 /** The language a switch is on its way to (equals lang() once its catalogs are in). */
 export const wantedLang = () => want;
 
-function loadArea(a) {
-  if (a.bg || !a.load) return Promise.resolve();
-  if (!a.loading) {
-    a.loading = lazyImport(`bg/${a.name}`, a.load).then((m) => {
-      a.bg = (m && (m.default ?? m.catalog)) || {};
-      Object.assign(BG, a.bg);
+function loadRegistered(record, locale) {
+  const loader = record.loaders[locale];
+  if (!loader || record.values.has(locale)) return Promise.resolve();
+  if (!record.loading.has(locale)) {
+    const pending = lazyImport(`${locale}/${record.name}`, loader).then((module) => {
+      const value = module.default ?? module;
+      record.values.set(locale, value);
+      if (record.area) Object.assign(catalogs.get(locale), value);
     }).catch((err) => {
-      a.loading = null;
-      console.warn(`i18n: the Bulgarian catalog '${a.name}' did not load`, err);
-    });
+      console.warn(`i18n: '${locale}/${record.name}' não carregou`, err);
+    }).finally(() => record.loading.delete(locale));
+    record.loading.set(locale, pending);
   }
-  return a.loading;
+  return record.loading.get(locale);
 }
-function loadData(d) {
-  if (d.value.bg !== undefined || !d.load) return Promise.resolve();
-  if (!d.loading) {
-    d.loading = lazyImport(`bg/${d.name}`, d.load).then((m) => { d.value.bg = (m && (m.default ?? m)) || null; })
-      .catch((err) => { d.loading = null; console.warn(`i18n: '${d.name}' did not load`, err); });
-  }
-  return d.loading;
-}
-function loadAll(l) {
-  if (l === 'en') return Promise.resolve();
-  return Promise.all([...[...areas.values()].map(loadArea), ...[...datas.values()].map(loadData)]);
+
+function loadAll(locale) {
+  if (locale === 'en') return Promise.resolve();
+  return Promise.all([...areas.values(), ...datas.values()].map((entry) => loadRegistered(entry, locale)));
 }
 
 let firstLoad = null;
-/** The first language's catalogs are in (always resolves; a failed Bulgarian load falls back to English). */
+/** Resolve quando os catálogos do idioma inicial estão disponíveis. */
 export function ready() {
-  if (!firstLoad) firstLoad = loadAll(want).then(() => { if (want === 'bg') switchTo('bg', { quiet: true }); });
+  if (!firstLoad) {
+    const initial = want;
+    firstLoad = loadAll(initial).then(() => { if (want === initial) switchTo(initial, { quiet: true }); });
+  }
   return firstLoad;
 }
 
-/**
- * Every area registered so far has its catalog in for the language in effect: a module imported on demand registers
- * its area late (the landing page's way back) and awaits this before its first words. Always resolves.
- */
+/** Aguarda também os catálogos registrados por módulos carregados depois da primeira tela. */
 export function loaded() {
   return ready().then(() => loadAll(want));
 }
 
-/** Register an area: its English catalog (the source) and the loader of its Bulgarian one. Idempotent per area. */
-export function register(name, en, bgLoader) {
-  if (areas.has(name)) return;
-  for (const k of Object.keys(en || {})) {
-    if (Object.hasOwn(EN, k)) console.warn(`i18n: key '${k}' is defined twice (area '${name}')`);
-    EN[k] = en[k];
+function registerLazy(registry, name, loaders, area = false) {
+  const record = { name, loaders, area, values: new Map(), loading: new Map() };
+  registry.set(name, record);
+  const locale = want;
+  if (locale !== 'en' && firstLoad) {
+    loadRegistered(record, locale).then(() => { if (cur === locale) emit(); });
   }
-  const a = { name, en, bg: null, load: bgLoader || null, loading: null };
-  areas.set(name, a);
-  // an area registered after the first load (a lazily imported panel) loads at once and re-renders when it lands
-  if (want === 'bg' && firstLoad) loadArea(a).then(() => { if (cur === 'bg') emit(); });
 }
 
-/** Lazy per-language data that is not a catalog (the content names table): data(name) is null until loaded. */
-export function registerData(name, bgLoader) {
-  if (datas.has(name)) return;
-  const d = { name, load: bgLoader, value: {}, loading: null };
-  datas.set(name, d);
-  if (want === 'bg' && firstLoad) loadData(d).then(() => { if (cur === 'bg') emit(); });
+export function register(name, en, loaders = {}) {
+  if (areas.has(name)) return;
+  for (const k of Object.keys(en || {})) {
+    if (Object.hasOwn(EN, k)) console.warn(`i18n: chave '${k}' duplicada (área '${name}')`);
+    EN[k] = en[k];
+  }
+  registerLazy(areas, name, loaders, true);
 }
+
+export function registerData(name, loaders) {
+  if (!datas.has(name)) registerLazy(datas, name, loaders);
+}
+
 export function data(name) {
-  const d = datas.get(name);
-  return d ? d.value[cur] ?? null : null;
+  return datas.get(name)?.values.get(cur) ?? null;
 }
 
 function emit() {
@@ -181,7 +144,7 @@ export async function setLang(l, { persist = true } = {}) {
   await (firstLoad || ready());
   await loadAll(l);
   if (want !== l) return cur;                      // a newer choice won meanwhile
-  if (l === 'bg' && ![...areas.values()].some((a) => a.bg)) { want = cur; return cur; }   // offline: stay as we are
+  if (l !== 'en' && ![...areas.values()].some((area) => area.values.has(l))) { want = cur; return cur; }   // offline: stay as we are
   if (cur !== l) switchTo(l);
   else if (from !== l) emit();                     // the first load switched quietly on its way: say so now
   return cur;
@@ -205,14 +168,17 @@ const PLURAL_KEYS = ['zero', 'one', 'two', 'few', 'many', 'other'];
 const GENDER_KEYS = ['m', 'f', 'n', 'pl'];
 const pluralRules = new Map();
 function pluralOfN(n) {
+  const count = Number(n) || 0;
+  if (cur === 'pt-BR' && count === 0) return 'other';
   let pr = pluralRules.get(cur);
   if (!pr) { pr = new Intl.PluralRules(cur); pluralRules.set(cur, pr); }
-  return pr.select(Number(n) || 0);
+  return pr.select(count);
 }
 
 /** The raw catalog value of a key in the language in effect (English when Bulgarian has none). */
 export function raw(key) {
-  if (cur !== 'en' && BG[key] !== undefined) return BG[key];
+  const translated = catalogs.get(cur)?.[key];
+  if (cur !== 'en' && translated !== undefined) return translated;
   if (EN[key] !== undefined) {
     if (cur !== 'en' && !missing.has(key)) missing.add(key);
     return EN[key];
@@ -277,7 +243,11 @@ export function anArticle(text) {
 function paramText(v, form) {
   // English-only articles: {x:a} "an Apple Tree", {x:A} at the start of a sentence; Bulgarian has none (the text only)
   if (form === 'a' || form === 'A') {
-    const s = paramText(v, null);
+    const s = paramText(v, cur === 'pt-BR' ? 'lc' : null);
+    if (cur === 'pt-BR' && isRef(v) && s) {
+      const article = refGender?.(v) === 'f' ? 'uma' : 'um';
+      return `${form === 'A' ? cap(article) : article} ${s}`;
+    }
     if (cur !== 'en' || !s) return s;
     const art = anArticle(s);
     return `${form === 'A' ? art[0].toUpperCase() + art.slice(1) : art} ${s}`;
@@ -469,6 +439,11 @@ export function fmtShort(n) {
     if (a < 1_000_000) return fmtNum(v);
     return `${fmtDec(v / 1_000_000, 1)} млн.`;
   }
+  if (cur === 'pt-BR') {
+    if (a < 10_000) return fmtNum(v);
+    if (a < 1_000_000) return `${fmtDec(v / 1000, 1)} mil`;
+    return `${fmtDec(v / 1_000_000, 1)} mi`;
+  }
   if (a < 10_000) return fmtNum(v);
   if (a < 1_000_000) return `${(v / 1000).toFixed(a < 100_000 ? 1 : 0).replace(/\.0$/, '')}k`;
   return `${(v / 1_000_000).toFixed(1).replace(/\.0$/, '')}M`;
@@ -479,6 +454,7 @@ export function fmtShort(n) {
 // "3 дни 4 ч"), a no-break space between a number and its unit so a line never ends on a bare number
 const NB = ' ';
 const UNITS = {
+  'pt-BR': { s: (n) => `${n}${NB}s`, m: (n) => `${n}${NB}min`, h: (n) => `${n}${NB}h`, d: (n) => `${n}${NB}${n === 1 ? 'dia' : 'dias'}` },
   en: { s: (n) => `${n}s`, m: (n) => `${n}m`, h: (n) => `${n}h`, d: (n) => `${n}d` },
   bg: { s: (n) => `${n}${NB}сек`, m: (n) => `${n}${NB}мин`, h: (n) => `${n}${NB}ч`, d: (n) => `${n}${NB}${n === 1 ? 'ден' : 'дни'}` },
 };
@@ -559,6 +535,7 @@ export function ordinal(n, g = 'm') {
     const end = g === 'f' ? 'а' : g === 'n' ? 'о' : 'и';
     return `${v}-${stem}${end}`;
   }
+  if (cur === 'pt-BR') return `${v}${g === 'f' ? 'ª' : 'º'}`;
   const suf = tens >= 11 && tens <= 13 ? 'th' : last === 1 ? 'st' : last === 2 ? 'nd' : last === 3 ? 'rd' : 'th';
   return `${v}${suf}`;
 }
@@ -573,7 +550,7 @@ export function fmtSigned(n) {
 
 /** Test hook: switch synchronously with an already-loaded Bulgarian catalog object (node tests; never the game). */
 export function __setForTest(l, bgCatalog = null) {
-  if (bgCatalog) { BG = Object.assign(Object.create(null), bgCatalog); }
+  if (bgCatalog && l !== 'en') catalogs.set(l, Object.assign(Object.create(null), bgCatalog));
   want = l;
   cur = l;
   pluralRules.clear();

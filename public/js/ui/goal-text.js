@@ -1,4 +1,4 @@
-// The rules' messages on screen (i18n lane C). shared/rules/goals.js and actions/quests.js build every Goal Tracker
+// The rules' messages on screen. shared/rules/goals.js and actions/quests.js build every Goal Tracker
 // card, task line and blocker as { key, params } (shared/rules/goal-text.js); this module says one in the language in
 // effect: English exactly as the rules always wrote it (enText), Bulgarian through the catalog (i18n/bg/goals.js) with
 // the content names in their Bulgarian forms.
@@ -6,7 +6,7 @@
 //   goalText(msg) -> string     a message (or a plain string, passed through) as text
 //   noteText(note) -> string    a gift's note in this screen's language (a one-tap token) or as typed (QA r2 F2-02)
 import { enText, giftNoteKey } from '../../../shared/rules/goal-text.js';
-import { lang, t, fmtNum, fmtDec, list, ctext, N, Q, name, qty, nameEntry } from '../i18n/index.js';
+import { lang, t, fmtNum, fmtDec, list, fmtDuration, ctext, N, Q, name, qty, nameEntry } from '../i18n/index.js';
 
 /**
  * A gift's note as this screen says it (QA r2 F2-02): a one-tap note ("#thanks") in the reader's language, a typed note
@@ -46,7 +46,7 @@ function param(v) {
   if (Object.hasOwn(v, '$qty')) return Q(v.$qty, v.n, v.family);
   // the bare noun as a count says it: "моркови", "пшеница" (one: "морков")
   if (Object.hasOwn(v, '$noun')) return name(v.$noun, { form: v.n === 1 ? 'lc' : 'pl', family: v.family });
-  if (Object.hasOwn(v, '$mmss')) return mmssBg(v.$mmss);
+  if (Object.hasOwn(v, '$mmss')) return lang() === 'pt-BR' ? fmtDuration(v.$mmss) : mmssBg(v.$mmss);
   if (Object.hasOwn(v, '$p10')) return fmtDec(v.$p10 / 10, 1);
   if (Object.hasOwn(v, '$ctext')) return String(ctext(...v.$ctext) ?? '');
   if (Object.hasOwn(v, '$msg')) return goalText(v.$msg);

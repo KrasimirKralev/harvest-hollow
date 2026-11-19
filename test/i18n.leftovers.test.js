@@ -289,9 +289,9 @@ test('the landing page\'s meta description follows the language, like the rest o
   const meta = html.match(/<meta name="description"[^>]*>/)?.[0] ?? '';
   const key = meta.match(/data-i18n-attr="content:([\w.]+)"/)?.[1];
   assert.ok(key, `the description is re-labelled with the page: ${meta}`);
-  const en = (await import('../public/js/i18n/en/multi.js')).default;
+  const pt = (await import('../public/js/i18n/pt-BR/multi.js')).default;
   const bg = (await import('../public/js/i18n/bg/multi.js')).default;
-  assert.equal(en[key], meta.match(/content="([^"]*)"/)[1], 'English stays the description it always was');
+  assert.equal(pt[key], meta.match(/content="([^"]*)"/)[1], 'the static description is in Brazilian Portuguese');
   assert.match(bg[key], /^Harness Hollow: /, 'the brand in Latin letters');
   assert.doesNotMatch(bg[key].replace(/^Harness Hollow: /, '').replace(/\b3D\b/, ''), /[A-Za-z]/, `Bulgarian: ${bg[key]}`);
 });
