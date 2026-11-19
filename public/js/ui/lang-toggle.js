@@ -11,7 +11,7 @@ export function langToggle(onSwitched) {
   const el = doc.createElement('div');
   el.className = 'lang-pick';
   el.setAttribute('role', 'group');
-  el.setAttribute('aria-label', `${LANG_NAMES.en} / ${LANG_NAMES.bg}`);
+  el.setAttribute('aria-label', LANGS.map((locale) => LANG_NAMES[locale]).join(' / '));
   const paint = () => { for (const b of el.querySelectorAll('button')) b.setAttribute('aria-pressed', String(b.dataset.lang === lang())); };
   LANGS.forEach((l, i) => {
     if (i) {

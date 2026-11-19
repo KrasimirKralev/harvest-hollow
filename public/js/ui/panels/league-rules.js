@@ -357,7 +357,7 @@ export function duelScoreText(n, scale = 1) {
   const whole = Math.floor(v / s);
   const q = v % s;
   if (!q) return String(whole);
-  const frac = s === 4 ? ['', '¼', '½', '¾'][q] : s === 2 ? '½' : `${lang() === 'bg' ? ',' : '.'}${String(Math.round((q * 100) / s)).padStart(2, '0')}`;
+  const frac = s === 4 ? ['', '¼', '½', '¾'][q] : s === 2 ? '½' : `${lang() === 'en' ? '.' : ','}${String(Math.round((q * 100) / s)).padStart(2, '0')}`;
   return `${whole || (s === 4 || s === 2 ? '' : '0')}${frac}`;
 }
 

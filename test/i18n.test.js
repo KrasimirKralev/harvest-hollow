@@ -245,3 +245,31 @@ test('live constants follow the language: ERR_TEXT and SWATCH_NAMES read the cat
     I.__setForTest('en');
   }
 });
+
+test('Brazilian Portuguese covers the game catalog and its interpolation parameters', async () => {
+  for (const [area, en, , loadPt] of AREAS) {
+    const pt = (await loadPt()).default;
+    assert.deepEqual(Object.keys(pt).sort(), Object.keys(en).sort(), area);
+    for (const [key, value] of Object.entries(en)) {
+      const params = (entry) => [...paramsOf(entry)].filter((p) => p !== 'n' && !p.startsWith('_')).sort();
+      assert.deepEqual(params(pt[key]), params(value), key);
+    }
+  }
+  assert.equal(I.detectLang(null, ['pt-BR']), 'pt-BR');
+  assert.equal(I.detectLang(null, ['en-US'], I.DEFAULT_LANG), 'pt-BR');
+  assert.equal(I.detectLang('en', ['pt-BR'], I.DEFAULT_LANG), 'en');
+  await I.__loadForTest('pt-BR');
+  try {
+    assert.equal(I.t('common.close'), 'Fechar');
+    assert.equal(I.tn('common.coins', 0), '0 moedas');
+    assert.equal(I.tn('common.coins', 1), '1 moeda');
+    assert.equal(I.tn('common.coins', 12340), '12.340 moedas');
+    assert.equal(I.fmtDec(1.5), '1,5');
+    assert.equal(I.fmtDuration(8_100_000), '2 h 15 min');
+    assert.equal(I.qty('carrot', 2), '2 cenouras');
+    assert.equal(I.qty('wheat', 3), '3 feixes de trigo');
+    assert.equal(I.ctext('quests', 'nope', 'title', 'Título'), 'Título');
+  } finally {
+    I.__setForTest('en');
+  }
+});

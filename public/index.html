@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="pt-BR">
 <head>
   <meta charset="utf-8">
   <!-- viewport-fit=cover: the farm runs under a notch and a home bar, the HUD keeps clear of them (css/mobile.css reads
@@ -8,7 +8,7 @@
   <meta name="theme-color" content="#4C9A3E">
   <!-- home screen (input lane: manifest.webmanifest, assets/pwa/): standalone, the status bar over the farm (the HUD keeps
        clear of it through the safe-area insets) -->
-  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="manifest" href="/manifest.pt-BR.webmanifest">
   <link rel="apple-touch-icon" href="/assets/pwa/apple-touch-icon.png">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -80,7 +80,7 @@
   </script>
 </head>
 <body>
-  <canvas id="world" aria-label="The farm. Click a plot to plant or harvest; Q and E rotate the view." data-i18n-attr="aria-label:shell.html.canvas"></canvas>
+  <canvas id="world" aria-label="A fazenda. Clique em uma parcela para plantar ou colher; Q e E giram a visualização." data-i18n-attr="aria-label:shell.html.canvas"></canvas>
   <div id="overlay" aria-hidden="true"></div>
   <div id="pointers" aria-hidden="true"></div>
 
@@ -89,8 +89,8 @@
        English source; [data-i18n] / [data-i18n-attr] re-label them in the player's language (i18n/core.js applyStatic,
        catalog area 'shell'). -->
   <div id="hud" hidden>
-    <header class="hud-tl" aria-label="Farm" data-i18n-attr="aria-label:shell.html.farm">
-      <section class="level-card" id="hud-level-card" aria-label="Farm level" data-i18n-attr="aria-label:shell.html.levelCard">
+    <header class="hud-tl" aria-label="Fazenda" data-i18n-attr="aria-label:shell.html.farm">
+      <section class="level-card" id="hud-level-card" aria-label="Nível da fazenda" data-i18n-attr="aria-label:shell.html.levelCard">
         <button class="level-star" id="hud-level-star" type="button" aria-describedby="hud-xp-text">
           <svg class="star-svg" viewBox="0 0 64 64" aria-hidden="true">
             <path d="M32 3l8.6 17.4 19.2 2.8-13.9 13.5 3.3 19.1L32 46.8 14.8 55.8l3.3-19.1L4.2 23.2l19.2-2.8z" fill="#2B78B5" stroke="#1C5283" stroke-width="3" stroke-linejoin="round"/>
@@ -98,58 +98,58 @@
             <path d="M32 11l-5.6 11.4L14 24.2" fill="none" stroke="#fff" stroke-opacity=".55" stroke-width="3" stroke-linecap="round"/>
           </svg>
           <span class="level-num outlined" id="hud-level">1</span>
-          <span class="sr-only"><span data-i18n="shell.html.levelSr">Farm level</span> <span id="hud-level-text">1</span></span>
+          <span class="sr-only"><span data-i18n="shell.html.levelSr">Nível da fazenda</span> <span id="hud-level-text">1</span></span>
         </button>
         <div class="level-body">
           <div class="farm-name outlined" id="hud-farm-name">Harness Hollow</div>
-          <div class="xp" role="progressbar" aria-label="Farm XP" data-i18n-attr="aria-label:shell.html.xpBar" aria-valuemin="0" id="hud-xp-bar">
+          <div class="xp" role="progressbar" aria-label="XP da fazenda" data-i18n-attr="aria-label:shell.html.xpBar" aria-valuemin="0" id="hud-xp-bar">
             <div class="fill" id="hud-xp-fill"></div>
-            <span class="xp-text" id="hud-xp-text">0 / 25 XP</span>
+            <span class="xp-text" id="hud-xp-text">0/25 XP</span>
           </div>
         </div>
       </section>
-      <ul class="players" id="hud-players" aria-label="Farmers" data-i18n-attr="aria-label:shell.html.farmers"></ul>
+      <ul class="players" id="hud-players" aria-label="Agricultores" data-i18n-attr="aria-label:shell.html.farmers"></ul>
     </header>
 
-    <aside class="tracker" id="tracker" aria-label="Goals" data-i18n-attr="aria-label:shell.html.goals"></aside>
+    <aside class="tracker" id="tracker" aria-label="Metas" data-i18n-attr="aria-label:shell.html.goals"></aside>
 
-    <section class="hud-tr" aria-label="Treasury" data-i18n-attr="aria-label:shell.html.treasury">
-      <button class="pill pill-coins" id="hud-coins-pill" type="button" data-tip="Farm treasury (shared). Open the Market" data-i18n-attr="data-tip:shell.html.coinsTip">
+    <section class="hud-tr" aria-label="Tesouro" data-i18n-attr="aria-label:shell.html.treasury">
+      <button class="pill pill-coins" id="hud-coins-pill" type="button" data-tip="Tesouraria agrícola (compartilhada). Abra o mercado" data-i18n-attr="data-tip:shell.html.coinsTip">
         <img class="icon" src="/assets/icons/coins.png" alt="" width="50" height="50" draggable="false">
-        <span class="num" id="hud-coins">0</span><span class="sr-only" data-i18n="shell.html.coinsSr"> coins</span>
+        <span class="num" id="hud-coins">0</span><span class="sr-only" data-i18n="shell.html.coinsSr"> moedas</span>
         <span class="more" aria-hidden="true"><svg viewBox="0 0 12 12" width="12" height="12"><path d="M4 2.5 7.5 6 4 9.5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
       </button>
-      <button class="pill pill-acorns" id="hud-acorns-pill" type="button" data-tip="Acorns (shared). Rare treats for special things" data-i18n-attr="data-tip:shell.html.acornsTip">
+      <button class="pill pill-acorns" id="hud-acorns-pill" type="button" data-tip="Bolotas (compartilhadas). Guloseimas raras para coisas especiais" data-i18n-attr="data-tip:shell.html.acornsTip">
         <img class="icon" src="/assets/icons/acorns.png" alt="" width="50" height="50" draggable="false">
-        <span class="num" id="hud-acorns">0</span><span class="sr-only" data-i18n="shell.html.acornsSr"> acorns</span>
+        <span class="num" id="hud-acorns">0</span><span class="sr-only" data-i18n="shell.html.acornsSr"> bolotas</span>
       </button>
-      <button class="pill pill-hearts" id="hud-hearts-pill" type="button" data-tip="Your hearts (personal): earned by playing together" data-i18n-attr="data-tip:shell.html.heartsTip">
+      <button class="pill pill-hearts" id="hud-hearts-pill" type="button" data-tip="Seus corações (pessoais): conquistados jogando juntos" data-i18n-attr="data-tip:shell.html.heartsTip">
         <img class="icon" src="/assets/icons/hearts.png" alt="" width="50" height="50" draggable="false">
-        <span class="num" id="hud-hearts">0</span><span class="sr-only" data-i18n="shell.html.heartsSr"> hearts</span>
+        <span class="num" id="hud-hearts">0</span><span class="sr-only" data-i18n="shell.html.heartsSr"> corações</span>
       </button>
-      <button class="pill pill-barn" id="hud-barn-pill" type="button" data-tip="The Barn (I)" data-i18n-attr="data-tip:shell.html.barnTip">
+      <button class="pill pill-barn" id="hud-barn-pill" type="button" data-tip="O Celeiro (I)" data-i18n-attr="data-tip:shell.html.barnTip">
         <img class="icon" src="/assets/icons/barn.png" alt="" width="50" height="50" draggable="false">
-        <span class="num"><span id="hud-barn">0</span><span class="cap" id="hud-barn-cap"></span></span><span class="sr-only" data-i18n="shell.html.barnSr"> items in the barn</span>
+        <span class="num"><span id="hud-barn">0</span><span class="cap" id="hud-barn-cap"></span></span><span class="sr-only" data-i18n="shell.html.barnSr"> itens no celeiro</span>
         <span class="more" aria-hidden="true"><svg viewBox="0 0 12 12" width="12" height="12"><path d="M4 2.5 7.5 6 4 9.5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
       </button>
     </section>
 
-    <nav class="hud-right" id="hud-right" aria-label="View" data-i18n-attr="aria-label:shell.html.view"></nav>
+    <nav class="hud-right" id="hud-right" aria-label="Ver" data-i18n-attr="aria-label:shell.html.view"></nav>
 
-    <section class="hud-bl" aria-label="Together" data-i18n-attr="aria-label:shell.html.together">
-      <ol class="feed" id="feed" aria-label="Activity" data-i18n-attr="aria-label:shell.html.activity" aria-live="polite"></ol>
+    <section class="hud-bl" aria-label="Juntos" data-i18n-attr="aria-label:shell.html.together">
+      <ol class="feed" id="feed" aria-label="Atividade" data-i18n-attr="aria-label:shell.html.activity" aria-live="polite"></ol>
       <div class="social" id="social"></div>
     </section>
 
     <div class="tray-wrap" id="tray-wrap">
       <div class="coach-slot" id="coach-slot"></div>
-      <div class="seed-tray paper" id="seed-tray" role="group" aria-label="Seeds" data-i18n-attr="aria-label:shell.html.seeds" hidden></div>
-      <div class="seed-tray build-tray paper" id="build-tray" role="menu" aria-label="Build" data-i18n-attr="aria-label:shell.html.build" hidden></div>
+      <div class="seed-tray paper" id="seed-tray" role="group" aria-label="Sementes" data-i18n-attr="aria-label:shell.html.seeds" hidden></div>
+      <div class="seed-tray build-tray paper" id="build-tray" role="menu" aria-label="Construir" data-i18n-attr="aria-label:shell.html.build" hidden></div>
       <div class="stroke-chip" id="stroke-chip" role="status" hidden></div>
-      <nav class="toolbar wood" id="toolbar" aria-label="Tools" data-i18n-attr="aria-label:shell.html.tools"></nav>
+      <nav class="toolbar wood" id="toolbar" aria-label="Ferramentas" data-i18n-attr="aria-label:shell.html.tools"></nav>
     </div>
 
-    <nav class="dock wood" id="dock" aria-label="Farm menus" data-i18n-attr="aria-label:shell.html.menus"></nav>
+    <nav class="dock wood" id="dock" aria-label="Menus da Fazenda" data-i18n-attr="aria-label:shell.html.menus"></nav>
 
     <div class="conn" id="conn" role="status" aria-live="polite"></div>
     <div class="toasts" id="toasts" role="status" aria-live="polite"></div>
@@ -177,10 +177,10 @@
     <div class="boot-card">
       <h1 class="boot-title"><picture><source srcset="/assets/art/logo.webp" type="image/webp">
         <img class="boot-logo" src="/assets/art/logo.png" alt="Harness Hollow" width="1200" height="538"></picture></h1>
-      <p class="boot-line" id="boot-line"><span class="spin" aria-hidden="true"></span><span id="boot-text" role="status" aria-live="polite">Waking up the farm…</span><span class="boot-pct" id="boot-pct" aria-hidden="true"></span>
+      <p class="boot-line" id="boot-line"><span class="spin" aria-hidden="true"></span><span id="boot-text" role="status" aria-live="polite">A fazenda está acordando…</span><span class="boot-pct" id="boot-pct" aria-hidden="true"></span>
         <span class="boot-prog" aria-hidden="true"><i id="boot-prog"></i></span></p>
       <!-- the language toggle (i18n): works before any module has loaded (the inline script below), remembered per device -->
-      <div class="lang-pick" role="group" aria-label="English / Български"><button type="button" class="lang-opt" data-lang="en" lang="en">English</button><span class="lang-dot" aria-hidden="true">·</span><button type="button" class="lang-opt" data-lang="bg" lang="bg">Български</button></div>
+      <div class="lang-pick" role="group" aria-label="Idioma"><button type="button" class="lang-opt" data-lang="pt-BR" lang="pt-BR">Português (Brasil)</button><span class="lang-dot" aria-hidden="true">·</span><button type="button" class="lang-opt" data-lang="en" lang="en">English</button><span class="lang-dot" aria-hidden="true">·</span><button type="button" class="lang-opt" data-lang="bg" lang="bg">Български</button></div>
     </div>
   </section>
   <!-- i18n boot (lane A): the language before main.js loads: the remembered choice, else the browser's (bg* -> Bulgarian).
@@ -188,12 +188,12 @@
        which switches the whole page once it is loaded. Keep the logic in step with i18n/core.js detectLang. -->
   <script>
     (function () {
-      var T = { en: 'Waking up the farm\u2026', bg: '\u0424\u0435\u0440\u043c\u0430\u0442\u0430 \u0441\u0435 \u0441\u044a\u0431\u0443\u0436\u0434\u0430\u2026' };
+      var T = { 'pt-BR': 'A fazenda está acordando…', en: 'Waking up the farm\u2026', bg: '\u0424\u0435\u0440\u043c\u0430\u0442\u0430 \u0441\u0435 \u0441\u044a\u0431\u0443\u0436\u0434\u0430\u2026' };
       var L = '';
       try { L = localStorage.getItem('hh.lang') || ''; } catch (e) { L = ''; }
-      if (L !== 'en' && L !== 'bg') {
+      if (L !== 'en' && L !== 'bg' && L !== 'pt-BR') {
         var n = (navigator.languages && navigator.languages[0]) || navigator.language || '';
-        L = /^bg\b/i.test(n) ? 'bg' : 'en';
+        L = /^bg\b/i.test(n) ? 'bg' : 'pt-BR';
       }
       var opts = document.querySelectorAll('#boot .lang-opt');
       function paint(l, text) {
@@ -235,7 +235,7 @@
       } catch (e) { /* no observer: the line stays words only */ }
       // the home-screen app's description in the chosen language (the name stays "Harness Hollow")
       var mf = document.querySelector('link[rel="manifest"]');
-      if (mf && L === 'bg') mf.setAttribute('href', '/manifest.bg.webmanifest');
+      if (mf) mf.setAttribute('href', L === 'en' ? '/manifest.webmanifest' : '/manifest.' + L + '.webmanifest');
       for (var i = 0; i < opts.length; i++) {
         opts[i].addEventListener('click', function (e) {
           var l = e.currentTarget.getAttribute('data-lang');
@@ -258,14 +258,14 @@
       <h1 class="slot-title" id="slot-title"><picture><source srcset="/assets/art/logo-wide.webp" type="image/webp">
         <img class="slot-logo" src="/assets/art/logo-wide.png" alt="Harness Hollow" width="1400" height="336" loading="lazy"></picture></h1>
       <div class="slot-paper paper">
-        <p class="slot-sub" id="slot-sub" data-i18n="shell.slot.who">Who is playing on this screen?</p>
+        <p class="slot-sub" id="slot-sub" data-i18n="shell.slot.who">Quem está jogando nesta tela?</p>
         <div class="slots" id="slot-list"></div>
         <p class="modal-error" id="slot-error" role="alert"></p>
       </div>
     </div>
   </section>
 
-  <noscript>Harness Hollow needs JavaScript and WebGL2. · Harness Hollow има нужда от JavaScript и WebGL2.</noscript>
+  <noscript>O Harness Hollow precisa de JavaScript e WebGL2.</noscript>
   <script type="module" src="/js/main.js"></script>
 </body>
 </html>

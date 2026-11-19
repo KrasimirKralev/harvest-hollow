@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="pt-BR">
 <head>
   <meta charset="utf-8">
   <!-- The hosted site's privacy note (multi mode: server/multi.js serves it at /privacy). Every sentence is checked
@@ -10,8 +10,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#4C9A3E">
   <meta name="color-scheme" content="light">
-  <meta name="description" content="What Harness Hollow keeps about you, why, for how long, and how to ask for a copy or a deletion. In English and Bulgarian.">
-  <title>Privacy · Harness Hollow</title>
+  <meta name="description" content="Saiba quais dados o Harness Hollow guarda, por quanto tempo e como pedir uma cópia ou exclusão.">
+  <title>Privacidade · Harness Hollow</title>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/assets/pwa/apple-touch-icon.png">
   <link rel="preload" href="/assets/fonts/fredoka-latin.woff2" as="font" type="font/woff2" crossorigin>
@@ -22,7 +22,8 @@
 <body class="pv-page">
   <header class="pv-top">
     <a class="pv-home" href="/"><img src="/assets/art/logo-wide.png" alt="Harness Hollow" width="1400" height="336"></a>
-    <nav class="pv-lang" aria-label="Language · Език">
+    <nav class="pv-lang" aria-label="Idioma">
+      <a href="?lang=pt-BR" lang="pt-BR" hreflang="pt-BR" data-lang="pt-BR">Português (Brasil)</a>
       <a href="?lang=en" lang="en" hreflang="en" data-lang="en">English</a>
       <a href="?lang=bg" lang="bg" hreflang="bg" data-lang="bg">Български</a>
     </nav>
@@ -30,9 +31,170 @@
 
   <main id="pv-main" class="pv-main">
 
+<article class="pv-doc paper" id="pt-BR" lang="pt-BR" data-lang="pt-BR" data-title="Privacidade · Harness Hollow" aria-labelledby="pt-BR-title">
+  <h1 class="pv-h1" id="pt-BR-title">Privacidade em Harness Hollow</h1>
+  <p class="pv-lead">Este aviso explica quais dados o jogo usa para salvar sua fazenda, viabilizar partidas em dupla e receber suas solicitações.</p>
+  <p class="pv-updated">Atualizado em <time datetime="2026-11-18">18 de novembro de 2026</time></p>
+
+  <section class="pv-short" aria-labelledby="pt-BR-short">
+    <h2 class="pv-h2" id="pt-BR-short">Resumindo</h2>
+    <ul>
+      <li>Sem conta, sem e-mail, sem cookies de rastreamento, sem análises, sem anúncios.</li>
+      <li>Uma fazenda que ninguém visita por 7 dias é excluída e você mesmo pode excluir a sua a qualquer momento.</li>
+      <li>Ideias e solicitações de privacidade são mantidas por no máximo 12 meses.</li>
+      <li>Seu endereço IP é usado apenas na memória do servidor, para evitar spam e abuso.</li>
+      <li>O ajudante do jogo envia suas solicitações apenas para a IA que você escolher, em sua própria conta. O compartilhamento deles conosco está desativado até você ativá-lo.</li>
+    </ul>
+  </section>
+
+  <section aria-labelledby="pt-BR-who">
+    <h2 class="pv-h2" id="pt-BR-who">Quem opera este site</h2>
+    <p>Esta instalação do jogo é operada por quem administra o domínio bonusdiario.com.br. Use o <a href="#pt-BR-request">formulário de privacidade</a> para enviar uma solicitação sobre os seus dados.</p>
+  </section>
+
+  <section aria-labelledby="pt-BR-what">
+    <h2 class="pv-h2" id="pt-BR-what">O que é mantido e por quê</h2>
+
+    <div class="pv-item">
+      <h3 class="pv-h3"><span aria-hidden="true">🌾</span> Sua fazenda</h3>
+      <p><b>Dados:</b> os nomes que você digita (do seu fazendeiro, da fazenda, dos seus animais), a cor e a aparência do seu fazendeiro, as notas que você fixa para o seu parceiro e o jogo em si: campos, animais, edifícios, moedas e progresso. Além disso, quando cada agricultor entrou e esteve lá pela última vez, e o fuso horário do navegador que iniciou a fazenda, então a meia-noite da fazenda é a sua meia-noite.</p>
+      <p><b>Por quê:</b> então sua fazenda estará esperando quando você voltar, por vocês dois.</p>
+      <p><b>Chaves:</b> o servidor nunca armazena seu link de fazenda pessoal, links de convite ou links de novas chaves. Ele mantém apenas uma impressão digital embaralhada de cada um (um hash), suficiente para reconhecê-los e inútil para quem lê, inclusive nós.</p>
+      <p><b>Onde:</b> no servidor, na própria pasta da fazenda, com alguns backups automáticos dos últimos três dias.</p>
+      <p><b>Bate-papo:</b> linhas de chat passam pelo servidor para chegar ao seu parceiro. Enquanto a fazenda estiver aberta, o servidor guarda em sua memória os últimos 50 para um fazendeiro que chegar; eles nunca são gravados no disco.</p>
+    </div>
+
+    <div class="pv-item">
+      <h3 class="pv-h3"><span aria-hidden="true">💡</span> A caixa de ideias</h3>
+      <p><b>Dados:</b> do que se trata a sua ideia, a ideia em si, um nome e um contato se você fornecer, a fazenda de onde ela veio se você a enviou de dentro de uma fazenda, seu idioma e a família do seu navegador, como “Safari no iOS” (sem versão, sem dispositivo). Nunca seu endereço IP.</p>
+      <p><b>Por quê:</b> para ler sua ideia, saber onde ocorreu um bug e responder se você nos solicitar. O contato é usado apenas para responder a você.</p>
+    </div>
+
+    <div class="pv-item">
+      <h3 class="pv-h3"><span aria-hidden="true">✉️</span> Solicitações de privacidade</h3>
+      <p><b>Dados:</b> o que você pede, sua descrição, um contato, se você fornecer, e seu idioma. Sem endereço IP, sem navegador.</p>
+      <p><b>Por quê:</b> fazer o que você pediu e manter um registro de que foi feito.</p>
+    </div>
+
+    <div class="pv-item">
+      <h3 class="pv-h3"><span aria-hidden="true">📱</span> No seu dispositivo</h3>
+      <p>O armazenamento do seu navegador guarda as chaves das fazendas deste dispositivo, suas configurações (idioma, som, gráficos, controles), a lista de fazendas que você abriu aqui, pequenos lembretes (quais dicas você viu, onde estava a câmera) e as fotos do Livro de Memória da sua fazenda. As imagens nunca saem do seu navegador. A chave de uma fazenda é enviada apenas para este site, para permitir que você entre naquela fazenda.</p>
+      <p>O jogo <strong>não usa cookies de rastreamento, ferramentas de análise de tráfego nem anúncios</strong>. Imagens, fontes e scripts são servidos pelo próprio site. Para remover tudo de um dispositivo, limpe os dados deste site no seu navegador.</p>
+    </div>
+  </section>
+
+  <section aria-labelledby="pt-BR-helper">
+    <h2 class="pv-h2" id="pt-BR-helper">O ajudante do jogo</h2>
+    <p>O ajudante muda sua fazenda quando você pede, digitando ou falando: uma nova colheita, uma receita, uma decoração. Você pode jogar sem ele; nada abaixo acontece até que você o use.</p>
+
+    <div class="pv-item">
+      <h3 class="pv-h3"><span aria-hidden="true">🤖</span> Sua solicitação vai para a IA que você escolher</h3>
+      <p><b>Dados:</b> o servidor da fazenda envia sua solicitação, o nível da fazenda e o idioma do jogo, o guia de modificação do jogo, listas do que já existe no jogo e as alterações do ajudante que sua fazenda já possui (pequenos arquivos de dados) para o provedor de IA que você escolheu: OpenAI (ChatGPT) ou Antrópico (Claude). Nunca o save da sua fazenda, a chave da sua fazenda ou o login de alguém.</p>
+      <p><b>Em sua própria conta:</b> você faz login com seu próprio plano ChatGPT ou Claude, na página de login do próprio provedor; nunca vemos sua senha. O trabalho conta para o seu plano e o provedor trata sua solicitação de acordo com suas próprias regras de privacidade (<a href="https://openai.com/policies/privacy-policy/" rel="noopener">OpenAI</a>,
+        <a href="https://www.anthropic.com/legal/privacy" rel="noopener">Anthropic</a>).</p>
+      <p><b>Seu login:</b> mantido apenas no servidor da fazenda, na própria pasta da fazenda, para o agricultor que fez login. O login de ChatGPT é um arquivo que somente o próprio servidor pode ler; ele nunca é gravado em um log e nunca é compartilhado. Para Claude, o servidor executa o Claude Code, que mantém seu próprio login em uma pasta privada que nosso código nunca abre. Saia em Configurações › Harvey e ele será removido; também acontece quando a fazenda é excluído.</p>
+    </div>
+
+    <div class="pv-item">
+      <h3 class="pv-h3"><span aria-hidden="true">🧩</span> As mudanças em sua fazenda</h3>
+      <p>O que o auxiliar construiu para você (seus arquivos, as verificações pelas quais passou, sua solicitação e seu breve resumo) é guardado na fazenda, para que ambos possam ver o histórico e desfazer uma alteração. O registro de uma solicitação é excluído após 30 dias e seus arquivos de trabalho após 7; as alterações aplicadas permanecem no fazenda até que ele seja excluído.</p>
+    </div>
+
+    <div class="pv-item">
+      <h3 class="pv-h3"><span aria-hidden="true">🎙️</span> Falando com o ajudante</h3>
+      <p>O botão do microfone usa o reconhecimento de fala do próprio navegador. Seu navegador pode enviar o som ao serviço do fabricante para transformá-lo em texto (Chrome para Google, Safari para Apple, por exemplo). Nunca recebemos o som, apenas as palavras que aparecem na caixa. A leitura de uma resposta em voz alta acontece no seu navegador.</p>
+    </div>
+
+    <div class="pv-item pv-share">
+      <h3 class="pv-h3"><span aria-hidden="true">📤</span> Compartilhar seus pedidos conosco: desativado, a menos que você diga sim</h3>
+      <p>Na primeira vez que você usa o helper, ele pergunta se deseja compartilhar suas solicitações com a equipe Harness Hollow, para que possamos melhorar o jogo para todos. Até que você diga sim, nada sobre suas solicitações será compartilhado conosco. Você pode mudar de ideia a qualquer momento em Configurações › Harvey; desligá-lo também exclui o que ainda estava esperando para ser enviado.</p>
+      <p><b>O que é compartilhado quando está ativado:</b> o que você perguntou, com suas palavras; as alterações do auxiliar (seus arquivos de dados); o que eles adicionaram, alteraram ou removeram; se as verificações foram aprovadas, com seus códigos de erro; se você aplicou, descartou ou desfez a alteração; o provedor e modelo de IA; sua linguagem de jogo; a versão do jogo; e um código de instalação aleatório. Nunca seu login, conta, e-mail, endereço da fazenda, chave da fazenda, endereço IP ou arquivos, e nenhum nome de fazendeiro ou fazenda, a menos que você os digite em sua solicitação. Qualquer coisa em uma solicitação que pareça uma chave, uma senha, um e-mail, um endereço de fazenda ou um caminho de arquivo é apagada antes de sair.</p>
+      <p><b>Onde e por quanto tempo:</b> no servidor deste site, mantido por no máximo 12 meses e depois excluído automaticamente. Somente o criador do jogo os lê, para melhorar o jogo.</p>
+      <p><b>Retirando:</b> Configurações › Harvey mostra seu código de instalação. Envie com um <a href="#pt-BR-request">solicitação de privacidade</a> e tudo o que for compartilhado nele será excluído.</p>
+    </div>
+  </section>
+
+  <section aria-labelledby="pt-BR-long">
+    <h2 class="pv-h2" id="pt-BR-long">Quanto tempo</h2>
+    <dl class="pv-times">
+      <div><dt>Fazendas</dt><dd>Uma fazenda que ninguém visita por 7 dias é excluída com todos os seus arquivos e backups. Enquanto você joga, ele permanece. Você também pode <a href="#pt-BR-delete">exclua você mesmo</a> a qualquer momento.</dd></div>
+      <div><dt>Ideias</dt><dd>12 meses no máximo, depois são excluídos automaticamente. Pergunte e o seu será mais rápido.</dd></div>
+      <div><dt>Solicitações de privacidade</dt><dd>12 meses, conforme registro que respondemos, depois são excluídos automaticamente.</dd></div>
+      <div><dt>O trabalho do ajudante</dt><dd>Registro de uma solicitação: 30 dias. Seus arquivos de trabalho: 7 dias. As alterações que você aplicou: desde que a fazenda.</dd></div>
+      <div><dt>Solicitações de ajuda compartilhada</dt><dd>Somente se você disse sim: 12 meses no máximo, então eles serão excluídos automaticamente. Envie seu código de instalação e o seu será mais rápido.</dd></div>
+      <div><dt>Bate-papo</dt><dd>Apenas na memória do servidor, desaparece quando a fazenda entra em suspensão (cerca de dez minutos depois de vocês dois saírem).</dd></div>
+      <div><dt>Registros do servidor</dt><dd>A aplicação registra informações operacionais, como falhas na criação de uma fazenda. O prazo dos registros depende da configuração do servidor.</dd></div>
+      <div><dt>Seu dispositivo</dt><dd>Até você apagá-lo, esqueça uma fazenda na página inicial ou exclua a fazenda.</dd></div>
+    </dl>
+  </section>
+
+  <section aria-labelledby="pt-BR-ip">
+    <h2 class="pv-h2" id="pt-BR-ip">Seu endereço IP</h2>
+    <p>Cada visita vem com seu endereço de internet (endereço IP). Harness Hollow usa-o apenas na memória do servidor, para evitar spam e abusos: por exemplo, no máximo 5 novas fazendas por hora a partir de um endereço, e limites de ideias, convites e conexões. Nunca está escrito em uma fazenda, em uma ideia, em um pedido ou em um pedido de ajuda compartilhada.</p>
+    <p>A aplicação pode registrar a parte de rede de um endereço quando bloqueia uma conexão por abuso. A infraestrutura que recebe as conexões também pode ter seus próprios registros.</p>
+  </section>
+
+  <section aria-labelledby="pt-BR-who-else">
+    <h2 class="pv-h2" id="pt-BR-who-else">Serviços externos</h2>
+    <p>O jogo e os arquivos da fazenda ficam no servidor desta instalação. Links para outros sites, como o GitHub, levam a serviços com políticas próprias. Se o ajudante de IA estiver disponível e você decidir usá-lo, as informações da solicitação são enviadas ao provedor escolhido, conforme explicado na <a href="#pt-BR-helper">seção sobre o ajudante</a>.</p>
+  </section>
+
+  <section aria-labelledby="pt-BR-rights">
+    <h2 class="pv-h2" id="pt-BR-rights">Solicitações sobre seus dados</h2>
+    <p>No <a href="#pt-BR-request">formulário de privacidade</a>, você pode solicitar acesso, correção ou exclusão de dados. Indique a fazenda pelo endereço público (/f/…). Guarde o trecho #k= em segredo, pois ele contém sua chave de acesso.</p>
+  </section>
+
+  <section aria-labelledby="pt-BR-delete">
+    <h2 class="pv-h2" id="pt-BR-delete">Exclua sua fazenda você mesmo</h2>
+    <ol class="pv-steps">
+      <li>Abra sua fazenda e vá para <b>Configurações › Fazenda</b>.</li>
+      <li>Escolha <b>Excluir esta fazenda agora</b>.</li>
+      <li>Leia o que acontece e confirme. “Ficar com minha fazenda” é sempre a saída segura.</li>
+    </ol>
+    <p>Qualquer agricultor da fazenda pode fazer isso. Tudo acontece ao mesmo tempo, para ambos os agricultores: a exploração agrícola, ambos os agricultores e todo o progresso, e todos os apoios. Se o seu parceiro estiver jogando, a tela dele indicará que a fazenda foi excluída e este dispositivo a esquecerá. Não pode ser desfeito.</p>
+    <p>Perdeu-se em uma fazenda? Uma fazenda que ninguém visita por 7 dias é excluída por si só. Se o seu parceiro ainda joga lá, ou você quer ir embora antes, envie uma solicitação abaixo com o endereço da fazenda. Para esquecer uma fazenda em apenas um dispositivo, toque em ✕ ao lado dela na página inicial.</p>
+  </section>
+
+  <section class="pv-ask" aria-labelledby="pt-BR-request">
+    <h2 class="pv-h2" id="pt-BR-request">Enviar uma solicitação</h2>
+    <form class="pv-form" data-lang="pt-BR" novalidate>
+      <fieldset class="pv-kinds">
+        <legend class="pv-label">O que você gostaria?</legend>
+        <label class="pv-kind"><input type="radio" name="kind" value="idea" required> <span>Excluir minha ideia</span></label>
+        <label class="pv-kind"><input type="radio" name="kind" value="fazenda"> <span>Excluir uma fazenda ao qual perdi acesso</span></label>
+        <label class="pv-kind"><input type="radio" name="kind" value="copy"> <span>Uma cópia dos meus dados</span></label>
+        <label class="pv-kind"><input type="radio" name="kind" value="other"> <span>Outra coisa</span></label>
+        <p class="pv-err" data-err="kind" role="alert" hidden></p>
+      </fieldset>
+      <div class="pv-field">
+        <label class="pv-label" for="pt-BR-text">Conte-nos mais</label>
+        <textarea class="pv-input pv-text" id="pt-BR-text" name="text" rows="5" maxlength="2000" required aria-describedby="pt-BR-text-hint"></textarea>
+        <p class="pv-hint" id="pt-BR-text-hint">Qual ideia ou fazenda (o endereço da fazenda, nunca sua parte #k=) ou o código de instalação das solicitações de ajuda compartilhada e qualquer coisa que nos ajude a encontrá-lo.</p>
+        <p class="pv-err" data-err="text" role="alert" hidden></p>
+      </div>
+      <div class="pv-field">
+        <label class="pv-label" for="pt-BR-contact">Como podemos entrar em contato com você? <span class="pv-opt">(opcional)</span></label>
+        <input class="pv-input" id="pt-BR-contact" name="contact" type="text" maxlength="120" autocomplete="email" inputmode="email" aria-describedby="pt-BR-contact-hint">
+        <p class="pv-hint" id="pt-BR-contact-hint">Um e-mail ou identificador, apenas para responder a esta solicitação. Sem um, não podemos responder.</p>
+        <p class="pv-err" data-err="contact" role="alert" hidden></p>
+      </div>
+      <div class="pv-trap" aria-hidden="true"><label for="pt-BR-website">Deixe este campo vazio</label><input id="pt-BR-website" name="website" type="text" tabindex="-1" autocomplete="off"></div>
+      <div class="pv-acts"><button class="btn pv-send" type="submit">Enviar meu pedido</button></div>
+      <p class="pv-status" role="status" aria-live="polite"></p>
+    </form>
+    <div class="pv-done" tabindex="-1" hidden>
+      <p class="pv-done-title">Obrigado!</p>
+      <p>Sua solicitação foi enviada. Se você informou um contato, ele será usado para responder.</p>
+    </div>
+    <noscript><p class="pv-hint">Ative o JavaScript para enviar a solicitação pelo formulário.</p></noscript>
+  </section>
+
+</article>
+
 <!-- ================================================ ENGLISH ================================================ -->
-<article class="pv-doc paper" id="en" lang="en" data-lang="en" data-title="Privacy · Harness Hollow" aria-labelledby="en-title">
+<article class="pv-doc paper" id="en" hidden lang="en" data-lang="en" data-title="Privacy · Harness Hollow" aria-labelledby="en-title">
   <h1 class="pv-h1" id="en-title">Privacy at Harness Hollow</h1>
+  <p>For this installation at bonusdiario.com.br, see the <a href="?lang=pt-BR">Brazilian Portuguese privacy notice</a>. The policy below describes the original project’s hosting.</p>
   <p class="pv-lead">Harness Hollow is a free little farm game for two. It needs very little about you, keeps it only as long as it has to, never
     sells it, and hands it to no one but the company that hosts the site. Here is all of it, in plain words.</p>
   <p class="pv-updated">Last updated: <time datetime="2026-10-13">13 October 2026</time></p>
@@ -272,8 +434,9 @@
 </article>
 
 <!-- ================================================ БЪЛГАРСКИ ================================================ -->
-<article class="pv-doc paper" id="bg" lang="bg" data-lang="bg" data-title="Поверителност · Harness Hollow" aria-labelledby="bg-title">
+<article class="pv-doc paper" id="bg" hidden lang="bg" data-lang="bg" data-title="Поверителност · Harness Hollow" aria-labelledby="bg-title">
   <h1 class="pv-h1" id="bg-title">Поверителност в Harness Hollow</h1>
+  <p>За инсталацията на bonusdiario.com.br виж <a href="?lang=pt-BR">политиката на бразилски португалски</a>. Текстът по-долу описва хостинга на оригиналния проект.</p>
   <p class="pv-lead">Harness Hollow е малка безплатна игра за ферма за двама. Иска съвсем малко за теб, пази го само докато е нужно,
     никога не го продава и не го дава на никого освен на фирмата, която хоства сайта. Ето всичко, с прости думи.</p>
   <p class="pv-updated">Последна промяна: <time datetime="2026-10-13">13 октомври 2026 г.</time></p>
@@ -517,8 +680,8 @@
 
   <footer class="pv-foot">
     <nav class="pv-links" aria-label="Harness Hollow">
-      <a href="/" data-pv="home"><span lang="en">Start page</span><span class="pv-sep" aria-hidden="true"> · </span><span lang="bg">Начална страница</span></a>
-      <a href="https://github.com/KrasimirKralev/harvest-hollow" rel="noopener">Harness Hollow on GitHub</a>
+      <a href="/" data-pv="home"><span lang="pt-BR">Página inicial</span><span class="pv-sep" aria-hidden="true"> · </span><span lang="en">Start page</span><span class="pv-sep" aria-hidden="true"> · </span><span lang="bg">Начална страница</span></a>
+      <a href="https://github.com/KrasimirKralev/harvest-hollow" rel="noopener"><span lang="pt-BR">Harness Hollow no GitHub</span><span class="pv-sep" aria-hidden="true"> · </span><span lang="en">Harness Hollow on GitHub</span><span class="pv-sep" aria-hidden="true"> · </span><span lang="bg">Harness Hollow в GitHub</span></a>
     </nav>
   </footer>
   <script type="module" src="/js/privacy.js"></script>

@@ -496,11 +496,11 @@ body.motion-reduced .pc-breed, body.motion-reduced .pc-breed:hover { transition:
 /* Bulgarian (i18n lane D) on a phone: a Masterwork row's words run longer, so the row wraps (the buttons go under the
    level words) instead of pushing "Подобри" off the card */
 @media (max-width: 600px) {
-  :lang(bg) .pc-mw-copy { display: flex; flex-wrap: wrap; row-gap: 6px; }
-  :lang(bg) .pc-mw-now { flex: 1 1 7em; }
-  :lang(bg) .pc-mw-next { flex: 1 1 9em; justify-items: start; }
-  :lang(bg) .pc-mw-next small { text-align: left; }
-  :lang(bg) .pc-mw-copy > .pn-act { margin-left: auto; }
+  :is(:lang(bg), :lang(pt-BR)) .pc-mw-copy { display: flex; flex-wrap: wrap; row-gap: 6px; }
+  :is(:lang(bg), :lang(pt-BR)) .pc-mw-now { flex: 1 1 7em; }
+  :is(:lang(bg), :lang(pt-BR)) .pc-mw-next { flex: 1 1 9em; justify-items: start; }
+  :is(:lang(bg), :lang(pt-BR)) .pc-mw-next small { text-align: left; }
+  :is(:lang(bg), :lang(pt-BR)) .pc-mw-copy > .pn-act { margin-left: auto; }
 }
 
 /* wave 5: where a pet is by day (following its farmer, or staying home) and the "Stay home" / "Come with me" button */

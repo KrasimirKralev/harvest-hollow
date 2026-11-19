@@ -40,7 +40,7 @@ test('host variant: no static src/href/srcset stays on this server except the ma
       assert.match(tag, /rel=["'](manifest|icon|apple-touch-icon|shortcut icon)["']/, `<${tag.slice(1, 40)} ${attr}="${url}"> stays home`);
     }
   }
-  assert.match(html, /<link rel="manifest" href="\/manifest\.webmanifest">/);
+  assert.match(html, /<link rel="manifest" href="\/manifest\.pt-BR\.webmanifest">/);
   assert.match(html, /<script type="module" src="https:\/\/hh\.example\.app\/b\/[0-9a-f]{16}\/public\/js\/main\.js" integrity="sha256-/);
 });
 

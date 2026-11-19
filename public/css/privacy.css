@@ -118,7 +118,9 @@ body.pv-page { min-height: 100vh; min-height: 100dvh; -webkit-text-size-adjust: 
   box-shadow: inset 0 0 0 2px var(--paper-edge), 0 3px 0 rgba(0, 0, 0, .25); }
 .pv-links a:focus-visible { outline: 3px solid #fff; outline-offset: 3px; }
 /* the start page link names itself in the page's language once js/privacy.js chose one */
-html[data-pv-lang="en"] .pv-links [lang="bg"], html[data-pv-lang="bg"] .pv-links [lang="en"],
+html[data-pv-lang="en"] .pv-links [lang]:not([lang="en"]),
+html[data-pv-lang="bg"] .pv-links [lang]:not([lang="bg"]),
+html[data-pv-lang="pt-BR"] .pv-links [lang]:not([lang="pt-BR"]),
 html[data-pv-lang] .pv-sep { display: none; }
 
 @media (min-width: 700px) {

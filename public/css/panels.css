@@ -1092,16 +1092,16 @@ body.motion-reduced .pn-switch-knob, body.motion-reduced .pn-switch-track,
 @media (hover: none) { .pn-room-acts .pn-chipbtn, .pn-card-room .pn-chipbtn { min-height: 44px; } }
 
 /* Bulgarian (i18n lane D): names run ~25 % longer; a stack's name may take two lines instead of an ellipsis */
-:lang(bg) .pn-stack-name { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; line-height: 1.05; }
+:is(:lang(bg), :lang(pt-BR)) .pn-stack-name { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; line-height: 1.05; }
 /* ... and an animal card's name row wraps rather than run under its buttons */
-:lang(bg) .pn-ani-top { flex-wrap: wrap; row-gap: 2px; }
+:is(:lang(bg), :lang(pt-BR)) .pn-ani-top { flex-wrap: wrap; row-gap: 2px; }
 /* ... and a tree's "Undo" keeps its own width next to the footnote */
-:lang(bg) .pn-tree-foot > .pn-act { flex: none; }
+:is(:lang(bg), :lang(pt-BR)) .pn-tree-foot > .pn-act { flex: none; }
 /* ... and a recipe's "any grain" chip wraps its longer label inside the chip instead of past its edge */
-:lang(bg) .pn-ins .pn-chip.inline:has(.pn-chip-cls) { max-width: 100%; border-radius: var(--r-m, 12px); }
-:lang(bg) .pn-ins .pn-chip.inline .pn-chip-cls { white-space: normal; line-height: 1.1; }
+:is(:lang(bg), :lang(pt-BR)) .pn-ins .pn-chip.inline:has(.pn-chip-cls) { max-width: 100%; border-radius: var(--r-m, 12px); }
+:is(:lang(bg), :lang(pt-BR)) .pn-ins .pn-chip.inline .pn-chip-cls { white-space: normal; line-height: 1.1; }
 /* ... and a seed card's "Plant · grows" / "Harvest 3 × 15 · 6 XP" lines wrap between their parts, never inside one */
-:lang(bg) .pn-fact-line { flex-wrap: wrap; row-gap: 0; }
+:is(:lang(bg), :lang(pt-BR)) .pn-fact-line { flex-wrap: wrap; row-gap: 0; }
 
 /* ---- wave 5: babies in the pen (panels/pen-pair.js): the ❤ card under a home's header ----------------------------- */
 .pn-pair { display: flex; flex-direction: column; gap: 8px; margin: 0 0 12px; padding: 10px 12px 12px; border-radius: var(--r-m);

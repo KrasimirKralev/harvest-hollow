@@ -1,0 +1,35 @@
+[Unit]
+Description=Harvest Hollow em bonusdiario.com.br
+After=network.target
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+[Service]
+Type=simple
+DynamicUser=yes
+StateDirectory=bonusdiario
+StateDirectoryMode=0700
+WorkingDirectory=/opt/bonusdiario/app
+ExecStart=/usr/bin/env node server/index.js
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+Environment=NODE_ENV=production
+Environment=PORT=3300
+Environment=HH_HOST=127.0.0.1
+Environment=HH_MODE=multi
+Environment=HH_TZ=America/Sao_Paulo
+Environment=HH_DATA_DIR=/var/lib/bonusdiario
+Environment=HH_TRUST_PROXY=1
+Environment=HH_HELPER=off
+Environment=HH_TELEMETRY=off
+EnvironmentFile=-/etc/bonusdiario.env
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+Restart=on-failure
+RestartSec=3
+RestartPreventExitStatus=78
+TimeoutStopSec=25
+
+[Install]
+WantedBy=multi-user.target

@@ -169,5 +169,5 @@ test('links to the privacy note: the ideas box\'s small print (a new tab, the wo
   const fs = await import('node:fs');
   const landing = fs.readFileSync(new URL('../public/landing.html', import.meta.url), 'utf8');
   // the one-screen landing page (v2): Privacy sits in the "If you need more" row under the three actions
-  assert.match(landing, /<nav class="ld-more"[^>]*>(?:(?!<\/nav>)[\s\S])*<a class="ld-link" id="ld-privacy" href="\/privacy" data-i18n="front\.more\.privacy">Privacy<\/a>[\s\S]*?<\/nav>/);
+  assert.match(landing, /<nav class="ld-more"[^>]*>(?:(?!<\/nav>)[\s\S])*<a class="ld-link" id="ld-privacy" href="\/privacy" data-i18n="front\.more\.privacy">Privacidade<\/a>[\s\S]*?<\/nav>/);
 });

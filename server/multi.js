@@ -54,6 +54,7 @@ import { RULES_VERSION } from '../shared/rules/index.js';
 import { PLAYER_SLOTS } from '../shared/content/config.js';
 import FRONT_EN from '../public/js/i18n/en/front.js';
 import FRONT_BG from '../public/js/i18n/bg/front.js';
+import FRONT_PT from '../public/js/i18n/pt-BR/front.js';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -80,14 +81,14 @@ function sameOrigin(req, res, next) {
 }
 
 /** A tiny fallback front door when public/landing.html is missing (the real one is the client's). */
-const FALLBACK_LANDING = `<!doctype html><html lang="en"><head><meta charset="utf-8">
+const FALLBACK_LANDING = `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1"><title>Harness Hollow</title></head>
 <body style="font-family:system-ui,sans-serif;max-width:32rem;margin:3rem auto;padding:0 1rem">
-<h1>Harness Hollow</h1><button id="go" type="button">Start a new farm</button><p id="st" role="status"></p>
-<p>Farms nobody visits for 7 days are deleted.</p>
+<h1>Harness Hollow</h1><button id="go" type="button">Comece uma nova fazenda</button><p id="st" role="status"></p>
+<p>Fazendas sem visitas por 7 dias são excluídas.</p>
 <script>document.getElementById('go').onclick=async()=>{const r=await fetch('/api/farms',{method:'POST'});
 const b=await r.json().catch(()=>({}));if(r.ok){location.href='/f/'+b.id+'#k='+b.secret}else{
-document.getElementById('st').textContent=r.status===429?'Too many new farms from here; try later.':'We are full right now.'}}</script>
+document.getElementById('st').textContent=r.status===429?'Muitas fazendas foram criadas nesta rede. Tente mais tarde.':'O vale está cheio agora.'}}</script>
 </body></html>`;
 
 /** /api/status of the host: health and counts, never an id. */
@@ -161,10 +162,16 @@ export function createMultiApp(hh) {
   app.get(['/f/:id', '/f/:id/'], (req, res, next) => (ID_RE.test(req.params.id) ? game(req, res, next) : res.status(404).type('text').send('Not found')));
   // any well-formed id gets one (no existence leak), and never a key: see the header
   // ?lang=bg: the Bulgarian description (public/manifest.bg.webmanifest), the device's language (ui/farm-gate.js)
+  const manifestLocales = {
+    en: ['manifest.webmanifest', FRONT_EN],
+    bg: ['manifest.bg.webmanifest', FRONT_BG],
+    'pt-BR': ['manifest.pt-BR.webmanifest', FRONT_PT],
+  };
   const baseManifests = new Map();
   /** A home-screen manifest of this host (parsed once), or null. Strangers play here over the internet: the files'
    *  "shared over your home network" (a home server's line) becomes the landing's tagline (QA r1 I-04). */
-  const hostManifest = (file) => {
+  const hostManifest = (locale) => {
+    const [file, messages] = manifestLocales[locale];
     let m = baseManifests.get(file);
     if (m) return m;
     try {
@@ -173,14 +180,15 @@ export function createMultiApp(hh) {
       log.error(`${file} could not be read`, redactArg(err));
       return null;
     }
-    const tag = (file === 'manifest.bg.webmanifest' ? FRONT_BG : FRONT_EN)['front.hero.tag'];
+    const tag = messages['front.hero.tag'];
     m = { ...m, ...(typeof tag === 'string' && tag ? { description: tag } : {}) };
     baseManifests.set(file, m);
     return m;
   };
   app.get('/f/:id/manifest.webmanifest', (req, res) => {
     if (!ID_RE.test(req.params.id)) return res.status(404).type('text').send('Not found');
-    const baseManifest = hostManifest(req.query.lang === 'bg' ? 'manifest.bg.webmanifest' : 'manifest.webmanifest');
+    const locale = req.query.lang;
+    const baseManifest = hostManifest(typeof locale === 'string' && Object.hasOwn(manifestLocales, locale) ? locale : 'en');
     if (!baseManifest) return res.status(404).type('text').send('Not found');
     const at = `/f/${req.params.id}`;
     res.set('Cache-Control', 'public, max-age=3600');
@@ -188,9 +196,9 @@ export function createMultiApp(hh) {
     return res.type('application/manifest+json').send(JSON.stringify({ ...baseManifest, id: at, start_url: at, scope: '/' }));
   });
   // the landing page's own (public/landing.html links /manifest.webmanifest): the same description, its own start
-  app.get(['/manifest.webmanifest', '/manifest.bg.webmanifest'], (req, res, next) => {
-    // express matches routes ignoring case: only the two names ever reach the disk
-    const m = hostManifest(/bg/i.test(req.path) ? 'manifest.bg.webmanifest' : 'manifest.webmanifest');
+  app.get(Object.values(manifestLocales).map(([file]) => '/' + file), (req, res, next) => {
+    const locale = Object.keys(manifestLocales).find((lang) => '/' + manifestLocales[lang][0].toLowerCase() === req.path.toLowerCase());
+    const m = hostManifest(locale ?? 'en');
     if (!m) return next();
     res.set('Cache-Control', 'no-cache');
     return res.type('application/manifest+json').send(JSON.stringify(m));

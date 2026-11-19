@@ -180,7 +180,7 @@ export const duelPanel = {
 /** "Sun 12 Oct, 20:00" in the farm's zone. */
 function whenText(ms, state) {
   try {
-    return new Intl.DateTimeFormat(lang() === 'bg' ? 'bg-BG' : 'en-GB', { timeZone: state?.meta?.tz || 'UTC', weekday: 'short', day: 'numeric', month: 'short',
+    return new Intl.DateTimeFormat(({ en: 'en-GB', bg: 'bg-BG' })[lang()] ?? lang(), { timeZone: state?.meta?.tz || 'UTC', weekday: 'short', day: 'numeric', month: 'short',
       hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(ms);
   } catch { return ''; }
 }

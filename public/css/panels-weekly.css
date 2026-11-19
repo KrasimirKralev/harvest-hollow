@@ -401,9 +401,9 @@ body.motion-reduced .wk-rung.next, body.motion-reduced .wk-cere-medal, body.moti
 body.motion-reduced .wk-focus { animation: none; }
 
 /* Bulgarian (i18n lane B): sentence case; Title Case On Every Word is English typography */
-:lang(bg) .wk-post-head small, :lang(bg) .wk-friend-text small { text-transform: none; }
+:is(:lang(bg), :lang(pt-BR)) .wk-post-head small, :is(:lang(bg), :lang(pt-BR)) .wk-friend-text small { text-transform: none; }
 /* a long one-word Bulgarian name ("Ябълков сок") ran under its "0 / 4" on a phone: name and count stack there */
-@media (max-width: 600px) { html[lang="bg"] .wk-good-text { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 600px) { html:is([lang="bg"], [lang="pt-BR"]) .wk-good-text { grid-template-columns: minmax(0, 1fr); } }
 
 /* release 1.0 (ux-phone#15): the banner's "?" chip exists for the phone strip only (css/mobile-panels.css) */
 .wk-banner-more { display: none; }

@@ -4,7 +4,7 @@
 import { register } from './core.js';
 import { AREAS } from './catalogs.js';
 
-for (const [area, en, bg] of AREAS) register(area, en, bg);
+for (const [area, en, bg, pt] of AREAS) register(area, en, { bg, 'pt-BR': pt });
 
 export * from './core.js';
 export { name, qty, N, Q, gender, ctext, entry as nameEntry } from './names.js';

@@ -131,7 +131,7 @@ export function showFarmGate(kind, { farmId = null, doc = globalThis.document, l
 }
 
 /** Android's keyless home-screen manifest of a farm in a language (the server answers ?lang=bg in Bulgarian). Pure. */
-export const farmManifestHref = (href, l) => `${String(href).replace(/\?.*$/, '')}${l === 'bg' ? '?lang=bg' : ''}`;
+export const farmManifestHref = (href, l) => `${String(href).replace(/\?.*$/, '')}${l !== 'en' && l ? `?lang=${encodeURIComponent(l)}` : ''}`;
 
 /** The home-screen manifest of this farm (see the header). Never throws; a failed fetch keeps the page's own. */
 export async function installFarmManifest(id, secret, { doc = globalThis.document, fetcher = globalThis.fetch, origin = globalThis.location?.origin,

@@ -186,7 +186,7 @@ export function createHarnessUi(S, opts = {}) {
   /** A touch screen: the keyboard comes with the player's tap, never by itself (ux-phone#6). */
   const touch = () => Boolean(win.matchMedia?.('(pointer: coarse)')?.matches);
   /** The privacy note's helper section: this site's page in multi mode, the repo's PRIVACY.md for a self-hosted farm. */
-  const privacyHref = () => (scope.multi ? `${PRIVACY_PATH}#${lang() === 'bg' ? 'bg' : 'en'}-helper` : `${PRIVACY_MD_URL}#the-in-game-helper`);
+  const privacyHref = () => (scope.multi ? `${PRIVACY_PATH}#${lang()}-helper` : `${PRIVACY_MD_URL}#the-in-game-helper`);
   const players = () => store.state?.players ?? {};
   const nameOf = (pid) => (pid && players()[pid] && typeof players()[pid].name === 'string' ? players()[pid].name : null);
   const changed = () => { events.emit('change'); renderDock(); };

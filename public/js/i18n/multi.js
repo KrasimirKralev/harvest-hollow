@@ -4,6 +4,6 @@
 import { register } from './core.js';
 import multi from './en/multi.js';
 
-register('multi', multi, () => import('./bg/multi.js'));
+register('multi', multi, { bg: () => import('./bg/multi.js'), 'pt-BR': () => import('./pt-BR/multi.js') });
 
 export * from './core.js';

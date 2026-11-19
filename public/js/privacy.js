@@ -10,9 +10,9 @@
 //   pickLang({ search, stored, languages }) -> 'en' | 'bg'            pure
 //   checkRequest({ kind, text, contact }) -> { ok } | { ok: false, field, code }   pure
 //   sendRequest(fetch, fields) -> { ok, id } | { ok: false, code: 'RATE'|'FULL'|'BAD'|'NET', field? }   never throws
-import { t, setLang } from './i18n/privacy.js';
+import { t, setLang, LANGS, DEFAULT_LANG } from './i18n/privacy.js';
 
-export const LANGS = Object.freeze(['en', 'bg']);
+export { LANGS } from './i18n/privacy.js';
 /** The device's language choice (i18n/core.js STORAGE_KEY): one choice for every page of the site. */
 export const LANG_KEY = 'hh.lang';
 export const KINDS = Object.freeze(['idea', 'farm', 'copy', 'other']);
@@ -23,15 +23,16 @@ const squash = (s) => String(s ?? '').replace(/\s+/g, ' ').trim();
 
 /** The page's language: ?lang= wins, then the device's choice, then the first browser language that is one of ours,
  *  else English. Pure. */
-export function pickLang({ search = '', stored = null, languages = [] } = {}) {
+export function pickLang({ search = '', stored = null, languages = [], fallback = 'en' } = {}) {
   const asked = new URLSearchParams(String(search)).get('lang');
   if (LANGS.includes(asked)) return asked;
   if (LANGS.includes(stored)) return stored;
   for (const l of languages) {
     const base = String(l || '').toLowerCase().split('-')[0];
-    if (LANGS.includes(base)) return base;
+    if (base === 'pt') return 'pt-BR';
+    if (LANGS.includes(base) && (base !== 'en' || fallback === 'en')) return base;
   }
-  return 'en';
+  return fallback;
 }
 
 /** What the server checks (server/ideas.js checkPrivacy), so the form can say what is wrong before it sends. Pure. */
@@ -153,7 +154,7 @@ function readChoice() {
 
 function boot() {
   const lang = pickLang({ search: location.search, stored: readChoice(),
-    languages: navigator.languages?.length ? navigator.languages : [navigator.language] });
+    languages: navigator.languages?.length ? [navigator.languages[0]] : [navigator.language], fallback: DEFAULT_LANG });
   show(lang);
   for (const a of document.querySelectorAll('.pv-lang a')) {
     a.addEventListener('click', (e) => {
@@ -165,9 +166,9 @@ function boot() {
   for (const h of document.querySelectorAll('.pv-h1')) h.tabIndex = -1;
   for (const form of document.querySelectorAll('form.pv-form')) wireForm(form, form.dataset.lang);
   // a link into the other language's section (#bg-request opened with ?lang=en): show that language
-  const hashLang = /^#(en|bg)(-|$)/.exec(location.hash);
+  const hashLang = /^#(pt-BR|en|bg)(-|$)/.exec(location.hash);
   if (hashLang && hashLang[1] !== lang) show(hashLang[1]);
-  if (location.hash) document.querySelector(location.hash)?.scrollIntoView?.();
+  if (location.hash) document.getElementById(location.hash.slice(1))?.scrollIntoView?.();
 }
 
 if (typeof document !== 'undefined' && document.getElementById('pv-main')) boot();

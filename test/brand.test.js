@@ -38,12 +38,12 @@ test('a farm made before the rename keeps its save and shows the new name; a nam
 
 test('no page, manifest or catalog a player or visitor sees says the old name', () => {
   const files = ['public/index.html', 'public/landing.html', 'public/privacy.html', 'public/manifest.webmanifest',
-    'public/manifest.bg.webmanifest', 'server/banner.js', 'server/multi.js', 'README.md', 'PRIVACY.md', 'deploy/cloud.md'];
-  for (const dir of ['public/js/i18n/en', 'public/js/i18n/bg']) {
+    'public/manifest.bg.webmanifest', 'public/manifest.pt-BR.webmanifest', 'server/banner.js', 'server/multi.js', 'README.md', 'PRIVACY.md', 'deploy/cloud.md'];
+  for (const dir of ['public/js/i18n/en', 'public/js/i18n/bg', 'public/js/i18n/pt-BR']) {
     for (const f of fs.readdirSync(path.join(ROOT, dir))) if (f.endsWith('.js')) files.push(`${dir}/${f}`);
   }
   for (const f of files) assert.doesNotMatch(read(f), /Harvest Hollow/, f);
-  for (const f of ['public/manifest.webmanifest', 'public/manifest.bg.webmanifest']) {
+  for (const f of ['public/manifest.webmanifest', 'public/manifest.bg.webmanifest', 'public/manifest.pt-BR.webmanifest']) {
     const m = JSON.parse(read(f));
     assert.equal(m.name, BRAND, f);
     assert.equal(m.short_name, BRAND, f);
@@ -54,7 +54,7 @@ test('no page, manifest or catalog a player or visitor sees says the old name', 
   // the loading screen and the slot picker show the wordmark, named for screen readers
   assert.match(index, /<img class="boot-logo" src="\/assets\/art\/logo\.png" alt="Harness Hollow" width="1200" height="538">/);
   assert.match(index, /<img class="slot-logo" src="\/assets\/art\/logo-wide\.png" alt="Harness Hollow" width="1400" height="336"( loading="lazy")?>/);
-  assert.match(read('public/landing.html'), /<title>Harness Hollow · a cozy farm for two<\/title>/);
+  assert.match(read('public/landing.html'), /<title>Harness Hollow · uma fazenda para duas pessoas<\/title>/);
   assert.match(read('public/landing.html'), /alt="Harness Hollow"/);
 });
 
