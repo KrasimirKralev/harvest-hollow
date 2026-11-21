@@ -1,6 +1,8 @@
 // Bulgarian catalog, area 'home' (lane D): the same keys and {params} as en/home.js (test/i18n.test.js checks it).
 // Terms, tone and grammar: docs/agent-briefs/i18n-glossary-bg.md.
 export default {
+  'home.avatar.mnki': 'Мнки',
+  'home.avatar.swan': 'Суон',
   // ---- look names (w4-model.js LOOKS) and pet breeds (w4-rules.js): fallbacks when lane B's content texts lack them ----
   'home.look.bodies.farmer_a': 'Фигура А',
   'home.look.bodies.farmer_b': 'Фигура Б',

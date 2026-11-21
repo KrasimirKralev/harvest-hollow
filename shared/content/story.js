@@ -75,10 +75,8 @@ export const LETTER_ART = ['farmhouse', 'wheat', 'market', 'hens', 'order', 'win
 export const QUEST_STORY = {
   a1: {
     letter: { greeting: 'My dears,', art: 'farmhouse', signoff: 'All my love, Grandma Hazel', body: [
-      'The farm is yours now. Both of you. I always hoped it would be, and the old place has been waiting a '
-        + 'long time for some laughter.',
-      'Start small, the way I did. The field by the porch is tilled and ready. Wheat grows in a minute, so drag '
-        + 'a row of seeds across it and watch.',
+      'Swan brought a picnic cloth. Mnki brought two spoons. Can you grow the lunch?',
+      'Drag Wheat seeds across six plots by the porch. Harvest the golden heads.',
     ] },
     done: 'Your first harvest! Grandpa would have whistled.',
   },

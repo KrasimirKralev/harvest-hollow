@@ -112,6 +112,9 @@ export default function installW4(ui, deps = {}) {
   reg('upgrades', UPGRADES);
   reg('decorSell', DECOR_SELL);
   reg('avatar', AVATAR);
+  reg('picnic', lazyPanel({ title: () => t('hud.picnic.title'), icon: 'heart', size: 'card',
+    dock: { get label() { return t('hud.picnic.title'); }, icon: 'picnic_basket', order: 1, mini: true } },
+    () => import('./picnic.js').then((m) => m.loadPicnic())));
   const store = deps.store || ui.store || globalThis.__hh?.store || null;
   if (store && typeof store.on === 'function') {
     // the partner sold or upgraded something: a line on my screen with a way to look (Undo for a sale is in the toast

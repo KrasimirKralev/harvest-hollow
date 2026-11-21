@@ -157,7 +157,7 @@ test('privacy: single mode keeps its own log lines as they were (the owner\'s bo
 
 test('privacy: the star count is asked by the server, at most once an hour, keeps its last number, and is null without one', async () => {
   const { StarCount, STARS_URL } = await import('../server/stars.js');
-  assert.equal(STARS_URL, 'https://api.github.com/repos/KrasimirKralev/harvest-hollow');
+  assert.equal(STARS_URL, 'https://api.github.com/repos/mnkiswan/mnkiswan_');
   let now = 1_800_000_000_000;
   const asked = [];
   let answer = { status: 200, body: { stargazers_count: 321 } };
@@ -204,7 +204,7 @@ test('privacy: the star count is asked by the server, at most once an hour, keep
 });
 
 test('privacy: GET /api/stars answers from the server\'s cache (multi mode only); HH_STARS_URL picks the source', async () => {
-  assert.equal(multiConfig({}).starsUrl, 'https://api.github.com/repos/KrasimirKralev/harvest-hollow');
+  assert.equal(multiConfig({}).starsUrl, 'https://api.github.com/repos/mnkiswan/mnkiswan_');
   assert.equal(multiConfig({ HH_STARS_URL: 'off' }).starsUrl, null);
   assert.equal(multiConfig({ HH_STARS_URL: 'http://127.0.0.1:4123/repo' }).starsUrl, 'http://127.0.0.1:4123/repo');
   assert.throws(() => multiConfig({ HH_STARS_URL: 'file:///etc/passwd' }), /HH_STARS_URL/);

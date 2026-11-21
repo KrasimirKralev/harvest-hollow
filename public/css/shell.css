@@ -1585,3 +1585,29 @@ body.motion-reduced #boot.lifting { transition-duration: 1ms; }
 .hs-arrow.hs-right { right: 3px; }
 .hs-arrow:hover { color: var(--sun-ink); transform: scale(1.1); }
 .hs-arrow:active { transform: scale(.94); }
+
+/* The duo's picnic cloth and wildflower edging carry through from the front door. */
+#slot-picker .slot-card { background: repeating-linear-gradient(90deg, #b95045a8 0 9px, transparent 9px 18px),
+  repeating-linear-gradient(0deg, #e4a095 0 9px, #fff1d9 9px 18px); border-radius: 22px; padding: 12px; }
+#slot-picker .slot-paper { background: #fff6e3; }
+#slot-picker .slot-paper::before { content: ''; display: block; margin: 0 auto 4px; width: 106px; height: 72px;
+  background: url('../assets/art/mnkiswan-duo.webp') center / contain no-repeat; }
+#boot::after, #slot-picker::after { content: ''; position: absolute; inset: auto 0 0; height: min(17vh, 145px);
+  pointer-events: none; background: url('../assets/art/picnic-flowers.webp') center bottom / auto 100% repeat-x; }
+#slot-picker .slot-card, #boot .boot-card { z-index: 1; }
+.picnic-table { margin: auto; max-width: 26rem; text-align: center; color: #3f3023; }
+.picnic-how, .picnic-status { margin: .4rem auto .8rem; font-weight: 600; }
+.picnic-grid { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: clamp(5px,1.4vw,10px); }
+.picnic-card { position: relative; display: grid; place-items: center; aspect-ratio: 1; min-width: 0; min-height: 44px;
+  border: 2px solid #8b5037; border-radius: 13px; background: url('../assets/art/mnkiswan-duo.webp') center / 88% auto no-repeat, #fff0d8;
+  box-shadow: 0 3px 0 #a56d4a; cursor: pointer; }
+.picnic-card:focus-visible { outline: 3px solid #204d8a; outline-offset: 2px; }
+.picnic-card[data-face] { background: #fffaf0; }
+.picnic-card[data-face='matched'] { background: #e2efd2; border-color: #4f7547; }
+.picnic-card[data-face='matched']::after { content: '✓'; position: absolute; right: 5px; top: 1px; color: #365630; font-weight: 700; }
+.picnic-card .ic { width: 63%; height: 63%; object-fit: contain; }
+.picnic-status { margin-top: .8rem; }
+@media (max-height: 540px) {
+  #slot-picker .slot-paper::before { display: none; }
+  .picnic-table { max-width: 19rem; }
+}

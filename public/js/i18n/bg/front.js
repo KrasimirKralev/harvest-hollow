@@ -2,8 +2,8 @@
 export default {
   // the one screen: the tagline, Play and how the partner joins (release 1.0 O7). A display line stays in one face
   // (copy#19): no Latin brand word and no digit beside the Cyrillic (Nunito) on the lines people see first
-  'front.hero.tag': 'Уютна ферма за двама, на живо в браузъра ти.',
-  'front.act.title': 'Играй или помогни на Harness Hollow да расте',
+  'front.hero.tag': 'Посейте пшеница, пригответе пикник и се погрижете за поляната заедно.',
+  'front.act.title': 'Играй или помогни на MNKISWAN Meadow Picnic да расте',
   'front.act.play': 'Играй',
   'front.act.playSub': 'Създай нова ферма',
   'front.act.invite': 'Покани половинката си с линк от самата ферма.',
@@ -23,7 +23,7 @@ export default {
   'front.start.rateLater': 'От тази мрежа току-що се появиха много нови ферми. Опитай пак малко по‑късно.',
   'front.start.net': 'Сървърът на фермата не отговори. Опитай пак след малко.',
   'front.full.title': 'Долината е пълна в момента',
-  'front.full.text': 'Всички ферми, които Harness Hollow може да пази, са заети. Ферма, която никой не посети 7 дни, се изтрива, така че пак ще се освободи място: опитай отново утре.',
+  'front.full.text': 'Всички ферми, които MNKISWAN Meadow Picnic може да пази, са заети. Ферма, която никой не посети 7 дни, се изтрива, така че пак ще се освободи място: опитай отново утре.',
   'front.storage': 'Този прозорец на браузъра не пази нищо, след като се затвори, така че устройството ще забрави фермата ти. В играта, в Настройки › Ферма, е личният ти линк към фермата: пази го на сигурно място.',
 
   // this device's farms
@@ -111,7 +111,7 @@ export default {
   'front.game.ideasHelp': 'Кажи ни какво ти се иска да видиш. Четем всяка идея.',
   'front.game.ideasHelpGithub': 'Отваря таблото с идеи в GitHub.',
   'front.game.ideasLead': 'Какво би направило фермата ти още по‑уютна? Растение, животно, сграда или нещо, което те дразни.',
-  'front.game.starRibbon': 'Харесва ли ти Harness Hollow?',
+  'front.game.starRibbon': 'Харесва ли ти MNKISWAN Meadow Picnic?',
   'front.game.starText': 'Една ⭐ в GitHub помага и на други двойки да открият играта.',
   'front.game.starIt': 'Дай звезда',
   'front.game.later': 'По‑късно',

@@ -1,6 +1,6 @@
 {
-  "name": "Harness Hollow",
-  "short_name": "Harness Hollow",
+  "name": "MNKISWAN Meadow Picnic",
+  "short_name": "MNKISWAN",
   "description": "Уютна ферма за двама, споделена в домашната ви мрежа.",
   "id": "/",
   "start_url": "/",
@@ -8,7 +8,7 @@
   "display": "standalone",
   "orientation": "any",
   "background_color": "#D6F1FF",
-  "theme_color": "#4C9A3E",
+  "theme_color": "#315343",
   "lang": "bg",
   "dir": "ltr",
   "categories": [
@@ -16,24 +16,16 @@
     "entertainment"
   ],
   "icons": [
-    { "src": "/assets/pwa/icon-192.png",
-      "sizes": "192x192",
-      "type": "image/png",
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
       "purpose": "any"
     },
-    { "src": "/assets/pwa/icon-512.png",
-      "sizes": "512x512",
-      "type": "image/png",
-      "purpose": "any"
-    },
-    { "src": "/assets/pwa/icon-maskable-192.png",
-      "sizes": "192x192",
-      "type": "image/png",
-      "purpose": "maskable"
-    },
-    { "src": "/assets/pwa/icon-maskable-512.png",
-      "sizes": "512x512",
-      "type": "image/png",
+    {
+      "src": "/assets/pwa/picnic-maskable.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
       "purpose": "maskable"
     }
   ]

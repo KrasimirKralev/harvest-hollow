@@ -46,7 +46,7 @@ test('single mode: Settings > Farm links the repo\'s PRIVACY.md (this server kee
   box.append(...p.settingsRows({ close() {} }));
   const link = box.querySelector('a[data-privacy="open"]');
   assert.equal(link.getAttribute('href'), PRIVACY_MD_URL);
-  assert.match(PRIVACY_MD_URL, /^https:\/\/github\.com\/KrasimirKralev\/harvest-hollow\/blob\/main\/PRIVACY\.md$/);
+  assert.match(PRIVACY_MD_URL, /^https:\/\/github\.com\/mnkiswan\/mnkiswan_\/blob\/main\/PRIVACY\.md$/);
   assert.equal(box.querySelector('[data-farm-delete="open"]'), null);
   assert.equal(await p.deleteFlow(), false, 'nothing to delete on a self-hosted farm');
 });

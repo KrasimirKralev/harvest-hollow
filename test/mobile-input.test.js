@@ -533,27 +533,21 @@ test('audio: iOS-activating gestures unlock the context', () => {
   for (const ev of ['touchend', 'pointerup', 'click', 'keydown']) assert.ok(UNLOCK_EVENTS.includes(ev), ev);
 });
 
-test('manifest: standalone, theme colours, 192 and 512 px icons (and maskable) that exist at those sizes', () => {
+test('manifest: standalone, theme colours, scalable icons for regular and maskable installation', () => {
   const m = JSON.parse(fs.readFileSync(path.join(ROOT, 'public', 'manifest.webmanifest'), 'utf8'));
   assert.equal(m.display, 'standalone');
-  assert.equal(m.name, 'Harness Hollow');
+  assert.equal(m.name, 'MNKISWAN Meadow Picnic');
   assert.ok(m.short_name && m.short_name.length <= 15, 'fits under a home-screen icon');
   assert.match(m.theme_color, /^#[0-9A-Fa-f]{6}$/);
   assert.match(m.background_color, /^#[0-9A-Fa-f]{6}$/);
   assert.equal(m.start_url, '/');
-  const sizeOf = (file) => {
-    const b = fs.readFileSync(file);
-    assert.equal(b.toString('ascii', 1, 4), 'PNG', file);
-    return `${b.readUInt32BE(16)}x${b.readUInt32BE(20)}`;
-  };
-  for (const want of ['192x192', '512x512']) {
-    for (const purpose of ['any', 'maskable']) {
-      const icon = m.icons.find((i) => i.sizes === want && i.purpose === purpose);
-      assert.ok(icon, `${want} ${purpose}`);
-      assert.equal(sizeOf(path.join(ROOT, 'public', icon.src)), want, icon.src);
-    }
+  for (const purpose of ['any', 'maskable']) {
+    const icon = m.icons.find((i) => i.sizes === 'any' && i.purpose === purpose);
+    assert.equal(icon.type, 'image/svg+xml');
+    assert.match(fs.readFileSync(path.join(ROOT, 'public', icon.src), 'utf8'), /viewBox="0 0 64 64"/);
   }
-  assert.equal(sizeOf(path.join(ROOT, 'public', 'assets', 'pwa', 'apple-touch-icon.png')), '180x180');
+  const apple = fs.readFileSync(path.join(ROOT, 'public/assets/icons/picnic_basket.png'));
+  assert.equal(apple.toString('ascii', 1, 4), 'PNG');
 });
 
 test('touch: no browser click after a finger on the farm (a tap that opens the seed picker must not also choose a seed)', async () => {

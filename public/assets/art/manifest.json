@@ -403,27 +403,27 @@
         "file": "logo.webp",
         "w": 1200,
         "h": 538,
-        "bytes": 95832
+        "bytes": 44570
       },
       "png": {
         "file": "logo.png",
         "w": 1200,
         "h": 538,
-        "bytes": 356775
+        "bytes": 103782
       }
     },
     "wide": {
-      "webp": {
-        "file": "logo-wide.webp",
-        "w": 1400,
-        "h": 336,
-        "bytes": 56090
-      },
       "png": {
         "file": "logo-wide.png",
         "w": 1400,
         "h": 336,
-        "bytes": 213608
+        "bytes": 116757
+      },
+      "svg": {
+        "file": "wordmark-wide.svg",
+        "w": 1400,
+        "h": 336,
+        "bytes": 35306
       }
     }
   },
@@ -479,5 +479,5 @@
       "bytes": 56276
     }
   },
-  "totalBytes": 2223644
+  "totalBytes": 1801754
 }
