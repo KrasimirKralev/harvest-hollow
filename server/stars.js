@@ -4,9 +4,9 @@
 // with none yet the answer is null (the page then shows no number). Nothing of a visitor goes into the request.
 //
 //   new StarCount({ url, fetcher, wall, ttlMs, timeoutMs, log }).get() -> Promise<number | null>   never throws
-export const STARS_URL = 'https://api.github.com/repos/KrasimirKralev/harvest-hollow';
+export const STARS_URL = 'https://api.github.com/repos/mnkiswan/mnkiswan_';
 export const STARS_TTL_MS = 60 * 60_000;
-const USER_AGENT = 'harvest-hollow-server (+https://github.com/KrasimirKralev/harvest-hollow)';
+const USER_AGENT = 'harvest-hollow-server (+https://github.com/mnkiswan/mnkiswan_)';
 
 export class StarCount {
   /**

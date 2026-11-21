@@ -6,8 +6,8 @@ export default {
   // the one screen: the tagline, Play (the one big button) and how the partner joins (release 1.0 O7); Star us and
   // GitHub are pills in the link row (front.act.starSub is read out after "Star us"; front.act.github is the GitHub
   // pill's spoken name)
-  'front.hero.tag': 'A cozy 3D farm for two, live in your browser.',
-  'front.act.title': 'Play, or help Harness Hollow grow',
+  'front.hero.tag': 'Plant a little wheat, pack a picnic, and grow a meadow together.',
+  'front.act.title': 'Play, or help MNKISWAN Meadow Picnic grow',
   'front.act.play': 'Play',
   'front.act.playSub': 'Start a new farm',
   'front.act.invite': 'Invite your partner with a link from inside the farm.',
@@ -24,7 +24,7 @@ export default {
   'front.start.rateLater': 'Lots of new farms were just started from this network. Try again a little later.',
   'front.start.net': 'The farm server did not answer. Try again in a moment.',
   'front.full.title': 'The valley is full right now',
-  'front.full.text': 'Every farm Harness Hollow can keep is taken. Farms nobody visits for 7 days are deleted, so room opens up again: please try once more tomorrow.',
+  'front.full.text': 'All farms are taken. Try tomorrow. Inactive farms are cleared after 7 days.',
   'front.storage': 'This browser window does not keep anything once it closes, so this device will forget your farm. In the game, Settings › Farm has your personal farm link: keep it somewhere safe.',
 
   // this device's farms
@@ -109,7 +109,7 @@ export default {
   'front.game.ideasHelp': 'Tell us what you would love to see. We read every one.',
   'front.game.ideasHelpGithub': 'Opens the ideas board on GitHub.',
   'front.game.ideasLead': 'What would make your farm even cozier? A crop, an animal, a building, or something that bugged you.',
-  'front.game.starRibbon': 'Enjoying Harness Hollow?',
+  'front.game.starRibbon': 'Enjoying MNKISWAN Meadow Picnic?',
   'front.game.starText': 'A ⭐ on GitHub helps other couples find it.',
   'front.game.starIt': 'Star it',
   'front.game.later': 'Maybe later',

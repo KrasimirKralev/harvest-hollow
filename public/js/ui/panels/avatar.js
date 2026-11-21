@@ -236,8 +236,20 @@ export const avatarPanel = {
         renderGroups(); paintPreview();
       } } }, svgIcon('star', 18), t('home.avatar.dice'));
 
+    const outfits = [
+      { label: 'home.avatar.mnki', body: 'farmer_a', hair: 'short', hairColor: '#4A3022', hat: 'cap', top: '#B23A2E', bottom: '#3A3A40' },
+      { label: 'home.avatar.swan', body: 'farmer_b', hair: 'long', hairColor: '#7A4A2A', hat: 'flower_crown', top: '#F2E6CC', bottom: '#8DAA7A' },
+    ];
+    const duo = h('div.av-acts-row', ...outfits.map(({ label, ...outfit }) => h('button.btn.btn--paper.pn-sm', {
+      type: 'button', on: { click() {
+        draft = { ...draft, ...outfit };
+        renderGroups();
+        paintPreview();
+      } },
+    }, t(label))));
+
     fill(body, h('div.av-wrap',
-      h('div.av-left', preview, status, h('div.av-acts', save, h('div.av-acts-row', reset, dice)),
+      h('div.av-left', preview, duo, status, h('div.av-acts', save, h('div.av-acts-row', reset, dice)),
         h('p.av-note', t('home.avatar.note'))),
       groupsEl));
     renderGroups();

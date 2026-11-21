@@ -149,7 +149,7 @@ test('front: the landing page as served: no game data, a small first view, the r
   assert.equal((landing.match(/<link[^>]+rel="stylesheet"/g) || []).length, 1, 'css/landing.css only: the game styles come with the sheets');
   assert.equal((landing.match(/<link[^>]+rel="preload"[^>]+as="font"/g) || []).length, 1, 'one font');
   // the carved wordmark of the game's farmer picker (release 1.0 O7: one logo from the landing page into the game)
-  assert.match(landing, /<img src="\/assets\/art\/logo-wide\.webp\?v=[0-9a-f]+" srcset="[^"]*logo-wide_880\.webp 880w, \/assets\/art\/logo-wide\.webp 1400w"/);
+  assert.match(landing, /<img src="\/assets\/art\/wordmark-wide\.svg\?v=[0-9a-f]+"/);
   assert.match(landing, /<img class="ld-orb-still" src="\/assets\/landing\/farm-orbit\.webp\?v=[0-9a-f]+"/);
   // the video, the sheets and the screenshots never ride in the page: they come after the first paint, when asked
   assert.ok(!/<video|\.webm\b|\.mp4\b|shot-\d/.test(landing.replace(/<!--[\s\S]*?-->/g, '')), 'no video or screenshot in the first view');
@@ -169,7 +169,7 @@ test('front: the landing page as served: no game data, a small first view, the r
 test('front: the landing assets stay small (the first view and the lazy video)', () => {
   const kb = (f) => fs.statSync(path.join(ROOT, 'public/assets/landing', f)).size / 1024;
   assert.ok(kb('farm-orbit.webp') <= 40, `the orb's still: ${kb('farm-orbit.webp').toFixed(1)} KB`);
-  assert.ok(kb('logo-wide_560.webp') <= 35 && kb('logo-wide_880.webp') <= 50, 'the logo');
+  assert.ok(kb('../art/wordmark-wide.svg') <= 35, 'the scalable logo stays small');
   for (const f of ['farm-orbit.webm', 'farm-orbit.mp4']) assert.ok(kb(f) <= 1536, `${f}: ${kb(f).toFixed(0)} KB (at most 1.5 MB)`);
 });
 

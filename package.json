@@ -1,8 +1,8 @@
 {
-  "name": "harvest-hollow",
+  "name": "mnkiswan-meadow-picnic",
   "version": "0.1.0",
   "private": true,
-  "description": "Harvest Hollow: a cozy 3D co-op farming game for two, in the browser. Play free online or self-host (Node + Three.js). Phones too.",
+  "description": "A shared MNKISWAN meadow for two farmers, with a picnic matching game.",
   "license": "MIT",
   "type": "module",
   "main": "server/index.js",

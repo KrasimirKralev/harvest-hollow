@@ -5,17 +5,17 @@
   <!-- viewport-fit=cover: the farm runs under a notch and a home bar, the HUD keeps clear of them (css/mobile.css reads
        env(safe-area-inset-*)); resizes-content: Android's keyboard shrinks the page, so a sheet's text field stays in view -->
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
-  <meta name="theme-color" content="#4C9A3E">
+  <meta name="theme-color" content="#315343">
   <!-- home screen (input lane: manifest.webmanifest, assets/pwa/): standalone, the status bar over the farm (the HUD keeps
        clear of it through the safe-area insets) -->
   <link rel="manifest" href="/manifest.webmanifest">
-  <link rel="apple-touch-icon" href="/assets/pwa/apple-touch-icon.png">
+  <link rel="apple-touch-icon" href="/assets/icons/picnic_basket.png">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-title" content="Harness Hollow">
+  <meta name="apple-mobile-web-app-title" content="MNKISWAN Meadow Picnic">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="color-scheme" content="light">
-  <title>Harness Hollow</title>
+  <title>MNKISWAN Meadow Picnic</title>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <!-- Fonts are vendored (public/assets/fonts, SIL OFL): LAN play may have no internet, and no public CDN (tech §12.1). -->
   <link rel="preload" href="/assets/fonts/fredoka-latin.woff2" as="font" type="font/woff2" crossorigin>
@@ -101,7 +101,7 @@
           <span class="sr-only"><span data-i18n="shell.html.levelSr">Farm level</span> <span id="hud-level-text">1</span></span>
         </button>
         <div class="level-body">
-          <div class="farm-name outlined" id="hud-farm-name">Harness Hollow</div>
+          <div class="farm-name outlined" id="hud-farm-name">MNKISWAN Meadow Picnic</div>
           <div class="xp" role="progressbar" aria-label="Farm XP" data-i18n-attr="aria-label:shell.html.xpBar" aria-valuemin="0" id="hud-xp-bar">
             <div class="fill" id="hud-xp-fill"></div>
             <span class="xp-text" id="hud-xp-text">0 / 25 XP</span>
@@ -176,7 +176,7 @@
     </div>
     <div class="boot-card">
       <h1 class="boot-title"><picture><source srcset="/assets/art/logo.webp" type="image/webp">
-        <img class="boot-logo" src="/assets/art/logo.png" alt="Harness Hollow" width="1200" height="538"></picture></h1>
+        <img class="boot-logo" src="/assets/art/logo.png" alt="MNKISWAN Meadow Picnic" width="1200" height="538"></picture></h1>
       <p class="boot-line" id="boot-line"><span class="spin" aria-hidden="true"></span><span id="boot-text" role="status" aria-live="polite">Waking up the farm…</span><span class="boot-pct" id="boot-pct" aria-hidden="true"></span>
         <span class="boot-prog" aria-hidden="true"><i id="boot-prog"></i></span></p>
       <!-- the language toggle (i18n): works before any module has loaded (the inline script below), remembered per device -->
@@ -233,7 +233,7 @@
           var creep = setInterval(function () { if (window.__hhBootTaken) clearInterval(creep); else show(); }, 400);
         }
       } catch (e) { /* no observer: the line stays words only */ }
-      // the home-screen app's description in the chosen language (the name stays "Harness Hollow")
+      // the home-screen app's description in the chosen language (the name stays "MNKISWAN Meadow Picnic")
       var mf = document.querySelector('link[rel="manifest"]');
       if (mf && L === 'bg') mf.setAttribute('href', '/manifest.bg.webmanifest');
       for (var i = 0; i < opts.length; i++) {
@@ -255,8 +255,8 @@
     </div>
     <div class="slot-card wood">
       <!-- the carved wide logo above the card (art lane Hookup 4: the welcome painting keeps its sky free for it) -->
-      <h1 class="slot-title" id="slot-title"><picture><source srcset="/assets/art/logo-wide.webp" type="image/webp">
-        <img class="slot-logo" src="/assets/art/logo-wide.png" alt="Harness Hollow" width="1400" height="336" loading="lazy"></picture></h1>
+      <h1 class="slot-title" id="slot-title"><picture><source srcset="/assets/art/wordmark-wide.svg" type="image/svg+xml">
+        <img class="slot-logo" src="/assets/art/logo-wide.png" alt="MNKISWAN Meadow Picnic" width="1400" height="336" loading="lazy"></picture></h1>
       <div class="slot-paper paper">
         <p class="slot-sub" id="slot-sub" data-i18n="shell.slot.who">Who is playing on this screen?</p>
         <div class="slots" id="slot-list"></div>
@@ -265,7 +265,7 @@
     </div>
   </section>
 
-  <noscript>Harness Hollow needs JavaScript and WebGL2. · Harness Hollow има нужда от JavaScript и WebGL2.</noscript>
+  <noscript>MNKISWAN Meadow Picnic needs JavaScript and WebGL2. · MNKISWAN Meadow Picnic има нужда от JavaScript и WebGL2.</noscript>
   <script type="module" src="/js/main.js"></script>
 </body>
 </html>

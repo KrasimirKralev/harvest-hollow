@@ -1,5 +1,6 @@
 // Bulgarian catalog, area 'hud' (lane A): the same keys and {params} as en/hud.js.
 export default {
+  'hud.picnic.title': 'Пикник по двойки',
   'hud.unlock.barn': 'Подобрение на хамбара {id}',
   'hud.xp.valuetext': '{a} от {b} опит до ниво {level}',
   'hud.xp.unit': ' опит',
