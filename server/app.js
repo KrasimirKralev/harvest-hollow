@@ -1,4 +1,4 @@
-// MNKISWAN Meadow Picnic server: boot = config -> persist.load -> migrate/backfill -> replay -> catch-up of due system
+// MNKISWAN Tree Village server: boot = config -> persist.load -> migrate/backfill -> replay -> catch-up of due system
 // actions -> snapshot -> http + ws -> timers -> signals.
 // `node server/index.js` (the entry) runs main(); tests import startServer() to run one in-process on a temp data dir.
 import fs from 'node:fs';
@@ -155,7 +155,7 @@ export function loadFarm(persist, { dev = false, log = console, tz = DEFAULT_TZ,
  * opens one at boot; the multi-farm host (server/farms.js) opens each farm on demand, so a farm that slept catches
  * up exactly like a restarted single-farm server.
  * @param {object} cfg  loadConfig() shape
- * `harnessDir` (MNKISWAN Meadow Picnic, additive): the farm's harness dir. Its active mod overlay is installed into the content
+ * `harnessDir` (MNKISWAN Tree Village, additive): the farm's harness dir. Its active mod overlay is installed into the content
  * (this process holds one farm: single mode, or a modded farm's worker thread), every journal line replays under the
  * overlay it was accepted with (`mh`), and the welcome carries the mod (server/mods/hot.js).
  * @param {{ log: Console, dir?: string, perf?: Perf, staticFiles?: StaticFiles|null, persistOpts?: object,
@@ -316,7 +316,7 @@ export async function main() {
     cfg = loadConfig();
     s = await startServer(cfg);
   } catch (err) {
-    console.error(`\x1b[31mMNKISWAN Meadow Picnic failed to start: ${err.message}\x1b[0m`);
+    console.error(`\x1b[31mMNKISWAN Tree Village failed to start: ${err.message}\x1b[0m`);
     process.exit(err instanceof BootRefused || err instanceof ConfigError ? EXIT_REFUSED : 1);
   }
   // A bug that escapes every handler: log it structured and exit non-zero, so systemd restarts a clean process

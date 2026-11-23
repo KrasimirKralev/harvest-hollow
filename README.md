@@ -1,12 +1,32 @@
-<p align="center"><img src="public/assets/art/wordmark-wide.svg" alt="MNKISWAN Meadow Picnic" width="560"></p>
+<p align="center"><img src="public/assets/art/wordmark-wide.svg" alt="MNKISWAN Tree Village" width="560"></p>
 
-Swan has a picnic cloth. Mnki has two spoons. Their basket is empty. Grow wheat, gather ingredients and build a farm on your own or with a friend in this Three.js browser game.
+Welcome to **MNKISWAN Tree Village**. Swan has a picnic cloth. Mnki has two spoons. Their basket is empty. Plant orchards, grow wheat, gather ingredients and build a village among the trees in this Three.js browser game.
+
+**▶ Play it in your browser:** https://mnkiswan.github.io/mnkiswan_/ (no install, no server; your village is saved in your browser).
 
 Open **Your look** to try Mnki’s red farm outfit or Swan’s cream outfit and flower crown. Save a look to wear it on the farm.
 
 **Picnic Pairs** is a memory game you can play while your crops grow. Open the Farm book, choose Picnic Pairs and turn over two cards at a time to find all six foods. Each player has their own board. Closing the panel ends the round.
 
 This is MNKISWAN’s adaptation of [Harness Hollow by Krasimir Kralev](https://github.com/KrasimirKralev/harvest-hollow). The duo badge and hand-painted wildflower border come from the MNKISWAN artwork collection.
+
+## Play on GitHub Pages
+
+The whole game also runs as a static site. `tools/build-pages.mjs` builds it into `dist/`, and the
+**Deploy to GitHub Pages** workflow (`.github/workflows/pages.yml`) publishes it on every push to `main`. In the
+repository settings, set **Pages > Build and deployment > Source** to **GitHub Actions** once.
+
+On a static host there is no farm server, so `pages/local-server.js` runs the same server code (engine, sessions,
+scheduler and the shared rules) inside the page and talks to the game through an in-page socket. Each browser keeps
+its own village in IndexedDB. The browser version is single-device: Harvey and the hosted-farm features need the
+Node server. Build and try it locally:
+
+```bash
+PAGES_BASE=http://localhost:8080/mnkiswan_ node tools/build-pages.mjs --out dist
+```
+
+Serve `dist/` at `http://localhost:8080/mnkiswan_/` with any static file server. The developer console has
+`__village.exportSave()`, `__village.importSave(text)` and `__village.reset()` for backups and a fresh start.
 
 ## Features
 

@@ -1,4 +1,4 @@
-// Renders the "MNKISWAN Meadow Picnic" wordmark SVGs (tools/make-wordmark.py: public/assets/art/wordmark.svg and
+// Renders the "MNKISWAN Tree Village" wordmark SVGs (tools/make-wordmark.py: public/assets/art/wordmark.svg and
 // wordmark-wide.svg) into the logo files the pages show, under their old names and sizes, so no page changes layout:
 //   public/assets/art/logo.png + logo.webp            1200 x 538, the stacked one (the loading screen)
 //   public/assets/art/logo-wide.png + wordmark-wide.svg  1400 x 336, the wide one (the slot picker, the gates, privacy)

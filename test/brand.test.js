@@ -1,4 +1,4 @@
-// The rename to "MNKISWAN Meadow Picnic" (2026-10-13): one name in the rules and on every screen a player or visitor sees,
+// The rename to "MNKISWAN Tree Village" (2026-10-13): one name in the rules and on every screen a player or visitor sees,
 // old saves untouched (a farm nobody named still carries "Harvest Hollow" and shows the new name), the new wordmark.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -11,9 +11,9 @@ import { createFarm, validateState } from '../shared/rules/state.js';
 const OLD = 'Harvest Hollow';
 const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
 
-test('the brand is MNKISWAN Meadow Picnic; a new farm carries it until its farmers name it', () => {
-  assert.equal(BRAND, 'MNKISWAN Meadow Picnic');
-  assert.deepEqual([...DEFAULT_FARM_NAMES], ['MNKISWAN Meadow Picnic', 'Harness Hollow', OLD, 'Harvest Harness']);
+test('the brand is MNKISWAN Tree Village; a new farm carries it until its farmers name it', () => {
+  assert.equal(BRAND, 'MNKISWAN Tree Village');
+  assert.deepEqual([...DEFAULT_FARM_NAMES], ['MNKISWAN Tree Village', 'MNKISWAN Meadow Picnic', 'Harness Hollow', OLD, 'Harvest Harness']);
   const s = createFarm(7, T0);
   assert.equal(s.farm.name, BRAND);
   assert.deepEqual(validateState(s), []);
@@ -49,13 +49,13 @@ test('no page, manifest or catalog a player or visitor sees says the old name', 
     assert.equal(m.short_name, 'MNKISWAN', f);
   }
   const index = read('public/index.html');
-  assert.match(index, /<title>MNKISWAN Meadow Picnic<\/title>/);
-  assert.match(index, /<meta name="apple-mobile-web-app-title" content="MNKISWAN Meadow Picnic">/);
+  assert.match(index, /<title>MNKISWAN Tree Village<\/title>/);
+  assert.match(index, /<meta name="apple-mobile-web-app-title" content="MNKISWAN Tree Village">/);
   // the loading screen and the slot picker show the wordmark, named for screen readers
-  assert.match(index, /<img class="boot-logo" src="\/assets\/art\/logo\.png" alt="MNKISWAN Meadow Picnic" width="1200" height="538">/);
-  assert.match(index, /<img class="slot-logo" src="\/assets\/art\/logo-wide\.png" alt="MNKISWAN Meadow Picnic" width="1400" height="336"( loading="lazy")?>/);
-  assert.match(read('public/landing.html'), /<title>MNKISWAN Meadow Picnic · a cozy farm for two<\/title>/);
-  assert.match(read('public/landing.html'), /alt="MNKISWAN Meadow Picnic"/);
+  assert.match(index, /<img class="boot-logo" src="\/assets\/art\/logo\.png" alt="MNKISWAN Tree Village" width="1200" height="538">/);
+  assert.match(index, /<img class="slot-logo" src="\/assets\/art\/logo-wide\.png" alt="MNKISWAN Tree Village" width="1400" height="336"( loading="lazy")?>/);
+  assert.match(read('public/landing.html'), /<title>MNKISWAN Tree Village · a cozy farm for two<\/title>/);
+  assert.match(read('public/landing.html'), /alt="MNKISWAN Tree Village"/);
 });
 
 /** Width and height from a PNG's IHDR. */
@@ -68,8 +68,8 @@ function pngSize(rel) {
 test('the wordmark: outline SVGs (no font, no outside image) rendered into the logo files at their old sizes', () => {
   for (const f of ['public/assets/art/wordmark.svg', 'public/assets/art/wordmark-wide.svg']) {
     const svg = read(f);
-    assert.match(svg, /aria-label="MNKISWAN Meadow Picnic"/, f);
-    assert.match(svg, /<title>MNKISWAN Meadow Picnic<\/title>/, f);
+    assert.match(svg, /aria-label="MNKISWAN Tree Village"/, f);
+    assert.match(svg, /<title>MNKISWAN Tree Village<\/title>/, f);
     assert.doesNotMatch(svg, /<text|font-family|@font-face|https?:\/\/(?!www\.w3\.org\/2000\/svg)/, `${f}: letters are outlines, nothing is fetched`);
   }
   assert.deepEqual(pngSize('public/assets/art/logo.png'), [1200, 538]);

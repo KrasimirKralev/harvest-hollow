@@ -292,6 +292,6 @@ test('the landing page\'s meta description follows the language, like the rest o
   const en = (await import('../public/js/i18n/en/multi.js')).default;
   const bg = (await import('../public/js/i18n/bg/multi.js')).default;
   assert.equal(en[key], meta.match(/content="([^"]*)"/)[1], 'English stays the description it always was');
-  assert.match(bg[key], /^MNKISWAN Meadow Picnic: /, 'the brand in Latin letters');
-  assert.doesNotMatch(bg[key].replace(/^MNKISWAN Meadow Picnic: /, '').replace(/\b3D\b/, ''), /[A-Za-z]/, `Bulgarian: ${bg[key]}`);
+  assert.match(bg[key], /^MNKISWAN Tree Village: /, 'the brand in Latin letters');
+  assert.doesNotMatch(bg[key].replace(/^MNKISWAN Tree Village: /, '').replace(/\b3D\b/, ''), /[A-Za-z]/, `Bulgarian: ${bg[key]}`);
 });

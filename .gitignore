@@ -16,3 +16,4 @@ docs/qa/**/data-*/
 .scratch/
 data-archive-*/
 data-backup-*/
+dist/
