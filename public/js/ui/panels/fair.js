@@ -1,0 +1,691 @@
+// The County Fair tent (GDD §5.6, M1b) and the weekly lane's shared pieces (ui-weekly lane, wave 2).
+//
+// Panels (registered by `installWeekly`, see the bottom of this file):
+//   'fair'          the tent: the week's target W, points (one decimal), the medal ladder with what each medal pays,
+//                   who earned what, entries with point previews, the 10-per-item cap and the duet ×2 badge
+//   'fairCeremony'  the Sunday-20:00 results card, on both screens: opened when the CONFIRMED ceremony record
+//                   (`farm.fair.last`, written only by the server's `_fair`) is one this player has not seen; the
+//                   absent partner gets it on the next welcome. Showing it sends `markSeen { kind: 'fair' }`.
+// The barge, the townsfolk board and the Town Projects live in barge.js, townsfolk.js and town.js; they import the
+// shared helpers below (the calendar windows, the painted banner, the NPC speech, the player split, flags). This
+// module loads them dynamically in `installWeekly`, so the lane has no import cycle.
+//
+// The rules decide (GDD §7.2): every button asks the shared rules (`probe`) before the click, and the numbers come
+// from the goals lane's own helpers (shared/rules/actions/fair.js: entry points, medal thresholds and pay, the
+// week's open and close times), so a preview can never disagree with what a click does.
+import { CONTENT, FAIR, itemOf, npcOf, pluralOf } from '../../../../shared/content/index.js';
+import * as FR from '../../../../shared/rules/actions/fair.js';
+import { systemLive, weekOf } from '../../../../shared/rules/coop.js';
+import { h, icon, svgIcon, fmt, fmtDuration, playerMark, createKit, fill, price, hintable, phoneSheet } from './kit.js';
+import { pick, probe, passes, levelOf, available } from './core.js';
+import { portrait, s as sv } from './art.js';
+import { ensureStylesheet } from '../dom.js';
+import { assetUrl } from '../../net/asset-base.js';
+import { lazyImport, importFailed } from '../../net/lazy.js';
+import { leagueOpen, horseShowOpen } from './league-rules.js';
+import { t, lang, ctext, name as cname } from '../../i18n/index.js';
+
+export const BP = 10_000;
+const DAY = 86_400_000;
+const CSS_HREF = '/css/panels-weekly.css';
+
+// ---- small shared readers (pure) --------------------------------------------------------------------------------
+
+export const isObj = (v) => Boolean(v) && typeof v === 'object' && !Array.isArray(v);
+export const num = (v, d = 0) => (Number.isFinite(v) ? v : d);
+
+/** A weekly system (content rule object with a milestone) plays in this build and the farm has its level. */
+export function systemOpen(sys, state) {
+  return Boolean(sys) && systemLive(sys) && levelOf(state) >= (sys.unlock ?? 1);
+}
+
+/** The registered action type (the goals lanes' names), else the canonical name (its probe says "Not open yet"). */
+export const actionOf = (...names) => pick(...names) ?? names[0];
+
+/**
+ * Points are stored ×10 (one decimal, GDD §5.6 v2): 172 -> "17.2", 170 -> "17"; from 100 points on a whole number
+ * ("548.6" is noise there: 5486 -> "549", astra#10).
+ */
+export function fmtPts(p10) {
+  const v = Math.max(0, Math.round(num(p10)));
+  if (v >= 1000) return fmt(Math.round(v / 10));
+  const whole = Math.floor(v / 10);
+  const tenth = v % 10;
+  return tenth ? `${fmt(whole)}${lang() === 'bg' ? ',' : '.'}${tenth}` : fmt(whole);
+}
+
+/**
+ * "190 of 250 points", or just "549 points" once the score is past the week's reference W (astra#10): "549 of 190"
+ * reads like a bug.
+ */
+export function ptsOfText(p10, W10) {
+  return num(W10) > 0 && num(p10) >= num(W10) ? t('weekly.fair.pts', { p: fmtPts(p10) }) : t('weekly.fair.ptsOf', { p: fmtPts(p10), w: fmtPts(W10) });
+}
+
+/**
+ * What a medal pays, as the ladder says it: "1,200 coins + 2 Acorns + a trophy" (`trophy`: name the trophy too).
+ */
+export function payText(m, trophy) {
+  const parts = [t('weekly.coins', { n: m.coins })];
+  if (m.acorns) parts.push(t('weekly.acorns', { n: m.acorns }));
+  if (trophy && m.trophy) parts.push(t('weekly.fair.aTrophy'));
+  return parts.join(' + ');
+}
+
+/** A NO_ITEMS hint: English keeps its plural label ("Need 3 more Wooden Crates"); Bulgarian counts the item itself. */
+export function need(item, n) {
+  const k = Math.max(1, n);
+  return { missing: [{ item, n: k, label: lang() === 'bg' && itemOf(item) ? undefined : pluralOf(itemOf(item)?.name ?? item, k) }] };
+}
+
+/**
+ * A whole catalog sentence whose Node-valued params (a bold phrase) stay nodes: [text, node, text] for h()'s children.
+ * Like i18n tNodes, but without a DocumentFragment (the panels' node tests run on a small fake DOM).
+ */
+export function tParts(key, params = {}) {
+  const nodes = [];
+  const p = {};
+  for (const [k, v] of Object.entries(params)) {
+    if (v && typeof v === 'object' && typeof v.nodeType === 'number') { p[k] = `\u0001${nodes.length}\u0001`; nodes.push(v); } else p[k] = v;
+  }
+  return t(key, p).split(/\u0001(\d+)\u0001/).map((s, i) => (i % 2 ? nodes[Number(s)] : s)).filter((s) => s !== '');
+}
+
+/** Scroll a re-opened panel back to its top (the shell keeps the scroll box between openings). */
+export function toTop(ctx) {
+  const sc = ctx.el?.querySelector?.('.hh-panel-scroll');
+  if (sc) sc.scrollTop = 0;
+}
+
+/** Bring the card a tracker card or a world click named into view and ring it once. */
+export function focusOn(el) {
+  if (!el) return;
+  // the shell mounts a panel before it shows the frame: scroll once it is laid out
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    if (!el.isConnected) return;
+    el.scrollIntoView({ block: 'center' });
+    el.classList.add('wk-focus');
+    setTimeout(() => el.classList.remove('wk-focus'), 2600);
+  }));
+}
+
+/** "2d 4h" / "3h 05m" until `at` (never negative). */
+export function leftText(at, now) {
+  return fmtDuration(Math.max(0, at - now), { cut: 'ms<10' });
+}
+
+// ---- shared DOM pieces (the lane's look: painted banner, NPC speech, flags, player split) -----------------------
+
+/** Where each painting's subject sits (x, y as 0..1) for the wide, shallow banner crop: the barge, the Fair's prize
+ * table, the village street's market stall, the far village across the river. */
+export const BANNER_FOCUS = Object.freeze({ f: [0.5, 0.52], g: [0.3, 0.7], b: [0.5, 0.42], e: [0.2, 0.22] });
+
+/** The painted banner strip at the top of a weekly panel: art, a title on an ink gradient, an optional chip. */
+export function banner(art, title, sub, { chip = null, cls = '', focus = null } = {}) {
+  const [fx, fy] = focus ?? BANNER_FOCUS[art] ?? [0.5, 0.5];
+  // on a phone the hero is a 56 px strip (ux-phone#15): the line under the title waits behind a "?" chip
+  const el = h(`div.wk-banner${cls ? `.${cls}` : ''}`,
+    h('img.wk-banner-art', { src: assetUrl(`/assets/art/quests/${art}.webp`), alt: '', decoding: 'async', draggable: 'false',
+      style: { objectPosition: `${fx * 100}% ${fy * 100}%` } }),
+    h('div.wk-banner-ink', { 'aria-hidden': 'true' }),
+    h('div.wk-banner-text', h('h2.wk-banner-title', title), sub ? h('p.wk-banner-sub', sub) : null),
+    sub ? h('button.pn-chipbtn.wk-banner-more', { type: 'button', 'aria-expanded': 'false', 'aria-label': t('weekly.banner.more'), title: sub,
+      on: { click: (e) => { const on = !el.classList.contains('open'); el.classList.toggle('open', on); e.currentTarget.setAttribute('aria-expanded', String(on)); } } }, '?') : null,
+    chip);
+  return el;
+}
+
+/** A countdown chip ("Judging Sunday 20:00 · 2d 4h") that ticks with the panel's kit. */
+export function clockChip(kit, { label, at, doneText = t('weekly.clock.anyMoment'), glyph = 'sun', cls = '' }) {
+  const tm = h('b.wk-clock-t');
+  kit.timer(tm, { end: at, doneText });
+  // the label stays in the tooltip when a phone strip shows only the countdown
+  return h(`div.wk-clock${cls ? `.${cls}` : ''}`, { title: label }, svgIcon(glyph, 20), h('span.wk-clock-l', label), tm);
+}
+
+/** Speeches opened on this device (a re-render keeps a folded line open). */
+const openSpeech = new Set();
+/**
+ * An NPC portrait with a speech bubble (the tent / jetty / board host). On a phone the bubble is one line with a tap
+ * to open (ux-phone#15): a real toggle (aria-expanded, Enter / Space), so the whole line is one press away.
+ */
+export function speech(npcId, line, small = null, size = 64) {
+  const npc = npcOf(npcId);
+  const bubble = h('div.wk-speech', h('b', npc ? cname(npcId) : ''), h('p', t('weekly.quote', { line })), small ? h('small', small) : null);
+  if (phoneSheet()) {
+    const set = (on) => { bubble.setAttribute('aria-expanded', String(on)); if (on) openSpeech.add(npcId); else openSpeech.delete(npcId); };
+    Object.assign(bubble.dataset, { fold: '' });
+    bubble.setAttribute('role', 'button');
+    bubble.setAttribute('tabindex', '0');
+    set(openSpeech.has(npcId));
+    bubble.addEventListener('click', () => set(bubble.getAttribute('aria-expanded') !== 'true'));
+    bubble.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); set(bubble.getAttribute('aria-expanded') !== 'true'); } });
+  }
+  return h('div.wk-host', npc ? portrait(npc, size) : null, bubble);
+}
+
+/** A two-colour split bar of what each farmer brought, with marks and names (identity is never colour alone). */
+export function splitBar(state, parts, { format = fmt, label = t('weekly.split.label') } = {}) {
+  const rows = Object.entries(parts || {}).filter(([, v]) => num(v) > 0).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+  const sum = rows.reduce((n, [, v]) => n + num(v), 0);
+  if (!rows.length || sum <= 0) return null;
+  const segs = rows.map(([pid, v]) => {
+    const p = state.players?.[pid];
+    return h('span.wk-split-seg', { style: { '--who': p ? p.color : '#C9A36A', '--w': String(num(v) / sum) },
+      title: t('weekly.split.tip', { name: p ? p.name : t('weekly.someone'), v: format(v) }) });
+  });
+  const legend = rows.map(([pid, v]) => {
+    const p = state.players?.[pid];
+    return h('span.wk-split-who', p ? playerMark(pid, p) : h('span.wk-split-dot'), h('span', p ? p.name : t('weekly.someone')), h('b', format(v)));
+  });
+  return h('div.wk-split', { role: 'group', 'aria-label': label }, h('div.wk-split-bar', segs), h('div.wk-split-legend', legend));
+}
+
+/** "Need help" flag (GDD §6.2 mechanic 3): the flag owner's colour and name; the rules decide who may toggle it. */
+export function flagButton(ctx, state, flagBy, { type, args, title = t('weekly.flag.title') }) {
+  const me = ctx.store.pid;
+  const owner = flagBy && state.players?.[flagBy] ? flagBy : null;
+  const code = probe(ctx.store, type, args);
+  const off = !passes(code);
+  const text = owner ? (owner === me ? t('weekly.flag.asked') : t('weekly.flag.needs', { name: state.players[owner].name })) : t('weekly.flag.need');
+  const tip = owner && owner !== me ? t('weekly.flag.askedTip', { name: state.players[owner].name })
+    : off && code === 'CAP' ? t('weekly.flag.cap') : title;
+  return h('button.pn-tag-btn.pn-flag.wk-flag', {
+    type: 'button', 'aria-pressed': String(Boolean(owner)), 'aria-disabled': off ? 'true' : null,
+    style: owner ? { '--who': state.players[owner].color } : null,
+    title: tip,
+    dataset: { flag: JSON.stringify(args) },
+    on: { click: (e) => { e.stopPropagation(); if (!off) ctx.act(type, args); } } },
+  owner ? playerMark(owner, state.players[owner]) : '⚑', text);
+}
+
+/** The body of a system that is not open on this farm yet (locked by level, or not in this build). */
+export function lockedBody(art, title, lines, unlock, level, live = true) {
+  return h('div.wk-locked', banner(art, title, live && unlock > level ? t('weekly.locked.opensAt', { n: unlock }) : t('weekly.locked.soon')),
+    h('div.wk-locked-card', svgIcon('lock', 36), h('ul', ...lines.map((l) => h('li', l)))));
+}
+
+// ---- the Fair: reading the state (the goals lane's farm.fair = { cur, last }) -----------------------------------
+
+const PREMIUMS = () => new Set([...CONTENT.animals.values()].map((a) => a.premium).filter(Boolean));
+const metalOf = (id) => (id === 'platinum' ? 'platinum' : String(id || '').replace(/\d$/, '') || 'none');
+const rankOf = (id) => (/\d$/.test(String(id || '')) ? ['', 'I', 'II', 'III'][Number(String(id).slice(-1))] ?? '' : '');
+
+/** The medal ladder for a target W (points): [{ id, name, metal, rank, at10, coins, acorns, trophy }]. */
+export function medalLadder(W, state = null) {
+  // M2: the rules list Platinum only for a farm whose Town Fair Grounds is restored, so pass the farm
+  return FR.liveMedals(state).map((m) => ({ id: m.id, name: medalName(m.id, m.name), metal: metalOf(m.id), rank: rankOf(m.id), at10: FR.medalNeed10(m, W),
+    coins: FR.medalCoins(m, W), acorns: m.acorns ?? 0, trophy: Boolean(m.trophy) }));
+}
+
+/** A medal's name in the language in effect (content FAIR.medals: "Bronze I" / "Бронз I"). */
+export const medalName = (id, en) => ctext('FAIR', `medal.${id}`, 'name', en ?? String(id));
+
+/** The best rung a score reaches, or null. */
+export const medalAt = (ladder, p10) => ladder.reduce((got, m) => (p10 >= m.at10 ? m : got), null);
+
+/**
+ * Everything the tent draws, DOM-free (node tests drive it with a plain state).
+ * @returns {{ live, open, unlock, level, has, isOpen, closesAt, opensAt, W, W10, p10, ladder, medal, next, toNext10,
+ *   by, entries, entered, last, cap }}
+ */
+export function fairView(state, pid, now) {
+  const level = levelOf(state);
+  const live = systemLive(FAIR);
+  const open = live && level >= FAIR.unlock;
+  const w = weekOf(state, now);
+  const cur = state.farm.fair?.cur ?? null;
+  const thisWeek = Boolean(cur && cur.w === w);
+  const isOpen = Boolean(FR.openFair(state, now));
+  const closesAt = FR.fairCloseAt(state, w);
+  const opensAt = now >= closesAt ? FR.fairOpenAt(state, w + 1) : FR.fairOpenAt(state, w);
+  const W = thisWeek ? cur.W : FR.fairTarget(Math.max(FAIR.unlock, level));
+  const p10 = thisWeek ? cur.p : 0;
+  const ladder = medalLadder(W, state);
+  const medal = medalAt(ladder, p10);
+  const next = ladder.find((m) => m.at10 > p10) ?? null;
+  const cap = FR.entryLimit(state);
+  const ent = thisWeek ? cur.ent : {};
+  const premium = PREMIUMS();
+  const entries = [];
+  for (const it of CONTENT.items.values()) {
+    const pts10 = FR.entryPoints10(state, it.id, level);
+    if (pts10 <= 0) continue;
+    const have = available(state, it.id);
+    const entered = ent[it.id] ?? 0;
+    if (have <= 0 && entered <= 0) continue;
+    entries.push({ item: it.id, name: cname(it.id), tier: it.tier, duet: it.tier === 'duet', prized: premium.has(it.id), have, entered,
+      left: Math.max(0, cap - entered), pts10 });
+  }
+  const canEnter = (e) => Number(e.left > 0 && e.have > 0);
+  entries.sort((a, b) => canEnter(b) - canEnter(a) || b.pts10 - a.pts10 || (a.item < b.item ? -1 : 1));
+  return {
+    live, open, unlock: FAIR.unlock, level, has: thisWeek, isOpen, closesAt, opensAt, W, W10: W * 10, p10, ladder, medal, next,
+    toNext10: next ? next.at10 - p10 : 0, by: thisWeek ? { ...cur.by } : {}, entries, cap,
+    entered: Object.keys(ent).sort().map((item) => ({ item, n: ent[item], pts10: FR.entryPoints10(state, item, level) * ent[item] })),
+    last: lastResult(state), maxAt10: ladder.length ? ladder.at(-1).at10 : W * 10,
+  };
+}
+
+/** This farmer's ceremonies not seen yet, oldest first (the rules' queue, QA2 RC-14; [] on an older rules build). */
+const unseenOf = (state, pid) => (pid && typeof FR.ceremonyQueue === 'function' ? FR.ceremonyQueue(state, pid) : []);
+
+/**
+ * A ceremony as the card draws it: { w, W10, p10, medal, name, metal, rank, coins, acorns, trophy, by, next, at,
+ * seen } (by = each player's points, from the week's record while it is still the current one). With `pid`: the
+ * oldest one that farmer has not seen (a partner away for two Sundays sees both, one by one; QA2 RC-14), or week `w`
+ * when asked; else the newest.
+ */
+export function lastResult(state, pid = null, w = null) {
+  const q = unseenOf(state, pid);
+  const last = state.farm.fair?.last;
+  const l = w !== null && w !== undefined ? q.find((c) => c.w === w) ?? (isObj(last) && last.w === w ? last : null) : q[0] ?? last;
+  if (!isObj(l)) return null;
+  const cur = state.farm.fair.cur;
+  const ladder = medalLadder(l.W, state);
+  const m = ladder.find((x) => x.id === l.medal) ?? null;
+  // who brought what: the record's own split once the rules keep it, else the week's record while it is still there
+  const by = isObj(l.by) ? { ...l.by } : cur && cur.w === l.w ? { ...cur.by } : {};
+  return { w: l.w, W10: l.W * 10, p10: l.p, medal: l.medal, name: m ? m.name : null, metal: m ? m.metal : 'none', rank: m ? m.rank : '',
+    coins: l.coins, acorns: l.acorns, trophy: l.trophy, by, at: l.at, seen: { ...(l.seen ?? {}) },
+    next: m ? ladder[ladder.indexOf(m) + 1] ?? null : ladder[0] ?? null };
+}
+
+/** True when this player has a ceremony to see (recent: within 8 days of it), the catch-up for an absent partner. */
+export function ceremonyDue(state, pid, now) {
+  if (typeof FR.ceremonyQueue === 'function') {
+    const c = unseenOf(state, pid)[0];
+    return Boolean(isObj(c) && state.players?.[pid] && now - c.at < 8 * DAY);
+  }
+  const l = state.farm.fair?.last;
+  if (!isObj(l) || !state.players?.[pid] || l.seen?.[pid]) return false;
+  return now - l.at < 8 * DAY;
+}
+
+// ---- medal art (inline SVG in the panels' flat-fill + ink-outline style) ----------------------------------------
+
+const METALS = {
+  bronze: { face: '#D99155', rim: '#9A5A2A', shine: '#F3C08E', ribbon: ['#C8473A', '#E8556E'] },
+  silver: { face: '#D6DEE6', rim: '#8C9AA8', shine: '#FFFFFF', ribbon: ['#2B78B5', '#4AA8E8'] },
+  gold: { face: '#F5C542', rim: '#B8860B', shine: '#FFF2B8', ribbon: ['#C8473A', '#F5C542'] },
+  platinum: { face: '#E6EEF5', rim: '#7E8FA6', shine: '#FFFFFF', ribbon: ['#6A4FB0', '#9B6BD6'] },
+  none: { face: '#E9DCC0', rim: '#B89A6A', shine: '#FFF7E6', ribbon: ['#B89A6A', '#D9C49A'] },
+};
+
+/** A Fair medal: a round medal on a two-tail ribbon with its rank numeral (I / II / III). */
+export function medalArt(metal, rank = '', size = 56, { dim = false } = {}) {
+  const c = METALS[metal] ?? METALS.none;
+  const ink = '#3E2612';
+  const svg = sv('svg', { viewBox: '0 0 56 64', width: size, height: Math.round((size * 64) / 56),
+    class: `wk-medal m-${metal}${dim ? ' dim' : ''}`,
+    'aria-hidden': 'true', focusable: 'false' });
+  svg.append(
+    sv('path', { d: 'M18 2 h8 l6 22 h-8 z', fill: c.ribbon[0], stroke: ink, 'stroke-width': 1.8, 'stroke-linejoin': 'round' }),
+    sv('path', { d: 'M38 2 h-8 l-6 22 h8 z', fill: c.ribbon[1], stroke: ink, 'stroke-width': 1.8, 'stroke-linejoin': 'round' }),
+    sv('circle', { cx: 28, cy: 40, r: 19, fill: c.rim, stroke: ink, 'stroke-width': 2.2 }),
+    sv('circle', { cx: 28, cy: 40, r: 14.5, fill: c.face, stroke: c.rim, 'stroke-width': 1.5 }),
+    sv('path', { d: 'M18 34 q4 -7 12 -7', fill: 'none', stroke: c.shine, 'stroke-opacity': 0.85, 'stroke-width': 2.6,
+      'stroke-linecap': 'round' }),
+    metal === 'platinum'
+      ? sv('path', { d: 'M28 30 l2.9 6 6.6 .9 -4.8 4.6 1.2 6.5 -5.9 -3.1 -5.9 3.1 1.2 -6.5 -4.8 -4.6 6.6 -.9 z',
+        fill: '#9B6BD6', stroke: ink, 'stroke-width': 1.3, 'stroke-linejoin': 'round' })
+      : (rank ? sv('text', { x: 28, y: 45.5, 'text-anchor': 'middle', class: 'wk-medal-rank', fill: ink }, rank) : null),
+  );
+  return svg;
+}
+
+// ---- the Fair tent ----------------------------------------------------------------------------------------------
+
+const PEMBERTON = {
+  get start() { return t('weekly.fair.pemberton.start'); },
+  get close() { return t('weekly.fair.pemberton.close'); },
+  get gold() { return t('weekly.fair.pemberton.gold'); },
+  get closed() { return t('weekly.fair.pemberton.closed'); },
+  get setup() { return t('weekly.fair.pemberton.setup'); },
+};
+
+export const fairPanel = {
+  get title() { return t('weekly.fair.title'); },
+  icon: 'fair_rosettes_display',
+  size: 'full',
+  topics: ['fair', 'inventory', 'overflow', 'xp', 'players', 'meta', 'album'],
+  mount(body, ctx) {
+    const kit = createKit(ctx);
+    const type = () => actionOf('fairEnter');
+    const sig = () => {
+      const v = fairView(ctx.store.state, ctx.store.pid, ctx.now());
+      return [v.open, v.has, v.isOpen, v.W, v.p10, v.by, v.entries.map((e) => [e.item, e.have, e.entered, e.pts10]),
+        v.last && [v.last.w, v.last.medal]];
+    };
+    const update = kit.memo(body, sig, render);
+    // the window flips (Sunday 20:00, Monday 00:00) without a store change: look again once a minute
+    ctx.every(60_000, () => update());
+    // QA r2 P2-04 sibling: the entries keep the order they had when the sheet opened (what can be entered first). A
+    // partner's sale or entry re-sorted them under the cursor, and "Enter 5" went to another good: nothing undoes an
+    // entry. A good that is new since then goes last; the order is fresh on the next open
+    let order = null;
+    function stableEntries(list) {
+      if (!order) { order = list.map((e) => e.item); return list; }
+      const pos = new Map(order.map((x, i) => [x, i]));
+      const out = [...list.filter((e) => pos.has(e.item)).sort((a, b) => pos.get(a.item) - pos.get(b.item)), ...list.filter((e) => !pos.has(e.item))];
+      order = out.map((e) => e.item);
+      return out;
+    }
+
+    function render() {
+      const st = ctx.store.state;
+      const now = ctx.now();
+      const v = fairView(st, ctx.store.pid, now);
+      v.entries = stableEntries(v.entries);
+      if (!v.open) {
+        fill(body, lockedBody('g', t('weekly.fair.title'), [
+          t('weekly.fair.locked.1'),
+          t('weekly.fair.locked.2'),
+          t('weekly.fair.locked.3'),
+        ], v.unlock, v.level, v.live));
+        return;
+      }
+      const chip = v.isOpen
+        ? clockChip(kit, { label: t('weekly.fair.clock.judging'), at: v.closesAt, doneText: t('weekly.fair.clock.judgingNow') })
+        : clockChip(kit, { label: t('weekly.fair.clock.next'), at: v.opensAt, doneText: t('weekly.fair.clock.openingNow'), cls: 'closed' });
+      const line = !v.has ? PEMBERTON.setup : !v.isOpen ? PEMBERTON.closed : v.medal && v.medal.metal === 'gold' ? PEMBERTON.gold
+        : v.next && v.p10 > 0 && v.toNext10 * 100 <= v.W10 * 15 ? PEMBERTON.close : PEMBERTON.start;
+      const head = v.isOpen
+        ? banner('g', t('weekly.fair.banner.open'), t('weekly.fair.banner.openSub', { week: weekLabel(v.closesAt, st) }), { chip })
+        : banner('g', t('weekly.fair.banner.done'), t('weekly.fair.banner.doneSub'), { chip });
+      const entries = h('section.wk-col.wk-entries-col', h('h3.pn-h', h('span', t('weekly.fair.enterHead'))), entriesGrid(st, v));
+      const side = h('section.wk-col.wk-side', tablesCard(st, v), rulesCard(v));
+      // a phone opens on the action (ux-phone#15): the goods to enter come right under the judge, the score after them
+      if (phoneSheet()) fill(body, head, speech('pemberton', line), entries, ladderCard(st, v), side);
+      else fill(body, head, h('div.wk-fair-top', speech('pemberton', line), ladderCard(st, v)), h('div.wk-fair-cols', entries, side));
+      kit.refresh();
+      kit.tick();
+      if (ctx.args.item && !ctx.wkRang) focusOn(ctx.wkRang = body.querySelector(`[data-item="${CSS.escape(ctx.args.item)}"]`));
+    }
+
+    function ladderCard(st, v) {
+      const max = Math.max(v.maxAt10, v.p10, 1);
+      const marks = v.ladder.map((m) => {
+        const got = v.p10 >= m.at10;
+        const tip = t('weekly.fair.rungTip', { medal: m.name, pts: fmtPts(m.at10), n: m.at10 / 10, pay: payText(m, true) });
+        return h(`span.wk-rung${got ? '.got' : ''}${v.next === m ? '.next' : ''}`, {
+          style: { left: `${(m.at10 / max) * 100}%` }, title: tip, role: 'img', 'aria-label': tip, dataset: { medal: m.id },
+        }, medalArt(m.metal, m.rank, 34, { dim: !got && v.next !== m }));
+      });
+      const nextLine = v.next
+        ? h('p.wk-next', tParts('weekly.fair.nextLine', { more: h('b', t('weekly.morePts', { pts: fmtPts(v.toNext10), n: v.toNext10 / 10 })), medal: v.next.name }),
+          price({ coins: v.next.coins, acorns: v.next.acorns }),
+          v.next.trophy ? h('span.wk-plus', t('weekly.fair.plusTrophy')) : null)
+        : h('p.wk-next', tParts('weekly.fair.topLine', { top: h('b', t('weekly.fair.top')) }));
+      const nowLine = v.medal
+        ? h('span.wk-now-medal', medalArt(v.medal.metal, v.medal.rank, 30), h('b', v.medal.name),
+          h('small', t(v.isOpen ? 'weekly.fair.pays' : 'weekly.fair.paid', { pay: payText(v.medal, false) })))
+        : h('span.wk-now-medal.none', h('small', t('weekly.fair.firstAt', { pts: fmtPts(v.ladder[0]?.at10 ?? 0), n: (v.ladder[0]?.at10 ?? 0) / 10 })));
+      return h('section.wk-ladder', { 'aria-label': t('weekly.fair.ladderLabel') },
+        h('div.wk-ladder-head',
+          h('div.wk-score', h('b.wk-score-n', fmtPts(v.p10)), h('span', v.W10 > 0 && v.p10 >= v.W10 ? t('weekly.fair.ptsUnit') : t('weekly.fair.ofPts', { pts: fmtPts(v.W10) })),
+            h('small', t('weekly.fair.targetNote'))),
+          nowLine),
+        h('div.wk-track', { role: 'progressbar', 'aria-valuemin': '0', 'aria-valuemax': String(Math.round(max / 10)),
+          'aria-valuenow': String(Math.round(v.p10 / 10)),
+          'aria-label': ptsOfText(v.p10, v.W10) },
+        h('span.wk-track-fill', { style: { '--p': String(Math.min(1, v.p10 / max)) } }),
+        ...marks),
+        v.isOpen ? nextLine : null,
+        splitBar(st, v.by, { format: (p) => t('weekly.pts', { pts: fmtPts(p) }), label: t('weekly.fair.byFarmer') }));
+    }
+
+    function entriesGrid(st, v) {
+      if (!v.isOpen) {
+        return h('div.wk-empty', svgIcon('ribbon', 44),
+          h('p', v.has || v.last ? t('weekly.fair.cleared') : t('weekly.fair.opensSoon')),
+          h('small', t('weekly.fair.bringMonday')));
+      }
+      const tp = type();
+      const ready = v.entries.filter((e) => e.have > 0 && e.left > 0);
+      if (!v.entries.length) {
+        return h('div.wk-empty', svgIcon('ribbon', 44), h('p', t('weekly.fair.nothing')),
+          h('small', t('weekly.fair.nothingNote', { n: v.cap })));
+      }
+      return h('div.wk-entries', { role: 'list', 'aria-label': t('weekly.fair.canEnter', { n: ready.length }) },
+        ...v.entries.map((e) => entryCard(v, e, tp)));
+    }
+
+    function entryCard(v, e, tp) {
+      const most = Math.max(1, Math.min(e.left, e.have));
+      const n5 = Math.min(5, most);
+      const count = t('weekly.fair.entered', { n: e.entered, cap: v.cap });
+      const pips = h('span.wk-pips', { title: count, 'aria-label': count, role: 'img' },
+        ...Array.from({ length: v.cap }, (_, i) => h(`i${i < e.entered ? '.on' : ''}`)));
+      const hint = (n) => () => (e.left <= 0 ? { texts: { CAP: t('weekly.fair.allEntered', { n: v.cap }) } } : need(e.item, n - e.have));
+      return h(`div.wk-entry${e.left <= 0 ? '.full' : ''}`, { role: 'listitem', dataset: { item: e.item } },
+        hintable(h('div.wk-entry-art', icon(e.item, { size: 56, alt: '' }),
+          e.duet ? h('span.wk-x2', { title: t('weekly.fair.duetTip') }, '♥ ×2')
+            : e.prized ? h('span.wk-x2.prized', { title: t('weekly.fair.prizedTip') }, '×2') : null), e.item),
+        h('div.wk-entry-text', h('b', e.name), h('span.wk-each', t('weekly.ptsEach', { pts: fmtPts(e.pts10), n: e.pts10 / 10 })),
+          h('small', t('weekly.inBarn', { n: e.have }))),
+        // short words beside the ten pips: "10 left" fits the narrowest card at 1366 px (QA2 UI-08: it spilled 3-8 px)
+        h('div.wk-entry-cap', pips, h('small', e.left > 0 ? t('weekly.left', { n: e.left }) : t('weekly.allIn', { n: v.cap }))),
+        h('div.wk-entry-acts',
+          kit.button({ label: t('weekly.fair.enterN', { n: 1 }), cls: 'btn--small btn--paper', key: `fair:${e.item}:1`, type: tp,
+            args: { item: e.item, qty: 1 }, hint: hint(1), data: { enter: e.item } }),
+          n5 > 1 ? kit.button({ label: t('weekly.fair.enterN', { n: n5 }), cls: 'btn--small btn--sun', key: `fair:${e.item}:n`, type: tp,
+            args: { item: e.item, qty: n5 }, hint: hint(n5) }) : null),
+        e.left > 0 && e.have > 0 ? h('span.wk-entry-gain', t('weekly.fair.wouldAdd', { n: most, pts: fmtPts(e.pts10 * most) })) : null);
+    }
+
+    function tablesCard(st, v) {
+      const list = v.entered.map((r) => h('li.wk-log-row', icon(r.item, { size: 28 }),
+        h('span', `${fmt(r.n)}\u00a0×\u00a0${itemOf(r.item) ? cname(r.item) : r.item}`),
+        h('b', `+${fmtPts(r.pts10)}`)));
+      const fromEntries = v.entered.reduce((n, r) => n + r.pts10, 0);
+      const ribbons = Math.max(0, v.p10 - fromEntries);
+      if (ribbons > 0) {
+        list.push(h('li.wk-log-row', svgIcon('ribbon', 26), h('span', t('weekly.fair.ribbonHarvests')), h('b', `+${fmtPts(ribbons)}`)));
+      }
+      return h('section.wk-card', h('h3.pn-h', h('span', t('weekly.fair.tables'))),
+        list.length ? h('ul.wk-log', ...list) : h('p.wk-muted', t('weekly.fair.tablesEmpty')),
+        v.last ? lastLine(v.last) : null);
+    }
+
+    function lastLine(l) {
+      return h('div.wk-last', medalArt(l.metal, l.rank, 30, { dim: !l.medal }),
+        h('div', h('b', l.name ? t('weekly.fair.last', { medal: l.name }) : t('weekly.fair.lastNone')),
+          h('small', l.coins ? t('weekly.fair.lastPtsCoins', { score: ptsOfText(l.p10, l.W10), coins: l.coins }) : ptsOfText(l.p10, l.W10))));
+    }
+
+    function rulesCard(v) {
+      return h('section.wk-card.wk-rules', h('h3.pn-h', h('span', t('weekly.fair.rules.head'))),
+        h('ul.wk-bullets',
+          h('li', tParts('weekly.fair.rules.1', { b: h('b', t('weekly.fair.rules.1b')) })),
+          h('li', t('weekly.fair.rules.2', { n: v.cap })),
+          h('li', t('weekly.fair.rules.3')),
+          h('li', t('weekly.fair.rules.4'))),
+        // M2: the league IS the Fair's points; the horse show doubles the Show Ribbon (ui-league's panels)
+        h('div.wk-links',
+          leagueOpen(ctx.store.state) && ctx.ui.panels.has('league') ? h('button.btn.btn--paper.btn--small', { type: 'button', 'data-sfx': 'own',
+            on: { click: () => ctx.ui.panels.open('league') } }, t('weekly.fair.toLeague')) : null,
+          horseShowOpen(ctx.store.state) && ctx.ui.panels.has('horseShow') ? h('button.btn.btn--paper.btn--small',
+            { type: 'button', 'data-sfx': 'own', on: { click: () => ctx.ui.panels.open('horseShow') } }, t('weekly.fair.toShow')) : null));
+    }
+
+    update(true);
+    if (!ctx.args.item && !Number.isInteger(ctx.args.i)) requestAnimationFrame(() => toTop(ctx));
+    return { update: () => update() };
+  },
+};
+
+/** "5–11 Oct" for the Fair week that closes at `closesAt` (the farm's zone). */
+export function weekLabel(closesAt, state) {
+  const tz = state?.meta?.tz || 'UTC';
+  try {
+    const f = new Intl.DateTimeFormat(lang() === 'bg' ? 'bg-BG' : 'en-GB', { timeZone: tz, day: 'numeric', month: lang() === 'bg' ? 'long' : 'short' });
+    const a = f.formatToParts(closesAt - 6 * DAY + 4 * 3_600_000);
+    const b = f.formatToParts(closesAt);
+    const d = (p) => p.find((x) => x.type === 'day')?.value;
+    const m = (p) => p.find((x) => x.type === 'month')?.value;
+    return m(a) === m(b) ? `${d(a)}–${d(b)} ${m(b)}` : `${d(a)} ${m(a)} – ${d(b)} ${m(b)}`;
+  } catch {
+    return '';
+  }
+}
+
+// ---- the ceremony card ------------------------------------------------------------------------------------------
+
+export const ceremonyPanel = {
+  get title() { return t('weekly.cere.title'); },
+  icon: 'ribbon_trophy',
+  size: 'card',
+  mount(body, ctx) {
+    const st = ctx.store.state;
+    const c = lastResult(st, ctx.store.pid, Number.isSafeInteger(ctx.args?.w) ? ctx.args.w : null);
+    if (!c) { fill(body, h('p.wk-muted', t('weekly.cere.none'))); return {}; }
+    const me = ctx.store.pid;
+    const won = Boolean(c.medal);
+    const mine = c.by[me] ?? 0;
+    const theirs = Object.entries(c.by).filter(([k, p]) => k !== me && p > 0);
+    const lead = won
+      ? t(`weekly.cere.won.${c.metal}`, { score: ptsOfText(c.p10, c.W10) })
+      : t('weekly.cere.lost', { p: fmtPts(c.p10), n: c.p10 / 10, bronze: fmtPts(c.next ? c.next.at10 : 0) });
+    const thanks = theirs.length && mine > 0
+      ? t('weekly.cere.thanks', { mine: fmtPts(mine), n: mine / 10, others: theirs.map(([pid, p]) => `${st.players?.[pid]?.name ?? t('weekly.partner')} ${fmtPts(p)}`)
+        .join(', ') })
+      : null;
+    fill(body,
+      h('div.wk-cere', { dataset: { metal: c.metal } },
+        h('div.wk-cere-art', h('img', { src: assetUrl('/assets/art/quests/g_600.webp'), alt: '', decoding: 'async' }),
+          h('div.wk-cere-medal', medalArt(c.metal, c.rank, 112, { dim: !won }))),
+        ctx.args.catchUp ? h('p.wk-cere-away', t('weekly.cere.away')) : null,
+        h('h2.wk-cere-title', won ? t('weekly.cere.medal', { medal: c.name }) : t('weekly.cere.goodTry')),
+        h('p.wk-cere-lead', lead),
+        won ? h('div.wk-cere-pay', price({ coins: c.coins, acorns: c.acorns }),
+          c.trophy ? h('span.wk-plus', icon(c.trophy, { size: 30 }), t('weekly.cere.trophy')) : null) : null,
+        splitBar(st, c.by, { format: (p) => t('weekly.pts', { pts: fmtPts(p) }), label: t('weekly.fair.byFarmer') }),
+        thanks ? h('p.wk-cere-thanks', thanks) : null,
+        h('div.wk-cere-acts',
+          h('button.btn.btn--sun', { type: 'button', on: { click: () => ctx.close() } }, won ? t('weekly.cere.hooray') : t('weekly.cere.nextWeek')),
+          h('button.btn.btn--paper.btn--small', { type: 'button', 'data-sfx': 'own', on: { click: () => { ctx.close(); ctx.ui.panels.open('fair'); } } },
+            t('weekly.cere.seeFair')))));
+    return {};
+  },
+};
+
+// ---- install: register the weekly panels, their dock buttons, badges and the ceremony hook ----------------------
+
+function ensureCss() {
+  ensureStylesheet(CSS_HREF);
+}
+
+/** A spec whose dock button appears only once its system is open on this farm (the drip-feed: no dead buttons). */
+export function withDock(spec, sys, dock, store) {
+  // copy the spec's descriptors, not its values: its title is a getter that follows the language
+  return Object.defineProperty(Object.defineProperties({}, Object.getOwnPropertyDescriptors(spec)), 'dock', {
+    enumerable: true,
+    get: () => (store && store.state && systemOpen(sys, store.state) ? dock : null),
+  });
+}
+
+/** The Fair badge's tone: red only on the last day before judging, calm the rest of the week (QA2 UI-03). Pure. */
+export function fairTone(state, pid, now) {
+  const v = fairView(state, pid, now);
+  return v.isOpen && v.closesAt - now <= DAY ? null : 'calm';
+}
+
+/** The Fair's dock badge: '!' while a ceremony waits, or when the goods in the barn reach the next medal now. Pure. */
+export function fairBadge(state, pid, now) {
+  if (!systemOpen(FAIR, state)) return null;
+  const v = fairView(state, pid, now);
+  if (!v.isOpen || !v.next) return null;
+  const reach = v.entries.reduce((n, e) => n + e.pts10 * Math.min(e.left, e.have), 0);
+  return reach >= v.toNext10 ? '!' : null;
+}
+
+/**
+ * Register the weekly panels (fair, fairCeremony, barge, townsfolk, town) into the shell's registry, add their mini
+ * dock buttons once each system is open, keep their dock badges, and open the ceremony card for a confirmed Fair
+ * result this player has not seen. Returns an uninstall function.
+ */
+export function installWeekly(ui, deps = {}) {
+  ensureCss();
+  const off = [];
+  let dead = false;
+  const store = deps.store || ui.store || globalThis.__hh?.store || null;
+  (async () => {
+    const [{ bargePanel, bargeBadge, bargeTone }, { townsfolkPanel, townsfolkBadge, townsfolkTone }, { townPanel, townBadge }, C] = await lazyImport('weekly', () => Promise.all([
+      import('./barge.js'), import('./townsfolk.js'), import('./town.js'), import('../../../../shared/content/index.js')]));
+    if (dead) return;
+    const docks = {
+      fair: { get label() { return t('weekly.dock.fair'); }, icon: 'ribbon_rosette', order: 6, mini: true, get hint() { return t('weekly.dock.fairHint'); } },
+      barge: { get label() { return t('weekly.dock.barge'); }, icon: 'wooden_crate', order: 7, mini: true, get hint() { return t('weekly.dock.bargeHint'); } },
+      town: { get label() { return t('weekly.dock.town'); }, icon: 'ferry_landing_souvenir', order: 8, mini: true,
+        get hint() { return t('weekly.dock.townHint'); } },
+    };
+    off.push(ui.panels.register('fair', withDock(fairPanel, FAIR, docks.fair, store)));
+    off.push(ui.panels.register('fairCeremony', ceremonyPanel));
+    off.push(ui.panels.register('barge', withDock(bargePanel, C.BARGE, docks.barge, store)));
+    off.push(ui.panels.register('town', withDock(townPanel, C.TOWN_PROJECT_RULES, docks.town, store)));
+    off.push(ui.panels.register('townsfolk', townsfolkPanel));
+    if (store) {
+      // [badge, tone]: a tone function answers 'calm' (something to do) or null (red: the week closes within a day)
+      off.push(startWeeklyBadges(ui, store, { fair: [fairBadge, fairTone], barge: [bargeBadge, bargeTone],
+        townsfolk: [townsfolkBadge, townsfolkTone], town: [townBadge, () => 'calm'] }));
+      off.push(startCeremony(ui, store));
+    }
+  })().catch((err) => { if (!importFailed(err)) console.error('weekly panels failed to install', err); });
+  return () => { dead = true; for (const f of off.splice(0)) { try { f(); } catch { /* gone */ } } };
+}
+
+/** Show the ceremony card once per player and week: on the live result (both screens) and on the catch-up. */
+function startCeremony(ui, store) {
+  let live = false;
+  const shownW = new Set();
+  const check = () => {
+    const st = store.state;
+    if (!st || !ui.panels.has('fairCeremony')) return;
+    const now = store.now();
+    if (!ceremonyDue(st, store.pid, now) || ui.panels.isOpen('fairCeremony')) return;
+    // the oldest unseen one first; its markSeen moves the queue on and the next change opens the next (QA2 RC-14)
+    const w = unseenOf(st, store.pid)[0]?.w ?? st.farm.fair.last.w;
+    if (shownW.has(w)) return;                       // once per week and page, even if its markSeen did not land
+    shownW.add(w);
+    ui.panels.open('fairCeremony', { w, catchUp: !live }, { stack: true });
+    live = false;
+    if (has('markSeen')) store.act('markSeen', { kind: 'fair', id: String(w) });
+  };
+  const offs = [
+    store.on('celebrate', ({ ev } = {}) => { if (ev && ev.e === 'fairCeremony') { live = !ev.catchUp; queueMicrotask(check); } }),
+    store.on('change', (ch) => { if (ch.source !== 'local' && (ch.topics.has('fair') || ch.topics.has('*'))) setTimeout(check, 0); }),
+    // a second missed Sunday waits behind the first card: closing it shows the next (QA2 RC-14)
+    ui.panels.on?.('close', (name) => { if (name === 'fairCeremony') setTimeout(check, 400); }),
+  ].filter((f) => typeof f === 'function');
+  setTimeout(check, 0);
+  return () => { for (const f of offs) f(); };
+}
+
+const has = (type) => pick(type) === type;
+
+/** Recompute the weekly badges on farm changes, at most every 400 ms (a drag-paint stroke fires dozens). */
+function startWeeklyBadges(ui, store, fns) {
+  let t = 0;
+  const run = () => {
+    t = 0;
+    const st = store.state;
+    if (!st) return;
+    const now = store.now();
+    for (const [name, [fn, toneFn]] of Object.entries(fns)) {
+      let b = null;
+      let tone = null;
+      try {
+        b = fn(st, store.pid, now);
+        tone = b ? toneFn(st, store.pid, now) : null;
+      } catch (err) { console.error(`weekly badge ${name} failed`, err); }
+      ui.panels.badge(name, b, tone);
+    }
+  };
+  const kick = () => { if (!t) t = setTimeout(run, 400); };
+  const offs = [store.on('change', kick), store.on('welcome', kick)].filter((f) => typeof f === 'function');
+  const iv = setInterval(kick, 60_000);
+  kick();
+  return () => { clearTimeout(t); clearInterval(iv); for (const f of offs) f(); };
+}
+

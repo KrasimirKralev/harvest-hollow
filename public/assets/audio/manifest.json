@@ -1,0 +1,537 @@
+{
+ "sampleRate": 32000,
+ "sounds": {
+  "plant": {
+   "file": "plant.wav",
+   "ms": 170,
+   "ogg": "plant.ogg"
+  },
+  "pluck": {
+   "file": "pluck.wav",
+   "ms": 555,
+   "ogg": "pluck.ogg"
+  },
+  "pop": {
+   "file": "pop.wav",
+   "ms": 90,
+   "ogg": "pop.ogg"
+  },
+  "water": {
+   "file": "water.wav",
+   "ms": 604,
+   "ogg": "water.ogg"
+  },
+  "compost": {
+   "file": "compost.wav",
+   "ms": 220,
+   "ogg": "compost.ogg"
+  },
+  "uproot": {
+   "file": "uproot.wav",
+   "ms": 220,
+   "ogg": "uproot.ogg"
+  },
+  "shake": {
+   "file": "shake.wav",
+   "ms": 630,
+   "ogg": "shake.ogg"
+  },
+  "chop1": {
+   "file": "chop1.wav",
+   "ms": 216,
+   "ogg": "chop1.ogg"
+  },
+  "chop2": {
+   "file": "chop2.wav",
+   "ms": 222,
+   "ogg": "chop2.ogg"
+  },
+  "chop3": {
+   "file": "chop3.wav",
+   "ms": 212,
+   "ogg": "chop3.ogg"
+  },
+  "poof": {
+   "file": "poof.wav",
+   "ms": 360,
+   "ogg": "poof.ogg"
+  },
+  "weed": {
+   "file": "weed.wav",
+   "ms": 170,
+   "ogg": "weed.ogg"
+  },
+  "build": {
+   "file": "build.wav",
+   "ms": 483,
+   "ogg": "build.ogg"
+  },
+  "munch": {
+   "file": "munch.wav",
+   "ms": 360,
+   "ogg": "munch.ogg"
+  },
+  "hop": {
+   "file": "hop.wav",
+   "ms": 220,
+   "ogg": "hop.ogg"
+  },
+  "cluck": {
+   "file": "cluck.wav",
+   "ms": 469,
+   "ogg": "cluck.ogg"
+  },
+  "moo": {
+   "file": "moo.wav",
+   "ms": 957,
+   "ogg": "moo.ogg"
+  },
+  "baa": {
+   "file": "baa.wav",
+   "ms": 627,
+   "ogg": "baa.ogg"
+  },
+  "rooster": {
+   "file": "rooster.wav",
+   "ms": 1571,
+   "ogg": "rooster.ogg"
+  },
+  "done": {
+   "file": "done.wav",
+   "ms": 918,
+   "ogg": "done.ogg"
+  },
+  "craft": {
+   "file": "craft.wav",
+   "ms": 521,
+   "ogg": "craft.ogg"
+  },
+  "coin": {
+   "file": "coin.wav",
+   "ms": 400,
+   "ogg": "coin.ogg"
+  },
+  "register": {
+   "file": "register.wav",
+   "ms": 1059,
+   "ogg": "register.ogg"
+  },
+  "acorn": {
+   "file": "acorn.wav",
+   "ms": 655,
+   "ogg": "acorn.ogg"
+  },
+  "xp": {
+   "file": "xp.wav",
+   "ms": 280,
+   "ogg": "xp.ogg"
+  },
+  "order": {
+   "file": "order.wav",
+   "ms": 1485,
+   "ogg": "order.ogg"
+  },
+  "levelup": {
+   "file": "levelup.wav",
+   "ms": 1925,
+   "ogg": "levelup.ogg"
+  },
+  "achievement": {
+   "file": "achievement.wav",
+   "ms": 1494,
+   "ogg": "achievement.ogg"
+  },
+  "quest": {
+   "file": "quest.wav",
+   "ms": 1482,
+   "ogg": "quest.ogg"
+  },
+  "mastery": {
+   "file": "mastery.wav",
+   "ms": 1130,
+   "ogg": "mastery.ogg"
+  },
+  "expand": {
+   "file": "expand.wav",
+   "ms": 1386,
+   "ogg": "expand.ogg"
+  },
+  "arrive": {
+   "file": "arrive.wav",
+   "ms": 1197,
+   "ogg": "arrive.ogg"
+  },
+  "ping_me": {
+   "file": "ping_me.wav",
+   "ms": 950,
+   "ogg": "ping_me.ogg"
+  },
+  "ping_partner": {
+   "file": "ping_partner.wav",
+   "ms": 974,
+   "ogg": "ping_partner.ogg"
+  },
+  "emote": {
+   "file": "emote.wav",
+   "ms": 360,
+   "ogg": "emote.ogg"
+  },
+  "clap": {
+   "file": "clap.wav",
+   "ms": 794,
+   "ogg": "clap.ogg"
+  },
+  "duet": {
+   "file": "duet.wav",
+   "ms": 1735,
+   "ogg": "duet.ogg"
+  },
+  "golden": {
+   "file": "golden.wav",
+   "ms": 2782,
+   "ogg": "golden.ogg"
+  },
+  "together": {
+   "file": "together.wav",
+   "ms": 935,
+   "ogg": "together.ogg"
+  },
+  "note": {
+   "file": "note.wav",
+   "ms": 352,
+   "ogg": "note.ogg"
+  },
+  "thanks": {
+   "file": "thanks.wav",
+   "ms": 651,
+   "ogg": "thanks.ogg"
+  },
+  "click": {
+   "file": "click.wav",
+   "ms": 60,
+   "ogg": "click.ogg"
+  },
+  "tab": {
+   "file": "tab.wav",
+   "ms": 60,
+   "ogg": "tab.ogg"
+  },
+  "hover": {
+   "file": "hover.wav",
+   "ms": 40,
+   "ogg": "hover.ogg"
+  },
+  "open": {
+   "file": "open.wav",
+   "ms": 254,
+   "ogg": "open.ogg"
+  },
+  "close": {
+   "file": "close.wav",
+   "ms": 183,
+   "ogg": "close.ogg"
+  },
+  "bonk": {
+   "file": "bonk.wav",
+   "ms": 173,
+   "ogg": "bonk.ogg"
+  },
+  "toast": {
+   "file": "toast.wav",
+   "ms": 70,
+   "ogg": "toast.ogg"
+  },
+  "tooltip": {
+   "file": "tooltip.wav",
+   "ms": 60,
+   "ogg": "tooltip.ogg"
+  },
+  "i_pluck": {
+   "file": "i_pluck.wav",
+   "ms": 2200,
+   "ogg": "i_pluck.ogg"
+  },
+  "i_banjo": {
+   "file": "i_banjo.wav",
+   "ms": 1200,
+   "ogg": "i_banjo.ogg"
+  },
+  "i_bass": {
+   "file": "i_bass.wav",
+   "ms": 1800,
+   "ogg": "i_bass.ogg"
+  },
+  "i_mallet": {
+   "file": "i_mallet.wav",
+   "ms": 1310,
+   "ogg": "i_mallet.ogg"
+  },
+  "i_marimba": {
+   "file": "i_marimba.wav",
+   "ms": 1200,
+   "ogg": "i_marimba.ogg"
+  },
+  "i_piano": {
+   "file": "i_piano.wav",
+   "ms": 3000,
+   "ogg": "i_piano.ogg"
+  },
+  "amb_bird1": {
+   "file": "amb_bird1.wav",
+   "ms": 640,
+   "ogg": "amb_bird1.ogg"
+  },
+  "amb_bird2": {
+   "file": "amb_bird2.wav",
+   "ms": 656,
+   "ogg": "amb_bird2.ogg"
+  },
+  "amb_bird3": {
+   "file": "amb_bird3.wav",
+   "ms": 736,
+   "ogg": "amb_bird3.ogg"
+  },
+  "amb_bird4": {
+   "file": "amb_bird4.wav",
+   "ms": 604,
+   "ogg": "amb_bird4.ogg"
+  },
+  "amb_owl": {
+   "file": "amb_owl.wav",
+   "ms": 1448,
+   "ogg": "amb_owl.ogg"
+  },
+  "amb_crickets": {
+   "file": "amb_crickets.wav",
+   "ms": 6000,
+   "loop": true,
+   "ogg": "amb_crickets.ogg"
+  },
+  "amb_wind": {
+   "file": "amb_wind.wav",
+   "ms": 8000,
+   "loop": true,
+   "ogg": "amb_wind.ogg"
+  },
+  "amb_rain": {
+   "file": "amb_rain.wav",
+   "ms": 5000,
+   "loop": true,
+   "ogg": "amb_rain.ogg"
+  },
+  "oink": {
+   "file": "oink.wav",
+   "ms": 529,
+   "ogg": "oink.ogg"
+  },
+  "quack": {
+   "file": "quack.wav",
+   "ms": 420,
+   "ogg": "quack.ogg"
+  },
+  "bleat": {
+   "file": "bleat.wav",
+   "ms": 708,
+   "ogg": "bleat.ogg"
+  },
+  "neigh": {
+   "file": "neigh.wav",
+   "ms": 1459,
+   "ogg": "neigh.ogg"
+  },
+  "buzz": {
+   "file": "buzz.wav",
+   "ms": 905,
+   "ogg": "buzz.ogg"
+  },
+  "fanfare": {
+   "file": "fanfare.wav",
+   "ms": 2442,
+   "ogg": "fanfare.ogg"
+  },
+  "barge_horn": {
+   "file": "barge_horn.wav",
+   "ms": 2602,
+   "ogg": "barge_horn.ogg"
+  },
+  "crate": {
+   "file": "crate.wav",
+   "ms": 305,
+   "ogg": "crate.ogg"
+  },
+  "ferry_bell": {
+   "file": "ferry_bell.wav",
+   "ms": 1745,
+   "ogg": "ferry_bell.ogg"
+  },
+  "find": {
+   "file": "find.wav",
+   "ms": 1306,
+   "ogg": "find.ogg"
+  },
+  "bundle": {
+   "file": "bundle.wav",
+   "ms": 1371,
+   "ogg": "bundle.ogg"
+  },
+  "lights_on": {
+   "file": "lights_on.wav",
+   "ms": 2918,
+   "ogg": "lights_on.ogg"
+  },
+  "giant_fall": {
+   "file": "giant_fall.wav",
+   "ms": 1309,
+   "ogg": "giant_fall.ogg"
+  },
+  "dig": {
+   "file": "dig.wav",
+   "ms": 760,
+   "ogg": "dig.ogg"
+  },
+  "splash": {
+   "file": "splash.wav",
+   "ms": 725,
+   "ogg": "splash.ogg"
+  },
+  "hooves": {
+   "file": "hooves.wav",
+   "ms": 1320,
+   "loop": true,
+   "ogg": "hooves.ogg"
+  },
+  "sew": {
+   "file": "sew.wav",
+   "ms": 808,
+   "ogg": "sew.ogg"
+  },
+  "oven": {
+   "file": "oven.wav",
+   "ms": 708,
+   "ogg": "oven.ogg"
+  },
+  "fizz": {
+   "file": "fizz.wav",
+   "ms": 690,
+   "ogg": "fizz.ogg"
+  },
+  "tape": {
+   "file": "tape.wav",
+   "ms": 477,
+   "ogg": "tape.ogg"
+  },
+  "amb_water": {
+   "file": "amb_water.wav",
+   "ms": 7000,
+   "loop": true,
+   "ogg": "amb_water.ogg"
+  },
+  "amb_bells": {
+   "file": "amb_bells.wav",
+   "ms": 5269,
+   "ogg": "amb_bells.ogg"
+  },
+  "woof": {
+   "file": "woof.wav",
+   "ms": 319,
+   "ogg": "woof.ogg"
+  },
+  "meow": {
+   "file": "meow.wav",
+   "ms": 630,
+   "ogg": "meow.ogg"
+  },
+  "hum": {
+   "file": "hum.wav",
+   "ms": 1128,
+   "ogg": "hum.ogg"
+  },
+  "cast": {
+   "file": "cast.wav",
+   "ms": 610,
+   "ogg": "cast.ogg"
+  },
+  "reel": {
+   "file": "reel.wav",
+   "ms": 1000,
+   "loop": true,
+   "ogg": "reel.ogg"
+  },
+  "plop": {
+   "file": "plop.wav",
+   "ms": 433,
+   "ogg": "plop.ogg"
+  },
+  "bite": {
+   "file": "bite.wav",
+   "ms": 500,
+   "ogg": "bite.ogg"
+  },
+  "fish_splash": {
+   "file": "fish_splash.wav",
+   "ms": 900,
+   "ogg": "fish_splash.ogg"
+  },
+  "show_fanfare": {
+   "file": "show_fanfare.wav",
+   "ms": 2706,
+   "ogg": "show_fanfare.ogg"
+  },
+  "duel_start": {
+   "file": "duel_start.wav",
+   "ms": 1670,
+   "ogg": "duel_start.ogg"
+  },
+  "duel_win": {
+   "file": "duel_win.wav",
+   "ms": 1940,
+   "ogg": "duel_win.ogg"
+  },
+  "amb_interior": {
+   "file": "amb_interior.wav",
+   "ms": 8000,
+   "loop": true,
+   "ogg": "amb_interior.ogg"
+  },
+  "door": {
+   "file": "door.wav",
+   "ms": 1183,
+   "ogg": "door.ogg"
+  },
+  "furnish": {
+   "file": "furnish.wav",
+   "ms": 258,
+   "ogg": "furnish.ogg"
+  },
+  "brush": {
+   "file": "brush.wav",
+   "ms": 683,
+   "ogg": "brush.ogg"
+  },
+  "squeak": {
+   "file": "squeak.wav",
+   "ms": 330,
+   "ogg": "squeak.ogg"
+  },
+  "perk": {
+   "file": "perk.wav",
+   "ms": 1206,
+   "ogg": "perk.ogg"
+  },
+  "barn_door": {
+   "file": "barn_door.wav",
+   "ms": 1625,
+   "ogg": "barn_door.ogg"
+  },
+  "bunny": {
+   "file": "bunny.wav",
+   "ms": 573,
+   "ogg": "bunny.ogg"
+  },
+  "snore": {
+   "file": "snore.wav",
+   "ms": 1510,
+   "ogg": "snore.ogg"
+  }
+ }
+}

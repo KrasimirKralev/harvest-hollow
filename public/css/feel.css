@@ -1,0 +1,164 @@
+/* Release 1.0, life-feel lane: press states, the layers over panels, flights, toasts and reward cards. Linked last
+   in index.html (docs/agent-briefs/release-scope.md §7.2): it wins the cascade over every other stylesheet. */
+
+/* ---- M4 (feel#1, ux-first#4, ux-phone#12): what is earned inside a panel is seen -------------------------------------
+   #over-panels (z 50, ui/toasts.js): toasts, notices and urgent cards while a panel covers their spot, and the reward pip
+   on the open panel's title. #fx-top (z 60, render/fx.js): coin, XP and loot flights, over every panel. Both are made at
+   runtime and never catch a click on their own (only a toast or a card in them does). Scope §7.1. */
+#over-panels { position: fixed; inset: 0; z-index: 50; pointer-events: none; zoom: var(--ui-scale); }
+#over-panels .toast, #over-panels .notice, #over-panels .unlock-banner { pointer-events: auto; }
+#over-panels .over-toasts { top: 96px; }
+/* a notice lives 15 s and has buttons: over a panel it waits at the bottom centre, off the panel's tabs and title */
+#over-panels > .notice { top: auto; bottom: calc(26px + env(safe-area-inset-bottom, 0px)); }
+#fx-top { position: fixed; inset: 0; z-index: 60; pointer-events: none; overflow: hidden; }
+
+/* the reward pip on the open panel's title banner: "✓ Quest done · +55 coins" */
+.reward-pip { position: absolute; transform: translate(-50%, 0); z-index: 2; white-space: nowrap; pointer-events: none;
+  padding: 4px 14px 5px; border-radius: var(--r-pill, 999px); font: 800 .9375rem/1.2 var(--font-ui); color: var(--go-900, #2E5A1A);
+  background: linear-gradient(180deg, #F2FFE6, #CFF0B4); box-shadow: inset 0 0 0 2px var(--go-500, #5DBB3F), 0 0 0 2.5px var(--go-900, #2E5A1A), var(--drop, 0 4px 0 rgba(0, 0, 0, .2));
+  animation: pip-in 360ms var(--ease-back, cubic-bezier(.34, 1.56, .64, 1)) both; }
+.reward-pip.leaving { opacity: 0; transform: translate(-50%, -6px); transition: opacity 260ms, transform 260ms; }
+@keyframes pip-in { from { opacity: 0; transform: translate(-50%, 8px) scale(.7); } }
+
+/* ---- phones: toasts and notices over a sheet keep the right edge column free (mobile.css's --edge-lane is #hud's) -- */
+@media (max-width: 600px), (max-height: 500px) {
+  #over-panels { --edge-lane: calc(var(--safe, 16px) + 56px + var(--sar, 0px)); }
+  #over-panels .over-toasts { top: calc(60px + var(--sat, 0px)); left: calc(8px + var(--sal, 0px)); right: var(--edge-lane); transform: none; }
+  #over-panels .over-banners { top: calc(60px + var(--sat, 0px)); right: var(--edge-lane); left: calc(12px + var(--sal, 0px)); align-items: center; }
+  /* ux-phone#12: a notice wraps its sentence over its buttons, and the buttons are 44 px targets */
+  .notice { flex-wrap: wrap; row-gap: 8px; }
+  .notice > span { flex: 1 1 100%; }
+  .notice .btn { flex: 1 1 auto; min-height: 44px; }
+  /* a card's ribbon keeps clear of its × on a narrow screen ("Задачата е изпълнена!" ran under it at 360): it sits a
+     little left of the middle, in a smaller face, and wraps to a second line before it would reach the button */
+  .unlock-banner .ribbon { left: calc(50% - 20px); max-width: calc(100% - 64px); white-space: normal; text-align: center;
+    font-size: 1.0625rem; line-height: 1.05; padding: 5px 14px 6px; }
+}
+
+/* (QA r2 S2-15: the OS setting holds only until the player picks a motion level; settings.js sets body.motion-set) */
+@media (prefers-reduced-motion: reduce) { body:not(.motion-set) .reward-pip { animation: none; } }
+body.motion-reduced .reward-pip { animation: none; }
+
+/* ---- M19 (harvey#15): a card's entrance never grows past its final box (a tap on Harvey's button beside it during the
+   400 ms slide-in landed on the card). Cards scale in from 0.96 about their top-right corner, no overshoot, and leave
+   the same way; nothing slides in from the right edge column. Supersedes shell.css `banner-slide` / `banner-out` and
+   the rosette's `rosette-in` (listed in rel-life-feel.md for ui-shell to delete). */
+.unlock-banner, .bloom-banner { animation: card-in 260ms var(--ease-out) both; transform-origin: 100% 0; }
+.unlock-banner.leaving { animation: card-out 220ms var(--ease-in) both; }
+.rosette { animation: card-in 300ms var(--ease-out) both, swing 2s var(--ease-out) 300ms; }
+@keyframes card-in { from { opacity: 0; transform: scale(.96); } }
+@keyframes card-out { to { opacity: 0; transform: scale(.96); } }
+
+/* ---- M10 (ux-first#18): the welcome-back card fits: "Let's farm!" in a footer that stays in view (it sat at y 862 on
+   the owners' save at 1366 x 768), the lists folded to four lines plus "and N more" (ui/recap.js) ------------------- */
+.recap .recap-foot { position: sticky; bottom: 0; z-index: 2; margin: 0 -16px -16px; padding: 10px 16px 12px;
+  background: linear-gradient(180deg, rgba(255, 248, 230, .92), var(--paper-100, #FFF3D6) 40%);
+  box-shadow: 0 -6px 12px -8px rgba(62, 38, 18, .35); border-radius: 0 0 var(--r-m, 14px) var(--r-m, 14px); }
+.recap .recap-more { font: 700 .875rem/1.2 var(--font-ui); color: var(--ink-500, #7A5A3A); }
+.recap .grid .recap-more { align-self: center; width: auto; padding: 0 6px; }
+.recap .recap-surprise li { gap: 10px; }
+.recap .recap-surprise li > span { flex: 1 1 auto; }
+.recap .recap-thanks { margin-top: 8px; }
+/* the sheet's "more below" fade lay over the sticky footer and washed "Let's farm!" out (360 BG): the footer's own top
+   shadow says there is more above it */
+#panel-recap .scroll-fade { display: none; }
+
+/* ---- S6 (ux-first#10, #20, feel#13): the level-up ------------------------------------------------------------------
+   the rewards are icon chips under the level that fly into their pills (ui/levelup.js, fx `levelLoot`); for the 2.5 s of
+   the overlay the coach card and the stroke chip step aside (`body.celebrating`), so the ribbon never sits on them */
+.lvl .sub { display: flex; align-items: center; gap: 12px; }
+.lvl-chip { display: inline-flex; align-items: center; gap: 4px; font: 800 1.125rem/1 var(--font-display); color: var(--ink-900); }
+.lvl-chip .ic { width: 26px; height: 26px; }
+.lvl-chip.flown { opacity: .3; transition: opacity 300ms; }
+body.celebrating #coach-slot .coach, body.celebrating .stroke-chip { opacity: 0; visibility: hidden; transition: opacity 200ms, visibility 0s 200ms; }
+/* a phone on its side: the show sits higher, clear of the coach card at the bottom */
+@media (max-height: 500px) { .lvl { top: 24%; } }
+
+/* ---- F5 (feel#11): every tappable card answers the press at once (a tap on a shop card or a sell stack showed
+   nothing until the result arrived; mobile.css takes the tap highlight away), and a hover lift never sticks after a
+   tap on a touch screen (mobile.css covers the HUD's own buttons; these are the panels' and the shell's others) ---- */
+:is(.pn-card, .pn-stack, .pn-order, .pn-order-row, .goal, .chip, .seed, .farmer, .hh-tab, .gate-farm, .pn-slot-x, .pn-wishbtn,
+  .pn-chipbtn):active { transform: translateY(2px) scale(.985); filter: brightness(.97); transition-duration: 60ms; }
+@media (hover: none) {
+  :is(.pn-card, .pn-stack, .pn-order, .pn-order-row, .pn-wishbtn, .chip, .players .look-btn, .emote-wheel button, .dock .m-menu-btn,
+    .lg-hub-tab, .lg-kind, .pc-meter, .pc-breed, .av-opt):hover { transform: none; filter: none; }
+  .pn-card:hover .pn-card-art .ic, .hg-card:hover .hg-plinth .ic { transform: none; }
+}
+
+/* ==== QA r1 (life-feel) ==============================================================================================
+   L-02 (fbp#1): a card that pops over the field never eats the next stroke (ui/toasts.js): one that just came in
+   (.fresh, 600 ms), and every card while a farm stroke runs and for a second after it (body.farm-stroke), lets the
+   finger through to the farm. `#hud > * > *` (shell.css) gives every card pointer-events: these win on specificity. */
+#hud .unlock-banner.fresh, #hud .rosette.fresh,
+body.farm-stroke #hud .unlock-banner, body.farm-stroke #hud .rosette, body.farm-stroke #hud .bloom-banner { pointer-events: none; }
+
+/* L-01 (jde#1, coop#1, fe#3): the words someone wrote for this farmer (a surprise's note) on its card, in quotes */
+.unlock-banner .card-quote { margin: 0 0 10px; padding: 8px 12px; border-radius: var(--r-m, 14px); text-align: center;
+  font: 700 1.0625rem/1.3 var(--font-ui); color: var(--wood-900, #3E2612); overflow-wrap: anywhere;
+  background: rgba(255, 255, 255, .6); box-shadow: inset 0 0 0 1.5px var(--paper-edge, #D9B677); }
+/* the welcome-back card: a gift shelved while away, with its note */
+.recap .recap-notes li > span { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+.recap .recap-quote { font-weight: 700; color: var(--wood-700, #6B4423); }
+
+/* L-08 (fe#6): "Show me" spilled out of its button at 360 BG ("Покажи ми" 77 px wide, 80 px of text): the line wraps,
+   the words keep at least 12em, the button keeps its own width and goes under them when the row is too narrow */
+.recap .recap-surprise li { flex-wrap: wrap; row-gap: 6px; }
+.recap .recap-surprise li > span { flex: 1 1 12em; min-width: 0; }
+.recap .recap-surprise li > .btn { flex: none; margin-left: auto; white-space: nowrap; }
+
+/* L-09 (br#2): a pasted link or a long word in chat ran off its toast and its feed line (Notes and Harvey's quote
+   wrapped it already): the words break anywhere rather than leave the box */
+.feed li .txt, .toast .tx, .notice > span { min-width: 0; overflow-wrap: anywhere; }
+
+/* QA r4 integration (infra's note): a reward's name is as wide as its longest word, up to a cap; at 66 px
+   „Върбовата“ and „Подобрение“ ran into each other on the level-21 card (iPhone 13 BG) */
+.unlock-banner .thing { width: auto; min-width: 66px; max-width: 116px; overflow-wrap: break-word; }
+
+/* L-10 (fbp#20): a card that would reach the coach card folds its rewards into one row of small chips; if it still
+   would, the coach card steps aside while the card is up (ui/toasts.js, as for the level-up show, S6) */
+.unlock-banner.tight { padding-bottom: 8px; }
+.unlock-banner.tight .sheet { padding: 8px 10px; }
+.unlock-banner.tight .things { gap: 4px 14px; }
+.unlock-banner.tight .thing { flex-direction: row; width: auto; gap: 5px; }
+.unlock-banner.tight .thing .ic { width: 28px; height: 28px; }
+.unlock-banner.tight .acts { margin-top: 6px; }
+body.card-over-coach #coach-slot .coach { opacity: 0; visibility: hidden; transition: opacity 200ms, visibility 0s 200ms; }
+
+/* ==== QA r2 (life-feel) ==============================================================================================
+   L2-10 (br#3): a card with two buttons ran off a phone ("Много ми харесва" from x -14 at 360 BG): the row wraps, and a
+   button keeps inside the paper, its words wrapping before they would leave it. */
+.unlock-banner .acts { flex-wrap: wrap; row-gap: 8px; }
+.unlock-banner .acts .btn { max-width: 100%; min-width: 0; white-space: normal; }
+/* L2-12 (hv#13): a toast's action (the partner's one-tap Undo) and a card's small buttons are 44 px targets on touch */
+@media (pointer: coarse) {
+  .toast .toast-act, .unlock-banner .btn--small { min-height: 44px; }
+}
+/* L2-07 (coop#6): the recipient's "left a surprise for you" line shows the way to the box (sky, like every Show me)
+   until it is opened; then it carries the thanks */
+.feed .feed-show { color: var(--sky-900); background: #DDF0FF; }
+.feed .feed-show:hover { background: #C7E6FF; }
+/* L2-11 (fbp#10): the farmer's mark is a flex item of the feed row (ui/feed.js), centred with the words */
+.feed li > .pmark { vertical-align: baseline; }
+
+/* ==== QA r3 (life-feel) ==============================================================================================
+   L3-01 (jde#1): the layers toasts.js places (the action line, the top column, the line over a panel) never animate
+   their place. Reduced motion gives every element a 1 ms transition on every property (style.css, both the OS branch
+   and body.motion-reduced): toasts.js's reset-then-measure read the old, lifted rect, and an Undo line flipped onto the
+   toolbar 2.5 times a second. (toasts.js also measures with transitions off: `still`.) The lines' own entrance stays. */
+#snacks, #toasts, #over-panels .over-toasts { transition: none !important; }
+/* L3-03 (oib#3): a phone on its side with a sheet docked at the right: toasts.js puts the line in the free farm left of
+   the sheet (.beside-sheet, its width capped there) and the words wrap inside it rather than run under the sheet */
+.beside-sheet { transform: none; }
+.beside-sheet .toast { max-width: 100%; }
+
+/* ==== QA r4 (life-feel) ==============================================================================================
+   L4-09 (br#4): a name of 16 very wide glyphs. In a toast it is one span that ends in an ellipsis (toasts.js named()),
+   not a 328 px bubble. (The HUD face's own clamp lives in shell.css, ui-shell's.) */
+.toast .tx-name { display: inline-block; max-width: 10em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; }
+/* L4-01: an action line in the narrow free farm left of a sheet (a phone on its side): its button goes under the words
+   rather than squeeze them to one broken word a line ("Балонъ / т пусна"); the pill becomes a rounded card */
+.beside-sheet .toast.has-act { flex-wrap: wrap; border-radius: 22px; }
+.beside-sheet .toast.has-act .tx { flex: 1 1 150px; }
+.beside-sheet .toast.has-act .toast-act { margin-left: auto; }
+/* (seen with L4-05) the recap's "New on the farm" cells were 74 px: "Върбовата" ran into "Подобрение" beside it */
+.recap .grid .cell { width: auto; min-width: 74px; max-width: 112px; overflow-wrap: anywhere; }

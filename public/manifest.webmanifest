@@ -1,0 +1,32 @@
+{
+  "name": "MNKISWAN Tree Village",
+  "short_name": "MNKISWAN",
+  "description": "A cozy 3D tree village farm, right in your browser.",
+  "id": "/mnkiswan_/",
+  "start_url": "/mnkiswan_/",
+  "scope": "/mnkiswan_/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#D6F1FF",
+  "theme_color": "#315343",
+  "lang": "en",
+  "dir": "ltr",
+  "categories": [
+    "games",
+    "entertainment"
+  ],
+  "icons": [
+    {
+      "src": "/mnkiswan_/public/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/mnkiswan_/public/assets/pwa/picnic-maskable.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ]
+}

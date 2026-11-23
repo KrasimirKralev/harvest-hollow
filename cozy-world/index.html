@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MNKISWAN · Cozy World</title>
+  <meta name="description" content="A little world worth returning to — together. Wander the woodland village with Mnki and Swan, right in your browser.">
+  <link rel="icon" href="assets/portraits/couple.webp">
+  <link rel="stylesheet" href="cozy.css">
+  <script type="importmap">
+    { "imports": { "three": "../vendor/three/build/three.module.js", "three/addons/": "../vendor/three/examples/jsm/" } }
+  </script>
+</head>
+<body>
+  <canvas id="view" aria-label="The village"></canvas>
+  <div id="ui">
+    <section id="title" hidden></section>
+    <section id="hud" hidden>
+      <div class="panel loc">
+        <div class="small muted" id="region-sub">TREE VILLAGE · 01 / 13</div>
+        <div class="serif region" id="region-name">Sunshine Forest</div>
+        <div class="small muted" id="region-compass">A little light, a fresh beginning</div>
+      </div>
+      <div class="panel stat" id="stats">DAY 1    08:00     ◉ 18</div>
+      <div class="panel quest">
+        <div class="tiny muted">A LITTLE SOMETHING TO DO</div>
+        <div class="serif qname" id="quest-title">A welcome basket</div>
+        <div class="small muted pre" id="quest-detail"></div>
+      </div>
+      <div class="panel duo">
+        <img src="assets/portraits/mnki.webp" alt="Mnki"><img src="assets/portraits/swan.webp" alt="Swan">
+        <div>
+          <div class="small ink">MNKI &amp; SWAN</div>
+          <div class="tiny muted">WASD move · Mouse look (click)</div>
+          <div class="tiny muted">Shift run · Space jump · Q swap</div>
+        </div>
+      </div>
+      <div class="actions">
+        <button class="btn" type="button" id="btn-bag">Bag [I]</button>
+        <button class="btn" type="button" id="btn-journal">Journal [J]</button>
+        <button class="btn" type="button" id="btn-map">Map [M]</button>
+      </div>
+      <div class="prompt" id="prompt" hidden></div>
+      <div class="banner" id="banner" hidden></div>
+    </section>
+    <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+  </div>
+  <noscript><p class="noscript">Cozy World needs JavaScript and WebGL.</p></noscript>
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>

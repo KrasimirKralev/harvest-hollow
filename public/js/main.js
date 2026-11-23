@@ -1,0 +1,824 @@
+// Boot: identity -> socket -> welcome -> store -> view + ui + controller + audio, plus the window.__hh test hook.
+// Owned by the client-core lane.
+//
+// Identity (tech §7 rule 8): tokens per slot in localStorage['hh.tokens'] = { p1: token, ... } (shared by
+// the browser's tabs); the slot THIS tab plays in sessionStorage['hh.slot'], so two tabs of one browser can
+// be the two partners on one machine. URL params ?slot=p1&name=Rowan claim/resume without the picker
+// (used by tools/shot.mjs and tools/e2e-coop.mjs).
+//
+// Multi-farm hosted mode (a page at /f/<farmId>, net/farm.js; wire details docs/agent-notes/mf-client.md): the same
+// identity, its keys namespaced per farm; the way in for a device without a farmer's token is the creator's secret
+// (the landing page stored it), a personal link's '#k=<secret>' (read, stored, wiped from the address bar) or an
+// invite's '?join=<token>', or a farmer's new key '?rejoin=<token>' (another farmer made it: it is tried first, and seats
+// this device as that farmer). A farm that says no (deny PRIVATE / INVITE / FULL) shows the farm gate
+// (ui/farm-gate.js) and the socket stops knocking. A key the farm turned off (deny REKEYED, a farmer given a new key) or
+// a spent new-key link (deny REJOIN) is forgotten and the next way in is tried; with none left the gate says what
+// happened. A home-screen app without any key (its storage is apart from the browser's) gets the "open your farm in this
+// app" gate. Single mode (any other path) sends exactly the frames it always did.
+//
+// Server messages go through a per-animation-frame INBOX (GDD App. F "coalesce deltas per animation frame"):
+// everything that arrived since the last frame is handled in arrival order, and each run of d/rej/ack becomes
+// ONE store.onServerBatch() (one rewind, all changes, one replay). A 20 ms timer flushes when frames do not run
+// (a hidden tab). The clock sample of a pong is taken by the socket at receipt, never deferred.
+import { view } from './render/index.js';
+import { ui } from './ui/index.js';
+import { audio, UNLOCK_EVENTS } from './audio.js';
+import { SyncStore } from './net/sync.js';
+import { Socket } from './net/socket.js';
+import { contentGate, pageBuild, reloadPlan, unsavedOf, noteUnsaved, unsavedText } from './net/content-gate.js';
+import { createPeerTools } from './net/peers.js';
+// option 2 (release 1.0): where the static game files come from, and what to do when the public host fails us
+import { ASSET_BASE, onHost, selfUrl, noteHostFailure } from './net/asset-base.js';
+import { importFailed, noteImportFailure, recoverPlan } from './net/lazy.js';
+import { setFirstView, firstViewPacks, firstViewFiles, modelPath, rememberFirstView, prefetchRemembered, setModelsBusy, packStats } from './net/packs.js';
+import { pending as assetsPending } from './render/assets.js';
+import { models } from './render/models.js';
+import { createController } from './game/controller.js';
+import { createAvatar } from './game/avatar.js';
+import { createFeedback } from './game/feedback.js';
+import { createMemory, forgetPictures } from './game/memory.js';
+import { createRest } from './game/rest.js';
+import { route } from './game/path.js';
+import { spawnAt, objFootprint } from '../../shared/rules/grid.js';
+import { createWalkMarker } from './game/walk-marker.js';
+import { createViewport } from './game/viewport.js';
+import { createDevice } from './game/device.js';
+import { createTouchBuild } from './game/touch-build.js';
+import { createFishingHud } from './game/fishing-hud.js';
+import { createModeChip } from './game/mode-chip.js';
+import { createM2Moments } from './game/m2-moments.js';
+import { createSwanSays } from './game/swan-says.js';
+import { ClockSync } from '../../shared/net/clock.js';
+import { makeCid } from '../../shared/net/ids.js';
+import { MSG, ERR, PROTOCOL_VERSION, CAPS, cleanName } from '../../shared/net/protocol.js';
+import { CONTENT_HASH, furnitureOf } from '../../shared/content/index.js';
+import { BRAND } from '../../shared/brand.js';
+import { RULES_VERSION } from '../../shared/rules/version.js';
+import {
+  farm, session, readLaunch, cleanUrl, rememberFarm, forgetFarm, farmLabel, validSecret, ttlDays, isStandalone,
+  inviteNotice,
+} from './net/farm.js';
+import { showFarmGate, installFarmManifest } from './ui/farm-gate.js';
+import { ready as i18nReady, t, N } from './i18n/index.js';
+import { FARM_DELETED_EVENT } from './ui/privacy.js';
+import { syncOverlay } from './mod/overlay.js';
+import { setLookAudio } from './mod/look.js';
+import { emitHarness, setHarnessAuth } from './harness/bus.js';
+
+setLookAudio(audio);          // a farm's mod may prefer some music tracks (public/js/mod/look.js)
+setModelsBusy(() => assetsPending() > 0);   // the sound pack waits for every model (net/packs.js, release 1.0 O4)
+
+// a farm's own keys are namespaced per farm in multi mode (farm.key); unchanged in single mode
+const storage = {
+  get(area, key) { try { return JSON.parse(area.getItem(farm.key(key))); } catch { return null; } },
+  set(area, key, v) { try { area.setItem(farm.key(key), JSON.stringify(v)); } catch { /* private mode: identity lasts this page only */ } },
+  del(area, key) { try { area.removeItem(farm.key(key)); } catch { /* storage blocked */ } },
+};
+const params = new URLSearchParams(location.search);
+// multi mode: the personal link's key leaves the address bar at once (it is the farmer's key; a screenshot or a
+// shared tab must not carry it), and is kept for this farm until a welcome confirms it
+const launch = farm.multi ? readLaunch(location) : { key: null, join: null, rejoin: null };
+if (farm.multi && /[#&]k=/.test(location.hash)) {
+  try { history.replaceState(history.state, '', cleanUrl(location)); } catch { /* an odd browser: the key stays visible */ }
+}
+if (launch.key) storage.set(localStorage, 'hh.key', launch.key);
+/** ident.used when the hello carried the device's way in (creator secret / personal link), an invite or a farmer's new key
+ *  (rejoin), not a slot's token. */
+const KEY = '*key';
+const JOIN = '*join';
+const REJOIN = '*rejoin';
+const ident = {
+  tokens: storage.get(localStorage, 'hh.tokens') || {},
+  slot: params.get('slot') || storage.get(sessionStorage, 'hh.slot'),
+  name: cleanName(params.get('name')) || null,     // a link's name with nothing visible is none: the slot picker asks
+  used: null,
+  // multi mode only (null in single mode): the creator's or a personal link's secret, and an invite
+  key: farm.multi ? launch.key ?? validSecret(storage.get(localStorage, 'hh.key')) : null,
+  linkKey: Boolean(launch.key),     // a link opened just now: it says who I am, before any token this device keeps
+  join: launch.join,
+  rejoin: launch.rejoin,            // a farmer's new key, opened just now (multi mode)
+  sentKey: false,
+  sentJoin: false,
+  sentRejoin: false,
+  inviteFailed: false,              // the server refused the invite (used, expired, replaced): the gate says so
+  rekeyed: false,                   // a key of this device was turned off by a new key (deny REKEYED)
+  rejoinFailed: false,              // the new-key link was used, ran out or was replaced (deny REJOIN)
+};
+const saveTokens = () => storage.set(localStorage, 'hh.tokens', ident.tokens);
+let gated = false;
+
+const cid = makeCid((n) => crypto.getRandomValues(new Uint8Array(n)));   // not randomUUID: LAN pages are not secure contexts
+const clock = new ClockSync();
+const serverNow = () => clock.serverNow(performance.now());
+let socket = null;
+const store = new SyncStore({ cid, now: serverNow, send: (m) => socket.send(m) });
+let started = false;
+// The build hash of the files this page runs (SV-03): the server's <meta name="hh-build">, else /api/status at boot
+let myBuild = pageBuild({ meta: document.querySelector('meta[name="hh-build"]')?.content ?? null });
+let controller = null;
+let avatar = null;
+let feedback = null;
+/** The partner's presence tool ('horse' while riding): the controller counts riders against the farm's horses.
+ *  Only while that farmer is online (qa2 CL-01: a partner who left on horseback held the only horse forever). */
+const peerTools = createPeerTools();
+/** Per-tab record of actions a deploy's reload did not save (CL-02), shown once the reloaded page is up. */
+const unsavedMemo = {
+  get: () => storage.get(sessionStorage, 'hh.unsaved'),
+  set: (v) => storage.set(sessionStorage, 'hh.unsaved', v),
+  clear: () => storage.del(sessionStorage, 'hh.unsaved'),
+};
+/** How long a stale tab waits for its re-sent actions to be answered before it reloads anyway (CL-02). */
+const RELOAD_SETTLE_MS = 8000;
+/** The home buildings a farmer spawns beside: their models come first on a slow boot (QA r2 I2-C1). */
+const HOME_BUILDINGS = Object.freeze(['farmhouse', 'barn']);
+/** A def's model file in the manifest ('buildings/farmhouse.glb'), or null. */
+const modelFileOf = (def) => models.info(models.keyOf(def))?.file ?? null;
+
+/**
+ * The first view's model files, once the view has framed the farmer (QA r2 I2-C1): the objects on screen, with the
+ * margin the view's own placeholder count uses (|NDC| <= 1.3); the farmhouse and the barn first and alone, the farmers
+ * next, then nearest the farmer. On the self path net/packs.js fetches them before any other model.
+ */
+function nameFirstFiles(pid) {
+  try {
+    const r = document.getElementById('world')?.getBoundingClientRect?.();
+    const ndc = (v, from, size) => ((v - from) / size) * 2 - 1;
+    const onScreen = (x, z) => {
+      const p = view.toScreen(x, z);
+      return Boolean(r && r.width && r.height && p) && Math.abs(ndc(p.x, r.left, r.width)) <= 1.3 && Math.abs(ndc(p.y, r.top, r.height)) <= 1.3;
+    };
+    const seen = (o) => { const [w, d] = objFootprint(o); return onScreen(o.x + w / 2, o.z + d / 2); };
+    const avatars = models.keys('avatar:').map((k) => models.info(k)?.file).filter(Boolean).map(modelPath);
+    const files = firstViewFiles(store.state, spawnAt(store.state, pid), modelFileOf, { lead: HOME_BUILDINGS, after: avatars, seen });
+    const lead = new Set(HOME_BUILDINGS.map(modelFileOf).filter(Boolean).map(modelPath));
+    setFirstView(null, files, files.filter((f) => lead.has(f)).length);
+  } catch (err) { console.warn('first-view files: the packs decide', err); }
+}
+let reloading = false;
+
+function hello(claim) {
+  if (gated) return;
+  // caps ['b']: this client unpacks batch frames (socket.js), so the server may send one frame per tick
+  const msg = { t: MSG.HELLO, proto: PROTOCOL_VERSION, cid, caps: [CAPS.BATCH] };
+  const mine = Object.keys(ident.tokens);
+  // multi mode: what lets this device in when no farmer's token of its own answers ({} in single mode). Every key
+  // rides in hello.token, an invite too (server/farm-sessions.js); the server remembers it for the claim that follows
+  // a farmer's new key first: it is what this page was opened for
+  const way = ident.rejoin ? { token: ident.rejoin } : ident.key ? { token: ident.key } : ident.join ? { token: ident.join } : {};
+  const usedOf = (t) => (t === ident.rejoin ? REJOIN : t === ident.key ? KEY : JOIN);
+  if (claim) { msg.claim = claim; Object.assign(msg, way); if (way.token) ident.used = usedOf(way.token); }
+  else if (ident.rejoin) { msg.token = ident.rejoin; ident.used = REJOIN; }
+  else if (ident.key && ident.linkKey) { msg.token = ident.key; ident.used = KEY; }
+  else if (ident.slot && ident.tokens[ident.slot]) { msg.token = ident.tokens[ident.slot]; ident.used = ident.slot; }
+  else if (!ident.slot && mine.length === 1) { msg.token = ident.tokens[mine[0]]; ident.used = mine[0]; }
+  else if (ident.slot && ident.name) {
+    msg.claim = { slot: ident.slot, name: ident.name };
+    Object.assign(msg, way);
+    if (way.token) ident.used = usedOf(way.token);
+  }
+  else if (way.token) { msg.token = way.token; ident.used = usedOf(way.token); }
+  ident.sentKey = Boolean(ident.key) && msg.token === ident.key;
+  ident.sentJoin = Boolean(ident.join) && msg.token === ident.join;
+  ident.sentRejoin = Boolean(ident.rejoin) && msg.token === ident.rejoin;
+  socket.raw(msg);
+}
+
+/**
+ * The farm said no (multi mode): stop knocking and show the gate. The server's private answer is deny PASSPHRASE (no
+ * passphrase exists in multi mode) or PRIVATE; an invite it refused shows as "this invite no longer works".
+ */
+const GATE_CODES = new Set(['PRIVATE', 'INVITE', ERR.PASSPHRASE, ERR.FULL, 'DELETED']);
+function gate(code) {
+  if (gated) return;
+  gated = true;
+  socket?.stop();
+  ui.hideSlots();
+  const invite = code === 'INVITE' || ident.inviteFailed || (ident.sentJoin && code === ERR.PASSPHRASE);
+  // what this device lost, most specific first: a spent new-key link, a key turned off, a used-up invite
+  const kind = code === 'DELETED' ? 'deleted' : code === 'GONE' ? 'gone' : code === ERR.FULL ? 'full'
+    : code === 'REJOIN' || ident.rejoinFailed ? 'rejoin'
+      : code === 'REKEYED' || ident.rekeyed ? 'rekeyed'
+        : invite ? 'invite' : code === 'HOME' ? 'home' : 'private';
+  // a farm this device played that the server no longer has was deleted (7 days without a visit, or a farmer deleted
+  // it: Settings > Farm): its keys are useless, and its Memory Book pictures go with it where this page knows the farm
+  if (kind === 'gone' || kind === 'deleted') forgetFarm(localStorage, farm.id);
+  if (kind === 'deleted' && Number.isSafeInteger(store.state?.meta?.farmSeed)) {
+    forgetPictures(store.state.meta.farmSeed).catch(() => { /* storage blocked: nothing kept to forget */ });
+  }
+  showFarmGate(kind, { farmId: farm.id });
+}
+
+/**
+ * The slot picker. `pass`: the server needs the farm passphrase for claims and reclaims; the ui passes
+ * { pass?, reclaim?, color? } as the third argument of onPick ("this is me on a new device", lost token, the
+ * colour picked on the card).
+ */
+function pickSlot(slots, pass) {
+  // multi mode: the picker says whose screen this is (a new farm's creator, an invited friend, a farmer with a new key)
+  // and hides the passphrase and "this is me on a new device" (the personal link replaces them)
+  const opts = farm.multi ? { multi: true, rejoin: Boolean(ident.rejoin), invited: Boolean(ident.join && !ident.key && !ident.rejoin),
+    creator: Boolean(ident.key && !ident.rejoin) } : {};
+  // a new farm's creator is farmer 1 (the brief): one row, not a choice between two empty ones
+  if (opts.creator && slots.every((s) => !s.claimed) && slots.some((s) => s.pid === 'p1')) slots = slots.filter((s) => s.pid === 'p1');
+  ui.showSlots(slots.map((s) => ({ ...s, mine: Boolean(ident.tokens[s.pid]), pass })), (slot, typed, extra = {}) => {
+    // the name as the server will keep it (QA r2 I2-02): one with nothing visible (zero-width spaces) is refused here,
+    // as the server's deny BAD_ARGS used to say, since the server now drops such a hello as malformed. A reclaim
+    // never renames (server/sessions.js), so an old seat's invisible name never locks its farmer out
+    const name = typeof typed === 'string' ? (cleanName(typed) || (extra.reclaim === true ? slot : '')) : typed;
+    if (typed && !name) { ui.slotError(ERR.BAD_ARGS); return; }
+    ident.slot = slot;
+    const claim = name ? { slot, name } : null;
+    if (claim && typeof extra.pass === 'string' && extra.pass) claim.pass = extra.pass;
+    if (claim && extra.reclaim === true) claim.reclaim = true;
+    if (claim && typeof extra.color === 'string' && /^#[0-9a-f]{6}$/i.test(extra.color)) claim.color = extra.color;
+    hello(claim);
+  }, opts);
+}
+
+function onWelcome(w) {
+  // Identity first, whatever happens next: a reload below must never throw a fresh claim's token away.
+  if (w.token) { ident.tokens[w.pid] = w.token; saveTokens(); }
+  else if (farm.multi && ident.sentKey && ident.key) { ident.tokens[w.pid] = ident.key; saveTokens(); }
+  ident.slot = w.pid;
+  storage.set(sessionStorage, 'hh.slot', w.pid);
+  if (farm.multi) welcomeFarm(w);
+  const gate = contentGate(w, { content: CONTENT_HASH, build: myBuild }, {
+    get: () => storage.get(sessionStorage, 'hh.reloadedFor'),
+    set: (v) => storage.set(sessionStorage, 'hh.reloadedFor', v),
+  });
+  if (reloading) return;                               // already on the way out (a second welcome while settling)
+  let settle = null;
+  if (gate === 'reload') {
+    // Actions predicted while the server restarted (CL-02 / SV-01): re-sent first when the rules are the same,
+    // otherwise remembered, so the reloaded page can say they were not saved instead of dropping them silently.
+    const pending = store.state ? store.pending.length : 0;
+    const plan = reloadPlan(w, { content: CONTENT_HASH, rules: RULES_VERSION }, pending);
+    if (plan !== 'send') {
+      if (plan === 'note') noteUnsaved(unsavedMemo, unsavedOf(store.pending, w));
+      reloading = true;
+      location.reload();
+      return;
+    }
+    settle = watchUnsaved();                            // listens before reset(): it reports lost / rejected ones
+  }
+  if (gate === 'mismatch') { ui.hideSlots(); ui.setConnection('mismatch'); return; }
+  ui.hideSlots();
+  clock.seed(w.serverNow, performance.now());
+  // the farm's mod (Harness Hollow): installed before the reset, so pending predictions replay on its content and every
+  // panel re-reads it; a welcome without one puts the base game back (an undo to nothing, another farm)
+  syncOverlay(w.mod);
+  setHarnessAuth({ pid: w.pid, token: farm.multi ? session.secret ?? ident.tokens[w.pid] : ident.tokens[w.pid] });
+  store.reset(w);
+  const firstWelcome = !started;
+  if (!started) {
+    started = true;
+    // the model packs of what the camera shows first come first (release 1.0 O4: on a slow link the first view used to
+    // arrive last); the scheduler in net/packs.js takes it from here
+    try {
+      const first = firstViewPacks(store.state, spawnAt(store.state, w.pid), modelFileOf);
+      setFirstView(first);
+      rememberFirstView(first);                          // the next boot of this browser starts them before the welcome
+    } catch (err) { console.warn('first-view packs: the default order stands', err); }
+    // the farmer goes round buildings and fences (game/path.js); the router reads the predicted farm
+    avatar = createAvatar({ view, send: (m) => socket.raw(m), pid: w.pid, route: (from, to) => (store.state ? route(store.state, from, to) : null),
+      at: spawnAt(store.state, w.pid) });
+    controller = createController({
+      store, view, avatar, ui, audio,
+      canvas: document.getElementById('world'),
+      send: (m) => socket.raw(m),
+      toast: (c, o) => ui.toast(c, o),
+      peerTool: (pid) => peerTools.get(pid),
+    });
+    avatar.setTool(controller.tool.id);
+    // the world shows the full water pins only while the Watering Can is out (render-world, VISUAL-AFTER #5)
+    view.setTool?.(controller.tool.id);
+    controller.on('tool', (t) => { avatar.setTool(t.id); view.setTool?.(t.id); });
+    // a decor set placed piece by piece: light exactly the copies this spot would join (render-world's glow)
+    controller.on('build', (e) => view.ghost.setIds?.(e?.set?.ids ?? null));
+    feedback = createFeedback({ store, controller, view, audio, ui });
+    // a Hand click on open ground: a ring in my colour where my farmer is going (live requests 2026-10-04)
+    const marker = createWalkMarker({ view, avatar, overlay: document.getElementById('overlay'), color: store.state.players[w.pid]?.color });
+    controller.on('walk', (at) => marker.show(at.x, at.z));
+    store.subscribe?.('players', () => marker.setColor(store.state?.players[store.pid]?.color));
+    window.__hh.walkMarker = marker;
+    // the Memory Book's pictures, kept in this browser (M1b): the ui reads them with controller.memory.picture(n)
+    const memory = createMemory({ store, view });
+    controller.memory = memory;
+    controller.on('photo', ({ blob }) => memory.photo(blob));
+    window.__hh.memory = memory;
+    // phones (mobile wave): the wake lock and the fullscreen toggle for the ui (controller.device), and the ⟳ ✕ ✓ bar
+    // under the build ghost for a touch player
+    const device = createDevice({ options: () => controller.options });
+    controller.device = device;
+    window.__hh.device = device;
+    window.__hh.touchBuild = createTouchBuild({ controller, view, ui });
+    ui.init(store, view, controller);
+    wireM2();
+    window.__hh.controller = controller;
+    window.__hh.avatar = avatar;
+    window.__hh.feedback = feedback;
+    startAudioSoon();
+    // the deploy's reload did not save something this tab had shown done (CL-02): say so once, now that it is up
+    const text = unsavedText(unsavedMemo.get());
+    unsavedMemo.clear();
+    if (text) ui.notice(text);
+  } else {
+    // a reconnect (or a server restart): the server forgot my pose and put me back at the porch; send where I
+    // really stand, as a hop, even if I never move again (coop-robust-06: the partner saw me at the porch and a
+    // high-five next to each other failed until I moved)
+    avatar.resync();
+  }
+  view.setState(store.state, { me: w.pid });
+  if (firstWelcome) nameFirstFiles(w.pid);             // the view has framed the farmer: what it shows comes first
+  peerTools.welcome(w.peers);
+  syncPresent();
+  for (const p of w.peers || []) {
+    view.partner.online(p.pid, p.online);
+    ui.setPeer(p.pid, p.online);
+    if (p.pose) view.partner.update([p.pose], w.serverNow);
+    if (!p.online) view.avatars?.ride?.(p.pid, false);
+  }
+  if (Array.isArray(w.chat) && typeof ui.chatHistory === 'function') ui.chatHistory(w.chat);
+  document.title = `${BRAND} · ${store.state.players[w.pid]?.name ?? ''}`;
+  if (settle) settle();
+}
+
+/**
+ * Multi mode, at each welcome: the secret that brought me in is now this farmer's token (the creator's or the
+ * personal link's key is forgotten as such), a used invite leaves the address bar, the device's farm list learns the
+ * farm's name, and the invite card and Settings get my secret (net/farm.js session).
+ */
+function welcomeFarm(w) {
+  if (ident.key && (ident.sentKey || ident.linkKey)) { ident.key = null; storage.del(localStorage, 'hh.key'); }
+  ident.linkKey = false;
+  // in again: a key turned off earlier is history (the gate's memory of it goes)
+  storage.del(localStorage, 'hh.rekeyed');
+  ident.rekeyed = false;
+  if (ident.rejoin) {
+    // the new key is spent: it leaves the address bar (the welcome's token is this farmer's key from now on)
+    ident.rejoin = null;
+    try { history.replaceState(history.state, '', cleanUrl(location, { rejoin: true })); } catch { /* the link stays visible */ }
+  }
+  if (ident.join) {
+    // my own farm opened from the invite I made on this device: it stays for the friend it was meant for. The friend
+    // who taps the link they joined with again just comes in (QA r1 I-03: they were told it still waits for them)
+    const saved = storage.get(localStorage, 'hh.invite');
+    if (inviteNotice({ join: ident.join, sentJoin: ident.sentJoin, saved }) === 'own') {
+      setTimeout(() => ui.notice(t('multi.inviteOwn')), 1500);
+    }
+    ident.join = null;
+    try { history.replaceState(history.state, '', cleanUrl(location, { join: true })); } catch { /* the link stays visible */ }
+  }
+  session.pid = w.pid;
+  session.secret = ident.tokens[w.pid] ?? null;
+  rememberFarm(localStorage, { id: farm.id, name: farmLabel(w.state) });
+  // the server's retention (Settings > Farm says it), once
+  if (!welcomeFarm.asked) {
+    welcomeFarm.asked = true;
+    fetch(farm.api('/api/status'), { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null))
+      .then((st) => { if (st) session.ttlDays = ttlDays(st); }).catch(() => { /* the default stands */ });
+  }
+  installFarmManifest(farm.id, session.secret);
+}
+
+/**
+ * The M2 input's own on-screen pieces (wave 3): the fishing cast's bobber and card, the mode chip (the Breeding Barn's
+ * matchmaker, the farmhouse room), and the moments said between the panels (a duel invitation, a bred baby ready, a
+ * full Nursery card, a perk point). After ui.init: they live in the HUD the ui built.
+ */
+function wireM2() {
+  const hudEl = document.getElementById('hud');
+  const overlayEl = document.getElementById('overlay');
+  if (!hudEl || !overlayEl) return;
+  const motion = () => (document.body.classList.contains('motion-reduced') ? 'reduced' : 'full');
+  window.__hh.fishingHud = createFishingHud({ fishing: controller.fishing, view, hud: hudEl, overlay: overlayEl, now: serverNow,
+    pid: () => store.pid, input: () => controller.input, motion });
+  const chip = createModeChip({ hud: hudEl, input: () => controller.input });
+  window.__hh.modeChip = chip;
+  controller.pairing.on('pair', (p) => {
+    if (!p.active) { chip.hide('pair'); return; }
+    chip.show('pair', { text: p.text, icon: 'heart', tone: 'love', action: { label: t('common.cancel'), fn: () => controller.pairing.cancel() } });
+  });
+  controller.interior.on('change', (r) => {
+    if (!r.inside && !r.going) { chip.hide('room'); return; }
+    if (r.held) {
+      const def = furnitureOf(r.held.def);
+      const item = def ? N(def.id, 'furniture') : r.held.def.replace(/_/g, ' ');
+      const turn = def && def.layer !== 'wall' ? (controller.input === 'touch' ? '' : t('game.room.turn')) : '';
+      const what = `game.room.${r.held.id ? 'move' : 'place'}${r.valid || !r.spot ? '' : 'Bad'}`;
+      chip.show('room', { text: `${t(what, { item })}${turn}`, icon: 'chair', tone: 'home',
+        action: { label: t('common.cancel'), fn: () => controller.interior.cancel() } });
+      return;
+    }
+    // inside: the room panel's catalog (ui-home `farmhouse`, tab 'room') is one tap away
+    const furnish = !r.going && ui.panels?.has?.('farmhouse')
+      ? { label: t('game.room.furnish'), fn: () => ui.panels.open('farmhouse', { tab: 'room' }) } : null;
+    chip.show('room', { text: r.going ? t('game.room.going') : t('game.room.inside'), icon: 'house', tone: 'home', extra: furnish,
+      action: { label: t('game.room.leave'), fn: () => controller.interior.leave('chip') } });
+  });
+  controller.interior.on('change', () => syncPresent());
+  // the first-use tips of the world's M2 systems (content TUTORIAL.firstUse 'fishing', 'interior'), through the ui's
+  // tutorial when it offers the hook (ui.firstUse; the tutorial shows each tip once)
+  const tip = (id) => { try { ui.firstUse?.(id); } catch (err) { console.warn('first-use tip failed', err); } };
+  controller.fishing.on('phase', (e) => { if (e.phase === 'cast') tip('fishing'); });
+  controller.interior.on('change', (r) => { if (r.inside) tip('interior'); });
+  window.__hh.m2 = createM2Moments({ store, ui, controller, audio });
+  // Swan's gentle lines at the milestones (MNKISWAN Cozy World)
+  window.__hh.swan = createSwanSays({ store, ui });
+}
+
+/**
+ * Who stands inside the farmhouse room (render-world draws them by the fire): me while I am in, the partner while their
+ * presence says 'indoors' (avatar.setActivity, game/interior.js). Called on presence and on my own going in and out.
+ */
+let lastPresent = '';
+function syncPresent() {
+  const vi = view.interior;
+  if (!vi || typeof vi.setPresent !== 'function' || !controller || !store.state) return;
+  const pids = [];
+  if (controller.interior?.inside) pids.push(store.pid);
+  for (const pid of Object.keys(store.state.players).sort()) if (pid !== store.pid && peerTools.get(pid) === 'indoors') pids.push(pid);
+  const k = pids.join(',');
+  if (k === lastPresent) return;
+  lastPresent = k;
+  try { vi.setPresent(pids); } catch (err) { console.warn('view.interior.setPresent failed', err); }
+}
+
+/**
+ * A build-only deploy with actions pending (CL-02): count what the re-send does not save (rejected now, lost by a
+ * server that forgot this cid) and reload once nothing is unconfirmed, or after RELOAD_SETTLE_MS with the rest
+ * counted as unsure. Returns the function that starts the wait (after reset() has re-sent them). `go` reloads.
+ */
+function watchUnsaved(go = () => location.reload()) {
+  const u = { lost: 0, unsure: 0 };
+  const offs = [
+    store.on('reject', (r) => { if (!r.local) u.lost++; }),
+    store.on('lost', ({ actions }) => { u.unsure += actions.length; }),
+  ];
+  return () => {
+    reloading = true;
+    const t0 = performance.now();
+    const check = () => {
+      const left = store.pending.length;
+      if (left && performance.now() - t0 < RELOAD_SETTLE_MS) { setTimeout(check, 50); return; }
+      for (const off of offs) off();
+      noteUnsaved(unsavedMemo, { lost: u.lost, unsure: u.unsure + left });
+      go();
+    };
+    check();
+  };
+}
+
+/** Everything except d/rej/ack (those are batched into the store). */
+function handle(m) {
+  if (m.t === MSG.MARK || m.t === MSG.EMOTE) {          // a short trail for tests and the F3 overlay
+    const log = window.__hh.social;
+    log.push({ t: m.t, pid: m.pid, id: m.id ?? null, kind: m.kind ?? null, x: m.x ?? null, z: m.z ?? null, at: Date.now() });
+    if (log.length > 20) log.shift();
+  }
+  switch (m.t) {
+    case MSG.WELCOME: return onWelcome(m);
+    case MSG.SLOTS: return pickSlot(m.slots, Boolean(m.pass));
+    case MSG.DENY:
+      if (m.code === ERR.BAD_TOKEN || m.code === 'REKEYED' || m.code === 'REJOIN') {
+        // multi mode: a farmer of this farm got a new key (REKEYED: this key is off for good) or the new-key link is
+        // spent (REJOIN). Signed out while playing: the gate. Otherwise this key is forgotten like an unknown one, and
+        // the device tries its next way in (a home-screen app's start URL may carry an old key): the gate says what
+        // happened when nothing is left
+        if (m.code === 'REKEYED') { ident.rekeyed = true; storage.set(localStorage, 'hh.rekeyed', Date.now()); }
+        if (m.code === 'REJOIN') ident.rejoinFailed = true;
+        const playing = started && m.code !== ERR.BAD_TOKEN;
+        if (playing && ident.slot && ident.tokens[ident.slot]) { delete ident.tokens[ident.slot]; saveTokens(); }
+        if (ident.used === KEY) { ident.key = null; ident.linkKey = false; storage.del(localStorage, 'hh.key'); ident.used = null; }
+        else if (ident.used === JOIN) { ident.join = null; ident.inviteFailed = true; ident.used = null; }
+        else if (ident.used === REJOIN) { ident.rejoin = null; ident.used = null; }
+        else if (ident.used) { delete ident.tokens[ident.used]; saveTokens(); ident.used = null; }
+        if (playing) return gate(m.code);
+        return hello();
+      }
+      if (m.code === ERR.PROTO) { ui.toast(m.code); setTimeout(() => location.reload(), 1500); return undefined; }
+      // multi mode: a private farm, a used-up invite, a full farm (never the slot list: no names leak)
+      if (farm.multi && GATE_CODES.has(m.code)) return gate(m.code);
+      if (document.getElementById('slot-picker').hidden) {
+        if (farm.multi && !ident.name) return gate('PRIVATE');
+        ident.name = null;
+        return hello();
+      }
+      return ui.slotError(m.code);
+    case MSG.PRESENCE:
+      peerTools.presence(m.list);
+      syncPresent();
+      return view.partner.update(m.list, m.ts);       // rows carry their own time (row[7]); m.ts is the batch time
+    case MSG.PEER:
+      peerTools.online(m.pid, m.online);
+      syncPresent();
+      // a farmer who left gets off the horse on this screen too (the last presence row still says 'horse')
+      if (!m.online) view.avatars?.ride?.(m.pid, false);
+      view.partner.online(m.pid, m.online);
+      feedback?.peer(m.pid, m.online);
+      return ui.setPeer(m.pid, m.online);
+    case MSG.GHOST:
+      return view.partner.ghost(m.pid, m.g);
+    // The ui-shell's social corner draws relayed pings / emotes and captions them (ui.mark / ui.emote) when it is
+    // wired; the feedback layer always plays the sound, and draws them itself otherwise.
+    case MSG.MARK:
+      if (typeof ui.mark === 'function') ui.mark(m.pid, { x: m.x, z: m.z, kind: m.kind });
+      return feedback?.partnerPing(m.pid, m.x, m.z, { visual: typeof ui.mark !== 'function' });
+    case MSG.EMOTE:
+      if (typeof ui.emote === 'function') ui.emote(m.pid, m.id);
+      return feedback?.partnerEmote(m.pid, m.id, { visual: typeof ui.emote !== 'function' });
+    case MSG.CHAT:
+      return typeof ui.chat === 'function' ? ui.chat(m) : undefined;
+    // the in-game helper's pushes (Harness Hollow): the ui lane listens on public/js/harness/bus.js
+    case MSG.HX:
+      return emitHarness(m);
+    default:
+      return undefined;
+  }
+}
+
+// ---- the per-frame inbox ----------------------------------------------------------------------------------
+const inbox = [];
+let inboxQueued = false;
+let inboxTimer = null;
+const isStoreMsg = (m) => m.t === MSG.DELTA || m.t === MSG.REJ || m.t === MSG.ACK;
+
+function flushInbox() {
+  if (!inboxQueued) return;
+  inboxQueued = false;
+  clearTimeout(inboxTimer);
+  const list = inbox.splice(0);
+  let run = [];
+  const flushRun = () => { if (run.length) { store.onServerBatch(run); run = []; } };
+  for (const m of list) {
+    if (isStoreMsg(m)) { run.push(m); continue; }
+    flushRun();
+    try { handle(m); } catch (err) { console.error(`message ${m.t} failed`, err); }
+  }
+  flushRun();
+}
+
+function onMessage(m) {
+  inbox.push(m);
+  if (inboxQueued) return;
+  inboxQueued = true;
+  requestAnimationFrame(flushInbox);
+  // no frame within 20 ms (a hidden tab, slow frames): flush anyway (qa2 SV-02: the 100 ms fallback was the playtest's
+  // whole ack tail, p99 122-133 ms, on pages whose frames take longer than that); a real GPU's rAF still wins
+  inboxTimer = setTimeout(flushInbox, 20);
+}
+
+// ---- audio: after the farm is up, or at the first gesture, whichever comes first (SV-05) -------------------------
+// Fetching and decoding ~60 samples used to start before the renderer and competed with the first frame. The first
+// pointer / key press starts it at once AND resumes the context inside that gesture (autoplay policy); otherwise it
+// starts when the browser is idle after the first welcome.
+let audioStarted = false;
+function startAudio() {
+  if (audioStarted) return;
+  audioStarted = true;
+  audio.init({ now: serverNow }).catch((err) => console.warn('audio init failed', err));
+}
+// iOS Safari starts audio only inside an activating gesture (touchend / pointerup / click, not touchstart): audio.js keeps
+// listening for those after init, so a first touchstart creates the context and the same tap's touchend resumes it
+const onFirstGesture = () => {
+  for (const ev of UNLOCK_EVENTS) window.removeEventListener(ev, onFirstGesture, true);
+  startAudio();
+  audio.unlock();                                     // init created the context synchronously: resume it now
+};
+for (const ev of UNLOCK_EVENTS) window.addEventListener(ev, onFirstGesture, { capture: true, passive: true });
+function startAudioSoon() {
+  const idle = window.requestIdleCallback ? (fn) => window.requestIdleCallback(fn, { timeout: 3000 }) : (fn) => setTimeout(fn, 300);
+  setTimeout(() => idle(startAudio), 800);
+}
+
+// ---- a game file that did not arrive: option 2's host, or any lazy import() (net/lazy.js, QA r4 I4-01) -------------
+// An <img> from the host that fails is asked for again from this server, once. A failed module cannot be retried in
+// place (the browser keeps the failure; a second URL would be a second module instance), so: while the boot curtain is
+// up the page reloads once the farm's server answers (at most twice in 5 min per tab), afterwards it offers "Reload".
+// Either way the CL-02 settle keeps unsent moves. The host path reloads onto this server's files (?assets=self and a
+// 10-minute cookie, as the inline watchdog does); the self path just reloads.
+function reloadSelf() {
+  try { document.cookie = 'hh_assets=self; Max-Age=600; Path=/; SameSite=Lax'; } catch { /* cookies blocked: the query does it */ }
+  const u = new URL(location.href);
+  u.searchParams.set('assets', 'self');
+  location.replace(u.href);
+}
+if (ASSET_BASE) {
+  addEventListener('error', (e) => {
+    const el = e.target;
+    if (!el || el.tagName !== 'IMG' || el.dataset?.hhSelf || !onHost(el.currentSrc || el.src)) return;
+    el.dataset.hhSelf = '1';
+    noteHostFailure(`image ${selfUrl(el.src)}`);
+    el.src = selfUrl(el.src);
+  }, true);
+}
+addEventListener('unhandledrejection', (e) => { if (importFailed(e.reason)) noteImportFailure('import', e.reason); });
+const reloadPage = () => (ASSET_BASE ? reloadSelf() : location.reload());
+/** The farm's server answers again (a reload into a dead link shows the browser's offline page instead). */
+async function untilReachable() {
+  for (let wait = 500; ; wait = Math.min(wait * 2, 5000)) {
+    try {
+      if ((await fetch(farm.api('/api/status'), { cache: 'no-store', signal: AbortSignal.timeout?.(8000) })).status < 500) return;
+    } catch { /* still away */ }
+    await new Promise((r) => setTimeout(r, wait));
+  }
+}
+const reloadWhenUp = () => untilReachable().then(() => { if (!reloading) watchUnsaved(reloadPage)(); });
+let assetsNotice = null;
+let assetsWait = false;             // a reload or the notice is on its way
+const lifted = () => started && window.__hh?.playableAt != null;
+function assetsFailedNotice() {
+  // after the lift: under the curtain nobody reads it, and over the welcome-back sheet it goes above the panels
+  if (!lifted()) { setTimeout(assetsFailedNotice, 500); return; }
+  assetsWait = false;
+  assetsNotice = ui.notice(() => t(ASSET_BASE ? 'boot.assets.failed' : 'boot.assets.retry'),
+    { action: { label: () => t('boot.assets.reload'), fn: reloadWhenUp }, ms: 10 * 60_000, urgent: true });
+}
+addEventListener('hh:assets-failed', async () => {
+  if (reloading || assetsWait || assetsNotice?.isConnected) return;
+  assetsWait = true;
+  const recent = storage.get(sessionStorage, 'hh.assetsReloads') || [];
+  if (recoverPlan({ lifted: lifted(), recent, now: Date.now() }) === 'reload') {
+    await untilReachable();
+    if (!lifted() && !reloading) {
+      storage.set(sessionStorage, 'hh.assetsReloads', [...recent, Date.now()].slice(-4));
+      watchUnsaved(reloadPage)();
+      return;
+    }
+  }
+  assetsFailedNotice();
+});
+
+async function boot() {
+  // multi mode, nothing that could let this device in (no token, no key, no invite): the server can only say "private",
+  // so say it now, without loading the world (a phone would fetch the whole farm's art for nothing)
+  // a device whose key was turned off says so; a home-screen app (its storage is apart from the browser's) is shown how
+  // to open the farm in it
+  if (farm.multi && !ident.key && !ident.join && !ident.rejoin && !Object.keys(ident.tokens).length) {
+    ident.rekeyed = Boolean(storage.get(localStorage, 'hh.rekeyed'));
+    await i18nReady();
+    gate(isStandalone() ? 'HOME' : 'PRIVATE');
+    return;
+  }
+  const canvas = document.getElementById('world');
+  // nobody touching the page for a while: the endless CSS pulses pause (CL-03, a resting laptop)
+  window.__hh.rest = createRest();
+  // the phone's visible area (iOS keyboard, orientation): CSS --vvh / --kb / data-orient for the layout (mobile wave)
+  window.__hh.viewport = createViewport();
+  // this page's build hash, when the server did not stamp index.html (SV-03; a failed fetch skips the check)
+  if (!myBuild) {
+    fetch(farm.api('/api/status'), { cache: 'no-store' }).then((r) => r.json()).then((st) => { myBuild = pageBuild({ status: st }); })
+      .catch(() => { /* unknown build: content hash only */ });
+  }
+  // option 2's host path, a returning browser: last time's first-view model packs start now on the host's fast link,
+  // while the view sets up and the farm server says hello (release 1.0 O4; the boot curtain waits for those models). Not on
+  // the self path: there one slow link carries the welcome and the dock's code too
+  if (ASSET_BASE) {
+    const hint = document.querySelector('meta[name="hh-first-packs"]')?.getAttribute('content')?.split(',').filter(Boolean) ?? null;
+    prefetchRemembered(undefined, hint).catch(() => { /* the welcome's order takes over */ });
+  }
+  // ?quality=low|medium|high|eco|auto (tests, a slow partner PC); otherwise the view's default / remembered tier
+  const q = ['low', 'medium', 'high', 'eco', 'auto'].includes(params.get('quality')) ? params.get('quality') : 'auto';
+  // eco is the low tier plus capped frame rates: the renderer's MSAA is chosen at init, so init low, then eco (UI-16)
+  // the player's language is in before anything says a word (i18n: Bulgarian loads only when chosen, in parallel)
+  await Promise.all([view.init(canvas, { quality: q === 'eco' ? 'low' : q, now: serverNow, overlay: document.getElementById('overlay') }), i18nReady()]);
+  if (q === 'eco') view.setQuality('eco');
+  store.on('change', (ch) => view.sync(ch.ids, ch.topics));
+  store.on('fx', ({ ev, by, local }) => view.fx.play(ev, undefined, feedback ? feedback.fxMeta(by, local, ev) : { by, local }));
+  store.on('lost', () => ui.notice(t('game.lost')));
+  // Watchdog (review-m0 H3): a resync that gets no welcome within 5 s reconnects; the reconnect's hello is
+  // always answered with a welcome. The store also repeats its request every RESYNC_RETRY_MS.
+  let resyncT = null;
+  store.on('resync', ({ cause }) => {
+    console.warn('sync: resync requested:', cause);
+    clearTimeout(resyncT);
+    resyncT = setTimeout(() => { if (store.resyncing) socket.drop(); }, 5000);
+  });
+  store.on('welcome', () => clearTimeout(resyncT));
+  // "Saving..." indicator: predictions unconfirmed for more than 1.2 s (a slow or stalled server) are worth a quiet
+  // hint; on a LAN they confirm in 5-20 ms and nothing shows. The ui draws it (ui.setPending) when it has the hook.
+  let pendingShown = false;
+  setInterval(() => {
+    if (typeof ui.setPending !== 'function' || !store.state) return;
+    const hh = store.health();
+    const show = hh.pending > 0 && hh.oldestMs > 1200;
+    if (show || pendingShown) ui.setPending(show ? { n: hh.pending, oldestMs: hh.oldestMs, online: hh.online } : null);
+    pendingShown = show;
+  }, 400);
+  const url = farm.wsUrl(location);
+  socket = new Socket({ url, clock, onMessage, onOpen: () => hello(),
+    onStatus: (s) => { store.setOnline(s === 'open'); ui.setConnection(s); if (farm.multi) farmProbe(s); } });
+  window.__hh.net = socket;
+  socket.connect();
+  // multi mode: leaving for the landing page (Settings > All farms) can keep this page in the back/forward cache with
+  // its socket open, so the partner saw me "playing right now" and the farm never went to sleep. Close it there; the
+  // reconnect (its timer frozen with the page) says hello again if the page is brought back.
+  if (farm.multi) addEventListener('pagehide', (e) => { if (e.persisted && !gated) socket.drop(); });
+  // "Delete this farm now" on this screen (ui/privacy.js): the same gate the server's deny DELETED shows the partner
+  if (farm.multi) addEventListener(FARM_DELETED_EVENT, () => gate('DELETED'));
+}
+
+/**
+ * Multi mode: a socket that never opens for this farm (an unknown or deleted farm is refused at the handshake) asks
+ * the farm's status once; a 404 shows a gate instead of "trying again" forever: "this farm is gone" when this device
+ * was a farmer there (the retention sweep deleted it), else the private-farm gate (no existence leak).
+ */
+let failedOpens = 0;
+function farmProbe(s) {
+  if (s === 'open') { failedOpens = 0; return; }
+  if (s !== 'reconnecting' || started || gated || ++failedOpens !== 2) return;
+  fetch(farm.api('/api/status'), { cache: 'no-store' })
+    .then((r) => { if (r.status === 404 && !started) gate(Object.keys(ident.tokens).length ? 'GONE' : 'PRIVATE'); })
+    .catch(() => { /* the network itself: keep trying */ });
+}
+
+/** How much to trust the clock estimate: best RTT, the spread of the kept samples, a word for the overlay. */
+function clockInfo() {
+  const s = clock.samples;
+  if (!s.length) return { rtt: clock.rtt, jitter: null, samples: 0, offset: clock.offset, quality: clock.offset === null ? 'none' : 'seeded' };
+  const rtts = s.map((x) => x.rtt);
+  const jitter = Math.max(...rtts) - Math.min(...rtts);
+  const quality = clock.rtt < 30 && jitter < 25 ? 'good' : clock.rtt < 120 ? 'ok' : 'poor';
+  return { rtt: Math.round(clock.rtt), jitter: Math.round(jitter), samples: s.length, offset: Math.round(clock.offset ?? 0), quality };
+}
+
+// Test and debug hook (tech §9.1): the E2E and shot tools drive the game through this.
+window.__hh = {
+  cid, store, view, ui, clock, audio, serverNow,
+  /** Model and texture files still loading (render/assets.js): tools/boot-perf.mjs reads "every model drawn" here. */
+  assetsPending: () => assetsPending(),
+  /** How the model packs loaded (net/packs.js): tools/e2e-assets.mjs records it beside a warm reload's bytes. */
+  packStats: () => packStats(),
+  act: (type, args) => store.act(type, args),
+  get state() { return store.state; },
+  get pending() { return store.pending.length; },
+  get pid() { return store.pid; },
+  health: () => store.health(),
+  /** The last relayed pings / emotes received (newest last). */
+  social: [],
+  clockInfo,
+  latency: () => (controller ? controller.latency() : null),
+  dev: {
+    /** HH_DEV servers only (loopback): jump game time, then re-sync the clock estimate. */
+    async warp(ms) {
+      const r = await fetch(farm.api('/api/dev/warp'), { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ ms }) });
+      const { serverNow: target } = await r.json();
+      for (let i = 0; i < 40 && serverNow() < target - 250; i++) {
+        socket.ping();
+        await new Promise((res) => setTimeout(res, 50));
+      }
+      view.invalidate();
+      return serverNow();
+    },
+    /** Flush the inbox now (tests that must not wait for an animation frame). */
+    flush: () => flushInbox(),
+  },
+};
+
+// F3: debug overlay (fps, draw calls, RTT, clock quality, pending, latency, audio).
+let debugEl = null;
+window.addEventListener('keydown', (e) => {
+  if (e.code !== 'F3') return;
+  e.preventDefault();
+  if (debugEl) { debugEl.remove(); debugEl = null; return; }
+  debugEl = document.createElement('pre');
+  debugEl.style.cssText = 'position:fixed;left:8px;bottom:8px;margin:0;padding:6px 8px;background:rgba(0,0,0,.62);color:#fff;font:12px/1.35 monospace;border-radius:6px;pointer-events:none;z-index:9999';
+  document.body.append(debugEl);
+  // main-thread tasks over 50 ms in the last 10 s (qa2 CL-07: the partner laptop's numbers are read off this overlay)
+  const long = [];
+  let longObs = null;
+  try {
+    longObs = new PerformanceObserver((l) => { for (const e of l.getEntries()) long.push([e.startTime, e.duration]); });
+    longObs.observe({ type: 'longtask', buffered: false });
+  } catch { /* no long task timing in this browser */ }
+  const tick = () => {
+    if (!debugEl) { longObs?.disconnect(); return; }
+    const t10 = performance.now() - 10_000;
+    while (long.length && long[0][0] < t10) long.shift();
+    const st = view.stats();
+    const c = clockInfo();
+    const hh = store.health();
+    const l = controller ? controller.latency() : { n: 0 };
+    const a = audio.info();
+    // i18n-ok below: the F3 debug overlay is for developers and stays English
+    debugEl.textContent = [
+      `fps ${st.fps}  calls ${st.calls}  tris ${st.triangles}`, // i18n-ok
+      `tier ${st.tier ?? '-'}${st.tierMode === 'auto' ? ' (auto)' : ''}  band ${st.band ?? '-'}  shadows ${st.shadowRenders ?? '-'}  ${st.phase ?? ''} ${st.weather ?? ''} ${st.season ?? ''}`, // i18n-ok
+      `rtt ${c.rtt ?? '-'} ms  jitter ${c.jitter ?? '-'}  clock ${c.quality}  offset ${c.offset ?? '-'}`, // i18n-ok
+      `pending ${hh.pending}${hh.oldestMs ? ` (oldest ${hh.oldestMs} ms)` : ''}  v ${hh.v}  ${hh.online ? 'online' : `offline ${hh.offlineMs} ms`}${hh.resyncing ? '  RESYNC' : ''}  cid ${cid}`, // i18n-ok
+      `input->frame ${l.n ? `${l.last} ms (avg ${l.avg}, p95 ${l.p95}, n ${l.n})` : '-'}`, // i18n-ok
+      `long tasks (10 s) ${longObs ? `${long.length}${long.length ? `, max ${Math.round(Math.max(...long.map((x) => x[1])))} ms` : ''}` : 'n/a'}  rest ${window.__hh.rest?.resting ? 'resting' : 'awake'}`, // i18n-ok
+      `audio ${a.state} ${a.loaded} sounds  music ${a.music?.playing ? `${a.music.variant} bar ${a.music.bar}` : 'resting'}  ${a.scene.phase}`, // i18n-ok
+    ].join('\n');
+    setTimeout(tick, 500);
+  };
+  tick();
+});
+
+boot().catch((err) => {
+  console.error('boot failed', err);
+  const p = document.createElement('p');
+  p.style.cssText = 'position:fixed;top:40%;width:100%;text-align:center;font:600 18px system-ui';
+  p.textContent = t('shell.boot.failed');
+  document.body.append(p);
+});
