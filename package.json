@@ -1,8 +1,8 @@
 {
-  "name": "harvest-hollow",
+  "name": "mnkiswan-tree-village",
   "version": "0.1.0",
   "private": true,
-  "description": "Harvest Hollow: a cozy 3D co-op farming game for two, in the browser. Play free online or self-host (Node + Three.js). Phones too.",
+  "description": "MNKISWAN Tree Village: a cozy 3D village farm for one or two farmers, with a picnic matching game. Playable in the browser on GitHub Pages.",
   "license": "MIT",
   "type": "module",
   "main": "server/index.js",
@@ -23,6 +23,7 @@
   },
   "devDependencies": {
     "axe-core": "4.11.1",
+    "esbuild": "^0.25.12",
     "puppeteer-core": "^25.12.0"
   }
 }

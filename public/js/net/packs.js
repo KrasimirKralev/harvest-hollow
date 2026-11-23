@@ -47,7 +47,12 @@ import { PRIO, PREFETCHABLE, SINGLE_SHARE, firstViewPacks, firstViewFiles, model
 export { PRIO, PREFETCHABLE, SINGLE_SHARE, firstViewPacks, firstViewFiles, modelPath };
 
 /** Packs are versioned by their own content: on a host page they come from the host's root (see the header). */
-const PACK_ORIGIN = (() => { try { return ASSET_BASE ? new URL(ASSET_BASE).origin : ''; } catch { return ''; } })();
+// A static site under a sub-path (GitHub Pages, tools/build-pages.mjs) names where its packs are: <meta name="hh-packs-base">.
+const PACK_ORIGIN = (() => {
+  const own = globalThis.document?.querySelector?.('meta[name="hh-packs-base"]')?.getAttribute('content');
+  if (own) return own.replace(/\/+$/, '');
+  try { return ASSET_BASE ? new URL(ASSET_BASE).origin : ''; } catch { return ''; }
+})();
 export const MAX_PACKS = 2;
 export const COLLECT_MS = 150;
 

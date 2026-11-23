@@ -56,7 +56,7 @@ function sameOrigin(req, res, next) {
 /** Serve the callback page with the outcome stamped on <body> (the page shows it in the device's language). */
 export async function sendCallbackPage(res, { ok, code }) {
   let html;
-  try { html = await fsp.readFile(CALLBACK_PAGE, 'utf8'); } catch { html = '<!doctype html><title>Harness Hollow</title><body data-result="RESULT" data-code="CODE"></body>'; }
+  try { html = await fsp.readFile(CALLBACK_PAGE, 'utf8'); } catch { html = '<!doctype html><title>MNKISWAN Tree Village</title><body data-result="RESULT" data-code="CODE"></body>'; }
   // success stamps OK, a code no "what went wrong" line answers to (QA r1 H-02: an empty code showed the INTERNAL line
   // under "You are signed in")
   const safeCode = ok ? 'OK' : CODES.has(code) ? code : 'INTERNAL';

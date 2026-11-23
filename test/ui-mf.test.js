@@ -125,10 +125,10 @@ test('lead: the device list names a farm by its own name, else by its farmers (n
   assert.equal(F.farmLabel({ farm: { name: 'Sunny Acres' }, players: { p1: { name: 'Rowan' } } }), 'Sunny Acres');
   assert.equal(F.farmLabel({ farm: { name: 'Harness Hollow' }, players: { p2: { name: 'Mia' }, p1: { name: 'Rowan' } } }), 'Rowan & Mia\'s farm');
   assert.equal(F.farmLabel({ farm: { name: 'Harness Hollow' }, players: { p1: { name: 'Rowan' } } }), 'Rowan\'s farm');
-  assert.equal(F.farmLabel({ farm: { name: 'Harness Hollow' }, players: {} }), 'Harness Hollow');
+  assert.equal(F.farmLabel({ farm: { name: 'Harness Hollow' }, players: {} }), 'MNKISWAN Tree Village');
   // a farm made before the rename keeps the old default name in its save: it reads as unnamed, under the new name
   assert.equal(F.farmLabel({ farm: { name: 'Harvest Hollow' }, players: { p1: { name: 'Rowan' } } }), 'Rowan\'s farm');
-  assert.equal(F.farmLabel({ farm: { name: 'Harvest Hollow' }, players: {} }), 'Harness Hollow');
+  assert.equal(F.farmLabel({ farm: { name: 'Harvest Hollow' }, players: {} }), 'MNKISWAN Tree Village');
   // ...unless its farmers carved that name themselves
   assert.equal(F.farmLabel({ farm: { name: 'Harvest Hollow', coop: { named: { by: 'p1', at: 1 } } }, players: { p1: { name: 'Rowan' } } }), 'Harvest Hollow');
   assert.equal(F.farmLabel(null), null);

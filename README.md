@@ -1,29 +1,32 @@
-<p align="center">
-  <img src="public/assets/art/logo-wide.png" alt="Harness Hollow" width="560">
-</p>
+<p align="center"><img src="public/assets/art/wordmark-wide.svg" alt="MNKISWAN Tree Village" width="560"></p>
 
-<p align="center">
-  <picture>
-    <source srcset="docs/media/hero.webp" type="image/webp">
-    <img src="docs/media/hero.gif" alt="Two browsers, one farm: farmer Rowan (left) sows sunflowers while farmer Mia (right) sows pumpkins; time passes, the crops grow, and each harvests the other's rows, seen on both screens at once" width="900">
-  </picture>
-</p>
+Welcome to **MNKISWAN Tree Village**. Swan has a picnic cloth. Mnki has two spoons. Their basket is empty. Plant orchards, grow wheat, gather ingredients and build a village among the trees in this Three.js browser game.
 
-<p align="center"><b>A cozy 3D farming game for two, in the browser.</b><br>
-Plant, harvest, raise animals, craft and grow a whole valley together, on one shared farm, in real time.</p>
+**▶ Play it in your browser:** https://mnkiswan.github.io/mnkiswan_/ (no install, no server; your village is saved in your browser).
 
-<p align="center"><a href="https://harvest-hollow.up.railway.app"><b>▶ Play now in your browser</b></a> ·
-<a href="https://github.com/KrasimirKralev/harvest-hollow/stargazers">⭐ Star it</a> · English &amp; Български</p>
+Open **Your look** to try Mnki’s red farm outfit or Swan’s cream outfit and flower crown. Save a look to wear it on the farm.
 
-Harness Hollow is a co-op farming game for two. Play it at **[harvest-hollow.up.railway.app](https://harvest-hollow.up.railway.app)**
-(no account; start a farm in one tap and invite your partner with a link; farms nobody visits for 7 days are deleted
-there), or host your own. One small Node server runs the farm 24/7, and
-everyone plays in a browser — on a PC, a laptop, a tablet or a phone. Two people share **one** farm: one plants, the
-other harvests; one runs the bakery while the other feeds the cows; you both see everything the moment it happens.
+**Picnic Pairs** is a memory game you can play while your crops grow. Open the Farm book, choose Picnic Pairs and turn over two cards at a time to find all six foods. Each player has their own board. Closing the panel ends the round.
 
-<p align="center">
-  <img src="docs/screenshots/hero.png" alt="Two farmers on the sunset bench during Golden Hour, a busy farm around them" width="900">
-</p>
+This is MNKISWAN’s adaptation of [Harness Hollow by Krasimir Kralev](https://github.com/KrasimirKralev/harvest-hollow). The duo badge and hand-painted wildflower border come from the MNKISWAN artwork collection.
+
+## Play on GitHub Pages
+
+The whole game also runs as a static site. `tools/build-pages.mjs` builds it into `dist/`, and the
+**Deploy to GitHub Pages** workflow (`.github/workflows/pages.yml`) publishes it on every push to `main`. In the
+repository settings, set **Pages > Build and deployment > Source** to **GitHub Actions** once.
+
+On a static host there is no farm server, so `pages/local-server.js` runs the same server code (engine, sessions,
+scheduler and the shared rules) inside the page and talks to the game through an in-page socket. Each browser keeps
+its own village in IndexedDB. The browser version is single-device: Harvey and the hosted-farm features need the
+Node server. Build and try it locally:
+
+```bash
+PAGES_BASE=http://localhost:8080/mnkiswan_ node tools/build-pages.mjs --out dist
+```
+
+Serve `dist/` at `http://localhost:8080/mnkiswan_/` with any static file server. The developer console has
+`__village.exportSave()`, `__village.importSave(text)` and `__village.reset()` for backups and a fresh start.
 
 ## Features
 
@@ -110,13 +113,13 @@ a stand-in for OpenAI; `--fake` every screen state). A manual test of the real s
 [docs/harness/manual-test.md](docs/harness/manual-test.md). Harvey is on for self-hosted farms; the public host turns
 it on once both providers have cleared it for a hosted site.
 
-## Play it in 2 minutes
+## Quick start
 
 You need [Node.js 24](https://nodejs.org/).
 
 ```sh
-git clone https://github.com/KrasimirKralev/harvest-hollow.git
-cd harvest-hollow
+git clone https://github.com/mnkiswan/mnkiswan_.git
+cd mnkiswan_
 npm install
 npm start
 ```
@@ -236,18 +239,18 @@ start. Everyone taking part follows the [Code of Conduct](CODE_OF_CONDUCT.md).
 - Music: CC0 tracks from [OpenGameArt](https://opengameart.org) by Komiku, Memoraphile, Écrivain, Indieteur and
   RandomMind — details in [`public/assets/audio/music/CREDITS.md`](public/assets/audio/music/CREDITS.md).
 - Fonts: Fredoka, Baloo 2 and Nunito (SIL Open Font License 1.1; the licence texts are in `public/assets/fonts/`).
-- Illustrated portraits, letter headers, backdrops and the logo: original art made for this game with an AI image
+- Upstream illustrated portraits, letter headers and backdrops: original art made for the base game with an AI image
   model (Higgsfield), checked image by image and post-processed; released under the MIT licence with the code.
 - Sound effects: synthesised for this game by `tools/make-sfx.mjs`.
 - Built with [three.js](https://threejs.org), [Express](https://expressjs.com) and [ws](https://github.com/websockets/ws).
 
 ## Privacy and license
 
-The hosted game's privacy note is at [/privacy](https://harvest-hollow.up.railway.app/privacy); a self-hosted server keeps
+The original upstream host’s privacy note is at [/privacy](https://harvest-hollow.up.railway.app/privacy); a self-hosted server keeps
 everything on your own machine ([PRIVACY.md](PRIVACY.md)).
 
 
-Code and the game's own art, including the AI-generated illustrations: [MIT](LICENSE). Third-party assets keep their
+The code and upstream game art carry the original [MIT license](LICENSE). Third-party assets keep their
 own licences (CC0 or the SIL OFL, listed above).
 
 ---

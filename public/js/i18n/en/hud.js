@@ -1,6 +1,7 @@
 // English catalog, area 'hud' (lane A): ui/hud.js (the level star and XP bar, the pills, the farmers' chips, the right
 // edge, the dock, the connection chip, the buffs and the world cards).
 export default {
+  'hud.picnic.title': 'Picnic Pairs',
   'hud.unlock.barn': 'Barn upgrade {id}',
   'hud.xp.valuetext': '{a} of {b} XP to level {level}',
   'hud.xp.unit': ' XP',

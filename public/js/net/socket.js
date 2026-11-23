@@ -98,7 +98,8 @@ export class Socket {
 
   connect() {
     if (this.stopped) return;      // a reconnect timer that outlived stop() (the close raced the farm's refusal)
-    const ws = new WebSocket(this.url);
+    // the static-site build (GitHub Pages) runs the farm server inside the page: pages/local-server.js sets HH_LOCAL_WS
+    const ws = new (globalThis.HH_LOCAL_WS || WebSocket)(this.url);
     this.ws = ws;
     clearTimeout(this.connectTimer);
     this.connectTimer = setTimeout(() => {

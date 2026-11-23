@@ -1,4 +1,4 @@
-// The landing page's pictures (public/landing.html: the "Screenshots" viewer, the wide logo), made from the game itself:
+// The landing page's pictures (public/landing.html: the "Screenshots" viewer), made from the game itself:
 // a multi-mode host on --port (default 4103) with the level-12 QA fixture farm (test/fixtures/save-m1a-l12.json, its
 // farmers renamed Ana and Leo) as one farm, both farmers connected, one headless Chrome. Writes WebP into
 // public/assets/landing/:
@@ -7,7 +7,7 @@
 // Encoding is Chrome's own (canvas.toDataURL('image/webp')): no image dependency. The orbiting farm in the page's orb
 // comes from tools/landing-video.mjs.
 //
-//   node tools/landing-assets.mjs [--port 4103] [--only logo|shots] [--keep <dir>]   (--keep: also the raw PNGs)
+//   node tools/landing-assets.mjs [--port 4103] [--keep <dir>]   (--keep: also the raw PNGs)
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -66,14 +66,6 @@ function save(name, buf) {
   const file = path.join(OUT, name);
   fs.writeFileSync(file, buf);
   written.push({ file: path.relative(ROOT, file), kb: +(buf.length / 1024).toFixed(1) });
-}
-
-async function logos(browser) {
-  const page = await browser.newPage();
-  await page.goto('about:blank');
-  const src = fs.readFileSync(path.join(ROOT, 'public/assets/art/logo-wide.png'));
-  for (const [w, q] of [[560, 0.84], [880, 0.8], [1120, 0.78]]) save(`logo-wide_${w}.webp`, await webp(page, src, w, q));
-  await page.close();
 }
 
 // ---- the fixture farm on a multi-mode host -------------------------------------------------------------------------
@@ -255,8 +247,7 @@ let browser;
 try {
   browser = await puppeteer.launch({ executablePath: process.env.CHROME || '/opt/google/chrome/chrome', headless: 'new',
     args: ['--no-sandbox', '--enable-unsafe-swiftshader', '--use-angle=swiftshader', '--ignore-gpu-blocklist', '--mute-audio'] });
-  if (args.only !== 'shots') await logos(browser);
-  if (args.only !== 'logo') await shots(browser);
+  await shots(browser);
   console.log(JSON.stringify({ ok: true, written }));
 } catch (err) {
   console.log(JSON.stringify({ ok: false, error: String(err && err.stack || err), written, server: serverLog.slice(-1200) }));

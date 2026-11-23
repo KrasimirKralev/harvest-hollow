@@ -1,5 +1,5 @@
 // The project's public addresses, shared by the landing page and the game (one place to change them).
-export const REPO_URL = 'https://github.com/KrasimirKralev/harvest-hollow';
+export const REPO_URL = 'https://github.com/mnkiswan/mnkiswan_';
 /** GitHub Discussions, the "ideas" category: where a self-hosted game sends "Suggest an idea". */
 export const IDEAS_URL = `${REPO_URL}/discussions/categories/ideas`;
 /** The README's quick start: run your own farm server. */

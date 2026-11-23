@@ -28,12 +28,16 @@ const TAP_THROUGH = { gzipKB: 0.47, codeKB: 0.30 };
 // the owner's "portraits cover the coins" (2026-10-20, lead; rel-integration.md "Owner request 2026-10-20"): hud.js
 // fit()'s second step, 'stack' on the top-left row (118 B / 45 B)
 const TOP_ROW_STACK = { gzipKB: 0.12, codeKB: 0.05 };
+// MNKISWAN Tree Village on GitHub Pages (2026-11-23): net/socket.js takes the in-page socket (HH_LOCAL_WS) and
+// net/packs.js reads <meta name="hh-packs-base"> (182 B / 66 B); the in-page farm server is its own classic script
+const PAGES = { gzipKB: 0.18, codeKB: 0.07 };
 const RECORD = {
   gzipKB: HEAD.gzipKB + 186.67 + POWERUPS.gzipKB + SHOW_HARVEY.gzipKB + TAP_THROUGH.gzipKB
-    + TOP_ROW_STACK.gzipKB,
+    + TOP_ROW_STACK.gzipKB + PAGES.gzipKB,
   codeKB: HEAD.codeKB + 96.0 + POWERUPS.codeKB + SHOW_HARVEY.codeKB + TAP_THROUGH.codeKB
-    + TOP_ROW_STACK.codeKB,
-  decided: 'owner 2026-10-19 sideways rows + crate power-ups + Show Harvey + tap-through; 2026-10-20 top row stack',
+    + TOP_ROW_STACK.codeKB + PAGES.codeKB,
+  decided: 'owner 2026-10-19 sideways rows + crate power-ups + Show Harvey + tap-through; 2026-10-20 top row stack; '
+    + '2026-11-23 GitHub Pages',
 };
 
 const quiet = { info() {}, warn() {}, error() {}, log() {} };

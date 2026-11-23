@@ -81,9 +81,9 @@ function sameOrigin(req, res, next) {
 
 /** A tiny fallback front door when public/landing.html is missing (the real one is the client's). */
 const FALLBACK_LANDING = `<!doctype html><html lang="en"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1"><title>Harness Hollow</title></head>
+<meta name="viewport" content="width=device-width, initial-scale=1"><title>MNKISWAN Tree Village</title></head>
 <body style="font-family:system-ui,sans-serif;max-width:32rem;margin:3rem auto;padding:0 1rem">
-<h1>Harness Hollow</h1><button id="go" type="button">Start a new farm</button><p id="st" role="status"></p>
+<h1>MNKISWAN Tree Village</h1><button id="go" type="button">Start a new farm</button><p id="st" role="status"></p>
 <p>Farms nobody visits for 7 days are deleted.</p>
 <script>document.getElementById('go').onclick=async()=>{const r=await fetch('/api/farms',{method:'POST'});
 const b=await r.json().catch(()=>({}));if(r.ok){location.href='/f/'+b.id+'#k='+b.secret}else{
@@ -211,7 +211,7 @@ export function createMultiApp(hh) {
   app.post('/api/farms', sameOrigin, express.json({ limit: '1kb' }), async (req, res) => {
     res.set('Cache-Control', NO_STORE);
     if (reg.count >= mc.maxFarms) {
-      return res.status(503).json({ error: 'FULL', message: 'Harness Hollow is full right now. Please try again later.' });
+      return res.status(503).json({ error: 'FULL', message: 'MNKISWAN Tree Village is full right now. Please try again later.' });
     }
     const r = create.take(ipOf(req));
     if (!r.ok) {
@@ -364,7 +364,7 @@ export function createMultiApp(hh) {
         res.json({ ok: true, deleted, expired: reg.lastExpired });
       });
   }
-  // the in-game helper (Harness Hollow): /api/f/:id/harness/... and the mod icons /f/:id/mods/... (server/harness)
+  // the in-game helper (MNKISWAN Tree Village): /api/f/:id/harness/... and the mod icons /f/:id/mods/... (server/harness)
   if (hh.harness) {
     hh.harness.receiverRoutes(app);
     farmApi.use('/harness', hh.harness.router);
@@ -470,7 +470,7 @@ export async function startMultiServer(cfg) {
     return closing;
   };
   const text = [
-    'Harness Hollow — multi-farm host',
+    'MNKISWAN Tree Village — multi-farm host',
     `  running at http://localhost:${port}`,
     `  data: ${cfg.dataDir} (${stored} farm(s) stored, up to ${mc.maxFarms}; deleted after ${mc.ttlDays} days without a visit)`,
     cfg.dev ? '  DEV routes are ON (loopback only)' : null,

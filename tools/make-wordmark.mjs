@@ -1,10 +1,9 @@
-// Renders the "Harness Hollow" wordmark SVGs (tools/make-wordmark.py: public/assets/art/wordmark.svg and
+// Renders the "MNKISWAN Tree Village" wordmark SVGs (tools/make-wordmark.py: public/assets/art/wordmark.svg and
 // wordmark-wide.svg) into the logo files the pages show, under their old names and sizes, so no page changes layout:
 //   public/assets/art/logo.png + logo.webp            1200 x 538, the stacked one (the loading screen)
-//   public/assets/art/logo-wide.png + logo-wide.webp  1400 x 336, the wide one (the slot picker, the gates, privacy)
+//   public/assets/art/logo-wide.png + wordmark-wide.svg  1400 x 336, the wide one (the slot picker, the gates, privacy)
 // and updates their byte counts in public/assets/art/manifest.json. One headless Chrome; encoding is Chrome's own
 // (canvas.toDataURL('image/webp')): no image dependency. Then, for the sizes made from these files:
-//   node tools/landing-assets.mjs --only logo                 the landing page's logo-wide_{560,880,1120}.webp
 //   python3 docs/qa/mobile/input/make-pwa-icons.py           the home-screen icons (public/assets/pwa, Pillow)
 //
 //   node tools/make-wordmark.mjs [--out <dir>]   (--out: write the PNGs there for a look, leave the real files alone)
@@ -66,8 +65,10 @@ try {
       written.push(path.join(PREVIEW, `${job.name}.png`));
       continue;
     }
-    const webp = await toWebp(page, png, job.q);
-    for (const [ext, buf] of [['png', png], ['webp', webp]]) {
+    const variants = [['png', png]];
+    if (job.name === 'logo') variants.push(['webp', await toWebp(page, png, job.q)]);
+    else setBytes(job.svg, fs.statSync(path.join(ART, job.svg)).size);
+    for (const [ext, buf] of variants) {
       fs.writeFileSync(path.join(ART, `${job.name}.${ext}`), buf);
       setBytes(`${job.name}.${ext}`, buf.length);
       written.push({ file: `public/assets/art/${job.name}.${ext}`, kb: +(buf.length / 1024).toFixed(1) });

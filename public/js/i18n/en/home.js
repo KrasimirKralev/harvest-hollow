@@ -1,6 +1,8 @@
 // English catalog, area 'home' (lane D): the source text, exactly as the code had it. Keys: 'home.<thing>.<detail>'.
 // See docs/agent-notes/i18n-core.md.
 export default {
+  'home.avatar.mnki': 'Mnki',
+  'home.avatar.swan': 'Swan',
   // ---- look names (w4-model.js LOOKS) and pet breeds (w4-rules.js): fallbacks when lane B's content texts lack them ----
   'home.look.bodies.farmer_a': 'Build A',
   'home.look.bodies.farmer_b': 'Build B',
